@@ -287,7 +287,7 @@ def render_startup_script(spec: TPUJobSpec, zone: str, source_uri: str) -> str:
     if chunk_data_uri:
         chunk_sync = (
             f'mkdir -p "$WORKDIR/chunks"\n'
-            f'/snap/google-cloud-cli/current/bin/gcloud storage cp --recursive {shlex.quote(chunk_data_uri.rstrip("/") + "/*")} "$WORKDIR/chunks/"\n'
+            f'/snap/google-cloud-cli/current/bin/gcloud storage cp {shlex.quote(chunk_data_uri.rstrip("/") + "/*.npz")} "$WORKDIR/chunks/"\n'
         )
     entry_cmd = render_entry_command(spec, zone)
     status_uri = spec.status_uri(zone)
