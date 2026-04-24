@@ -1,0 +1,52 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "chess_dfm_jax"
+version = "0.1.0"
+description = "Standalone LC0 BT4 training scaffold with marimo notebooks"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "Apache-2.0"}
+authors = [
+  {name = "chess_dfm_jax contributors"}
+]
+dependencies = [
+  "flax>=0.10.0",
+
+  "gcsfs",
+  "google-cloud-storage>=2.18.0",
+  "google-cloud-tpu>=1.24.0",
+  "jax>=0.6.0",
+  "jaxlib>=0.6.0",
+  "marimo>=0.11.0",
+  "matplotlib>=3.9.0",
+  "numpy>=2.0.0",
+  "onnxruntime>=1.23.0",
+  "optax>=0.2.5",
+  "orbax-checkpoint>=0.11.0",
+  "pandas>=2.2.0",
+  "protobuf>=6.0.0",
+  "python-chess>=1.11.0",
+  "rich>=13.0.0",
+  "tqdm>=4.66.0",
+  "wandb>=0.19.0",
+  "zstandard>=0.23.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0.0",
+  "ruff>=0.11.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["chess_dfm_jax*"]
+
+[tool.setuptools.package-data]
+chess_dfm_jax = ["policy_moves.txt", "policy_attn_map.txt"]
+
+[tool.ruff]
+line-length = 100

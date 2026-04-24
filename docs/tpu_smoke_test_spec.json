@@ -1,0 +1,31 @@
+{
+  "project_id": "project-b9551f07-5f68-491a-8a0",
+  "run_id": "smoke-test-v4",
+  "run_name": "smoke-test-v4",
+  "zone_order": [
+    "us-central2-b"
+  ],
+  "bucket_by_region": {
+    "us-central2": "gs://gunay-chess-experiments-us-central2"
+  },
+  "wandb_project": "chess_dfm_jax-jepa",
+  "wandb_group": "smoke-test",
+  "accelerator_type": "v4-8",
+  "runtime_version": "tpu-ubuntu2204-base",
+  "service_account": "534484336006-compute@developer.gserviceaccount.com",
+  "network": "default",
+  "subnetwork_by_zone": {
+    "us-central2-b": "projects/project-b9551f07-5f68-491a-8a0/regions/us-central2/subnetworks/default"
+  },
+  "enable_external_ips": true,
+  "autocheckpoint_enabled": true,
+  "allocation_timeout_s": 900,
+  "poll_interval_s": 30,
+  "workdir": "/tmp/chess_dfm_jax",
+  "models_uri_by_region": {
+    "us-central2": "gs://gunay-chess-experiments-us-central2/models"
+  },
+  "entry_command": "/tmp/venv/bin/python scripts/profile_jepa_tpu.py --out-dir /tmp/chess_dfm_jax/artifacts/profile_bundle --compute-dtype bfloat16 --head-param-dtype float32 --head-compute-dtype bfloat16 --trace-batch-size 1024 --trace-token-dim 512 --trace-num-layers 4 --trace-num-heads 8 --trace-mlp-dim 2048 --sweep-batch-sizes 256 --sweep-token-dims 256 --sweep-mlp-dims 1024 --num-layers 4 --num-heads 8 --warmup 1 --repeat 1",
+  "env": {},
+  "spot": false
+}

@@ -1,0 +1,55 @@
+{
+  "project_id": "project-b9551f07-5f68-491a-8a0",
+  "run_id": "jepa-v5e8-example",
+  "run_name": "jepa-v5e8-example",
+  "zone_order": [
+    "us-central1-a",
+    "europe-west4-b"
+  ],
+  "bucket_by_region": {
+    "us-central1": "gs://your-us-central1-bucket",
+    "europe-west4": "gs://your-europe-west4-bucket"
+  },
+  "wandb_project": "chess_dfm_jax-jepa",
+  "wandb_group": "bt4-token-jepa",
+  "accelerator_type": "v5litepod-8",
+  "runtime_version": "tpu-ubuntu2204-base",
+  "service_account": "tpu-trainer@project-b9551f07-5f68-491a-8a0.iam.gserviceaccount.com",
+  "network": "default",
+  "subnetwork_by_zone": {
+    "us-central1-a": "projects/project-b9551f07-5f68-491a-8a0/regions/us-central1/subnetworks/default",
+    "europe-west4-b": "projects/project-b9551f07-5f68-491a-8a0/regions/europe-west4/subnetworks/default"
+  },
+  "enable_external_ips": false,
+  "autocheckpoint_enabled": true,
+  "allocation_timeout_s": 1800,
+  "poll_interval_s": 30,
+  "workdir": "/tmp/chess_dfm_jax",
+  "models_uri": null,
+  "models_uri_by_region": {
+    "us-central1": "gs://your-us-central1-bucket/models",
+    "europe-west4": "gs://your-europe-west4-bucket/models"
+  },
+  "chunk_data_uri": null,
+  "chunk_data_uri_by_region": {
+    "us-central1": "gs://your-us-central1-bucket/chunks/training-run2--20251215-1017",
+    "europe-west4": "gs://your-europe-west4-bucket/chunks/training-run2--20251215-1017"
+  },
+  "train_args": {
+    "steps": 50000,
+    "batch-size": 64,
+    "save-every": 100,
+    "log-every": 10,
+    "encoder-dtype": "bfloat16",
+    "head-param-dtype": "float32",
+    "head-compute-dtype": "bfloat16",
+    "token-dim": 256,
+    "num-layers": 4,
+    "num-heads": 8,
+    "mlp-dim": 1024,
+    "action-source": "best"
+  },
+  "env": {
+    "WANDB_API_KEY": "set-me"
+  }
+}

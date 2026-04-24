@@ -1,0 +1,34 @@
+{
+  "project_id": "project-b9551f07-5f68-491a-8a0",
+  "run_id": "jepa-v5litepod16-profile",
+  "run_name": "jepa-v5litepod16-profile",
+  "zone_order": [
+    "europe-west4-b",
+    "us-central1-a"
+  ],
+  "bucket_by_region": {
+    "us-central1": "gs://gunay-chess-experiments-us-central1",
+    "europe-west4": "gs://gunay-chess-experiments-europe-west4"
+  },
+  "wandb_project": "chess_dfm_jax-jepa",
+  "wandb_group": "bt4-token-jepa",
+  "accelerator_type": "v5litepod-16",
+  "runtime_version": "tpu-ubuntu2204-base",
+  "service_account": "534484336006-compute@developer.gserviceaccount.com",
+  "network": "default",
+  "subnetwork_by_zone": {
+    "us-central1-a": "projects/project-b9551f07-5f68-491a-8a0/regions/us-central1/subnetworks/default",
+    "europe-west4-b": "projects/project-b9551f07-5f68-491a-8a0/regions/europe-west4/subnetworks/default"
+  },
+  "enable_external_ips": true,
+  "autocheckpoint_enabled": true,
+  "allocation_timeout_s": 900,
+  "poll_interval_s": 30,
+  "workdir": "/tmp/chess_dfm_jax",
+  "models_uri_by_region": {
+    "us-central1": "gs://gunay-chess-experiments-us-central1/models",
+    "europe-west4": "gs://gunay-chess-experiments-europe-west4/models"
+  },
+  "entry_command": "/tmp/venv/bin/python scripts/profile_jepa_tpu.py --out-dir /tmp/chess_dfm_jax/artifacts/profile_bundle --compute-dtype bfloat16 --head-param-dtype float32 --head-compute-dtype bfloat16 --trace-batch-size 1024 --trace-token-dim 512 --trace-num-layers 4 --trace-num-heads 8 --trace-mlp-dim 2048 --sweep-batch-sizes 256,512,1024 --sweep-token-dims 256,512,1024 --sweep-mlp-dims 1024,2048,4096 --num-layers 4 --num-heads 8 --warmup 1 --repeat 5",
+  "env": {}
+}

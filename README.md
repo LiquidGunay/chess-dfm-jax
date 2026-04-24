@@ -1,0 +1,135 @@
+# lc0jax-human
+
+Standalone BT4 training scaffold extracted from the larger `schutpaper` repo.
+
+This folder is meant to be copied to a GPU or TPU VM and used as a clean starting
+point for:
+
+- manual BT4 reproduction in JAX
+- encoder/backbone experimentation
+- token-level JEPA training on LC0 self-play data
+- parity checks against the shipped ONNX oracle
+- roofline and step profiling
+- preemption-safe Spot TPU batch training with Orbax checkpoints
+
+## Layout
+
+- `chess_dfm_jax/`: local package with encoder, policy map, weights loader, BT4 reference forward, NNX BT4 encoder/model, chunk loader, PGN sequence loader, roofline helpers, Orbax checkpoints, TPU controller helpers, and W&B utilities.
+- `notebooks/`: pedagogical marimo notebooks.
+- `scripts/`: runnable CLIs for parity checks, roofline measurement, and chunk inspection.
+- `docs/`: workflow notes for manual reproduction, roofline analysis, and data loading.
+
+## Quickstart
+
+```bash
+cd lc0jax-human
+uv venv .venv
+uv pip install --python .venv/bin/python -e .
+```
+
+If you want to reuse the parent repo environment on this machine:
+
+```bash
+source ../.venv/bin/activate
+```
+
+Optional experiment tracking:
+
+```bash
+echo "WANDB_API_KEY=..." > .env
+```
+
+## Model paths
+
+The scaffold looks for BT4 files in this order:
+
+1. `LC0JAXHUMAN_MODELS_DIR`
+2. `./models/`
+3. `../models/`
+
+Expected filenames:
+
+- `BT4.onnx`
+- `BT4_exported.pb.gz`
+- `BT4-1024x15x32h-swa-6147500-policytune-332.pb.gz`
+
+## Main notebooks
+
+- `notebooks/lc0_bt4_jax_repro.py`: manual forward pass scaffold with parity checks.
+- `notebooks/leela_data_pipeline.py`: widget-driven LC0 data browser for chunk samples, plane inspection, board views, and policy-head summaries.
+- `notebooks/training_roofline.py`: timing, cost analysis, and roofline workflow for reference forward plus NNX encoder forward/backward.
+- `notebooks/training_jepa.py`: frozen-BT4, token-level JEPA scaffold with one token per square and an action-conditioned transformer.
+- `notebooks/analyze_jepa.py`: inspect saved JEPA runs with training curves, per-square cosine heatmaps, and a post hoc two-ply probe on held-out PGN sequences.
+- `notebooks/play_bt4.py`: play against the greedy BT4 policy head on GPU.
+
+## Main scripts
+
+- `python scripts/compare_logits.py`
+- `python scripts/compare_logits.py --forward-fn chess_dfm_jax.nnx_bt4:bt4_forward_fp16`
+- `python scripts/inspect_leela_chunks.py --chunk-dir /path/to/chunks`
+- `python scripts/run_roofline.py --batch-size 8`
+- `python scripts/run_roofline.py --target nnx_encoder_forward --compute-dtype float16 --batch-size 8`
+- `python scripts/run_roofline.py --target nnx_encoder_backward --compute-dtype float16 --batch-size 8`
+- `python scripts/run_roofline.py --target jepa_train --compute-dtype float16 --batch-size 8`
+- `python scripts/profile_jepa_tpu.py --out-dir artifacts/profile_bundle`
+- `python scripts/train_jepa.py --steps 10 --chunk-dir /path/to/chunks`
+- `python scripts/train_jepa.py --steps 50000 --run-name local-jepa --resume --checkpoint-uri runs/jepa/local-jepa/checkpoints`
+- `python scripts/run_tpu_spot_jepa.py --job-spec docs/tpu_spot_job_spec.example.json`
+
+## JEPA architecture
+
+The trainable model keeps BT4 frozen and trains only a small transition head:
+
+- BT4 encoder produces `64 x 1024` square tokens.
+- A trainable projector maps those tokens to `64 x token_dim`.
+- A learned action embedding is prepended as token `0`.
+- A small transformer updates the `65` token sequence.
+- The model predicts the next state's `64` projected BT4 tokens.
+
+Default training config:
+
+- `token_dim=256`
+- `num_layers=4`
+- `num_heads=8`
+- `mlp_dim=1024`
+- `action_source=best`
+- GPU default: encoder `float16`, head params `float32`, head compute `float32`
+- TPU default: encoder `bfloat16`, head params `float32`, head compute `bfloat16`
+
+Two-ply probes are analysis-only and are not part of the training loss.
+
+## Checkpoints and resume
+
+`scripts/train_jepa.py` now uses Orbax async checkpoints instead of pickle files.
+
+- Local runs default to `runs/jepa/<run-name>/checkpoints/`.
+- Resume uses `--resume` and restores the latest step from the checkpoint directory.
+- The trainer handles `SIGTERM` and writes a final checkpoint before exiting.
+- Only the trainable JEPA head and optimizer state are checkpointed; frozen BT4 weights are reloaded from the pinned model file.
+
+Do not run two trainers against the same checkpoint directory at the same time.
+
+## Spot TPU flow
+
+The first cloud path is single-host `v5litepod-8` Spot TPU VMs.
+
+- Use `docs/tpu_spot_job_spec.example.json` as the controller spec template.
+- The local controller uploads an immutable source snapshot to GCS.
+- The TPU VM startup script installs `jax[tpu]`, installs the repo, downloads models/data, and runs `scripts/train_jepa.py --resume`.
+- Orbax checkpoints go to a regional GCS path so a later zone retry can resume safely.
+
+See `docs/tpu_spot_training.md` for the setup details.
+
+## Suggested workflow
+
+1. Finish the TODO cells in `notebooks/lc0_bt4_jax_repro.py` until manual outputs match the reference and ONNX.
+2. Use `scripts/compare_logits.py --forward-fn chess_dfm_jax.nnx_bt4:bt4_forward_fp16` for a GPU-oriented low-precision parity check, or `bt4_forward` for the fp32 baseline.
+3. Use `scripts/run_roofline.py --target nnx_encoder_forward` and `--target nnx_encoder_backward` with `--compute-dtype float16` or `float32` to measure encoder arithmetic intensity before building a full training loop.
+4. Prototype chunk batching in `notebooks/leela_data_pipeline.py`.
+5. Start with `notebooks/training_jepa.py` for a token-level JEPA smoke test on GPU.
+6. Use `notebooks/play_bt4.py` when you want a quick human-vs-policy sanity check without search.
+7. Use `scripts/train_jepa.py` for tracked local runs with W&B and Orbax checkpoints.
+8. Use `notebooks/analyze_jepa.py` to inspect `metrics.jsonl`, per-square cosine heatmaps, and the post hoc two-ply probe.
+9. Use `scripts/profile_jepa_tpu.py` when you want a TPU-oriented trace plus a small arithmetic-intensity sweep in one artifact bundle.
+10. Use `scripts/run_tpu_spot_jepa.py` with a filled job spec when you are ready to move the same training path to Spot TPU VMs.
+11. Plug the JEPA `train_step` into `scripts/run_roofline.py` as described in `docs/roofline_analysis.md`.
