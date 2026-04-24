@@ -135,8 +135,8 @@ def mask_actions(actions: jnp.ndarray, mask_prob: jnp.ndarray, mask_token_id: in
     return noisy_actions, mask
 
 def dfm_loss_fn(model: DFMDenoiser, batch: dict[str, jnp.ndarray], rng: jnp.ndarray) -> tuple[jnp.ndarray, dict[str, jnp.ndarray]]:
-    # batch["action_indices"]: [B, K]
-    actions = batch["action_indices"]
+    # batch["action_indices"]: [B, max_K]
+    actions = batch["action_indices"][:, :model.config.horizon]
     batch_size, K = actions.shape
     
     # 1. Sample t ~ U(0, 1)
