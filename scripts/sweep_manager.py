@@ -6,6 +6,7 @@ import json
 import os
 import subprocess
 import threading
+import sys
 import time
 from queue import Queue
 from dataclasses import dataclass

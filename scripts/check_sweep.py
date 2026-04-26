@@ -2,7 +2,7 @@ import wandb
 
 api = wandb.Api()
 try:
-    runs = api.runs("gunays-independent/lc0jaxhuman-jepa")
+    runs = api.runs("gunays-independent/chess_dfm_jax-jepa")
     print("Recent W&B Sweep Runs:")
     print("-" * 80)
     found = False
