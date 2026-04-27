@@ -521,16 +521,16 @@ def run_spot_controller(spec: TPUJobSpec, *, repo_root: str | Path | None = None
                 if state_name in {"FAILED", "SUSPENDED"}:
                     print(f"Resource {resource_name} failed or suspended (state={state_name}). Deleting and retrying...")
                     delete_queued_resource(resource_name)
-                    break
+                    return {"status": "preempted", "zone": zone}
                 if state_name == "ACTIVE" and status and status.get("state") == "failed":
                     print(f"Job failed on ACTIVE resource {resource_name}. Deleting and retrying...")
                     delete_queued_resource(resource_name)
-                    break
+                    return {"status": "job_failed", "zone": zone}
                 if state_name in {"CREATING"}:
                     if time.monotonic() - started > spec.allocation_timeout_s:
                         print(f"Resource {resource_name} timed out in {state_name}. Deleting and retrying...")
                         delete_queued_resource(resource_name)
-                        break
+                        return {"status": "timeout", "zone": zone}
                 time.sleep(spec.poll_interval_s)
 
 

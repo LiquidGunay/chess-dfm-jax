@@ -119,7 +119,7 @@ def worker(slot: dict, task_queue: Queue, project_id: str, workdir: str):
         cmd = [
             sys.executable, "-u", "scripts/run_tpu_spot_jepa.py",
             "--job-spec", spec_path,
-            "--override-source-uri", f"gs://gunay-chess-experiments-{region}/fixed_snapshots/verified_source_v23_dfm.tar.gz"
+            "--override-source-uri", f"gs://gunay-chess-experiments-{region}/fixed_snapshots/verified_source_v26_dfm.tar.gz"
         ]
         
         print(f"[{zone} | {accel}] Executing: {' '.join(cmd)}")
