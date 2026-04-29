@@ -66,6 +66,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--use-xsa", action="store_true", help="Use Exclusive Self-Attention.")
     parser.add_argument("--use-muon", action="store_true", help="Use Muon optimizer.")
     parser.add_argument("--terminal-only", action="store_true", help="Only supervise the final rollout state.")
+    parser.add_argument("--sigreg-coeff", type=float, default=0.01)
+    parser.add_argument("--value-coeff", type=float, default=0.0)
+    parser.add_argument("--wdl-coeff", type=float, default=0.0)
     parser.add_argument("--save-dir", type=str, default=None, help="Local path for saves.")
     parser.add_argument("--save-every", type=int, default=500, help="Save checkpoint every N steps.")
     parser.add_argument("--log-every", type=int, default=10, help="Log metrics every N steps.")
@@ -124,6 +127,9 @@ def main() -> int:
         use_xsa=args.use_xsa,
         use_muon=args.use_muon,
         terminal_only=args.terminal_only,
+        sigreg_coeff=args.sigreg_coeff,
+        value_coeff=args.value_coeff,
+        wdl_coeff=args.wdl_coeff,
     )
     model, optimizer = create_jepa_components(params, config, seed=args.seed)
 
@@ -194,7 +200,14 @@ def main() -> int:
     loader = None
     if chunk_paths and args.chunk_dir != "synthetic":
         data_source = str(chunk_dir)
-        loader_obj = LeelaChunkDataLoader(chunk_paths, batch_size=args.batch_size, seed=args.seed, horizon=args.horizon)
+        loader_obj = LeelaChunkDataLoader(
+            chunk_paths,
+            batch_size=args.batch_size,
+            seed=args.seed,
+            horizon=args.horizon,
+            action_source=args.action_source,
+            drop_last=True,
+        )
         loader = iter(loader_obj)
 
     run = None

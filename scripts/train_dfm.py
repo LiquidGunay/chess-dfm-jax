@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run token-level JEPA training with optional W&B logging and raw NumPy checkpoints."""
+"""Run DFM action-denoising training with optional W&B logging and raw NumPy checkpoints."""
 
 from __future__ import annotations
 
@@ -96,8 +96,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--wandb-entity", type=str, default=None, help="W&B entity.")
     parser.add_argument("--wandb-group", type=str, default="jepa-training", help="W&B group.")
     parser.add_argument("--no-wandb", action="store_true", help="Disable W&B logging.")
-    parser.add_argument("--token-dim", type=int, default=512, help="JEPA token dimension.")
-    parser.add_argument("--num-layers", type=int, default=4, help="Number of JEPA predictor layers.")
+    parser.add_argument("--token-dim", type=int, default=512, help="DFM token dimension.")
+    parser.add_argument("--num-layers", type=int, default=4, help="Number of DFM transformer layers.")
     parser.add_argument("--num-heads", type=int, default=8, help="Number of attention heads.")
     parser.add_argument("--mlp-dim", type=int, default=2048, help="MLP hidden dimension.")
     parser.add_argument("--learning-rate", type=float, default=3e-4, help="Learning rate.")
@@ -118,7 +118,7 @@ def parse_args() -> argparse.Namespace:
         help="If in [0,1], train every batch at a fixed flow time t instead of sampling t uniformly.",
     )
     parser.add_argument("--encoder-dtype", type=str, default="float16", choices=["float16", "bfloat16", "float32"])
-    parser.add_argument("--head-param-dtype", type=str, default="float32", choices=["float16", "bfloat16", "float32"])
+    parser.add_argument("--head-param-dtype", type=str, default="float32", choices=["float16", "bfloat16", "float32"], help=argparse.SUPPRESS)
     parser.add_argument("--head-compute-dtype", type=str, default="float32", choices=["float16", "bfloat16", "float32"])
     parser.add_argument("--action-source", type=str, default="best", choices=["best", "played"])
     parser.add_argument("--use-qk-gain", action="store_true", help="Use QK gain scaling.")
@@ -131,6 +131,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--resume", action="store_true", help="Resume from latest checkpoint.")
     parser.add_argument("--run-id", type=str, default=None, help="Explicit run ID.")
     parser.add_argument("--checkpoint-uri", type=str, default=None, help="Explicit checkpoint GCS URI.")
+    parser.add_argument(
+        "--init-checkpoint-uri",
+        type=str,
+        default=None,
+        help=(
+            "Load model weights from this checkpoint directory before training a new run. "
+            "Optimizer state is intentionally not restored."
+        ),
+    )
+    parser.add_argument("--init-checkpoint-step", type=int, default=None, help="Checkpoint step for --init-checkpoint-uri. Defaults to latest.")
     parser.add_argument("--horizon", type=int, default=1, help="Prediction horizon.")
     parser.add_argument("--job-spec", type=str, default=None, help="Optional job spec JSON.")
     parser.add_argument(
@@ -270,8 +280,31 @@ def make_gcs_cache(
     return cache
 
 
+def sync_checkpoint_uri(checkpoint_uri: str, destination: Path) -> Path:
+    """Sync a local or GCS checkpoint directory to a local path."""
+    if not checkpoint_uri.startswith("gs://"):
+        return Path(checkpoint_uri)
+
+    destination.mkdir(parents=True, exist_ok=True)
+    subprocess.run(
+        [
+            "/snap/google-cloud-cli/current/bin/gcloud",
+            "storage",
+            "cp",
+            "--recursive",
+            f"{checkpoint_uri.rstrip('/')}/*",
+            str(destination),
+        ],
+        check=True,
+    )
+    return destination
+
+
 def main() -> int:
     args = parse_args()
+
+    if args.resume and args.init_checkpoint_uri:
+        raise ValueError("--resume and --init-checkpoint-uri are different operations; use only one.")
     
     if args.backend == "tpu":
         jax.distributed.initialize(initialization_timeout=1200)
@@ -307,6 +340,7 @@ def main() -> int:
         compute_dtype=args.head_compute_dtype,
         horizon=args.horizon,
         use_qk_gain=args.use_qk_gain,
+        use_xsa=args.use_xsa,
         use_muon=args.use_muon,
         loss_horizon=args.loss_horizon,
         first_legality_loss_weight=args.first_legality_loss_weight,
@@ -322,6 +356,20 @@ def main() -> int:
     )
 
     start_step = 0
+    if args.init_checkpoint_uri:
+        init_checkpoint_root = sync_checkpoint_uri(
+            args.init_checkpoint_uri,
+            output_dir / "init_checkpoint",
+        )
+        init_step = args.init_checkpoint_step or latest_checkpoint_step(init_checkpoint_root)
+        if init_step is None:
+            raise FileNotFoundError(f"No checkpoint found under {args.init_checkpoint_uri}.")
+        load_training_checkpoint(init_checkpoint_root, model=model, step=init_step)
+        if jax.process_index() == 0:
+            print(f"Initialized model weights from {args.init_checkpoint_uri} step={init_step}")
+            print("Optimizer state was not restored; this is a fresh run branch.")
+            sys.stdout.flush()
+
     if args.resume:
         resume_step = latest_checkpoint_step(local_checkpoint_root)
         source_root = local_checkpoint_root
@@ -430,8 +478,10 @@ def main() -> int:
             batch_size=args.batch_size,
             seed=args.seed,
             horizon=args.horizon,
+            action_source=args.action_source,
             chunk_paths_provider=train_cache.local_paths if train_cache is not None else None,
             shuffle_files=True if train_cache is not None else False,
+            drop_last=True,
         )
         loader = iter(loader_obj)
     if val_chunk_paths:
@@ -440,6 +490,7 @@ def main() -> int:
             batch_size=args.batch_size,
             seed=args.val_seed,
             horizon=args.horizon,
+            action_source=args.action_source,
             shuffle_files=False,
             drop_last=False,
             chunk_paths_provider=val_cache.local_paths if val_cache is not None else None,

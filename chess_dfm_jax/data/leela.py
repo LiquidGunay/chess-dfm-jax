@@ -16,6 +16,11 @@ try:
 except ImportError:  # pragma: no cover
     chess = None
 
+try:
+    import zstandard as zstd
+except ImportError:  # pragma: no cover
+    zstd = None
+
 from chess_dfm_jax import encoding as encode_mod
 from chess_dfm_jax import policy as policy_mod
 from chess_dfm_jax.data.trajectory import trajectory_shard_from_npz, trajectory_shard_to_batch
@@ -86,6 +91,7 @@ class LeelaChunkDataLoader:
         horizon: int = 1,
         include_metadata: bool = False,
         chunk_paths_provider: Callable[[], Sequence[str]] | None = None,
+        action_source: str = "best",
     ):
         self.chunk_paths = [str(path) for path in chunk_paths]
         self.batch_size = batch_size
@@ -100,6 +106,9 @@ class LeelaChunkDataLoader:
         self.horizon = horizon
         self.include_metadata = include_metadata
         self.chunk_paths_provider = chunk_paths_provider
+        if action_source not in {"best", "played"}:
+            raise ValueError(f"Unsupported action_source: {action_source}")
+        self.action_source = action_source
 
     def __iter__(self) -> Iterator[dict[str, np.ndarray]]:
         paths = (
@@ -152,7 +161,10 @@ class LeelaChunkDataLoader:
         fmt = INPUT_FORMAT_NAMES.get(record.input_format, "INPUT_CLASSICAL_112_PLANE")
         current_planes = encode_mod.encode_board(board, history=[], input_format=fmt)
 
-        move_idx = record.best_idx if record.best_idx is not None else record.played_idx
+        if self.action_source == "played":
+            move_idx = record.played_idx if record.played_idx is not None else record.best_idx
+        else:
+            move_idx = record.best_idx if record.best_idx is not None else record.played_idx
         if move_idx is None:
             return None
 
@@ -221,6 +233,10 @@ def discover_chunk_files(chunk_dir: str | None) -> list[str]:
 def _open_chunk(path: str):
     if path.endswith(".gz"):
         return gzip.open(path, "rb")
+    if path.endswith(".zst"):
+        if zstd is None:
+            raise ImportError("zstandard is required to read .zst LC0 chunks.")
+        return zstd.open(path, "rb")
     return open(path, "rb")
 
 

@@ -35,6 +35,8 @@ class DFMConfig:
 
 class DFMDenoiser(nnx.Module):
     def __init__(self, encoder: BT4Model, config: DFMConfig, *, rngs: nnx.Rngs):
+        if config.use_xsa:
+            raise NotImplementedError("use_xsa is reserved but not implemented for DFM.")
         self.encoder = encoder
         self.config = config
         compute_dtype = _parse_compute_dtype(config.compute_dtype)

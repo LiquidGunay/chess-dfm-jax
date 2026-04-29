@@ -39,29 +39,89 @@ As of 2026-04-29:
 - The combined TCEC+LC0 exact-deduplicated H8 dataset is still a later training
   input. Do not use it until its manifest exists and rollout validation passes.
 
+## Training Policy
+
+- BT4 stays frozen through DFM Phase A/B/C, TCEC diagnostics, and the first JEPA
+  sequence runs. Unfreeze only after the heads and data path are proven on
+  held-out metrics. The first unfreeze should be adapters/LoRA or last BT4
+  blocks with a smaller learning rate; full BT4 fine-tuning is a late joint
+  refinement step.
+- DFM and JEPA keep separate trainable projectors by default. DFM needs a
+  state-conditioning latent for action denoising; JEPA needs a predictive
+  latent for future-state dynamics. A shared projector is a later ablation, not
+  part of the current phase-wise curriculum.
+- Normal training runs must use immutable dataset prefixes. The CPU data worker
+  can keep producing additional LC0 trajectory-v2 chunks while TPU training
+  runs, but it should write to a new prefix that is not consumed until manifest,
+  rollout validation, and dedup stats pass.
+
+## Audit Reconciliation
+
+The latest repo audit is useful, but some findings are already addressed:
+
+- `JEPAConfig.use_xsa` now exists and is passed through model construction.
+- Raw LC0 chunks now hard-fail for `horizon != 1` instead of silently creating
+  fake zero-action horizons.
+- Trajectory-v2 is the canonical multi-step contract, and DFM evaluation has a
+  first sampler/refinement path.
+- GCS-backed DFM training defaults to cache-all startup to avoid repeated
+  partial-cache artifacts.
+- Dtype parsing now fails closed and accepts explicit aliases such as `bf16`,
+  `bfloat16`, `fp16`, and `fp32`.
+- JEPA defaults now keep value/WDL losses off and use a small SigReg coefficient
+  for dynamics-first training.
+- Raw LC0 `.zst` chunks are decompressed through `zstandard`.
+- Raw LC0 `action_source` is wired for `best` and `played` targets.
+- DFM curriculum branches can initialize model weights from a prior checkpoint
+  with `--init-checkpoint-uri` while writing to a new run ID.
+- DFM evaluation restores the training loss horizon and loss weights from
+  checkpoint metadata.
+
+Remaining blockers before serious new sweeps:
+
+- Add policy-sampled raw LC0 targets if we decide to train DFM against the LC0
+  visit distribution instead of hard best/played targets.
+- Add JEPA metrics that defeat the identity shortcut: changed-square cosine,
+  identity-baseline cosine, and true-action-vs-random-action delta.
+- Add DFM model-selection metrics beyond CE: legal argmax rate, legal top-k,
+  illegal probability mass, accuracy by `t` bin, and full exact-rollout sequence
+  legality from the sampler.
+- Document and then implement real multi-device sharding before claiming
+  multi-host TPU scaling; current training should be treated as single-process
+  unless a run explicitly uses sharded arrays.
+
 ## Near-Term Plan
 
-1. Let the LC0 10M build finish, then validate sampled train/val/test shards:
+1. Finish the fix-first patch set above and run local CPU smoke tests for DFM,
+   JEPA, loader discovery, checkpoint init, and trajectory-v2 validation.
+2. Let the LC0 10M build finish, then validate sampled train/val/test shards:
    schema, shape, legal replay from `fen_t`, future board equality, and legal
    mask consistency.
-2. Run duplicate statistics on the LC0 10M dataset and write an exact
+3. Compute the LC0 10M average legal-move count and set the Phase A legality
+   coefficient to match random-policy CE scale:
+   `lambda = log(1858) / (1 - avg_legal_moves / 1858)`.
+4. Run duplicate statistics on the LC0 10M dataset and write an exact
    `position_actions` deduplicated version if duplicate rates are meaningful.
-3. Compare the short TCEC legality ablations on held-out metrics, especially
-   validation illegal probability mass, legal-masked first-move accuracy, and
-   first-move CE. Do not choose based on training loss alone.
-4. Start the next real LC0 Phase A run only after the larger LC0 dataset has a
-   complete manifest and validation passes. Use `--gcs-startup-cache-policy all`.
-5. Finish and validate the combined TCEC+LC0 exact-deduplicated H8 dataset.
+5. Start one clean LC0 Phase A run on the full validated LC0 10M dataset:
+   `learning_rate=6e-4`, `loss_horizon=1`, fixed `t=0`,
+   `first_action_loss_weight=0`, `horizon_legality_loss_weight=0`, cache-all
+   startup, and the measured random-policy-balanced legality weight. Do not
+   sweep this Phase A launch.
+6. Finish and validate the combined TCEC+LC0 exact-deduplicated H8 dataset.
    Do not train from that prefix until `manifest.json` exists and a sample shard
    validation passes.
-6. Continue the curriculum from a good Phase A checkpoint:
+7. Keep the LC0 CPU data worker running on a new immutable prefix for future
+   Phase B/C data while the Phase A TPU run trains.
+8. Continue the curriculum from a good Phase A checkpoint using
+   `--init-checkpoint-uri` so each phase has a fresh run ID and checkpoint
+   namespace:
    - Phase B: increase `loss_horizon` from 1 to 2-4 while keeping legality
      pressure.
    - Phase C: train full H8 with scheduled/random `t`.
    - Phase D: run sampler/refinement evaluation, not just token CE.
-7. Run comparable LC0-only, TCEC-only, and deduplicated TCEC+LC0 validation
+9. Run comparable LC0-only, TCEC-only, and deduplicated TCEC+LC0 validation
    curves before scaling depth/width.
-8. After DFM stabilizes, resume JEPA sequence-prediction and plan-scoring work.
+10. After DFM stabilizes, resume JEPA sequence-prediction and plan-scoring work.
 
 ## Trajectory-v2 Contract
 

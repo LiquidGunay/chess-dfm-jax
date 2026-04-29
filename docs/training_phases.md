@@ -45,12 +45,25 @@ Current live work:
   first-step legality weights 10 and 20. These are diagnostic runs while the
   larger LC0 data finishes, not final model-selection runs.
 
+## BT4 and Projectors
+
+BT4 stays frozen for DFM Phase A/B/C, TCEC diagnostics, and initial JEPA runs.
+Only consider unfreezing after DFM has held-out legal/plausible action chunks
+and JEPA beats identity/random-action baselines on changed-square metrics. The
+first unfreeze should be adapter/LoRA-style or last-block-only with a smaller
+learning rate; full BT4 fine-tuning is a late joint-refinement stage.
+
+DFM and JEPA use separate trainable projectors by default. They optimize
+different objectives: DFM needs a conditioning space for action denoising, while
+JEPA needs a predictive latent space for future-state dynamics. A shared
+projector is a later ablation after both paths are stable.
+
 ## Phase A Loss
 
 The Phase A DFM command uses fixed `t=0` masking for the supervised horizon:
 
 ```text
-loss = first_action_loss_weight * CE(actions[:, 0])
+loss = CE(actions[:, 0])
      + first_legality_loss_weight * mean(sum_illegal_probs(step=0))
 ```
 
@@ -63,6 +76,26 @@ horizon_legality_loss_weight = 0.0
 loss_horizon = 1
 train_deterministic_t = 0.0
 ```
+
+That diagnostic double-counted first-move CE because masked CE already includes
+the first action when `loss_horizon=1` and `t=0`. The next clean LC0 10M Phase A
+run should use:
+
+```text
+first_action_loss_weight = 0.0
+loss_horizon = 1
+train_deterministic_t = 0.0
+learning_rate = 6e-4
+```
+
+Choose the legality coefficient by matching the random-policy scale:
+
+```text
+lambda_legal = log(1858) / (1 - avg_legal_moves / 1858)
+```
+
+The expected value is around `7.5-8.0`, but use the measured LC0 10M average
+legal-move count before launch.
 
 Validation should include fixed `t` slices, not just the training distribution,
 so we can separate first-move legality, first-move accuracy, and denoising
@@ -80,11 +113,12 @@ Do not launch the combined TCEC+LC0 run until all of these are true:
 
 After the larger LC0 dataset is complete and validated, continue in this order:
 
-1. Phase A rerun: train on the larger LC0 dataset with `loss_horizon=1`, fixed
-   `t=0`, cache-all startup, and a legality weight chosen from the short TCEC
-   ablations or a small LC0 smoke.
-2. Phase B: resume from Phase A, increase `loss_horizon` to 2-4, and keep
-   first-move legality pressure.
+1. Phase A rerun: train on the full validated LC0 10M dataset with
+   `loss_horizon=1`, fixed `t=0`, cache-all startup, `learning_rate=6e-4`, and
+   the measured random-policy-balanced legality coefficient. Do not sweep Phase
+   A before this run.
+2. Phase B: branch from Phase A with `--init-checkpoint-uri`, increase
+   `loss_horizon` to 2-4, and keep first-move legality pressure.
 3. Phase C: train full H8 with scheduled or random `t` and held-out validation.
 4. Phase D: evaluate sampler/refinement behavior, including first-move legal
    rate and full exact-rollout legal sequence rate.

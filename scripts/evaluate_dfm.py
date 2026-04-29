@@ -41,6 +41,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--checkpoint-dir", required=True, help="Local or gs:// DFM checkpoint directory.")
     parser.add_argument("--models-dir", default=None, help="Path to BT4 model files.")
     parser.add_argument("--chunk-dir", default=None, help="Validation trajectory-v2 chunk directory.")
+    parser.add_argument("--gcs-val-prefix", default="", help="Optional GCS prefix containing validation .npz shards.")
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--batches", type=int, default=4)
     parser.add_argument("--seed", type=int, default=0)
@@ -58,6 +59,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--head-compute-dtype", choices=["float16", "bfloat16", "float32"], default=None)
     parser.add_argument("--learning-rate", type=float, default=None)
     parser.add_argument("--weight-decay", type=float, default=None)
+    parser.add_argument("--loss-horizon", type=int, default=None)
+    parser.add_argument("--first-legality-loss-weight", type=float, default=None)
+    parser.add_argument("--horizon-legality-loss-weight", type=float, default=None)
+    parser.add_argument("--first-action-loss-weight", type=float, default=None)
     parser.add_argument("--use-qk-gain", action=argparse.BooleanOptionalAction, default=None)
     parser.add_argument("--use-muon", action=argparse.BooleanOptionalAction, default=None)
     return parser.parse_args()
@@ -90,6 +95,10 @@ def resolve_dfm_config(args: argparse.Namespace, checkpoint_dir: Path) -> DFMCon
         horizon=int(_value_from_args_or_metadata(args, metadata, "horizon", 1)),
         use_qk_gain=bool(_value_from_args_or_metadata(args, metadata, "use_qk_gain", False)),
         use_muon=bool(_value_from_args_or_metadata(args, metadata, "use_muon", False)),
+        loss_horizon=int(_value_from_args_or_metadata(args, metadata, "loss_horizon", 0)),
+        first_legality_loss_weight=float(_value_from_args_or_metadata(args, metadata, "first_legality_loss_weight", 2.0)),
+        horizon_legality_loss_weight=float(_value_from_args_or_metadata(args, metadata, "horizon_legality_loss_weight", 0.0)),
+        first_action_loss_weight=float(_value_from_args_or_metadata(args, metadata, "first_action_loss_weight", 0.0)),
     )
 
 
@@ -98,6 +107,22 @@ def sync_gcs_checkpoint(checkpoint_uri: str, destination: Path) -> Path:
     source = checkpoint_uri.rstrip("/") + "/*"
     subprocess.run(
         ["/snap/google-cloud-cli/current/bin/gcloud", "storage", "cp", "--recursive", source, str(destination)],
+        check=True,
+    )
+    return destination
+
+
+def sync_gcs_shards(prefix: str, destination: Path) -> Path:
+    destination.mkdir(parents=True, exist_ok=True)
+    subprocess.run(
+        [
+            "/snap/google-cloud-cli/current/bin/gcloud",
+            "storage",
+            "cp",
+            "--recursive",
+            f"{prefix.rstrip('/')}/*",
+            str(destination),
+        ],
         check=True,
     )
     return destination
@@ -296,12 +321,16 @@ def evaluate(args: argparse.Namespace, checkpoint_dir: Path) -> dict[str, Any]:
 
 def main() -> int:
     args = parse_args()
-    if args.checkpoint_dir.startswith("gs://"):
-        with tempfile.TemporaryDirectory(prefix="dfm-eval-ckpt-") as tmp:
-            checkpoint_dir = sync_gcs_checkpoint(args.checkpoint_dir, Path(tmp) / "checkpoints")
-            metrics = evaluate(args, checkpoint_dir)
-    else:
-        metrics = evaluate(args, Path(args.checkpoint_dir))
+    with tempfile.TemporaryDirectory(prefix="dfm-eval-") as tmp:
+        tmp_path = Path(tmp)
+        checkpoint_dir = (
+            sync_gcs_checkpoint(args.checkpoint_dir, tmp_path / "checkpoints")
+            if args.checkpoint_dir.startswith("gs://")
+            else Path(args.checkpoint_dir)
+        )
+        if args.gcs_val_prefix:
+            args.chunk_dir = str(sync_gcs_shards(args.gcs_val_prefix, tmp_path / "val_shards"))
+        metrics = evaluate(args, checkpoint_dir)
 
     text = json.dumps(metrics, indent=2, sort_keys=True)
     print(text)

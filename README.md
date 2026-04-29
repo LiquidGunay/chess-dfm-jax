@@ -10,13 +10,13 @@ point for:
 - token-level JEPA training on LC0 self-play data
 - parity checks against the shipped ONNX oracle
 - roofline and step profiling
-- preemption-safe Spot TPU batch training with Orbax checkpoints
+- preemption-aware Spot TPU batch training with raw NumPy checkpoints
 - trajectory-v2 DFM training on exact multi-ply chess rollouts
 - dataset QA/deduplication and run monitoring through marimo notebooks
 
 ## Layout
 
-- `chess_dfm_jax/`: local package with encoder, policy map, weights loader, BT4 reference forward, NNX BT4 encoder/model, chunk loader, PGN sequence loader, roofline helpers, Orbax checkpoints, TPU controller helpers, and W&B utilities.
+- `chess_dfm_jax/`: local package with encoder, policy map, weights loader, BT4 reference forward, NNX BT4 encoder/model, chunk loader, PGN sequence loader, roofline helpers, raw NumPy checkpoints, TPU controller helpers, and W&B utilities.
 - `notebooks/`: pedagogical marimo notebooks.
 - `scripts/`: runnable CLIs for parity checks, roofline measurement, and chunk inspection.
 - `docs/`: workflow notes for manual reproduction, roofline analysis, and data loading.
@@ -136,12 +136,16 @@ The Spot TPU example spec uses a smaller `token_dim=256, mlp_dim=1024` configura
 
 ## Checkpoints and resume
 
-`scripts/train_jepa.py` now uses Orbax async checkpoints instead of pickle files.
+`scripts/train_jepa.py` and `scripts/train_dfm.py` use raw NumPy checkpoint
+directories, not Orbax. Each checkpoint stores trainable model state and, for
+normal resume, optimizer state.
 
-- Local runs default to `runs/jepa/<run-name>/checkpoints/`.
+- Local runs default to `runs/jepa/<run-name>/checkpoints/` or
+  `runs/dfm/<run-name>/checkpoints/`.
 - Resume uses `--resume` and restores the latest step from the checkpoint directory.
 - The trainer handles `SIGTERM` and writes a final checkpoint before exiting.
-- Only the trainable JEPA head and optimizer state are checkpointed; frozen BT4 weights are reloaded from the pinned model file.
+- Only trainable head/projector state and optimizer state are checkpointed;
+  frozen BT4 weights are reloaded from the pinned model file.
 
 Do not run two trainers against the same checkpoint directory at the same time.
 
@@ -152,7 +156,8 @@ The first cloud path is single-host `v5litepod-8` Spot TPU VMs.
 - Use `docs/tpu_spot_job_spec.example.json` as the controller spec template.
 - The local controller uploads an immutable source snapshot to GCS.
 - The TPU VM startup script installs `jax[tpu]`, installs the repo, downloads models/data, and runs `scripts/train_jepa.py --resume`.
-- Orbax checkpoints go to a regional GCS path so a later zone retry can resume safely.
+- Raw NumPy checkpoints go to a regional GCS path so a later zone retry can
+  resume safely.
 
 See `docs/tpu_spot_training.md` for the setup details.
 
@@ -170,7 +175,7 @@ See `docs/tpu_spot_training.md` for the setup details.
 4. Prototype chunk batching in `notebooks/leela_data_pipeline.py`.
 5. Start with `notebooks/training_jepa.py` for a token-level JEPA smoke test on GPU.
 6. Use `notebooks/play_bt4.py` when you want a quick human-vs-policy sanity check without search.
-7. Use `scripts/train_jepa.py` for tracked local runs with W&B and Orbax checkpoints.
+7. Use `scripts/train_jepa.py` for tracked local runs with W&B and raw NumPy checkpoints.
 8. Use `notebooks/analyze_jepa.py` to inspect `metrics.jsonl`, per-square cosine heatmaps, and the post hoc two-ply probe.
 9. Use `scripts/profile_jepa_tpu.py` when you want a TPU-oriented trace plus a small arithmetic-intensity sweep in one artifact bundle.
 10. Use `scripts/run_tpu_spot_jepa.py` with a filled job spec when you are ready to move the same training path to Spot TPU VMs.

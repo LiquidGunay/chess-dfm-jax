@@ -20,6 +20,7 @@ chess_dfm_jax/analysis/jepa_theory.py
 chess_dfm_jax/analysis/profile_targets.py
 chess_dfm_jax/analysis/roofline.py
 chess_dfm_jax/data/__init__.py
+chess_dfm_jax/data/gcs_cache.py
 chess_dfm_jax/data/leela.py
 chess_dfm_jax/data/pgn.py
 chess_dfm_jax/data/trajectory.py
@@ -32,6 +33,7 @@ chess_dfm_jax/training/checkpoints.py
 chess_dfm_jax/training/dfm.py
 chess_dfm_jax/training/jepa.py
 chess_dfm_jax/training/tpu_jobs.py
+tests/test_dfm_diagnostics.py
 tests/test_dfm_step.py
 tests/test_muon.py
 tests/test_overfit.py

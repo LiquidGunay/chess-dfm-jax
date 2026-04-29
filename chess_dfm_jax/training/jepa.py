@@ -43,9 +43,9 @@ class JEPAConfig:
     use_xsa: bool = False
     use_muon: bool = False
     terminal_only: bool = False
-    sigreg_coeff: float = 1.0
-    value_coeff: float = 1.0
-    wdl_coeff: float = 1.0
+    sigreg_coeff: float = 0.01
+    value_coeff: float = 0.0
+    wdl_coeff: float = 0.0
 
 
 class ActionMLP(nnx.Module):
@@ -424,11 +424,18 @@ def build_transition_batch(
 
 
 def _parse_compute_dtype(dtype_str: str) -> jnp.dtype:
-    if dtype_str == "float16":
-        return jnp.float16
-    if dtype_str == "bfloat16":
-        return jnp.bfloat16
-    return jnp.float32
+    dtype = dtype_str.lower()
+    mapping = {
+        "float16": jnp.float16,
+        "fp16": jnp.float16,
+        "bfloat16": jnp.bfloat16,
+        "bf16": jnp.bfloat16,
+        "float32": jnp.float32,
+        "fp32": jnp.float32,
+    }
+    if dtype not in mapping:
+        raise ValueError(f"Unsupported compute dtype: {dtype_str}")
+    return mapping[dtype]
 
 
 def create_jepa_components(
@@ -437,6 +444,8 @@ def create_jepa_components(
     *,
     seed: int = 0,
 ) -> tuple[LC0JEPA, nnx.Optimizer]:
+    if config.use_xsa:
+        raise NotImplementedError("use_xsa is reserved but not implemented in EncoderLayer.")
     encoder_dtype = _parse_compute_dtype(config.encoder_dtype)
     encoder = make_bt4_model(bt4_params, dtype=encoder_dtype)
     model = LC0JEPA(encoder, config, rngs=nnx.Rngs(seed))
