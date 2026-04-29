@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import collections
 import dataclasses
-import os
-from typing import Any, Sequence
+from typing import Any
 
 import jax
 import jax.numpy as jnp
@@ -13,8 +11,20 @@ import numpy as np
 import optax
 from flax import nnx
 
-from chess_dfm_jax.nnx_bt4 import BT4Model, EncoderLayer, TrainableParam, TrainableLayerNorm, TrainableEmbedding, make_bt4_model, swish
-from chess_dfm_jax.policy import policy_index_to_move, move_to_policy_index
+from chess_dfm_jax.data.trajectory import (
+    build_synthetic_trajectory_shard,
+    terminal_target_indices,
+    trajectory_shard_to_batch,
+)
+from chess_dfm_jax.nnx_bt4 import (
+    BT4Model,
+    EncoderLayer,
+    TrainableEmbedding,
+    TrainableLayerNorm,
+    TrainableParam,
+    make_bt4_model,
+    swish,
+)
 
 @dataclasses.dataclass
 class JEPAConfig:
@@ -30,7 +40,9 @@ class JEPAConfig:
     action_source: str = "best"
     action_vocab_size: int = 1858
     use_qk_gain: bool = False
+    use_xsa: bool = False
     use_muon: bool = False
+    terminal_only: bool = False
     sigreg_coeff: float = 1.0
     value_coeff: float = 1.0
     wdl_coeff: float = 1.0
@@ -152,40 +164,42 @@ class TokenTransitionHead(nnx.Module):
         square_pos = jnp.asarray(self.square_pos[...], dtype=self.compute_dtype)
         return jnp.asarray(projected, dtype=self.compute_dtype) + square_pos[None, :, :]
 
+    def encode_future_tokens(self, future_planes: jnp.ndarray) -> jnp.ndarray:
+        batch_size, horizon, channels, height, width = future_planes.shape
+        flat_planes = future_planes.reshape((batch_size * horizon, channels, height, width))
+        flat_tokens = self.encode_state_tokens(flat_planes)
+        token_dim = flat_tokens.shape[-1]
+        return flat_tokens.reshape((batch_size, horizon, 64, token_dim))
+
     def predict_next(self, tokens: jnp.ndarray, action_idx: jnp.ndarray) -> jnp.ndarray:
-        # tokens: [B, 64, D]
-        # action_idx: [B]
         action_token = self.action_mlp(action_idx)
-        # Condition board tokens by adding action embedding: [B, 64, D]
         seq = tokens + action_token[:, None, :]
         for block in self.blocks:
             seq = block(seq)
-        # Return predicted next tokens
         return self.output_norm(seq)
+
+    def predict_sequence(self, current_planes: jnp.ndarray, action_indices: jnp.ndarray) -> jnp.ndarray:
+        current_tokens = self.encode_state_tokens(current_planes)
+
+        def loop_body(tokens, action_idx):
+            next_tokens = self.predict_next(tokens, action_idx)
+            return next_tokens, next_tokens
+
+        actions_seq = jnp.transpose(action_indices, (1, 0))
+        _, pred_tokens_seq = jax.lax.scan(loop_body, current_tokens, actions_seq)
+        return jnp.transpose(pred_tokens_seq, (1, 0, 2, 3))
 
     def __call__(
         self,
         current_planes: jnp.ndarray,
         action_indices: jnp.ndarray,
-        next_planes: jnp.ndarray,
+        future_planes: jnp.ndarray,
     ) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray]:
-        # action_indices: [B, K] where K is horizon
-        current_tokens = self.encode_state_tokens(current_planes)
-        target_tokens = jax.lax.stop_gradient(self.encode_state_tokens(next_planes))
-        
-        # Unroll predictor for K steps
-        def loop_body(tokens, action_idx):
-            next_tokens = self.predict_next(tokens, action_idx)
-            return next_tokens, None
-            
-        # Swap axes to [K, B] for scan
-        actions_seq = jnp.transpose(action_indices, (1, 0))
-        final_pred, _ = jax.lax.scan(loop_body, current_tokens, actions_seq)
-        
-        z_pool = jnp.mean(final_pred, axis=1)
+        pred_tokens_seq = self.predict_sequence(current_planes, action_indices)
+        target_tokens_seq = jax.lax.stop_gradient(self.encode_future_tokens(future_planes))
+        z_pool = jnp.mean(pred_tokens_seq, axis=2)
         q_pred, wdl_pred = self.value_head(z_pool)
-        
-        return final_pred, target_tokens, q_pred, wdl_pred
+        return pred_tokens_seq, target_tokens_seq, q_pred, wdl_pred
 
 
 def _l2_normalize(x: jnp.ndarray, axis: int = -1, epsilon: float = 1e-12) -> jnp.ndarray:
@@ -212,51 +226,63 @@ def transition_jepa_loss(
     model: LC0JEPA,
     batch: dict[str, jnp.ndarray],
 ) -> tuple[jnp.ndarray, dict[str, jnp.ndarray]]:
-    # batch["action_indices"]: [B, K]
     pred_tokens, target_tokens, q_pred, wdl_pred = model(
         batch["current_planes"],
         batch["action_indices"],
-        batch["next_planes"],
+        batch["future_planes"],
     )
     pred_tokens_norm = _l2_normalize(jnp.asarray(pred_tokens, dtype=jnp.float32))
     target_tokens_norm = _l2_normalize(jnp.asarray(target_tokens, dtype=jnp.float32))
+    future_valid = jnp.asarray(batch["future_valid"], dtype=jnp.float32)
     valid = jnp.asarray(batch["valid"], dtype=jnp.float32)
-    
-    # Cosine similarity between 64 tokens
+    if model.terminal_only:
+        terminal_index = jnp.asarray(batch["terminal_target_index"], dtype=jnp.int32)
+        terminal_mask = jax.nn.one_hot(
+            terminal_index, future_valid.shape[1], dtype=jnp.float32
+        )
+        loss_mask = terminal_mask * valid[:, None]
+    else:
+        loss_mask = future_valid * valid[:, None]
+
     cosine = jnp.sum(pred_tokens_norm * target_tokens_norm, axis=-1)
     token_distance = 2.0 - 2.0 * cosine
     sample_sim_loss = jnp.mean(token_distance, axis=-1)
-    
-    denom = jnp.maximum(valid.sum(), 1.0)
-    sim_loss = jnp.sum(sample_sim_loss * valid) / denom
-    mean_cosine = jnp.sum(jnp.mean(cosine, axis=-1) * valid) / denom
-    
-    # SigReg Loss
+
+    denom = jnp.maximum(loss_mask.sum(), 1.0)
+    sim_loss = jnp.sum(sample_sim_loss * loss_mask) / denom
+    mean_cosine = jnp.sum(jnp.mean(cosine, axis=-1) * loss_mask) / denom
+
     z_flat = pred_tokens.reshape((-1, pred_tokens.shape[-1]))
     sigreg = _sigreg_loss(z_flat)
-    
-    # Value Loss (MSE)
-    value_target = jnp.asarray(batch.get("value_target", jnp.zeros_like(q_pred)), dtype=jnp.float32)
+
+    value_target = jnp.asarray(
+        batch.get("value_targets", jnp.zeros_like(q_pred)), dtype=jnp.float32
+    )
     sample_val_loss = jnp.square(q_pred - value_target)
-    val_loss = jnp.sum(sample_val_loss * valid) / denom
-    
-    # WDL Loss (Cross-Entropy/KL Divergence)
-    wdl_target = jnp.asarray(batch.get("wdl_target", jnp.zeros_like(wdl_pred)), dtype=jnp.float32)
+    val_loss = jnp.sum(sample_val_loss * loss_mask) / denom
+
+    wdl_target = jnp.asarray(batch.get("wdl_targets", jnp.zeros_like(wdl_pred)), dtype=jnp.float32)
     wdl_target = wdl_target / jnp.maximum(jnp.sum(wdl_target, axis=-1, keepdims=True), 1e-12)
     wdl_log_probs = jax.nn.log_softmax(wdl_pred, axis=-1)
     sample_wdl_loss = -jnp.sum(wdl_target * wdl_log_probs, axis=-1)
-    wdl_loss = jnp.sum(sample_wdl_loss * valid) / denom
-    
-    total_loss = sim_loss + model.sigreg_coeff * sigreg + model.value_coeff * val_loss + model.wdl_coeff * wdl_loss
-    
+    wdl_loss = jnp.sum(sample_wdl_loss * loss_mask) / denom
+
+    total_loss = (
+        sim_loss
+        + model.sigreg_coeff * sigreg
+        + model.value_coeff * val_loss
+        + model.wdl_coeff * wdl_loss
+    )
+
     aux = {
         "loss": total_loss,
         "jepa_loss": sim_loss,
         "sigreg_loss": sigreg,
         "val_loss": val_loss,
         "wdl_loss": wdl_loss,
-        "valid_fraction": valid.mean(),
+        "valid_fraction": loss_mask.mean(),
         "mean_token_cosine": mean_cosine,
+        "terminal_only": jnp.asarray(1.0 if model.terminal_only else 0.0, dtype=jnp.float32),
         "pred_token_norm": jnp.mean(jnp.linalg.norm(pred_tokens, axis=-1)),
         "target_token_norm": jnp.mean(jnp.linalg.norm(target_tokens, axis=-1)),
     }
@@ -267,6 +293,7 @@ class LC0JEPA(nnx.Module):
     def __init__(self, encoder: BT4Model, config: JEPAConfig, *, rngs: nnx.Rngs):
         self.encoder = encoder
         self.transition = TokenTransitionHead(encoder, config, rngs=rngs)
+        self.terminal_only = config.terminal_only
         self.sigreg_coeff = config.sigreg_coeff
         self.value_coeff = config.value_coeff
         self.wdl_coeff = config.wdl_coeff
@@ -274,13 +301,20 @@ class LC0JEPA(nnx.Module):
     def encode_state_tokens(self, planes: jnp.ndarray) -> jnp.ndarray:
         return self.transition.encode_state_tokens(planes)
 
+    def predict_sequence(
+        self,
+        current_planes: jnp.ndarray,
+        action_indices: jnp.ndarray,
+    ) -> jnp.ndarray:
+        return self.transition.predict_sequence(current_planes, action_indices)
+
     def __call__(
         self,
         current_planes: jnp.ndarray,
         action_indices: jnp.ndarray,
-        next_planes: jnp.ndarray,
+        future_planes: jnp.ndarray,
     ) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray]:
-        return self.transition(current_planes, action_indices, next_planes)
+        return self.transition(current_planes, action_indices, future_planes)
 
 
 _loss_and_grad = nnx.value_and_grad(
@@ -298,27 +332,102 @@ def train_step(model: LC0JEPA, optimizer: nnx.Optimizer, batch: dict[str, jnp.nd
 
 
 def build_synthetic_transition_batch(batch_size: int, horizon: int = 1) -> dict[str, jnp.ndarray]:
-    return {
-        "current_planes": jnp.zeros((batch_size, 112, 8, 8), dtype=jnp.float32),
-        "action_indices": jnp.zeros((batch_size, horizon), dtype=jnp.int32),
-        "next_planes": jnp.zeros((batch_size, 112, 8, 8), dtype=jnp.float32),
-        "valid": jnp.ones((batch_size,), dtype=jnp.float32),
-        "value_target": jnp.zeros((batch_size,), dtype=jnp.float32),
-        "wdl_target": jnp.zeros((batch_size, 3), dtype=jnp.float32),
-        "legal_mask": jnp.ones((batch_size, 1858), dtype=jnp.float32),
-    }
+    shard = build_synthetic_trajectory_shard(batch_size=batch_size, horizon=horizon)
+    batch = trajectory_shard_to_batch(shard)
+    return {key: jnp.asarray(value) for key, value in batch.items()}
 
 
 def build_transition_batch(
     raw_batch: dict[str, Any],
     action_source: str = "best",
 ) -> dict[str, jnp.ndarray]:
-    return raw_batch
+    del action_source
+    batch = dict(raw_batch)
+    if "action_indices" not in batch:
+        if "action_idx" not in batch:
+            raise KeyError("Missing action_indices/action_idx in transition batch.")
+        action_idx = np.asarray(batch["action_idx"], dtype=np.int32)
+        if action_idx.ndim == 1:
+            batch["action_indices"] = action_idx[:, None]
+        else:
+            batch["action_indices"] = action_idx.astype(np.int32)
+    else:
+        batch["action_indices"] = np.asarray(batch["action_indices"], dtype=np.int32)
+
+    if "action_idx" not in batch:
+        batch["action_idx"] = np.asarray(batch["action_indices"][:, 0], dtype=np.int32)
+
+    if "future_planes" not in batch:
+        if "next_planes" not in batch:
+            raise KeyError("Missing future_planes/next_planes in transition batch.")
+        next_planes = np.asarray(batch["next_planes"], dtype=np.float32)
+        batch["future_planes"] = next_planes[:, None, ...]
+
+    future_planes = np.asarray(batch["future_planes"], dtype=np.float32)
+    batch["future_planes"] = future_planes
+    horizon = future_planes.shape[1]
+
+    if "future_valid" not in batch:
+        batch["future_valid"] = np.ones((future_planes.shape[0], horizon), dtype=np.float32)
+    else:
+        batch["future_valid"] = np.asarray(batch["future_valid"], dtype=np.float32)
+
+    if "terminal_target_index" not in batch:
+        batch["terminal_target_index"] = terminal_target_indices(
+            np.asarray(batch["future_valid"], dtype=np.float32)
+        )
+
+    terminal_idx = np.asarray(batch["terminal_target_index"], dtype=np.int32)
+    batch["next_planes"] = future_planes[np.arange(future_planes.shape[0]), terminal_idx]
+    batch["valid"] = np.asarray(
+        batch.get("valid", (np.asarray(batch["future_valid"]).sum(axis=1) > 0).astype(np.float32)),
+        dtype=np.float32,
+    )
+
+    if "value_targets" not in batch:
+        if "value_target" in batch:
+            value_target = np.asarray(batch["value_target"], dtype=np.float32)
+            value_targets = np.zeros((value_target.shape[0], horizon), dtype=np.float32)
+            value_targets[np.arange(value_target.shape[0]), terminal_idx] = value_target
+            batch["value_targets"] = value_targets
+        else:
+            batch["value_targets"] = np.zeros((future_planes.shape[0], horizon), dtype=np.float32)
+    else:
+        batch["value_targets"] = np.asarray(batch["value_targets"], dtype=np.float32)
+    batch["value_target"] = np.asarray(
+        batch["value_targets"][np.arange(future_planes.shape[0]), terminal_idx], dtype=np.float32
+    )
+
+    if "wdl_targets" not in batch:
+        if "wdl_target" in batch:
+            wdl_target = np.asarray(batch["wdl_target"], dtype=np.float32)
+            wdl_targets = np.zeros((wdl_target.shape[0], horizon, 3), dtype=np.float32)
+            wdl_targets[np.arange(wdl_target.shape[0]), terminal_idx] = wdl_target
+            batch["wdl_targets"] = wdl_targets
+        else:
+            batch["wdl_targets"] = np.zeros((future_planes.shape[0], horizon, 3), dtype=np.float32)
+    else:
+        batch["wdl_targets"] = np.asarray(batch["wdl_targets"], dtype=np.float32)
+    batch["wdl_target"] = np.asarray(
+        batch["wdl_targets"][np.arange(future_planes.shape[0]), terminal_idx], dtype=np.float32
+    )
+
+    if "legal_mask" not in batch:
+        if "legal_masks" in batch:
+            batch["legal_mask"] = np.asarray(batch["legal_masks"], dtype=np.float32)[:, 0]
+        else:
+            batch["legal_mask"] = np.ones((future_planes.shape[0], 1858), dtype=np.float32)
+    else:
+        batch["legal_mask"] = np.asarray(batch["legal_mask"], dtype=np.float32)
+
+    return {key: jnp.asarray(value) for key, value in batch.items()}
 
 
 def _parse_compute_dtype(dtype_str: str) -> jnp.dtype:
     if dtype_str == "float16":
         return jnp.float16
+    if dtype_str == "bfloat16":
+        return jnp.bfloat16
     return jnp.float32
 
 

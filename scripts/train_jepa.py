@@ -58,13 +58,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--mlp-dim", type=int, default=2048, help="MLP hidden dimension.")
     parser.add_argument("--learning-rate", type=float, default=3e-4, help="Learning rate.")
     parser.add_argument("--weight-decay", type=float, default=1e-4, help="Weight decay.")
-    parser.add_argument("--encoder-dtype", type=str, default="float16", choices=["float16", "float32"])
-    parser.add_argument("--head-param-dtype", type=str, default="float32", choices=["float16", "float32"])
-    parser.add_argument("--head-compute-dtype", type=str, default="float32", choices=["float16", "float32"])
+    parser.add_argument("--encoder-dtype", type=str, default="float16", choices=["float16", "bfloat16", "float32"])
+    parser.add_argument("--head-param-dtype", type=str, default="float32", choices=["float16", "bfloat16", "float32"])
+    parser.add_argument("--head-compute-dtype", type=str, default="float32", choices=["float16", "bfloat16", "float32"])
     parser.add_argument("--action-source", type=str, default="best", choices=["best", "played"])
     parser.add_argument("--use-qk-gain", action="store_true", help="Use QK gain scaling.")
     parser.add_argument("--use-xsa", action="store_true", help="Use Exclusive Self-Attention.")
     parser.add_argument("--use-muon", action="store_true", help="Use Muon optimizer.")
+    parser.add_argument("--terminal-only", action="store_true", help="Only supervise the final rollout state.")
     parser.add_argument("--save-dir", type=str, default=None, help="Local path for saves.")
     parser.add_argument("--save-every", type=int, default=500, help="Save checkpoint every N steps.")
     parser.add_argument("--log-every", type=int, default=10, help="Log metrics every N steps.")
@@ -120,7 +121,9 @@ def main() -> int:
         head_compute_dtype=args.head_compute_dtype,
         action_source=args.action_source,
         use_qk_gain=args.use_qk_gain,
+        use_xsa=args.use_xsa,
         use_muon=args.use_muon,
+        terminal_only=args.terminal_only,
     )
     model, optimizer = create_jepa_components(params, config, seed=args.seed)
 

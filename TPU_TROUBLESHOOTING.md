@@ -49,7 +49,7 @@ Because the controller might need to wait hours for Spot capacity, you should ru
 source .venv/bin/activate
 
 # Run the controller in the background, redirecting logs to a file
-python -u scripts/run_tpu_spot_jepa.py --job-spec docs/tpu_profile_job_spec.project.json > spot_controller.log 2>&1 &
+python -u scripts/run_tpu_spot_jepa.py --job-spec docs/tpu_profile_job_spec.local.json > spot_controller.log 2>&1 &
 ```
 
 ## How to Check Job Progress
@@ -66,20 +66,20 @@ tail -f spot_controller.log
 Check this to see what the TPU VM is currently doing. The states are usually `booting` -> `running` -> `completed` (or `failed`).
 ```bash
 # Check the primary zone (Europe)
-gcloud storage cat gs://gunay-chess-experiments-europe-west4/runs/jepa/jepa-v5litepod16-profile/status.json
+gcloud storage cat gs://your-europe-west4-bucket/runs/jepa/jepa-profile-example/status.json
 
 # Check the fallback zone (US-Central)
-gcloud storage cat gs://gunay-chess-experiments-us-central1/runs/jepa/jepa-v5litepod16-profile/status.json
+gcloud storage cat gs://your-us-central1-bucket/runs/jepa/jepa-profile-example/status.json
 ```
 
 ### 3. The Deep Dive (Startup Logs)
 If the high-level status says `failed`, the controller is now configured to upload the exact console output of the TPU VM before it dies. Read this to find the Python Traceback or bash error:
 ```bash
-gcloud storage cat gs://gunay-chess-experiments-europe-west4/runs/jepa/jepa-v5litepod16-profile/artifacts/startup.log
+gcloud storage cat gs://your-europe-west4-bucket/runs/jepa/jepa-profile-example/artifacts/startup.log
 ```
 
 ### 4. The Final Results
 Once the job `status.json` says `completed`, your profiling data (MFU metrics, CSVs, TensorBoard traces) will be available in the artifacts folder:
 ```bash
-gcloud storage ls gs://gunay-chess-experiments-europe-west4/runs/jepa/jepa-v5litepod16-profile/artifacts/profile_bundle/
+gcloud storage ls gs://your-europe-west4-bucket/runs/jepa/jepa-profile-example/artifacts/profile_bundle/
 ```

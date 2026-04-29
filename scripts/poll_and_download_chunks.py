@@ -8,8 +8,12 @@ import re
 
 BASE_URL = "https://storage.lczero.org/files/training_data/test80/"
 GCS_BUCKETS = [
-    "gs://gunay-chess-experiments-us-central1/data/chunks",
-    "gs://gunay-chess-experiments-us-central2/data/chunks"
+    bucket.strip()
+    for bucket in os.environ.get(
+        "CHESS_DFM_CHUNK_BUCKETS",
+        "gs://your-us-central1-bucket/data/chunks,gs://your-us-central2-bucket/data/chunks",
+    ).split(",")
+    if bucket.strip()
 ]
 
 def get_links():

@@ -29,7 +29,7 @@ Provides-Extra: dev
 Requires-Dist: pytest>=8.0.0; extra == "dev"
 Requires-Dist: ruff>=0.11.0; extra == "dev"
 
-# lc0jax-human
+# chess-dfm-jax
 
 Standalone BT4 training scaffold extracted from the larger `schutpaper` repo.
 
@@ -53,7 +53,7 @@ point for:
 ## Quickstart
 
 ```bash
-cd lc0jax-human
+cd chess-dfm-jax
 uv venv .venv
 uv pip install --python .venv/bin/python -e .
 ```

@@ -22,6 +22,7 @@ chess_dfm_jax/analysis/roofline.py
 chess_dfm_jax/data/__init__.py
 chess_dfm_jax/data/leela.py
 chess_dfm_jax/data/pgn.py
+chess_dfm_jax/data/trajectory.py
 chess_dfm_jax/proto/__init__.py
 chess_dfm_jax/proto/net_pb2.py
 chess_dfm_jax/tracking/__init__.py
@@ -36,3 +37,4 @@ tests/test_muon.py
 tests/test_overfit.py
 tests/test_pipeline_e2e.py
 tests/test_training_step.py
+tests/test_trajectory_v2.py

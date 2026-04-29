@@ -54,20 +54,23 @@ def test_end_to_end():
         chunk_path = os.path.join(tmpdir, "chunk_000000.npz")
         
         planes_t = np.stack([s["planes_t"] for s in samples])
-        legal_mask = np.stack([s["legal_mask"] for s in samples])
-        planes_target = np.stack([s["planes_target"] for s in samples])
         actions = np.stack([s["actions"] for s in samples])
-        value_target = np.stack([s["value_target"] for s in samples])
-        wdl_target = np.stack([s["wdl_target"] for s in samples])
+        planes_future = np.stack([s["planes_future"] for s in samples])
+        future_valid = np.stack([s["future_valid"] for s in samples])
+        legal_masks = np.stack([s["legal_masks"] for s in samples])
+        value_targets = np.stack([s["value_targets"] for s in samples])
+        wdl_targets = np.stack([s["wdl_targets"] for s in samples])
         
         np.savez_compressed(
             chunk_path,
+            schema_version=np.asarray("trajectory-v2"),
             planes_t=planes_t,
-            legal_mask=legal_mask,
             actions=actions,
-            planes_target=planes_target,
-            value_target=value_target,
-            wdl_target=wdl_target
+            planes_future=planes_future,
+            future_valid=future_valid,
+            legal_masks=legal_masks,
+            value_targets=value_targets,
+            wdl_targets=wdl_targets,
         )
         
         print(f"Saved dummy chunk to {chunk_path}. Loading with LeelaChunkDataLoader...")
@@ -77,6 +80,7 @@ def test_end_to_end():
         batch = next(batch_iter)
         assert batch["current_planes"].shape == (8, 112, 8, 8), f"Wrong planes shape: {batch['current_planes'].shape}"
         assert batch["action_indices"].shape == (8, 8), f"Wrong actions shape: {batch['action_indices'].shape}"
+        assert batch["future_planes"].shape == (8, 8, 112, 8, 8), f"Wrong future planes shape: {batch['future_planes'].shape}"
         
         print("Data Loading successful. Initializing model...")
         models_dir = REPO_ROOT / "models"

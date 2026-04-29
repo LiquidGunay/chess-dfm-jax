@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import io
 import json
 import os
 import shlex
@@ -83,6 +82,36 @@ def zone_region(zone: str) -> str:
     return zone.rsplit("-", 1)[0]
 
 
+STALE_SOURCE_MARKERS = (
+    "verified_source_v27_dfm.tar.gz",
+    "lc0jax-human",
+    "your-bucket",
+    "example",
+)
+
+
+def validate_launch_spec(spec: "TPUJobSpec", *, override_source_uri: str | None = None) -> None:
+    """Fail closed before creating TPU queued resources."""
+    if not spec.project_id or spec.project_id == "your-gcp-project":
+        raise ValueError("project_id must be set to a real GCP project before launch.")
+    if not spec.run_id:
+        raise ValueError("run_id must be set before launch.")
+    if not spec.zone_order:
+        raise ValueError("zone_order must include at least one TPU zone before launch.")
+    if not spec.service_account or "your-gcp-project" in spec.service_account:
+        raise ValueError("service_account must be set to a real service account before launch.")
+    for region, bucket in spec.bucket_by_region.items():
+        if not bucket.startswith("gs://") or "your-bucket" in bucket:
+            raise ValueError(f"bucket_by_region[{region!r}] must be a real gs:// bucket URI.")
+    if override_source_uri:
+        if not override_source_uri.startswith("gs://"):
+            raise ValueError("override_source_uri must be a gs:// URI.")
+        if any(marker in override_source_uri for marker in STALE_SOURCE_MARKERS):
+            raise ValueError(f"Refusing stale or placeholder source snapshot: {override_source_uri}")
+    if spec.entry_command and "verified_source_v27_dfm" in spec.entry_command:
+        raise ValueError("Refusing stale entry_command that references verified_source_v27_dfm.")
+
+
 @dataclass
 class TPUJobSpec:
     project_id: str
@@ -90,6 +119,7 @@ class TPUJobSpec:
     zone_order: list[str]
     bucket_by_region: dict[str, str]
     run_name: str | None = None
+    run_family: str = "jepa"
     wandb_project: str = "chess_dfm_jax-jepa"
     wandb_group: str = "bt4-token-jepa"
     accelerator_type: str = "v5litepod-8"
@@ -133,7 +163,7 @@ class TPUJobSpec:
         return self.bucket_by_region[region].rstrip("/")
 
     def run_root_uri(self, zone: str) -> str:
-        return f"{self.bucket_for_zone(zone)}/runs/jepa/{self.run_id}"
+        return f"{self.bucket_for_zone(zone)}/runs/{self.run_family}/{self.run_id}"
 
     def checkpoint_uri(self, zone: str) -> str:
         return f"{self.run_root_uri(zone)}/checkpoints"
@@ -157,20 +187,28 @@ def create_source_snapshot(repo_root: str | Path, output_path: str | Path) -> Pa
     root = Path(repo_root).resolve()
     out_path = Path(output_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    excluded = {
+    excluded_top_level = {
         ".git",
         ".venv",
-        "__pycache__",
         "data",
         "models",
         "runs",
         "wandb",
+        "artifacts",
+        ".pytest_cache",
+        ".ruff_cache",
     }
+    excluded_anywhere = {"__pycache__"}
     with tarfile.open(out_path, "w:gz") as archive:
         for path in root.rglob("*"):
+            if not path.is_file():
+                continue
             rel = path.relative_to(root)
-            parts = set(rel.parts)
-            if parts & excluded:
+            if rel.parts[0] in excluded_top_level:
+                continue
+            if set(rel.parts) & excluded_anywhere:
+                continue
+            if rel.name == ".env" or rel.name.endswith(".local.json"):
                 continue
             archive.add(path, arcname=str(rel))
     return out_path
@@ -265,7 +303,11 @@ def render_train_command(spec: TPUJobSpec, zone: str) -> str:
 
 
 def render_entry_command(spec: TPUJobSpec, zone: str) -> str:
-    return spec.entry_command or render_train_command(spec, zone)
+    if spec.entry_command:
+        # Older sweep specs used the pre-rename workdir. Keep those specs usable
+        # while the startup script downloads chunks into the canonical workdir.
+        return spec.entry_command.replace("/tmp/lc0jaxhuman/chunks", f"{spec.workdir}/chunks")
+    return render_train_command(spec, zone)
 
 
 def render_startup_script(spec: TPUJobSpec, zone: str, source_uri: str) -> str:
@@ -287,7 +329,9 @@ def render_startup_script(spec: TPUJobSpec, zone: str, source_uri: str) -> str:
     if chunk_data_uri:
         chunk_sync = (
             f'mkdir -p "$WORKDIR/chunks"\n'
-            f'/snap/google-cloud-cli/current/bin/gcloud storage cp {shlex.quote(chunk_data_uri.rstrip("/") + "/*.npz")} "$WORKDIR/chunks/"\n'
+            f'/snap/google-cloud-cli/current/bin/gcloud storage cp --recursive {shlex.quote(chunk_data_uri.rstrip("/") + "/*")} "$WORKDIR/chunks/"\n'
+            f'mkdir -p /tmp/lc0jaxhuman\n'
+            f'ln -sfn "$WORKDIR/chunks" /tmp/lc0jaxhuman/chunks\n'
         )
     entry_cmd = render_entry_command(spec, zone)
     status_uri = spec.status_uri(zone)
@@ -371,7 +415,6 @@ def request_spot_tpu(spec: TPUJobSpec, zone: str, startup_script: str, attempt: 
         if spec.spot:
             cmd.append("--spot")
         cmd.extend([
-            "--async",
             f"--metadata-from-file=startup-script={startup_path}",
             f"--labels=run_id={spec.run_id},controller=chess_dfm_jax",
         ])
@@ -439,8 +482,21 @@ def delete_queued_resource(name: str) -> None:
             if "DeleteQueuedResource is not supported when state is PROVISIONING" in str(exc) and attempt < 4:
                 time.sleep(10)
             else:
+                force_cmd = [
+                    "gcloud",
+                    "compute",
+                    "tpus",
+                    "queued-resources",
+                    "delete",
+                    queued_resource_id,
+                    f"--zone={zone}",
+                    "--quiet",
+                    "--force",
+                ]
+                if project:
+                    force_cmd.append(f"--project={project}")
                 try:
-                    _run_cli(["gcloud", "compute", "tpus", "queued-resources", "delete", queued_resource_id, f"--zone={zone}", "--quiet", "--force"])
+                    _run_cli(force_cmd)
                 except Exception:
                     pass
                 break
@@ -458,6 +514,7 @@ def queued_resource_state_name(resource) -> str:
 
 def run_spot_controller(spec: TPUJobSpec, *, repo_root: str | Path | None = None, override_source_uri: str | None = None) -> dict[str, Any]:
     print("Starting run_spot_controller")
+    validate_launch_spec(spec, override_source_uri=override_source_uri)
     root = Path(repo_root) if repo_root is not None else project_root()
     for zone in spec.zone_order:
         print(f"Checking status for zone: {zone}")
@@ -468,6 +525,7 @@ def run_spot_controller(spec: TPUJobSpec, *, repo_root: str | Path | None = None
 
     attempt = 0
     while True:
+        request_failures: list[dict[str, str]] = []
         for zone in spec.zone_order:
             attempt += 1
             stamp = time.strftime("%Y%m%d_%H%M%S", time.gmtime())
@@ -488,6 +546,15 @@ def run_spot_controller(spec: TPUJobSpec, *, repo_root: str | Path | None = None
                 resource_name = request_spot_tpu(spec, zone, startup_script, attempt)
             except RuntimeError as exc:
                 print(f"Failed to request spot TPU in {zone}: {exc}")
+                request_failures.append({"zone": zone, "error": str(exc)})
+                if (
+                    "does not have permission" in str(exc)
+                    or "permission" in str(exc).lower()
+                    or "Insufficient capacity" in str(exc)
+                ):
+                    continue
+                if len(spec.zone_order) == 1:
+                    return {"status": "request_failed", "zone": zone, "error": str(exc)}
                 time.sleep(30)
                 continue
             
@@ -522,16 +589,18 @@ def run_spot_controller(spec: TPUJobSpec, *, repo_root: str | Path | None = None
                     print(f"Resource {resource_name} failed or suspended (state={state_name}). Deleting and retrying...")
                     delete_queued_resource(resource_name)
                     return {"status": "preempted", "zone": zone}
-                if state_name == "ACTIVE" and status and status.get("state") == "failed":
-                    print(f"Job failed on ACTIVE resource {resource_name}. Deleting and retrying...")
+                if status and status.get("state") == "failed":
+                    print(f"Job failed on resource {resource_name} (state={state_name}). Deleting and retrying...")
                     delete_queued_resource(resource_name)
                     return {"status": "job_failed", "zone": zone}
-                if state_name in {"CREATING"}:
+                if state_name in {"ACCEPTED", "WAITING_FOR_RESOURCES", "CREATING"}:
                     if time.monotonic() - started > spec.allocation_timeout_s:
                         print(f"Resource {resource_name} timed out in {state_name}. Deleting and retrying...")
                         delete_queued_resource(resource_name)
                         return {"status": "timeout", "zone": zone}
                 time.sleep(spec.poll_interval_s)
+        if request_failures:
+            return {"status": "request_failed", "failures": request_failures}
 
 
 __all__ = [
@@ -544,5 +613,6 @@ __all__ = [
     "run_spot_controller",
     "upload_file",
     "upload_json",
+    "validate_launch_spec",
     "zone_region",
 ]

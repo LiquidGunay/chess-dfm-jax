@@ -10,13 +10,18 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 export PATH="/root/.cargo/bin:$PATH"
 
 # Download the code snapshot and sweep config
-gcloud storage cp gs://gunay-chess-experiments-us-central2/fixed_snapshots/verified_source_v22_dfm.tar.gz .
-gcloud storage cp gs://gunay-chess-experiments-us-central2/configs/hparam_sweep.jsonl .
+SOURCE_SNAPSHOT_URI="${SOURCE_SNAPSHOT_URI:-gs://your-us-central2-bucket/fixed_snapshots/verified_source_example.tar.gz}"
+SWEEP_CONFIG_URI="${SWEEP_CONFIG_URI:-gs://your-us-central2-bucket/configs/hparam_sweep.jsonl}"
 
-mkdir lc0jax-human
-tar -xzf verified_source_v22_dfm.tar.gz -C lc0jax-human
+gcloud storage cp "$SOURCE_SNAPSHOT_URI" .
+gcloud storage cp "$SWEEP_CONFIG_URI" .
 
-cd lc0jax-human
+ARCHIVE_NAME="$(basename "$SOURCE_SNAPSHOT_URI")"
+
+mkdir chess-dfm-jax
+tar -xzf "$ARCHIVE_NAME" -C chess-dfm-jax
+
+cd chess-dfm-jax
 mv ../hparam_sweep.jsonl .
 
 # Create venv and install

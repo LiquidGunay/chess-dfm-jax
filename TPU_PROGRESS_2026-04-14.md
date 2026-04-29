@@ -2,16 +2,16 @@
 
 ## Current Progress
 
-- GCP project in use: `project-b9551f07-5f68-491a-8a0`
-- Active account: `gunaysoni@gmail.com`
+- GCP project in use: `your-gcp-project`
+- Active account: `your-account@example.com`
 - Existing `default` VPC/subnets are being used for the first TPU path.
 - Regional buckets created:
-  - `gs://gunay-chess-experiments-us-central1`
-  - `gs://gunay-chess-experiments-europe-west4`
+  - `gs://your-us-central1-bucket`
+  - `gs://your-europe-west4-bucket`
 - Model files are uploaded in `us-central1`:
-  - `gs://gunay-chess-experiments-us-central1/models/BT4-1024x15x32h-swa-6147500-policytune-332.pb.gz`
-  - `gs://gunay-chess-experiments-us-central1/models/BT4.onnx`
-  - `gs://gunay-chess-experiments-us-central1/models/BT4_exported.pb.gz`
+  - `gs://your-us-central1-bucket/models/BT4-1024x15x32h-swa-6147500-policytune-332.pb.gz`
+  - `gs://your-us-central1-bucket/models/BT4.onnx`
+  - `gs://your-us-central1-bucket/models/BT4_exported.pb.gz`
 - The Spot TPU controller now has a `gcloud` CLI fallback and no longer depends on local ADC being configured.
 - TPU specs and docs were corrected to use the TPU names that actually exist in `us-central1-a`:
   - accelerator family: `v5litepod-*`
@@ -19,7 +19,7 @@
 - Added TPU profiling entrypoint:
   - `scripts/profile_jepa_tpu.py`
 - Added TPU profile job spec:
-  - `docs/tpu_profile_job_spec.project.json`
+  - `docs/tpu_profile_job_spec.example.json`
 - Added theory-backed JEPA profiling support:
   - `chess_dfm_jax/analysis/jepa_theory.py`
   - `scripts/profile_jepa_sweep.py`
@@ -31,7 +31,7 @@
   - `Quota 'TPUV5sPreemptibleLitepodServingPerProjectPerZoneForTPUAPI' exhausted. Limit 4 in zone us-central1-a`
 - The profile spec was reduced to `v5litepod-4`.
 - A follow-up `v5litepod-4` request successfully uploaded the source snapshot to GCS:
-  - `gs://gunay-chess-experiments-us-central1/source_snapshots/jepa-v5litepod4-profile/...`
+  - `gs://your-us-central1-bucket/source_snapshots/jepa-profile-example/...`
 - The controller then hit a transient `NOT_FOUND` immediately after `create`, while polling `describe`.
 - The controller was patched so that an immediate `NOT_FOUND` from `describe` is treated as control-plane propagation instead of a hard failure.
 
@@ -50,7 +50,7 @@
     - `sweep_points.json`
     - `SUMMARY.txt`
     - TensorBoard-compatible JAX trace under `tb_trace/`
-- `docs/tpu_profile_job_spec.project.json`
+- `docs/tpu_profile_job_spec.example.json`
   - currently configured for a profile-only `v5litepod-4` Spot request in `us-central1-a`
 
 ## Next Steps
@@ -58,7 +58,7 @@
 1. Retry the `v5litepod-4` Spot TPU profile request with the patched controller.
 2. If the queued resource becomes active, wait for the TPU VM startup script to finish and confirm:
    - `status.json` in GCS moves from `booting` to `running` to `completed`
-   - profile artifacts appear under `gs://gunay-chess-experiments-us-central1/runs/jepa/jepa-v5litepod4-profile/artifacts/`
+   - profile artifacts appear under `gs://your-us-central1-bucket/runs/jepa/jepa-profile-example/artifacts/`
 3. Pull back the first TPU profiling bundle and inspect:
    - arithmetic intensity by batch size and token width
    - achieved throughput

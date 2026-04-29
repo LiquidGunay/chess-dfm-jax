@@ -55,7 +55,7 @@ def _(mo):
 
 @app.cell
 def _(default_bt4_paths, project_root):
-    CHUNK_DIR = project_root().parent / "data" / "runs" / "2026-02-02_full" / "lc0-training" / "training-run2--20251215-1017"
+    CHUNK_DIR = project_root() / "data" / "lc0-training"
     BATCH_SIZE = 8
     DECODE_MODE = "raw"
     MODEL_PATHS = default_bt4_paths()

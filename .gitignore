@@ -1,6 +1,7 @@
 .venv/
 .venv311/
 .env
+uv.lock
 __pycache__/
 *.pyc
 node_modules/
@@ -10,6 +11,7 @@ node_modules/
 runs/
 sweep_runs/
 wandb/
+docs/*.local.json
 
 # Artifacts
 models/

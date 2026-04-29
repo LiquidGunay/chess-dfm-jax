@@ -1,4 +1,4 @@
-# lc0jax-human
+# chess-dfm-jax
 
 Standalone BT4 training scaffold extracted from the larger `schutpaper` repo.
 
@@ -11,6 +11,8 @@ point for:
 - parity checks against the shipped ONNX oracle
 - roofline and step profiling
 - preemption-safe Spot TPU batch training with Orbax checkpoints
+- trajectory-v2 DFM training on exact multi-ply chess rollouts
+- dataset QA/deduplication and run monitoring through marimo notebooks
 
 ## Layout
 
@@ -22,7 +24,7 @@ point for:
 ## Quickstart
 
 ```bash
-cd lc0jax-human
+cd chess-dfm-jax
 uv venv .venv
 uv pip install --python .venv/bin/python -e .
 ```
@@ -57,6 +59,8 @@ Expected filenames:
 
 - `notebooks/lc0_bt4_jax_repro.py`: manual forward pass scaffold with parity checks.
 - `notebooks/leela_data_pipeline.py`: widget-driven LC0 data browser for chunk samples, plane inspection, board views, and policy-head summaries.
+- `notebooks/state_action_training_browser.py`: trajectory-v2 shard browser with exact rollout checks and local/GCS/W&B training-status inspection.
+- `notebooks/trajectory_dedup_browser.py`: duplicate-statistics browser for trajectory-v2 datasets.
 - `notebooks/training_roofline.py`: timing, cost analysis, and roofline workflow for reference forward plus NNX encoder forward/backward.
 - `notebooks/training_jepa.py`: frozen-BT4, token-level JEPA scaffold with one token per square and an action-conditioned transformer.
 - `notebooks/analyze_jepa.py`: inspect saved JEPA runs with training curves, per-square cosine heatmaps, and a post hoc two-ply probe on held-out PGN sequences.
@@ -75,6 +79,38 @@ Expected filenames:
 - `python scripts/train_jepa.py --steps 10 --chunk-dir /path/to/chunks`
 - `python scripts/train_jepa.py --steps 50000 --run-name local-jepa --resume --checkpoint-uri runs/jepa/local-jepa/checkpoints`
 - `python scripts/run_tpu_spot_jepa.py --job-spec docs/tpu_spot_job_spec.example.json`
+- `uvx marimo check notebooks/state_action_training_browser.py`
+- `uv run notebooks/state_action_training_browser.py`
+- `uvx marimo check notebooks/trajectory_dedup_browser.py`
+- `python scripts/trajectory_dedup.py stats --input-prefix lc0=/path/or/gs-prefix --output-json dedup_stats.json`
+
+## Current DFM Status
+
+As of 2026-04-29, the main training path is the DFM action denoiser on
+trajectory-v2 shards:
+
+- LC0-only H8 data is ready and validated at
+  `data/trajectory_v2_lc0_test80_h8_1m`: 920 train shards, 55 validation
+  shards, 49 test shards, and 1,048,576 total samples.
+- TCEC S20-S28 H8 data is ready at
+  `data/trajectory_v2_tcec_s20_s28_standard_h8_4m`: 2,283,113 total samples.
+- Combined TCEC+LC0 exact deduplication is supported by
+  `scripts/trajectory_dedup.py`. Exact `position + full action sequence`
+  duplicates are removed while repeated positions with different continuations
+  are kept for policy diversity.
+- `scripts/train_dfm.py` defaults to `--gcs-startup-cache-policy all` for GCS
+  datasets. Training blocks until every visible train shard is cached locally,
+  preventing the earlier growing-cache replay artifact.
+
+The active LC0-only Phase A run uses:
+
+- model: DFM `token_dim=640`, `num_layers=8`, `num_heads=10`, `mlp_dim=2560`
+- optimizer: Muon where configured by the trainer, learning rate `6e-4`
+- data: LC0 H8 train/val trajectory-v2 shards
+- objective: first-ply curriculum with all actions masked at `t=0`
+- loss: `2 * CE(first_move) + 5 * illegal_prob_mass(first_move)`
+
+Use `docs/training_phases.md` for the exact phase plan and launch guardrails.
 
 ## JEPA architecture
 
@@ -82,21 +118,21 @@ The trainable model keeps BT4 frozen and trains only a small transition head:
 
 - BT4 encoder produces `64 x 1024` square tokens.
 - A trainable projector maps those tokens to `64 x token_dim`.
-- A learned action embedding is prepended as token `0`.
-- A small transformer updates the `65` token sequence.
-- The model predicts the next state's `64` projected BT4 tokens.
+- A learned action embedding conditions the current square tokens at each rollout step.
+- A small transformer unrolls a predicted token sequence over an action chunk.
+- The model predicts future projected BT4 tokens, value targets, and WDL targets for each horizon step.
 
-Default training config:
+`scripts/train_jepa.py` defaults:
 
-- `token_dim=256`
+- `token_dim=512`
 - `num_layers=4`
 - `num_heads=8`
-- `mlp_dim=1024`
+- `mlp_dim=2048`
 - `action_source=best`
 - GPU default: encoder `float16`, head params `float32`, head compute `float32`
 - TPU default: encoder `bfloat16`, head params `float32`, head compute `bfloat16`
 
-Two-ply probes are analysis-only and are not part of the training loss.
+The Spot TPU example spec uses a smaller `token_dim=256, mlp_dim=1024` configuration for cost-controlled training. Two-ply probes are analysis-only and are not part of the training loss.
 
 ## Checkpoints and resume
 
@@ -120,6 +156,12 @@ The first cloud path is single-host `v5litepod-8` Spot TPU VMs.
 
 See `docs/tpu_spot_training.md` for the setup details.
 
+## Docs
+
+- `VISION.md`: long-range research direction for latent chess planning.
+- `ROADMAP.md`: current implementation priorities and acceptance checks.
+- `docs/data_loading.md`: trajectory-v2 shard contract and loader behavior.
+
 ## Suggested workflow
 
 1. Finish the TODO cells in `notebooks/lc0_bt4_jax_repro.py` until manual outputs match the reference and ONNX.
@@ -132,4 +174,5 @@ See `docs/tpu_spot_training.md` for the setup details.
 8. Use `notebooks/analyze_jepa.py` to inspect `metrics.jsonl`, per-square cosine heatmaps, and the post hoc two-ply probe.
 9. Use `scripts/profile_jepa_tpu.py` when you want a TPU-oriented trace plus a small arithmetic-intensity sweep in one artifact bundle.
 10. Use `scripts/run_tpu_spot_jepa.py` with a filled job spec when you are ready to move the same training path to Spot TPU VMs.
-11. Plug the JEPA `train_step` into `scripts/run_roofline.py` as described in `docs/roofline_analysis.md`.
+11. Keep smoke, DFM, JEPA, profile, and combined runs separated as described in `docs/training_phases.md`.
+12. Plug the JEPA `train_step` into `scripts/run_roofline.py` as described in `docs/roofline_analysis.md`.

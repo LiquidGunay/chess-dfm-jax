@@ -674,7 +674,7 @@ def _(BT4NNX, jax, jnp, nnx_bt4_forward_with_trunk, time):
     import sys
     from pathlib import Path
 
-    ROOT = Path("/home/ubuntu/schutpaper/lc0jax-human")
+    ROOT = Path("/home/ubuntu/chess-dfm-jax")
     if str(ROOT) not in sys.path:
         sys.path.insert(0, str(ROOT))
 

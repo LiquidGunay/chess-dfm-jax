@@ -1,6 +1,6 @@
 # LC0 BT4 Reproduction Plan
 
-`lc0jax-human/` is now a standalone scaffold, not just a scratch notebook.
+`chess-dfm-jax/` is now a standalone scaffold, not just a scratch notebook.
 
 ## Goal
 

@@ -1,4 +1,3 @@
-import os
 import sys
 import jax
 import jax.numpy as jnp
@@ -9,9 +8,9 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from chess_dfm_jax.analysis.profile_targets import load_mapped_bt4_params
-from chess_dfm_jax.training.dfm import create_dfm_components, train_dfm_step, DFMConfig
-from chess_dfm_jax.training.jepa import build_synthetic_transition_batch
+from chess_dfm_jax.analysis.profile_targets import load_mapped_bt4_params  # noqa: E402
+from chess_dfm_jax.training.dfm import DFMConfig, create_dfm_components, train_dfm_step  # noqa: E402
+from chess_dfm_jax.training.jepa import build_synthetic_transition_batch  # noqa: E402
 
 def test_dfm_training_step():
     print("Testing DFM Training Step (Shapes and Gradients)...")
@@ -47,6 +46,9 @@ def test_dfm_training_step():
     print("Validating outputs...")
     assert jnp.isfinite(loss), "Loss is not finite!"
     assert "accuracy" in aux, "Missing accuracy in aux metrics!"
+    assert aux["loss_by_horizon"].shape == (config.horizon,)
+    assert aux["accuracy_by_horizon"].shape == (config.horizon,)
+    assert aux["mask_rate_by_horizon"].shape == (config.horizon,)
     print(f"Success! Loss: {loss:.6f}, Masked Accuracy: {aux['accuracy']:.4f}")
     
     print("All DFM training step tests passed successfully.")

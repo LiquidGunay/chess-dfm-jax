@@ -3,18 +3,20 @@ import sys
 import jax
 import jax.numpy as jnp
 from pathlib import Path
-import numpy as np
+import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from chess_dfm_jax.analysis.profile_targets import load_mapped_bt4_params
-from chess_dfm_jax.training.dfm import create_dfm_components, train_dfm_step, DFMConfig
-from chess_dfm_jax.training.jepa import build_synthetic_transition_batch
-from flax import nnx
+from chess_dfm_jax.analysis.profile_targets import load_mapped_bt4_params  # noqa: E402
+from chess_dfm_jax.training.dfm import create_dfm_components, train_dfm_step, DFMConfig  # noqa: E402
+from chess_dfm_jax.training.jepa import build_synthetic_transition_batch  # noqa: E402
 
 def test_overfit():
+    if os.environ.get("CHESS_DFM_RUN_SLOW") != "1":
+        pytest.skip("Set CHESS_DFM_RUN_SLOW=1 to run the BT4-backed overfit diagnostic.")
+
     print("Testing DFM Overfitting on a single batch...")
     
     models_dir = REPO_ROOT / "models"

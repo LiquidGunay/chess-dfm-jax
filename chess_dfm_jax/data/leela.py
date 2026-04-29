@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
+import collections
 from dataclasses import dataclass
 import gzip
-import io
 import os
-import queue
 import random
-import threading
-from typing import Iterable, Iterator, Sequence, Any
+from typing import Callable, Iterator, Sequence
 
 import numpy as np
 
@@ -20,6 +18,7 @@ except ImportError:  # pragma: no cover
 
 from chess_dfm_jax import encoding as encode_mod
 from chess_dfm_jax import policy as policy_mod
+from chess_dfm_jax.data.trajectory import trajectory_shard_from_npz, trajectory_shard_to_batch
 
 
 V3_RECORD_SIZE = 8276
@@ -85,6 +84,8 @@ class LeelaChunkDataLoader:
         drop_last: bool = False,
         prefetch_batches: int = 0,
         horizon: int = 1,
+        include_metadata: bool = False,
+        chunk_paths_provider: Callable[[], Sequence[str]] | None = None,
     ):
         self.chunk_paths = [str(path) for path in chunk_paths]
         self.batch_size = batch_size
@@ -97,10 +98,15 @@ class LeelaChunkDataLoader:
         self.drop_last = drop_last
         self.prefetch_batches = prefetch_batches
         self.horizon = horizon
+        self.include_metadata = include_metadata
+        self.chunk_paths_provider = chunk_paths_provider
 
     def __iter__(self) -> Iterator[dict[str, np.ndarray]]:
-        # For JEPA scaling, we wrap the raw records into unrolled sequences
-        paths = list(self.chunk_paths)
+        paths = (
+            [str(path) for path in self.chunk_paths_provider()]
+            if self.chunk_paths_provider is not None
+            else list(self.chunk_paths)
+        )
         if self.shuffle_files:
             self.rng.shuffle(paths)
 
@@ -109,23 +115,12 @@ class LeelaChunkDataLoader:
         for path in paths:
             if path.endswith(".npz"):
                 try:
-                    data = np.load(path)
-                    planes_t = data["planes_t"]
-                    actions = data["actions"]
-                    planes_target = data["planes_target"]
-                    value_target = data.get("value_target", np.zeros((len(planes_t),), dtype=np.float32))
-                    wdl_target = data.get("wdl_target", np.zeros((len(planes_t), 3), dtype=np.float32))
-                    legal_mask = data.get("legal_mask", np.ones((len(planes_t), 1858), dtype=np.float32))
-                    
-                    for i in range(len(planes_t)):
-                        current_batch["current_planes"].append(planes_t[i])
-                        current_batch["action_indices"].append(actions[i])
-                        current_batch["next_planes"].append(planes_target[i])
-                        current_batch["valid"].append(np.array(1.0, dtype=np.float32))
-                        current_batch["value_target"].append(value_target[i])
-                        current_batch["wdl_target"].append(wdl_target[i])
-                        current_batch["legal_mask"].append(legal_mask[i])
-                        
+                    with np.load(path, allow_pickle=False) as data:
+                        shard = trajectory_shard_from_npz(data)
+                    batch = trajectory_shard_to_batch(shard, include_metadata=self.include_metadata)
+                    for i in range(shard.batch_size):
+                        for key, value in batch.items():
+                            current_batch[key].append(value[i])
                         if len(current_batch["current_planes"]) >= self.batch_size:
                             yield self._finalize_batch(current_batch)
                             current_batch = collections.defaultdict(list)
@@ -134,8 +129,6 @@ class LeelaChunkDataLoader:
                 continue
 
             for record in iter_records(path):
-
-                # Try to unroll a JEPA sequence from this record
                 sample = self._unroll_jepa_sample(record)
                 if sample is None:
                     continue
@@ -151,69 +144,72 @@ class LeelaChunkDataLoader:
             yield self._finalize_batch(current_batch)
 
     def _unroll_jepa_sample(self, record: TrainingRecord) -> dict[str, np.ndarray] | None:
-        # 1. Reconstruct current board
         try:
             board = record_to_board(record)
         except Exception:
             return None
-        
-        # 2. Extract initial planes (current state)
-        # record.planes are the dense 8x8x13 planes
-        # We need them in float32 NCHW format [112, 8, 8]
-        # But for scaling sweep, we can just use the raw record planes 
-        # provided they are encoded correctly for the horizon.
-        # Actually, record.planes is 104x u64, which are the 13*8 board history bits.
-        # We only care about the latest board [0:13].
-        
+
         fmt = INPUT_FORMAT_NAMES.get(record.input_format, "INPUT_CLASSICAL_112_PLANE")
         current_planes = encode_mod.encode_board(board, history=[], input_format=fmt)
-        
-        # 3. Unroll K steps using engine best moves if available, or just played moves
-        action_indices = []
-        temp_board = board.copy()
-        
-        # We only have the move for the *current* state in the chunk record.
-        # To get more moves, we'd need sequential records or an engine.
-        # Since we want to use REAL data, and chunks are usually game segments,
-        # we'll assume for this scaling sweep that we're testing the model's 
-        # ability to unroll. If we only have 1 move, we fill the rest with zeros 
-        # and set valid=0 for those samples? No, let's just use 1-step for now 
-        # if we can't find sequential data, but allow the architecture to be multi-step.
-        
+
         move_idx = record.best_idx if record.best_idx is not None else record.played_idx
         if move_idx is None:
             return None
-            
-        # For this phase, we unroll the same move if needed or just use 1-step logic
-        # while keeping the [B, K] shape.
-        actions = np.zeros((self.horizon,), dtype=np.int32)
-        actions[0] = move_idx
-        
-        # Next state
+
+        if self.horizon != 1:
+            raise ValueError(
+                "Raw LC0 chunks only support horizon=1 exact rollouts. "
+                "Preprocess to trajectory-v2 .npz shards for multi-step training."
+            )
+
+        temp_board = board.copy(stack=False)
         try:
             move = policy_mod.policy_index_to_move(move_idx, "lc0_1858")
             if move in temp_board.legal_moves:
+                legal_mask = policy_mod.legal_move_mask(temp_board, "lc0_1858").astype(np.float32)
                 temp_board.push(move)
-                next_planes = encode_mod.encode_board(temp_board, history=[], input_format=fmt)
+                next_planes = encode_mod.encode_board(
+                    temp_board, history=[], input_format=fmt
+                ).astype(np.float32)
             else:
                 return None
-        except:
+        except Exception:
             return None
-            
+
+        future_value = (
+            np.asarray(-record.q_value, dtype=np.float32)
+            if record.q_value is not None
+            else np.zeros((), dtype=np.float32)
+        )
+        if record.wdl is not None:
+            future_wdl = np.asarray([record.wdl[2], record.wdl[1], record.wdl[0]], dtype=np.float32)
+        else:
+            future_wdl = np.zeros((3,), dtype=np.float32)
+
         return {
             "current_planes": current_planes,
-            "action_indices": actions, # [K]
+            "action_indices": np.asarray([move_idx], dtype=np.int32),
+            "action_idx": np.asarray(move_idx, dtype=np.int32),
+            "future_planes": next_planes[None, ...],
+            "future_valid": np.ones((1,), dtype=np.float32),
+            "terminal_target_index": np.asarray(0, dtype=np.int32),
             "next_planes": next_planes,
             "valid": np.array(1.0, dtype=np.float32),
-            "value_target": np.array(record.q_value, dtype=np.float32) if record.q_value is not None else np.zeros((), dtype=np.float32),
-            "wdl_target": np.array(record.wdl, dtype=np.float32) if record.wdl is not None else np.zeros((3,), dtype=np.float32),
+            "value_targets": future_value[None],
+            "value_target": future_value,
+            "wdl_targets": future_wdl[None, :],
+            "wdl_target": future_wdl,
+            "legal_masks": legal_mask[None, :],
+            "legal_mask": legal_mask,
         }
 
     def _finalize_batch(self, batch_dict: dict[str, list]) -> dict[str, np.ndarray]:
         return {k: np.stack(v) for k, v in batch_dict.items()}
 
 
-def discover_chunk_files(chunk_dir: str) -> list[str]:
+def discover_chunk_files(chunk_dir: str | None) -> list[str]:
+    if not chunk_dir:
+        return []
     paths = []
     for root, _dirs, files in os.walk(chunk_dir):
         for name in sorted(files):
@@ -278,9 +274,9 @@ def iter_records(path: str) -> Iterator[TrainingRecord]:
                 import struct
                 floats_bytes = record[floats_offset:floats_offset + 16]
                 if len(floats_bytes) == 16:
-                    q, w, d, l = struct.unpack("<4f", floats_bytes)
+                    q, w, d, loss_prob = struct.unpack("<4f", floats_bytes)
                     q_value = q
-                    wdl = (w, d, l)
+                    wdl = (w, d, loss_prob)
 
                 visits_offset = floats_offset + 15 * 4
                 played_idx = int.from_bytes(record[visits_offset + 4 : visits_offset + 6], "little")
@@ -338,18 +334,26 @@ def record_to_board(record: TrainingRecord) -> "chess.Board":
     us_ooo, us_oo, them_ooo, them_oo = record.castling
     rights = 0
     if record.side_to_move == 0:
-        if us_ooo: rights |= chess.BB_A1
-        if us_oo: rights |= chess.BB_H1
-        if them_ooo: rights |= chess.BB_A8
-        if them_oo: rights |= chess.BB_H8
+        if us_ooo:
+            rights |= chess.BB_A1
+        if us_oo:
+            rights |= chess.BB_H1
+        if them_ooo:
+            rights |= chess.BB_A8
+        if them_oo:
+            rights |= chess.BB_H8
     else:
-        if us_ooo: rights |= chess.BB_A8
-        if us_oo: rights |= chess.BB_H8
-        if them_ooo: rights |= chess.BB_A1
-        if them_oo: rights |= chess.BB_H1
+        if us_ooo:
+            rights |= chess.BB_A8
+        if us_oo:
+            rights |= chess.BB_H8
+        if them_ooo:
+            rights |= chess.BB_A1
+        if them_oo:
+            rights |= chess.BB_H1
     board.castling_rights = rights
     board.halfmove_clock = int(record.rule50)
     return board
 
-import collections
+
 __all__ = ["LeelaChunkDataLoader", "discover_chunk_files", "record_to_board", "iter_records"]

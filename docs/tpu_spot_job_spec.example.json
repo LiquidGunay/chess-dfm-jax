@@ -1,7 +1,7 @@
 {
-  "project_id": "project-b9551f07-5f68-491a-8a0",
-  "run_id": "jepa-v5e8-example",
-  "run_name": "jepa-v5e8-example",
+  "project_id": "your-gcp-project",
+  "run_id": "jepa-sequence-example",
+  "run_name": "jepa-sequence-example",
   "zone_order": [
     "us-central1-a",
     "europe-west4-b"
@@ -14,11 +14,11 @@
   "wandb_group": "bt4-token-jepa",
   "accelerator_type": "v5litepod-8",
   "runtime_version": "tpu-ubuntu2204-base",
-  "service_account": "tpu-trainer@project-b9551f07-5f68-491a-8a0.iam.gserviceaccount.com",
+  "service_account": "tpu-trainer@your-gcp-project.iam.gserviceaccount.com",
   "network": "default",
   "subnetwork_by_zone": {
-    "us-central1-a": "projects/project-b9551f07-5f68-491a-8a0/regions/us-central1/subnetworks/default",
-    "europe-west4-b": "projects/project-b9551f07-5f68-491a-8a0/regions/europe-west4/subnetworks/default"
+    "us-central1-a": "projects/your-gcp-project/regions/us-central1/subnetworks/default",
+    "europe-west4-b": "projects/your-gcp-project/regions/europe-west4/subnetworks/default"
   },
   "enable_external_ips": false,
   "autocheckpoint_enabled": true,
@@ -32,8 +32,8 @@
   },
   "chunk_data_uri": null,
   "chunk_data_uri_by_region": {
-    "us-central1": "gs://your-us-central1-bucket/chunks/training-run2--20251215-1017",
-    "europe-west4": "gs://your-europe-west4-bucket/chunks/training-run2--20251215-1017"
+    "us-central1": "gs://your-us-central1-bucket/chunks/trajectory-v2-example",
+    "europe-west4": "gs://your-europe-west4-bucket/chunks/trajectory-v2-example"
   },
   "train_args": {
     "steps": 50000,

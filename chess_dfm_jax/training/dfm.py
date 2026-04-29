@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import dataclasses
-from typing import Any
 
 import jax
 import jax.numpy as jnp
@@ -29,6 +28,10 @@ class DFMConfig:
     use_qk_gain: bool = False
     use_xsa: bool = False
     use_muon: bool = False
+    loss_horizon: int = 0
+    first_legality_loss_weight: float = 2.0
+    horizon_legality_loss_weight: float = 0.0
+    first_action_loss_weight: float = 0.0
 
 class DFMDenoiser(nnx.Module):
     def __init__(self, encoder: BT4Model, config: DFMConfig, *, rngs: nnx.Rngs):
@@ -88,7 +91,6 @@ class DFMDenoiser(nnx.Module):
         # noisy_actions: [B, K]
         # t: [B]
         
-        batch = current_planes.shape[0]
         K = noisy_actions.shape[1]
         
         # 1. Encode board state (frozen)
@@ -138,6 +140,8 @@ def dfm_loss_fn(model: DFMDenoiser, batch: dict[str, jnp.ndarray], rng: jnp.ndar
     # batch["action_indices"]: [B, max_K]
     actions = batch["action_indices"][:, :model.config.horizon]
     batch_size, K = actions.shape
+    loss_horizon = K if model.config.loss_horizon <= 0 else min(model.config.loss_horizon, K)
+    loss_horizon_mask = (jnp.arange(K) < loss_horizon).astype(jnp.float32)
     
     # 1. Sample t ~ U(0, 1)
     rng_t, rng_mask = jax.random.split(rng)
@@ -169,15 +173,18 @@ def dfm_loss_fn(model: DFMDenoiser, batch: dict[str, jnp.ndarray], rng: jnp.ndar
     mask_float = jnp.asarray(is_masked, dtype=jnp.float32)
     # The true DFM loss can be weighted by 1 / (1-t) depending on the exact formulation, 
     # but uniform weighting across masked tokens is standard and stable.
-    loss_masked = jnp.sum(ce_loss * mask_float, axis=-1) / jnp.maximum(jnp.sum(mask_float, axis=-1), 1e-5)
+    loss_mask_float = mask_float * loss_horizon_mask[None, :]
+    loss_masked = jnp.sum(ce_loss * loss_mask_float, axis=-1) / jnp.maximum(jnp.sum(loss_mask_float, axis=-1), 1e-5)
     
     # Average over batch
     valid = jnp.asarray(batch["valid"], dtype=jnp.float32)
     denom = jnp.maximum(jnp.sum(valid), 1.0)
-    loss = jnp.sum(loss_masked * valid) / denom
+    masked_ce_loss = jnp.sum(loss_masked * valid) / denom
+    loss = masked_ce_loss
     
-    # 6. Legality Loss
-    # We penalize placing probability mass on illegal moves for the FIRST step (k=0).
+    # 6. Legality losses.
+    # The legacy first-step term keeps compatibility with existing runs. The optional
+    # horizon term uses teacher-forced legal masks for every available target ply.
     if "legal_mask" in batch:
         legal_mask = jnp.asarray(batch["legal_mask"], dtype=jnp.float32) # [B, V]
         illegal_mask = 1.0 - legal_mask # [B, V]
@@ -188,21 +195,53 @@ def dfm_loss_fn(model: DFMDenoiser, batch: dict[str, jnp.ndarray], rng: jnp.ndar
         illegal_prob_mass = jnp.sum(probs_0 * illegal_mask, axis=-1) # [B]
         legality_loss = jnp.sum(illegal_prob_mass * valid) / denom
         
-        loss = loss + 2.0 * legality_loss # Weight the legality loss
+        loss = loss + model.config.first_legality_loss_weight * legality_loss
     else:
         legality_loss = jnp.zeros(())
+
+    if "legal_masks" in batch and model.config.horizon_legality_loss_weight != 0.0:
+        legal_masks = jnp.asarray(batch["legal_masks"], dtype=jnp.float32)[:, :K, :]
+        probs = jax.nn.softmax(logits, axis=-1)
+        illegal_prob_mass_by_horizon = jnp.sum(probs * (1.0 - legal_masks), axis=-1) # [B, K]
+        if "legal_masks_valid" in batch:
+            legal_valid = jnp.asarray(batch["legal_masks_valid"], dtype=jnp.float32)[:, :K]
+        else:
+            legal_valid = jnp.ones((batch_size, K), dtype=jnp.float32)
+        horizon_valid = valid[:, None] * legal_valid
+        horizon_legality_loss = (
+            jnp.sum(illegal_prob_mass_by_horizon * horizon_valid)
+            / jnp.maximum(jnp.sum(horizon_valid), 1.0)
+        )
+        loss = loss + model.config.horizon_legality_loss_weight * horizon_legality_loss
+    else:
+        horizon_legality_loss = jnp.zeros(())
+
+    first_action_loss = jnp.sum(ce_loss[:, 0] * valid) / denom
+    loss = loss + model.config.first_action_loss_weight * first_action_loss
     
     # Metrics
     preds = jnp.argmax(logits, axis=-1)
-    accuracy_masked = jnp.sum((preds == actions) * mask_float, axis=-1) / jnp.maximum(jnp.sum(mask_float, axis=-1), 1e-5)
+    accuracy_masked = jnp.sum((preds == actions) * loss_mask_float, axis=-1) / jnp.maximum(jnp.sum(loss_mask_float, axis=-1), 1e-5)
     mean_accuracy = jnp.sum(accuracy_masked * valid) / denom
     mean_mask_prob = jnp.mean(mask_prob)
 
+    horizon_denom = jnp.maximum(jnp.sum(loss_mask_float * valid[:, None], axis=0), 1e-5)
+    loss_by_horizon = jnp.sum(ce_loss * loss_mask_float * valid[:, None], axis=0) / horizon_denom
+    accuracy_by_horizon = jnp.sum((preds == actions) * loss_mask_float * valid[:, None], axis=0) / horizon_denom
+    mask_rate_by_horizon = jnp.sum(loss_mask_float * valid[:, None], axis=0) / jnp.maximum(denom, 1e-5)
+
     aux = {
         "loss": loss,
+        "masked_ce_loss": masked_ce_loss,
         "legality_loss": legality_loss,
+        "horizon_legality_loss": horizon_legality_loss,
+        "first_action_loss": first_action_loss,
+        "loss_horizon": jnp.asarray(loss_horizon, dtype=jnp.float32),
         "accuracy": mean_accuracy,
         "mask_prob": mean_mask_prob,
+        "loss_by_horizon": loss_by_horizon,
+        "accuracy_by_horizon": accuracy_by_horizon,
+        "mask_rate_by_horizon": mask_rate_by_horizon,
     }
     
     return loss, aux
@@ -218,6 +257,11 @@ def train_dfm_step(model: DFMDenoiser, optimizer: nnx.Optimizer, batch: dict[str
     (loss, aux), grads = _dfm_loss_and_grad(model, batch, rng)
     optimizer.update(model, grads)
     return loss, aux
+
+
+@nnx.jit
+def eval_dfm_step(model: DFMDenoiser, batch: dict[str, jnp.ndarray], rng: jnp.ndarray):
+    return dfm_loss_fn(model, batch, rng)
 
 def create_dfm_components(
     bt4_params: dict,
