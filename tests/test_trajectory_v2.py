@@ -18,6 +18,7 @@ from chess_dfm_jax.data.trajectory import (  # noqa: E402
     build_synthetic_trajectory_shard,
     load_trajectory_shard,
     rollout_from_fen,
+    trajectory_action_batch_from_npz,
     validate_trajectory_shard,
 )  # noqa: E402
 from chess_dfm_jax.encoding import encode_board  # noqa: E402
@@ -141,6 +142,53 @@ def test_trajectory_v2_validator_rejects_illegal_recorded_action():
 
     with np.testing.assert_raises_regex(ValueError, "Recorded action is illegal"):
         validate_trajectory_shard(broken)
+
+
+def test_action_batch_view_skips_future_planes_for_dfm():
+    shard = build_synthetic_trajectory_shard(batch_size=2, horizon=4)
+    payload = {
+        "schema_version": np.asarray("trajectory-v2"),
+        "planes_t": shard.planes_t,
+        "actions": shard.actions,
+        "planes_future": shard.planes_future,
+        "future_valid": shard.future_valid,
+        "legal_masks": shard.legal_masks,
+        "legal_masks_valid": np.ones((2, 4), dtype=np.float32),
+    }
+
+    batch = trajectory_action_batch_from_npz(payload, horizon=2)
+    assert batch["current_planes"].shape == (2, 112, 8, 8)
+    assert batch["action_indices"].shape == (2, 2)
+    assert batch["legal_masks"].shape == (2, 2, 1858)
+    assert "future_planes" not in batch
+    assert "next_planes" not in batch
+
+
+def test_leela_loader_dfm_action_view_omits_future_planes():
+    shard = build_synthetic_trajectory_shard(batch_size=3, horizon=4)
+    with tempfile.TemporaryDirectory() as tmpdir:
+        chunk_path = Path(tmpdir) / "chunk_000000.npz"
+        np.savez_compressed(
+            chunk_path,
+            schema_version=np.asarray("trajectory-v2"),
+            planes_t=shard.planes_t,
+            actions=shard.actions,
+            planes_future=shard.planes_future,
+            future_valid=shard.future_valid,
+            legal_masks=shard.legal_masks,
+        )
+
+        loader = LeelaChunkDataLoader(
+            [str(chunk_path)],
+            batch_size=2,
+            horizon=1,
+            batch_view="dfm_action",
+        )
+        batch = next(iter(loader))
+        assert batch["current_planes"].shape == (2, 112, 8, 8)
+        assert batch["action_indices"].shape == (2, 1)
+        assert batch["legal_masks"].shape == (2, 1, 1858)
+        assert "future_planes" not in batch
 
 
 def test_gcs_cache_local_name_avoids_split_collisions():

@@ -3,8 +3,10 @@
 The TPU-safe path in this repo targets single-host TPU VMs. The local controller
 lives in `scripts/run_tpu_spot_jepa.py` and uploads an immutable source snapshot
 to GCS before each launch attempt. Use this controller for smoke tests and
-phase-specific sweeps, but keep the training commands and checkpoint namespaces
-separate as described in `docs/training_phases.md`.
+one-shot debug jobs. For sweeps, prefer launching a TPU-side experiment queue so
+one provisioned VM executes several experiments before deletion or preemption.
+Keep training commands and checkpoint namespaces separate as described in
+`docs/training_phases.md`.
 
 ## Required GCP setup
 
@@ -36,8 +38,9 @@ Important fields:
 - `chunk_data_uri_by_region`: per-region bucket directories containing the chunk files.
 - `cache_disk_by_zone`: optional existing zonal persistent disks to attach as reusable shard caches. The disk must be in the same zone as the TPU VM. When set, startup mounts it at `cache_mount_point` and rewrites the default `--gcs-cache-dir /tmp/chess_dfm_jax/gcs_cache` to `cache_mount_point/gcs_cache`.
 - `train_args`: arguments forwarded directly to `scripts/train_jepa.py`.
-- `entry_command`: optional full command. Use this for DFM smoke/sweep specs that
-  call `scripts/train_dfm.py`; otherwise `train_args` renders a JEPA command.
+- `entry_command`: optional full command. Use this for DFM/JEPA smoke specs or
+  for queued sweeps that call `scripts/run_experiment_queue.py`; otherwise
+  `train_args` renders a JEPA command.
 - `secret_env`: optional environment variables loaded from Google Secret Manager at startup. Use this for `WANDB_API_KEY`; do not put real API keys in `env`, because startup metadata is visible through TPU metadata.
 
 Example private overrides:
@@ -75,6 +78,22 @@ What the controller does:
    `status.json` on job start and exit.
 7. The controller deletes the queued resource after completion, job failure,
    resource failure, or allocation timeout.
+
+For queued sweeps, set `entry_command` to the queue runner and point it at a
+queue JSONL in GCS:
+
+```bash
+python scripts/run_experiment_queue.py \
+  --queue-uri gs://bucket/queues/dfm_and_latent_sasa.jsonl \
+  --workdir /tmp/chess_dfm_jax/repo \
+  --status-dir /tmp/chess_dfm_jax/artifacts/experiment_queue \
+  --status-uri gs://bucket/runs/queues/dfm_and_latent_sasa
+```
+
+Each queue entry must use a unique run ID and checkpoint URI. Code or data
+failures stop the queue by default. For Spot preemption, relaunch the worker
+against the same queue; existing status files under `--status-uri` are synced
+back and completed entries are skipped unless `--rerun-completed` is set.
 
 ## Smoke Test
 

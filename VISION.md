@@ -1,19 +1,36 @@
 # Vision
 
-`chess-dfm-jax` is moving toward latent state-action sequence planning on top of a frozen LC0 BT4 encoder.
+`chess-dfm-jax` is moving toward Latent-SASA planning on top of a frozen LC0
+BT4 encoder.
 
 Core direction:
 
-- BT4 encodes the current chess state into square tokens.
-- DFM proposes action chunks as the fast action prior.
-- JEPA predicts latent future trajectories for those action chunks.
-- Value, WDL, and later concept heads score and interpret predicted futures.
-- Exact rollout comparison is the research loop: propose, predict, score, and compare against real future boards.
+- BT4 encodes chess states into square-token latents.
+- DFM denoises explicit action chunks.
+- JEPA predicts BT4-derived latent future trajectories for those chunks.
+- Value, WDL, ranking, and later concept heads score predicted futures.
+- Exact rollout comparison is the research loop: propose, predict, score, and
+  compare against real future boards.
 
 Near-term intent:
 
-- standardize trajectory-v2 shards as the canonical training contract
-- keep DFM as the action-only baseline
-- upgrade JEPA from terminal-only prediction to sequence prediction
-- add notebook-first inspection so data quality and training status stay visible
-- preserve public-repo hygiene by keeping operational cloud details in ignored local config
+- keep trajectory-v2 shards as the source-of-truth contract
+- add compact, column-selective loader views for DFM, JEPA, and joint training
+- keep action-only DFM and teacher-forced JEPA as baselines
+- train joint Latent-SASA with a shared online latent basis, small DFM/JEPA
+  adapters, shared action embeddings, and stop-gradient/EMA target latents
+- run experiment queues on already-provisioned TPU workers instead of
+  provisioning a new TPU for every small ablation
+- preserve public-repo hygiene by keeping operational cloud details in ignored
+  local config
+
+Default training stance:
+
+- BT4 remains frozen until joint heads beat action-only baselines on held-out
+  action, legality, and latent-rollout metrics.
+- Grain is a later loader backend option. The first implementation is a custom
+  deterministic loader boundary because the compact schema and training views
+  are still evolving.
+- Checkpoints remain raw NumPy locally for now. The next checkpointing upgrade is
+  asynchronous GCS upload of completed local checkpoints, not an immediate Orbax
+  migration.

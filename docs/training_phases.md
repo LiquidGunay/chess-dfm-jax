@@ -8,14 +8,15 @@ group, and run ID define the experiment phase.
 
 1. `smoke`: smallest possible job that proves source packaging, TPU startup,
    data download, training, checkpoint upload, status upload, and cleanup.
-2. `dfm`: action-only DFM sweeps. Use `scripts/train_dfm.py` and checkpoint
+2. `dfm`: action-only DFM baselines. Use `scripts/train_dfm.py` and checkpoint
    under `runs/dfm/<run_id>/checkpoints`.
-3. `jepa`: latent future prediction sweeps. Use `scripts/train_jepa.py` and
-   checkpoint under `runs/jepa/<run_id>/checkpoints`.
+3. `jepa`: teacher-forced latent future prediction baselines. Use
+   `scripts/train_jepa.py` and checkpoint under `runs/jepa/<run_id>/checkpoints`.
 4. `profile`: profiling-only jobs. Use `scripts/profile_jepa_tpu.py`; never
    share checkpoint directories with training jobs.
-5. `combined`: later plan-scoring/reranking runs after DFM and JEPA sweeps have
-   stable phase winners.
+5. `joint`: Latent-SASA joint DFM+JEPA runs after loader and queue smoke tests.
+6. `combined`: later mixed-data plan-scoring/reranking runs after LC0-only joint
+   baselines are stable.
 
 ## Current Run State
 
@@ -53,10 +54,14 @@ and JEPA beats identity/random-action baselines on changed-square metrics. The
 first unfreeze should be adapter/LoRA-style or last-block-only with a smaller
 learning rate; full BT4 fine-tuning is a late joint-refinement stage.
 
-DFM and JEPA use separate trainable projectors by default. They optimize
-different objectives: DFM needs a conditioning space for action denoising, while
-JEPA needs a predictive latent space for future-state dynamics. A shared
-projector is a later ablation after both paths are stable.
+Standalone DFM and JEPA keep their existing separate projectors as baselines.
+Joint Latent-SASA should use:
+
+- shared online BT4-to-planning-latent base projector
+- small DFM and JEPA adapters
+- shared action embedding
+- stop-gradient or EMA target projector for JEPA targets
+- later DFM action-token hidden-state conditioning into the JEPA transition
 
 ## Phase A Loss
 
@@ -97,9 +102,60 @@ lambda_legal = log(1858) / (1 - avg_legal_moves / 1858)
 The expected value is around `7.5-8.0`, but use the measured LC0 10M average
 legal-move count before launch.
 
+For the first queued baseline, default to `7.64` if the dataset average is not
+available yet:
+
+```text
+loss = CE(a0) + 7.64 * illegal_prob_mass(a0)
+```
+
+For the first H4 action-only baseline:
+
+```text
+loss = CE(a0:a3)
+     + 7.64 * illegal_prob_mass(a0)
+     + 7.64 * teacher_forced_illegal_mass(a1:a3)
+```
+
 Validation should include fixed `t` slices, not just the training distribution,
 so we can separate first-move legality, first-move accuracy, and denoising
 behavior at harder noise levels.
+
+## Latent-SASA Defaults
+
+Initial JEPA baselines:
+
+```text
+H = 2, then H = 4
+token_dim = 256
+num_layers = 4
+num_heads = 4
+mlp_dim = 1024
+learning_rate = 1e-4
+loss = latent_cosine + 0.01 * sigreg
+value_coeff = 0.0
+wdl_coeff = 0.0
+```
+
+Initial joint baselines:
+
+```text
+H = 2, then H = 4
+token_dim = 256
+num_layers = 4
+num_heads = 4
+mlp_dim = 1024
+learning_rate = 3e-4
+lambda_action = 1.0
+lambda_legal = 7.64
+lambda_jepa = 1.0
+lambda_value = 0.0 initially
+lambda_wdl = 0.0 initially
+lambda_rank = 0.0 first, then 0.2
+```
+
+Do not sweep batch size. Probe the largest batch that fits the allocated TPU
+shape and keep the learning rate fixed for the first baseline queue.
 
 ## Next Runs
 
@@ -164,6 +220,28 @@ checkpoints, and cleaned up the TPU resource.
 - Failed experiments are not requeued unless `--requeue-on-failure` is set.
 - For GCS-backed DFM training, use `--gcs-startup-cache-policy all` unless the
   experiment is explicitly testing streaming behavior.
+
+For the next sweeps, prefer `scripts/run_experiment_queue.py` inside the TPU VM:
+
+```bash
+python scripts/run_experiment_queue.py \
+  --queue-uri gs://bucket/queues/latent_sasa_baselines.jsonl \
+  --workdir /tmp/chess_dfm_jax/repo \
+  --status-dir /tmp/chess_dfm_jax/artifacts/experiment_queue \
+  --status-uri gs://bucket/runs/queues/latent_sasa_baselines
+```
+
+The queue runner validates that experiment IDs are unique, phase commands point
+at the expected training script, and no two queue entries write to the same
+checkpoint URI. A code/data failure stops the queue by default. Use
+`--keep-going` only for explicitly independent diagnostic queues. On relaunch it
+syncs existing status files from `--status-uri` and skips entries already marked
+`completed` unless `--rerun-completed` is set.
+
+Checkpointing remains raw NumPy locally. The next implementation step is an
+asynchronous GCS uploader for completed local checkpoints and queue status that
+reports both local and uploaded latest steps. Do not migrate to Orbax until the
+queue and loader paths are stable.
 
 Example dry validation:
 

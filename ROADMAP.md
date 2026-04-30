@@ -19,6 +19,9 @@ The first implementation wave is substantially in place:
    run status; `trajectory_dedup_browser.py` displays duplicate statistics.
 6. Dataset QA: `scripts/trajectory_dedup.py` computes duplicate statistics and
    writes exact-deduplicated trajectory-v2 shards.
+7. Persistent experiment queues: `scripts/run_experiment_queue.py` can execute
+   multiple experiments sequentially on one already-provisioned worker, with
+   per-experiment status files and checkpoint namespace validation.
 
 ## Current Status Snapshot
 
@@ -41,19 +44,52 @@ As of 2026-04-29:
 
 ## Training Policy
 
-- BT4 stays frozen through DFM Phase A/B/C, TCEC diagnostics, and the first JEPA
-  sequence runs. Unfreeze only after the heads and data path are proven on
-  held-out metrics. The first unfreeze should be adapters/LoRA or last BT4
-  blocks with a smaller learning rate; full BT4 fine-tuning is a late joint
-  refinement step.
-- DFM and JEPA keep separate trainable projectors by default. DFM needs a
-  state-conditioning latent for action denoising; JEPA needs a predictive
-  latent for future-state dynamics. A shared projector is a later ablation, not
-  part of the current phase-wise curriculum.
+- BT4 stays frozen through DFM baselines, JEPA baselines, and the first joint
+  Latent-SASA runs. Unfreeze only after the heads and data path are proven on
+  held-out action, legality, and latent-rollout metrics. The first unfreeze
+  should be adapters/LoRA or last BT4 blocks with a smaller learning rate; full
+  BT4 fine-tuning is a late joint-refinement step.
+- The joint direction is not fully separate DFM/JEPA projectors. Use a shared
+  online BT4-to-planning-latent base, small DFM and JEPA adapters, shared action
+  embeddings, and a stop-gradient or EMA target projector for JEPA targets. The
+  existing standalone DFM and JEPA scripts remain baselines.
 - Normal training runs must use immutable dataset prefixes. The CPU data worker
   can keep producing additional LC0 trajectory-v2 chunks while TPU training
   runs, but it should write to a new prefix that is not consumed until manifest,
   rollout validation, and dedup stats pass.
+- Sweep infrastructure should provision TPU workers for queues, not one TPU per
+  experiment. A worker should run its assigned queue until completion,
+  preemption, or a code/data failure. Code/data failures stop the queue;
+  preemptions are resumed by the controller from the unfinished experiment.
+- Grain is not the first loader backend. Build a custom deterministic,
+  column-selective loader boundary first; consider Grain later if host input
+  throughput or distributed sharding remains a bottleneck after compact v3.
+- Checkpoints remain raw NumPy for compatibility. The next checkpointing step is
+  async GCS upload of completed local checkpoints with `latest_local_step` and
+  `latest_uploaded_step` status reporting; Orbax is a later migration, not a
+  blocker for the next experiments.
+
+## Experiment Defaults
+
+Use these defaults for the first queued experiments unless a run explicitly says
+otherwise:
+
+| run family | horizon | learning rate | model | loss |
+| --- | ---: | ---: | --- | --- |
+| DFM first-ply baseline | 1 | `6e-4` | `D640/L8/H10/MLP2560` | `CE(a0) + 7.64 * illegal_mass(a0)` |
+| DFM H4 action baseline | 4 | `6e-4` | `D640/L8/H10/MLP2560` | `CE(a0:a3) + 7.64 * illegal_mass(a0) + 7.64 * teacher_forced_illegal_mass(a1:a3)` |
+| JEPA H2 | 2 | `1e-4` | `D256/L4/H4/MLP1024` | `latent_cosine + 0.01 * sigreg` |
+| JEPA H4 | 4 | `1e-4` | `D256/L4/H4/MLP1024` | `latent_cosine + 0.01 * sigreg` |
+| Joint Latent-SASA H2 | 2 | `3e-4` | `D256/L4/H4/MLP1024` | `DFM CE + legal + latent_jepa` |
+| Joint Latent-SASA H4 | 4 | `3e-4` | `D256/L4/H4/MLP1024` | `DFM CE + legal + latent_jepa` |
+| Joint H4 rank | 4 | `3e-4` | `D256/L4/H4/MLP1024` | previous loss plus `0.2 * chunk_rank` |
+
+The `7.64` legality coefficient is the current random-policy-balanced default:
+random CE is `log(1858) ~= 7.53`, while random illegal mass is close to `1`.
+Recompute it from the dataset's average legal-move count when launching a new
+major dataset, but do not run a broad Phase A legality sweep before the first
+clean baseline. Batch size should be auto-probed per TPU shape and then kept as
+large as fits.
 
 ## Audit Reconciliation
 
@@ -92,8 +128,11 @@ Remaining blockers before serious new sweeps:
 
 ## Near-Term Plan
 
-1. Finish the fix-first patch set above and run local CPU smoke tests for DFM,
-   JEPA, loader discovery, checkpoint init, and trajectory-v2 validation.
+1. Finish the loader and queue-runner work:
+   - DFM action batches should avoid materializing unused future boards.
+   - TPU-side queues should run several experiments on one provisioned VM.
+   - Controller-side queue splitting should request multiple workers only when
+     we intentionally want parallel capacity.
 2. Let the LC0 10M build finish, then validate sampled train/val/test shards:
    schema, shape, legal replay from `fen_t`, future board equality, and legal
    mask consistency.
@@ -112,16 +151,16 @@ Remaining blockers before serious new sweeps:
    validation passes.
 7. Keep the LC0 CPU data worker running on a new immutable prefix for future
    Phase B/C data while the Phase A TPU run trains.
-8. Continue the curriculum from a good Phase A checkpoint using
-   `--init-checkpoint-uri` so each phase has a fresh run ID and checkpoint
-   namespace:
-   - Phase B: increase `loss_horizon` from 1 to 2-4 while keeping legality
-     pressure.
-   - Phase C: train full H8 with scheduled/random `t`.
-   - Phase D: run sampler/refinement evaluation, not just token CE.
+8. Run short queued baselines, then move quickly to joint Latent-SASA:
+   - DFM H1 and H4 action-only baselines.
+   - JEPA H2 and H4 teacher-forced latent transition baselines.
+   - Joint H2 with shared latent base and clean teacher-forced actions.
+   - Joint H4 with DFM action-state conditioning.
+   - Joint H4 with chunk-ranking negatives.
 9. Run comparable LC0-only, TCEC-only, and deduplicated TCEC+LC0 validation
    curves before scaling depth/width.
-10. After DFM stabilizes, resume JEPA sequence-prediction and plan-scoring work.
+10. Add sampler/reranking evaluation before treating a checkpoint as
+    planner-ready.
 
 ## Trajectory-v2 Contract
 
@@ -143,6 +182,11 @@ Remaining blockers before serious new sweeps:
 - Tracked docs/configs only ship sanitized examples; local operational details live in ignored `.local.json` files.
 - GCS-backed training must not start from a small partial cache unless an
   experiment explicitly opts into `--gcs-startup-cache-policy minimum`.
+- Queued sweeps must not launch one TPU per experiment. One worker should run a
+  queue until preempted or failed, and each queue entry must own a unique
+  checkpoint URI.
+- DFM-only loaders should not materialize `planes_future`; JEPA and joint views
+  may load future states.
 
 ## Evaluation Gaps
 

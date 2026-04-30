@@ -23,7 +23,11 @@ except ImportError:  # pragma: no cover
 
 from chess_dfm_jax import encoding as encode_mod
 from chess_dfm_jax import policy as policy_mod
-from chess_dfm_jax.data.trajectory import trajectory_shard_from_npz, trajectory_shard_to_batch
+from chess_dfm_jax.data.trajectory import (
+    trajectory_action_batch_from_npz,
+    trajectory_shard_from_npz,
+    trajectory_shard_to_batch,
+)
 
 
 V3_RECORD_SIZE = 8276
@@ -92,6 +96,7 @@ class LeelaChunkDataLoader:
         include_metadata: bool = False,
         chunk_paths_provider: Callable[[], Sequence[str]] | None = None,
         action_source: str = "best",
+        batch_view: str = "full",
     ):
         self.chunk_paths = [str(path) for path in chunk_paths]
         self.batch_size = batch_size
@@ -109,6 +114,9 @@ class LeelaChunkDataLoader:
         if action_source not in {"best", "played"}:
             raise ValueError(f"Unsupported action_source: {action_source}")
         self.action_source = action_source
+        if batch_view not in {"full", "dfm_action"}:
+            raise ValueError(f"Unsupported batch_view: {batch_view}")
+        self.batch_view = batch_view
 
     def __iter__(self) -> Iterator[dict[str, np.ndarray]]:
         paths = (
@@ -125,9 +133,20 @@ class LeelaChunkDataLoader:
             if path.endswith(".npz"):
                 try:
                     with np.load(path, allow_pickle=False) as data:
-                        shard = trajectory_shard_from_npz(data)
-                    batch = trajectory_shard_to_batch(shard, include_metadata=self.include_metadata)
-                    for i in range(shard.batch_size):
+                        if self.batch_view == "dfm_action":
+                            batch = trajectory_action_batch_from_npz(
+                                data,
+                                horizon=self.horizon,
+                                include_metadata=self.include_metadata,
+                            )
+                        else:
+                            shard = trajectory_shard_from_npz(data)
+                            batch = trajectory_shard_to_batch(
+                                shard,
+                                include_metadata=self.include_metadata,
+                            )
+                    batch_size = int(batch["current_planes"].shape[0])
+                    for i in range(batch_size):
                         for key, value in batch.items():
                             current_batch[key].append(value[i])
                         if len(current_batch["current_planes"]) >= self.batch_size:

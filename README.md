@@ -12,6 +12,8 @@ point for:
 - roofline and step profiling
 - preemption-aware Spot TPU batch training with raw NumPy checkpoints
 - trajectory-v2 DFM training on exact multi-ply chess rollouts
+- queued TPU experiment execution for multiple ablations per provisioned worker
+- Latent-SASA joint DFM+JEPA pretraining
 - dataset QA/deduplication and run monitoring through marimo notebooks
 
 ## Layout
@@ -79,6 +81,7 @@ Expected filenames:
 - `python scripts/train_jepa.py --steps 10 --chunk-dir /path/to/chunks`
 - `python scripts/train_jepa.py --steps 50000 --run-name local-jepa --resume --checkpoint-uri runs/jepa/local-jepa/checkpoints`
 - `python scripts/run_tpu_spot_jepa.py --job-spec docs/tpu_spot_job_spec.example.json`
+- `python scripts/run_experiment_queue.py --queue experiments.jsonl --dry-run`
 - `uvx marimo check notebooks/state_action_training_browser.py`
 - `uv run notebooks/state_action_training_browser.py`
 - `uvx marimo check notebooks/trajectory_dedup_browser.py`
@@ -102,15 +105,31 @@ trajectory-v2 shards:
   datasets. Training blocks until every visible train shard is cached locally,
   preventing the earlier growing-cache replay artifact.
 
-The active LC0-only Phase A run uses:
+The clean LC0-only Phase A baseline uses:
 
 - model: DFM `token_dim=640`, `num_layers=8`, `num_heads=10`, `mlp_dim=2560`
 - optimizer: Muon where configured by the trainer, learning rate `6e-4`
 - data: LC0 H8 train/val trajectory-v2 shards
 - objective: first-ply curriculum with all actions masked at `t=0`
-- loss: `2 * CE(first_move) + 5 * illegal_prob_mass(first_move)`
+- loss: `CE(first_move) + 7.64 * illegal_prob_mass(first_move)` by default,
+  with the legality coefficient recomputed from dataset average legal-move
+  count for major new datasets
 
 Use `docs/training_phases.md` for the exact phase plan and launch guardrails.
+
+## Latent-SASA direction
+
+The next research target is Latent-SASA joint pretraining:
+
+- BT4 stays frozen initially.
+- A shared online BT4-to-planning-latent base feeds small DFM and JEPA adapters.
+- DFM denoises explicit action chunks.
+- JEPA predicts BT4-derived future latents for those action chunks.
+- Later ranking/value heads score real chunks above corrupted legal chunks.
+
+Standalone DFM and JEPA remain baselines. Grain is deferred until the compact
+loader schema is stable; the current implementation starts with a custom
+deterministic, column-selective loader.
 
 ## JEPA architecture
 
@@ -148,14 +167,18 @@ normal resume, optimizer state.
   frozen BT4 weights are reloaded from the pinned model file.
 
 Do not run two trainers against the same checkpoint directory at the same time.
+The next checkpointing upgrade is asynchronous GCS upload of completed local
+checkpoints; local checkpoint writes remain synchronous and raw NumPy.
 
 ## Spot TPU flow
 
-The first cloud path is single-host `v5litepod-8` Spot TPU VMs.
+The first cloud path is single-host TPU VMs.
 
 - Use `docs/tpu_spot_job_spec.example.json` as the controller spec template.
 - The local controller uploads an immutable source snapshot to GCS.
 - The TPU VM startup script installs `jax[tpu]`, installs the repo, downloads models/data, and runs `scripts/train_jepa.py --resume`.
+- For sweeps, run `scripts/run_experiment_queue.py` as the TPU entry command so
+  several experiments execute on one provisioned VM.
 - Raw NumPy checkpoints go to a regional GCS path so a later zone retry can
   resume safely.
 

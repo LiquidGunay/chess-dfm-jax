@@ -24,9 +24,41 @@ The canonical training contract is now `trajectory-v2`.
 
 - discovers `.gz`, `.zst`, and `.npz` files
 - loads trajectory-v2 shards directly
+- supports a `dfm_action` view that reads current planes, actions, validity, and
+  legal masks without materializing dense `planes_future`
 - adapts legacy `planes_target` shards into explicit terminal-only batches
 - preserves first-step `legal_mask` for DFM compatibility
 - exposes `future_planes`, `future_valid`, and terminal aliases such as `next_planes`
+  in the full JEPA/inspection view
+
+The current DFM trainer uses `batch_view="dfm_action"` for train and validation
+loaders. This is an immediate stopgap for dense trajectory-v2 shards: it avoids
+the largest unused array for DFM-only training, but dense legal masks still need
+to be read when legality losses are enabled.
+
+## Compact Latent-SASA v3 Plan
+
+Trajectory-v2 remains the source of truth. The next loader milestone is a
+derived compact view for throughput:
+
+- bitpacked or `uint8` `planes_t`
+- bitpacked or `uint8` `planes_future`
+- `uint16` actions
+- `uint8` future-valid flags
+- `legal_idx_u16` plus `legal_count`, replacing dense float legal masks
+- stable row metadata for replay, dedup, and debugging
+
+Training views over the same compact source:
+
+- `dfm_action`: `planes_t`, `actions`, legal indices/counts, validity
+- `jepa_latent`: `planes_t`, `actions`, `planes_future`, `future_valid`
+- `joint_latent_sasa`: all required action, future-state, legal, and optional
+  value/WDL columns
+
+Use a custom deterministic loader first. Grain remains a later backend option
+once the compact schema and training views are stable. The loader boundary
+should still be Grain-compatible: explicit sampler, column reader, host
+transform, prefetch queue, and device transfer stages.
 
 ## Current Datasets
 
@@ -80,6 +112,15 @@ The older behavior is still available only for explicit streaming experiments:
 ```
 
 Do not use `minimum` for model-selection runs.
+
+For large compact datasets, replace full startup cache waits with deterministic
+windowed prefetch:
+
+1. Build the full epoch shard/row schedule before training.
+2. Assign each worker a deterministic shard window.
+3. Download upcoming windows to persistent SSD in the background.
+4. Block if the next scheduled shard is missing.
+5. Never silently train on a smaller already-cached subset.
 
 For TPU runs, put `--gcs-cache-dir` on an attached persistent disk instead of
 the boot disk, for example:
