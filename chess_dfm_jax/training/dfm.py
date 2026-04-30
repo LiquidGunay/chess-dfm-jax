@@ -209,7 +209,8 @@ def dfm_loss_fn(model: DFMDenoiser, batch: dict[str, jnp.ndarray], rng: jnp.ndar
             legal_valid = jnp.asarray(batch["legal_masks_valid"], dtype=jnp.float32)[:, :K]
         else:
             legal_valid = jnp.ones((batch_size, K), dtype=jnp.float32)
-        horizon_valid = valid[:, None] * legal_valid
+        continuation_mask = (jnp.arange(K) > 0).astype(jnp.float32) * loss_horizon_mask
+        horizon_valid = valid[:, None] * legal_valid * continuation_mask[None, :]
         horizon_legality_loss = (
             jnp.sum(illegal_prob_mass_by_horizon * horizon_valid)
             / jnp.maximum(jnp.sum(horizon_valid), 1.0)
