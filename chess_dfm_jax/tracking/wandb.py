@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+import stat
 from typing import Any
 
 from chess_dfm_jax.paths import project_root
@@ -26,6 +27,27 @@ def load_env_file(path: str | Path | None = None, *, override: bool = False) -> 
         if override or key not in os.environ:
             os.environ[key] = value
     return env_path
+
+
+def has_wandb_credentials() -> bool:
+    """Return whether W&B can authenticate without prompting."""
+    load_env_file()
+    mode = os.environ.get("WANDB_MODE", "").strip().lower()
+    if mode in {"disabled", "offline"}:
+        return True
+    if os.environ.get("WANDB_API_KEY"):
+        return True
+
+    netrc_path = Path(os.environ.get("NETRC", Path.home() / ".netrc"))
+    try:
+        if not netrc_path.exists():
+            return False
+        if netrc_path.stat().st_mode & (stat.S_IRWXG | stat.S_IRWXO):
+            return False
+        text = netrc_path.read_text(encoding="utf-8", errors="ignore")
+    except OSError:
+        return False
+    return "api.wandb.ai" in text and "password" in text
 
 
 def init_wandb_run(

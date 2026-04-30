@@ -39,7 +39,7 @@ from chess_dfm_jax.training.dfm import (  # noqa: E402
 from chess_dfm_jax.training.jepa import (  # noqa: E402
     build_synthetic_transition_batch,
 )
-from chess_dfm_jax.tracking import init_wandb_run  # noqa: E402
+from chess_dfm_jax.tracking import has_wandb_credentials, init_wandb_run  # noqa: E402
 
 
 def parse_args() -> argparse.Namespace:
@@ -312,6 +312,12 @@ def sync_checkpoint_uri(checkpoint_uri: str, destination: Path, *, step: int | N
 
 def main() -> int:
     args = parse_args()
+    if not args.no_wandb and not has_wandb_credentials():
+        raise SystemExit(
+            "W&B logging is enabled but no non-interactive credentials were found. "
+            "Set WANDB_API_KEY, create a restricted ~/.netrc entry for api.wandb.ai, "
+            "set WANDB_MODE=offline, or pass --no-wandb."
+        )
     
     if args.backend == "tpu":
         jax.distributed.initialize(initialization_timeout=1200)

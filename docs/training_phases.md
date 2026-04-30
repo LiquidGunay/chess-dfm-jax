@@ -248,6 +248,11 @@ latest or selected checkpoint of a prior run while writing to a new run ID.
 GCS initialization and resume sync only the selected `stepXXXXXXX/state.npz`
 instead of copying every checkpoint in the source directory.
 
+If W&B logging is enabled, `scripts/train_dfm.py` checks for non-interactive
+credentials before TPU initialization, model loading, checkpoint restore, or
+cache warming. Provide `WANDB_API_KEY`, a restricted `~/.netrc`, set
+`WANDB_MODE=offline`, or pass `--no-wandb`.
+
 Example dry validation:
 
 ```bash
