@@ -137,8 +137,13 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help=(
             "Load model weights from this checkpoint directory before training a new run. "
-            "Optimizer state is intentionally not restored."
+            "Optimizer state is not restored unless --init-restore-optimizer is set."
         ),
+    )
+    parser.add_argument(
+        "--init-restore-optimizer",
+        action="store_true",
+        help="With --init-checkpoint-uri, also restore optimizer state while keeping a fresh run/checkpoint directory.",
     )
     parser.add_argument("--init-checkpoint-step", type=int, default=None, help="Checkpoint step for --init-checkpoint-uri. Defaults to latest.")
     parser.add_argument("--horizon", type=int, default=1, help="Prediction horizon.")
@@ -364,10 +369,18 @@ def main() -> int:
         init_step = args.init_checkpoint_step or latest_checkpoint_step(init_checkpoint_root)
         if init_step is None:
             raise FileNotFoundError(f"No checkpoint found under {args.init_checkpoint_uri}.")
-        load_training_checkpoint(init_checkpoint_root, model=model, step=init_step)
+        load_training_checkpoint(
+            init_checkpoint_root,
+            model=model,
+            optimizer=optimizer if args.init_restore_optimizer else None,
+            step=init_step,
+        )
         if jax.process_index() == 0:
             print(f"Initialized model weights from {args.init_checkpoint_uri} step={init_step}")
-            print("Optimizer state was not restored; this is a fresh run branch.")
+            if args.init_restore_optimizer:
+                print("Optimizer state was restored; this is a continuation branch with a fresh run ID.")
+            else:
+                print("Optimizer state was not restored; this is a fresh optimizer branch.")
             sys.stdout.flush()
 
     if args.resume:
