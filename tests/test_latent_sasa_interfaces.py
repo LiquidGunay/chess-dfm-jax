@@ -65,7 +65,7 @@ def test_dfm_planner_from_latents_returns_hidden_and_preserves_call_path():
 
 def test_jepa_rollout_from_latents_consumes_action_hidden():
     config = JEPAConfig(
-        token_dim=16,
+        token_dim=8,
         num_layers=1,
         num_heads=4,
         mlp_dim=32,
@@ -77,14 +77,15 @@ def test_jepa_rollout_from_latents_consumes_action_hidden():
     actions = jnp.asarray([[1, 2, 3], [4, 5, 6]], dtype=jnp.int32)
     z0_jepa = model.encode_state_tokens(current_planes)
 
-    zero_hidden = jnp.zeros((2, 3, config.token_dim), dtype=jnp.float32)
-    shifted_hidden = jnp.ones((2, 3, config.token_dim), dtype=jnp.float32) * 0.25
+    zero_hidden = jnp.zeros((2, 3, model.transition.jepa_width), dtype=jnp.float32)
+    shifted_hidden = jnp.ones((2, 3, model.transition.jepa_width), dtype=jnp.float32) * 0.25
     pred_zero = model.jepa_rollout_from_latents(z0_jepa, actions, zero_hidden)
     pred_shifted = model.jepa_rollout_from_latents(z0_jepa, actions, shifted_hidden)
     pred_standalone = model.predict_sequence(current_planes, actions)
 
-    assert pred_zero.shape == (2, 3, 64, config.token_dim)
-    assert pred_shifted.shape == (2, 3, 64, config.token_dim)
+    assert z0_jepa.shape == (2, 64, DummyEncoder().embedding_size)
+    assert pred_zero.shape == (2, 3, 64, DummyEncoder().embedding_size)
+    assert pred_shifted.shape == (2, 3, 64, DummyEncoder().embedding_size)
     np.testing.assert_allclose(np.asarray(pred_zero), np.asarray(pred_standalone), rtol=1e-5, atol=1e-5)
     assert float(jnp.max(jnp.abs(pred_zero - pred_shifted))) > 1e-6
 
@@ -104,7 +105,7 @@ def test_joint_stage1_step_uses_compact_legal_batch():
     batch["deterministic_t"] = jnp.asarray(0.0, dtype=jnp.float32)
 
     config = JointLatentSASAConfig(
-        token_dim=16,
+        token_dim=8,
         dfm_layers=1,
         jepa_layers=1,
         num_heads=4,
@@ -120,6 +121,11 @@ def test_joint_stage1_step_uses_compact_legal_batch():
     )
     model = JointLatentSASAModel(DummyEncoder(), config, rngs=nnx.Rngs(2))
     optimizer = nnx.Optimizer(model, optax.adamw(1e-3), wrt=TrainableParam)
+    z_jepa = model.encode_current_jepa(batch["current_planes"])
+    target_tokens = model.encode_future_targets(batch["future_planes"])
+
+    assert z_jepa.shape == (2, 64, DummyEncoder().embedding_size)
+    assert target_tokens.shape == (2, 2, 64, DummyEncoder().embedding_size)
 
     loss, aux = train_joint_stage1_step(model, optimizer, batch, jnp.asarray([0, 1], dtype=jnp.uint32))
 
@@ -161,7 +167,7 @@ def test_joint_stage2_step_adds_contrastive_metrics():
     batch["deterministic_t"] = jnp.asarray(0.0, dtype=jnp.float32)
 
     config = JointLatentSASAConfig(
-        token_dim=16,
+        token_dim=8,
         dfm_layers=1,
         jepa_layers=1,
         num_heads=4,

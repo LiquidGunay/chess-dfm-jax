@@ -52,10 +52,11 @@ As of 2026-04-29:
   held-out action, legality, and latent-rollout metrics. The first unfreeze
   should be adapters/LoRA or last BT4 blocks with a smaller learning rate; full
   BT4 fine-tuning is a late joint-refinement step.
-- The joint direction is not fully separate DFM/JEPA projectors. Use a shared
-  online BT4-to-planning-latent base, small DFM and JEPA adapters, shared action
-  embeddings, and a stop-gradient or EMA target projector for JEPA targets. The
-  existing standalone DFM and JEPA scripts remain baselines.
+- The joint direction keeps a compact projected BT4 basis for DFM, but JEPA
+  current and future targets are raw frozen BT4 tokens. Do not define JEPA
+  targets with a trainable projector. DFM action-token hidden states are
+  projected into BT4 width and consumed by the JEPA transition. The existing
+  standalone DFM and JEPA scripts remain baselines.
 - Joint coupling is not implemented just by passing action IDs into JEPA. The
   required bridge is DFM action-token hidden states consumed by the JEPA
   transition, with gradient diagnostics showing that JEPA losses reach the DFM
@@ -85,12 +86,12 @@ otherwise:
 | --- | ---: | ---: | --- | --- |
 | DFM first-ply baseline | 1 | `6e-4` | `D640/L8/H10/MLP2560` | `CE(a0) + 7.64 * illegal_mass(a0)` |
 | DFM H4 action baseline | 4 | `6e-4` | `D640/L8/H10/MLP2560` | `CE(a0:a3) + 7.64 * illegal_mass(a0) + 7.64 * teacher_forced_illegal_mass(a1:a3)` |
-| JEPA H2 | 2 | `1e-4` | `D256/L4/H4/MLP1024` | `latent_cosine + 0.01 * sigreg` |
-| JEPA H4 | 4 | `1e-4` | `D256/L4/H4/MLP1024` | `latent_cosine + 0.01 * sigreg` |
-| Joint Latent-SASA H2 | 2 | `6e-4` | `D256/L4/H4/MLP1024` | `DFM CE + 7.64 * first_legal + latent_jepa` |
-| Joint Latent-SASA H4 | 4 | `6e-4` | `D256/L4/H4/MLP1024` | `DFM CE + 7.64 * first_legal + latent_jepa` |
-| Joint H4 horizon-legal ablation | 4 | `6e-4` | `D256/L4/H4/MLP1024` | previous loss plus `0.5 * horizon_legal` |
-| Joint H4 rank | 4 | `3e-4` | `D256/L4/H4/MLP1024` | previous loss plus `0.2 * chunk_rank` |
+| JEPA H2 | 2 | `1e-4` | raw BT4 width `1024`, `L4/H8/MLP4096` | `raw_bt4_cosine + 0.01 * sigreg` |
+| JEPA H4 | 4 | `1e-4` | raw BT4 width `1024`, `L4/H8/MLP4096` | `raw_bt4_cosine + 0.01 * sigreg` |
+| Joint Latent-SASA H2 | 2 | `6e-4` | DFM `D256/L4/H4/MLP1024`, JEPA raw BT4 | `DFM CE + 7.64 * first_legal + raw_bt4_jepa` |
+| Joint Latent-SASA H4 | 4 | `6e-4` | DFM `D256/L4/H4/MLP1024`, JEPA raw BT4 | `DFM CE + 7.64 * first_legal + raw_bt4_jepa` |
+| Joint H4 horizon-legal ablation | 4 | `6e-4` | DFM `D256/L4/H4/MLP1024`, JEPA raw BT4 | previous loss plus `0.5 * horizon_legal` |
+| Joint H4 rank | 4 | `3e-4` | DFM `D256/L4/H4/MLP1024`, JEPA raw BT4 | previous loss plus `0.2 * chunk_rank` |
 
 The `7.64` legality coefficient is the current random-policy-balanced default:
 random CE is `log(1858) ~= 7.53`, while random illegal mass is close to `1`.

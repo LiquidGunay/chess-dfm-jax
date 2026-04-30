@@ -111,36 +111,32 @@ class TokenTransitionHead(nnx.Module):
         compute_dtype = _parse_compute_dtype(config.head_compute_dtype)
         self.encoder = encoder
         self.compute_dtype = jnp.dtype(compute_dtype)
-        self.token_projector = TokenProjector(
-            encoder.embedding_size,
-            config.token_dim,
-            rngs=rngs,
-            param_dtype=param_dtype,
-            compute_dtype=compute_dtype,
-        )
+        self.jepa_width = int(encoder.embedding_size)
+        if self.jepa_width % config.num_heads != 0:
+            raise ValueError(
+                f"Raw-BT4 JEPA width {self.jepa_width} must be divisible by num_heads={config.num_heads}."
+            )
+        hidden_dim = max(config.token_dim * 2, self.jepa_width)
         self.action_mlp = ActionMLP(
             vocab_size=config.action_vocab_size,
             embed_dim=128,
-            hidden_dim=config.token_dim * 2,
-            output_dim=config.token_dim,
+            hidden_dim=hidden_dim,
+            output_dim=self.jepa_width,
             rngs=rngs,
             param_dtype=param_dtype,
             compute_dtype=compute_dtype,
         )
         self.value_head = ValuePredictionHead(
-            input_dim=config.token_dim,
-            hidden_dim=config.token_dim * 2,
+            input_dim=self.jepa_width,
+            hidden_dim=hidden_dim,
             rngs=rngs,
             param_dtype=param_dtype,
             compute_dtype=compute_dtype,
         )
-        square_pos = jax.random.normal(rngs.params(), (64, config.token_dim), dtype=jnp.float32)
-        square_pos = square_pos / np.sqrt(max(config.token_dim, 1))
-        self.square_pos = TrainableParam(jnp.asarray(square_pos, dtype=jnp.dtype(param_dtype)))
         self.blocks = nnx.List(
             [
                 EncoderLayer(
-                    width=config.token_dim,
+                    width=self.jepa_width,
                     num_heads=config.num_heads,
                     mlp_dim=config.mlp_dim,
                     rngs=rngs,
@@ -153,16 +149,14 @@ class TokenTransitionHead(nnx.Module):
             ]
         )
         self.output_norm = TrainableLayerNorm(
-            config.token_dim,
+            self.jepa_width,
             param_dtype=param_dtype,
             compute_dtype=compute_dtype,
         )
 
     def encode_state_tokens(self, planes: jnp.ndarray) -> jnp.ndarray:
         encoder_tokens = self.encoder.encode_tokens(planes)
-        projected = self.token_projector(encoder_tokens)
-        square_pos = jnp.asarray(self.square_pos[...], dtype=self.compute_dtype)
-        return jnp.asarray(projected, dtype=self.compute_dtype) + square_pos[None, :, :]
+        return jax.lax.stop_gradient(jnp.asarray(encoder_tokens, dtype=self.compute_dtype))
 
     def encode_future_tokens(self, future_planes: jnp.ndarray) -> jnp.ndarray:
         batch_size, horizon, channels, height, width = future_planes.shape

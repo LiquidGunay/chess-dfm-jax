@@ -145,14 +145,17 @@ implementation starts with a custom deterministic, column-selective loader.
 The trainable model keeps BT4 frozen and trains only a small transition head:
 
 - BT4 encoder produces `64 x 1024` square tokens.
-- A trainable projector maps those tokens to `64 x token_dim`.
+- JEPA consumes those raw frozen BT4 tokens directly as `z_t`.
 - A learned action embedding conditions the current square tokens at each rollout step.
 - A small transformer unrolls a predicted token sequence over an action chunk.
-- The model predicts future projected BT4 tokens, value targets, and WDL targets for each horizon step.
+- The model predicts future raw BT4 tokens, value targets, and WDL targets for each horizon step.
+- `token_dim` remains the compact DFM/planning width in joint runs; JEPA target
+  space is anchored to BT4 width `1024`, not a trainable projector.
 
 `scripts/train_jepa.py` defaults:
 
-- `token_dim=512`
+- raw JEPA token width is BT4 width `1024`
+- `token_dim=512` remains a compatibility/hidden-size knob for the action MLP
 - `num_layers=4`
 - `num_heads=8`
 - `mlp_dim=2048`

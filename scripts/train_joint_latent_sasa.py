@@ -73,6 +73,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--token-dim", type=int, default=256)
     parser.add_argument("--dfm-layers", type=int, default=4)
     parser.add_argument("--jepa-layers", type=int, default=2)
+    parser.add_argument("--jepa-num-heads", type=int, default=0, help="JEPA heads for raw BT4 tokens; defaults to --num-heads.")
+    parser.add_argument("--jepa-mlp-dim", type=int, default=0, help="JEPA MLP width for raw BT4 tokens; defaults to 4x BT4 width.")
     parser.add_argument("--num-heads", type=int, default=4)
     parser.add_argument("--mlp-dim", type=int, default=1024)
     parser.add_argument("--learning-rate", type=float, default=3e-4)
@@ -94,7 +96,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--jepa-sigreg-coeff", type=float, default=0.0)
     parser.add_argument("--jepa-action-contrast-coeff", type=float, default=0.0)
     parser.add_argument("--jepa-action-contrast-margin", type=float, default=0.05)
-    parser.add_argument("--target-projector-mode", type=str, default="shared", choices=["shared", "separate"])
+    parser.add_argument(
+        "--target-projector-mode",
+        type=str,
+        default=None,
+        choices=["shared", "separate"],
+        help="Deprecated no-op. Joint JEPA now targets raw frozen BT4 tokens.",
+    )
     parser.add_argument("--contrastive-coeff", type=float, default=0.0)
     parser.add_argument("--contrastive-temperature", type=float, default=0.1)
     parser.add_argument("--candidate-count", type=int, default=1)
@@ -244,6 +252,8 @@ def estimate_joint_step_flops(
     token_dim: int,
     dfm_layers: int,
     jepa_layers: int,
+    jepa_width: int,
+    jepa_mlp_dim: int,
     mlp_dim: int,
 ) -> dict[str, float]:
     seq_len = 64 + horizon
@@ -254,9 +264,9 @@ def estimate_joint_step_flops(
         + 2.0 * seq_len * seq_len * token_dim
     )
     jepa_layer_forward = batch_size * horizon * jepa_layers * (
-        4.0 * state_len * token_dim * token_dim
-        + 2.0 * state_len * token_dim * mlp_dim
-        + 2.0 * state_len * state_len * token_dim
+        4.0 * state_len * jepa_width * jepa_width
+        + 2.0 * state_len * jepa_width * jepa_mlp_dim
+        + 2.0 * state_len * state_len * jepa_width
     )
     dfm_train = 3.0 * dfm_layer_forward * 2.0
     jepa_train = 3.0 * jepa_layer_forward
@@ -264,6 +274,8 @@ def estimate_joint_step_flops(
         "estimated_dfm_train_flops_per_step": float(dfm_train),
         "estimated_jepa_train_flops_per_step": float(jepa_train),
         "estimated_total_step_flops": float(dfm_train + jepa_train),
+        "estimated_jepa_width": float(jepa_width),
+        "estimated_jepa_mlp_dim": float(jepa_mlp_dim),
     }
 
 
@@ -344,6 +356,8 @@ def main() -> int:
         token_dim=args.token_dim,
         dfm_layers=args.dfm_layers,
         jepa_layers=args.jepa_layers,
+        jepa_num_heads=args.jepa_num_heads,
+        jepa_mlp_dim=args.jepa_mlp_dim,
         num_heads=args.num_heads,
         mlp_dim=args.mlp_dim,
         learning_rate=args.learning_rate,
@@ -362,7 +376,6 @@ def main() -> int:
         jepa_sigreg_coeff=args.jepa_sigreg_coeff,
         jepa_action_contrast_coeff=args.jepa_action_contrast_coeff,
         jepa_action_contrast_margin=args.jepa_action_contrast_margin,
-        target_projector_mode=args.target_projector_mode,
         contrastive_coeff=args.contrastive_coeff,
         contrastive_temperature=args.contrastive_temperature,
         candidate_count=args.candidate_count,
@@ -481,6 +494,7 @@ def main() -> int:
     run_config = config.__dict__.copy()
     run_config.update(vars(args))
     run_config["first_legality_coeff"] = first_legality_coeff
+    run_config["jepa_target_space"] = "raw_bt4_tokens"
     run_config.update(
         {
             "model_family": "joint_latent_sasa",
@@ -498,6 +512,8 @@ def main() -> int:
         token_dim=args.token_dim,
         dfm_layers=args.dfm_layers,
         jepa_layers=args.jepa_layers,
+        jepa_width=int(params["embedding_size"]),
+        jepa_mlp_dim=args.jepa_mlp_dim if args.jepa_mlp_dim > 0 else int(params["embedding_size"]) * 4,
         mlp_dim=args.mlp_dim,
     )
     run_config.update(flops)

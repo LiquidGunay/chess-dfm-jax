@@ -34,9 +34,9 @@ the two systems into loosely related baselines.
 - BT4 remains frozen through DFM baselines, JEPA baselines, and the first joint
   Latent-SASA stages. Unfreeze only after joint heads beat action-only baselines
   on held-out action, legality, reranking, and latent-rollout metrics.
-- The joint model uses a shared online BT4-to-planning-latent base projector,
-  small DFM and JEPA adapters, a shared action embedding, and a stop-gradient or
-  EMA target projector.
+- The joint model uses a compact DFM planning projector, but JEPA consumes raw
+  frozen BT4 current tokens and predicts raw frozen BT4 future tokens. There is
+  no trainable JEPA target projector in the active path.
 - The bridge is DFM action-token hidden states, not only action IDs. JEPA losses
   must have a gradient path into the DFM planner/action-token pathway.
 - DFM may predict illegal actions and is trained with legality penalties. JEPA
@@ -95,28 +95,29 @@ Tests:
 
 ### W2: Shared Latent Components
 
-Status: initial joint module implemented with shared projector, adapters,
-shared action embedding, and stop-gradient target projector. EMA target updates
-are still pending.
+Status: initial joint module implemented with a compact DFM projector/adapter,
+raw-BT4 JEPA current/target tokens, and DFM-hidden-state conditioning. The old
+shared/separate target-projector path is deprecated because it made the JEPA
+target space either movable or fixed-random.
 
 Add reusable joint components:
 
 ```text
-SharedTokenProjector
+DFMTokenProjector
 DFMAdapter
-JEPAAdapter
-TargetTokenProjector
-SharedActionEmbedding
+JEPAActionAdapter
+JEPAActionEmbedding
 ```
 
 Guidelines:
 
-- Standalone DFM/JEPA may keep separate projectors; joint models should use the
-  shared base projector plus adapters.
-- The target projector must be stop-gradient initially. EMA target updates are
-  a follow-up once the stop-gradient path is stable.
-- The action embedding should be shared in joint runs so the same LC0 action ID
-  has one meaning for DFM and JEPA.
+- DFM may use a compact projected BT4 basis because its targets are action
+  labels/legal masks.
+- JEPA must not define its target with a trainable projector. Its current input
+  is `stopgrad(BT4(s_t)) [B,64,1024]`; its target is
+  `stopgrad(BT4(s_{t+h})) [B,H,64,1024]`.
+- DFM action hidden states are projected into BT4 width and injected into the
+  JEPA rollout so JEPA loss still reaches the DFM action pathway.
 
 Tests:
 
@@ -240,7 +241,7 @@ Current definitions:
 - Legality defaults to masked-token positions only. Validation uses `t=0`, so
   all supervised slots are masked.
 - `L_jepa_positive = mean(2 - 2*cos(pred_norm, target_norm))`, equivalent to
-  squared distance between L2-normalized latent tokens.
+  squared distance between L2-normalized raw BT4 tokens.
 - `L_jepa_sigreg` matches the standalone JEPA SigReg quantile regularizer and
   is off unless `--jepa-sigreg-coeff > 0`.
 - `L_action_contrast = max(margin + L_true_actions - L_shuffled_actions, 0)`.
@@ -265,9 +266,9 @@ Guidelines:
 
 - Use the random-policy-balanced legality coefficient for first-ply legality
   unless a run explicitly tests another value.
-- Prefer `target_projector_mode=shared` for the next Stage 1 runs. The older
-  separate stop-gradient target projector is kept as an ablation because it
-  provides a fixed random target space.
+- Do not use trainable JEPA target projectors for Stage 1. The active target
+  space is raw frozen BT4 token space. `--target-projector-mode` is accepted
+  only for compatibility and is ignored by the joint trainer.
 - Use lower or scheduled JEPA learning rates before scaling JEPA depth.
 - Report gradient norms from `L_jepa` into DFM action-token/pathway modules.
 

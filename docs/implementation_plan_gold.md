@@ -33,10 +33,17 @@ z0, a0, z1, a1, z2, ...
 where:
 
 ```text
-zh = projected BT4 latent representation of board state sh
+zh = raw frozen BT4 token representation of board state sh
+   = stopgrad(BT4(sh)) with shape [64, 1024]
 ```
 
 This is **Latent-SASA**, not discrete board-token SASA.
+
+Implementation correction, 2026-04-30: JEPA targets must not be defined by a
+trainable projector. Earlier references in this document to EMA/stop-gradient
+target projectors are superseded by the current repo plan: DFM may use compact
+projected planning tokens, but JEPA input and output targets are raw frozen BT4
+tokens.
 
 ---
 

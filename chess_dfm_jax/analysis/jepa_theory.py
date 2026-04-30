@@ -43,31 +43,34 @@ def estimate_jepa_theory(
     board_tokens: int = 64,
 ) -> JEPATheory:
     seq = board_tokens + 1
+    jepa_width = encoder_width
+    action_embed_dim = 128
+    action_hidden_dim = max(token_dim * 2, jepa_width)
 
     trainable_params = 0
-    trainable_params += _linear_params(encoder_width, token_dim)  # token projector
-    trainable_params += action_vocab_size * token_dim  # action embedding
-    trainable_params += token_dim  # action token bias
-    trainable_params += board_tokens * token_dim  # square positions
+    trainable_params += action_vocab_size * action_embed_dim  # action embedding
+    trainable_params += _linear_params(action_embed_dim, action_hidden_dim)
+    trainable_params += _linear_params(action_hidden_dim, jepa_width)
 
     # output norm
-    trainable_params += 2 * token_dim
+    trainable_params += 2 * jepa_width
 
     for _ in range(num_layers):
         # two layer norms
-        trainable_params += 4 * token_dim
+        trainable_params += 4 * jepa_width
         # q, k, v, out
-        trainable_params += 4 * _linear_params(token_dim, token_dim)
+        trainable_params += 4 * _linear_params(jepa_width, jepa_width)
         # MLP up/down
-        trainable_params += _linear_params(token_dim, mlp_dim)
-        trainable_params += _linear_params(mlp_dim, token_dim)
+        trainable_params += _linear_params(jepa_width, mlp_dim)
+        trainable_params += _linear_params(mlp_dim, jepa_width)
 
     forward_flops = 0
-    forward_flops += 2 * _linear_flops(batch_size * board_tokens, encoder_width, token_dim)  # current + target projector
+    forward_flops += _linear_flops(batch_size, action_embed_dim, action_hidden_dim)
+    forward_flops += _linear_flops(batch_size, action_hidden_dim, jepa_width)
     for _ in range(num_layers):
-        forward_flops += _attention_flops(batch_size, seq, token_dim, num_heads)
-        forward_flops += _linear_flops(batch_size * seq, token_dim, mlp_dim)
-        forward_flops += _linear_flops(batch_size * seq, mlp_dim, token_dim)
+        forward_flops += _attention_flops(batch_size, seq, jepa_width, num_heads)
+        forward_flops += _linear_flops(batch_size * seq, jepa_width, mlp_dim)
+        forward_flops += _linear_flops(batch_size * seq, mlp_dim, jepa_width)
 
     # rule of thumb: forward pass plus backward through trainable head is about 3x forward
     return JEPATheory(

@@ -28,6 +28,8 @@ class JointLatentSASAConfig:
     token_dim: int = 256
     dfm_layers: int = 4
     jepa_layers: int = 2
+    jepa_num_heads: int = 0
+    jepa_mlp_dim: int = 0
     num_heads: int = 4
     mlp_dim: int = 1024
     learning_rate: float = 3e-4
@@ -47,7 +49,6 @@ class JointLatentSASAConfig:
     jepa_sigreg_coeff: float = 0.0
     jepa_action_contrast_coeff: float = 0.0
     jepa_action_contrast_margin: float = 0.05
-    target_projector_mode: str = "shared"
     contrastive_coeff: float = 0.0
     contrastive_temperature: float = 0.1
     candidate_count: int = 1
@@ -58,17 +59,19 @@ class JointLatentSASAConfig:
 class LinearAdapter(nnx.Module):
     def __init__(
         self,
-        dim: int,
+        input_dim: int,
+        output_dim: int | None = None,
         *,
         rngs: nnx.Rngs,
         param_dtype: jnp.dtype = jnp.float32,
         compute_dtype: jnp.dtype = jnp.float32,
     ):
+        output_dim = input_dim if output_dim is None else output_dim
         self.w = TrainableParam(
-            jax.random.normal(rngs.params(), (dim, dim), dtype=param_dtype)
-            / np.sqrt(max(dim, 1))
+            jax.random.normal(rngs.params(), (input_dim, output_dim), dtype=param_dtype)
+            / np.sqrt(max(input_dim, 1))
         )
-        self.b = TrainableParam(jnp.zeros((dim,), dtype=param_dtype))
+        self.b = TrainableParam(jnp.zeros((output_dim,), dtype=param_dtype))
         self.compute_dtype = jnp.dtype(compute_dtype)
 
     def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
@@ -87,6 +90,13 @@ class JointLatentSASAModel(nnx.Module):
         param_dtype = _parse_compute_dtype(config.param_dtype)
         compute_dtype = _parse_compute_dtype(config.compute_dtype)
         self.compute_dtype = jnp.dtype(compute_dtype)
+        self.encoder_dim = int(encoder.embedding_size)
+        jepa_num_heads = config.jepa_num_heads if config.jepa_num_heads > 0 else config.num_heads
+        if self.encoder_dim % jepa_num_heads != 0:
+            raise ValueError(
+                f"Raw-BT4 JEPA width {self.encoder_dim} must be divisible by jepa_num_heads={jepa_num_heads}."
+            )
+        jepa_mlp_dim = config.jepa_mlp_dim if config.jepa_mlp_dim > 0 else self.encoder_dim * 4
 
         self.shared_projector = TokenProjector(
             encoder.embedding_size,
@@ -101,15 +111,16 @@ class JointLatentSASAModel(nnx.Module):
             param_dtype=param_dtype,
             compute_dtype=compute_dtype,
         )
-        self.jepa_adapter = LinearAdapter(
-            config.token_dim,
+        self.jepa_action_embed = TrainableEmbedding(
+            config.action_vocab_size + 1,
+            self.encoder_dim,
             rngs=rngs,
             param_dtype=param_dtype,
             compute_dtype=compute_dtype,
         )
-        self.target_projector = TokenProjector(
-            encoder.embedding_size,
+        self.jepa_action_adapter = LinearAdapter(
             config.token_dim,
+            self.encoder_dim,
             rngs=rngs,
             param_dtype=param_dtype,
             compute_dtype=compute_dtype,
@@ -148,9 +159,9 @@ class JointLatentSASAModel(nnx.Module):
         self.jepa_blocks = nnx.List(
             [
                 EncoderLayer(
-                    width=config.token_dim,
-                    num_heads=config.num_heads,
-                    mlp_dim=config.mlp_dim,
+                    width=self.encoder_dim,
+                    num_heads=jepa_num_heads,
+                    mlp_dim=jepa_mlp_dim,
                     rngs=rngs,
                     param_dtype=param_dtype,
                     compute_dtype=compute_dtype,
@@ -160,7 +171,7 @@ class JointLatentSASAModel(nnx.Module):
             ]
         )
         self.dfm_out_norm = TrainableLayerNorm(config.token_dim, param_dtype=param_dtype, compute_dtype=compute_dtype)
-        self.jepa_out_norm = TrainableLayerNorm(config.token_dim, param_dtype=param_dtype, compute_dtype=compute_dtype)
+        self.jepa_out_norm = TrainableLayerNorm(self.encoder_dim, param_dtype=param_dtype, compute_dtype=compute_dtype)
         self.out_proj = TrainableParam(
             jax.random.normal(rngs.params(), (config.token_dim, config.action_vocab_size), dtype=param_dtype)
             / np.sqrt(config.token_dim)
@@ -171,31 +182,23 @@ class JointLatentSASAModel(nnx.Module):
         encoder_tokens = jax.lax.stop_gradient(self.encoder.encode_tokens(current_planes))
         return self.shared_projector(encoder_tokens)
 
-    def _project_target_tokens(self, encoder_tokens: jnp.ndarray) -> jnp.ndarray:
-        if self.config.target_projector_mode == "shared":
-            return self.shared_projector(encoder_tokens)
-        if self.config.target_projector_mode == "separate":
-            return self.target_projector(encoder_tokens)
-        raise ValueError(f"Unsupported target_projector_mode: {self.config.target_projector_mode!r}")
+    def encode_current_jepa(self, current_planes: jnp.ndarray) -> jnp.ndarray:
+        """Return anchored raw BT4 tokens for the JEPA stream."""
+        encoder_tokens = self.encoder.encode_tokens(current_planes)
+        return jax.lax.stop_gradient(jnp.asarray(encoder_tokens, dtype=self.compute_dtype))
 
     def encode_current_targets(self, current_planes: jnp.ndarray) -> jnp.ndarray:
-        encoder_tokens = jax.lax.stop_gradient(self.encoder.encode_tokens(current_planes))
-        target_tokens = self._project_target_tokens(encoder_tokens)
-        return jax.lax.stop_gradient(target_tokens)
+        return self.encode_current_jepa(current_planes)
 
     def encode_future_targets(self, future_planes: jnp.ndarray) -> jnp.ndarray:
         batch_size, horizon, channels, height, width = future_planes.shape
         flat_planes = future_planes.reshape((batch_size * horizon, channels, height, width))
-        encoder_tokens = jax.lax.stop_gradient(self.encoder.encode_tokens(flat_planes))
-        target_tokens = self._project_target_tokens(encoder_tokens)
-        target_tokens = target_tokens.reshape((batch_size, horizon, 64, self.config.token_dim))
-        return jax.lax.stop_gradient(target_tokens)
+        encoder_tokens = self.encoder.encode_tokens(flat_planes)
+        target_tokens = encoder_tokens.reshape((batch_size, horizon, 64, self.encoder_dim))
+        return jax.lax.stop_gradient(jnp.asarray(target_tokens, dtype=self.compute_dtype))
 
     def dfm_latents(self, shared_tokens: jnp.ndarray) -> jnp.ndarray:
         return self.dfm_adapter(jnp.asarray(shared_tokens, dtype=self.compute_dtype))
-
-    def jepa_latents(self, shared_tokens: jnp.ndarray) -> jnp.ndarray:
-        return self.jepa_adapter(jnp.asarray(shared_tokens, dtype=self.compute_dtype))
 
     def get_time_embedding(self, t: jnp.ndarray) -> jnp.ndarray:
         t = t[:, None]
@@ -243,7 +246,7 @@ class JointLatentSASAModel(nnx.Module):
 
         def loop_body(tokens, inputs):
             action_idx, hidden = inputs
-            action_token = self.action_embed(action_idx) + hidden
+            action_token = self.jepa_action_embed(action_idx) + self.jepa_action_adapter(hidden)
             seq = tokens + action_token[:, None, :]
             for block in self.jepa_blocks:
                 seq = block(seq)
@@ -348,7 +351,7 @@ def joint_stage1_loss_fn(
 
     shared_tokens = model.encode_shared(batch["current_planes"])
     z_dfm = model.dfm_latents(shared_tokens)
-    z_jepa = model.jepa_latents(shared_tokens)
+    z_jepa = model.encode_current_jepa(batch["current_planes"])
 
     rng_t, rng_mask, rng_contrast = jax.random.split(rng, 3)
     t = jax.random.uniform(rng_t, shape=(batch_size,))
@@ -508,7 +511,7 @@ def joint_jepa_positive_loss_fn(
 
     shared_tokens = model.encode_shared(batch["current_planes"])
     z_dfm = model.dfm_latents(shared_tokens)
-    z_jepa = model.jepa_latents(shared_tokens)
+    z_jepa = model.encode_current_jepa(batch["current_planes"])
 
     clean_t = jnp.ones((actions.shape[0],), dtype=jnp.float32)
     _, clean_hidden = model.planner_from_latents(z_dfm, actions, clean_t, return_hidden=True)
@@ -556,7 +559,7 @@ def joint_jepa_action_baseline_diagnostics(
 
     shared_tokens = model.encode_shared(batch["current_planes"])
     z_dfm = model.dfm_latents(shared_tokens)
-    z_jepa = model.jepa_latents(shared_tokens)
+    z_jepa = model.encode_current_jepa(batch["current_planes"])
     target_tokens = model.encode_future_targets(future_planes)
     target_norm = _l2_normalize(jnp.asarray(target_tokens, dtype=jnp.float32))
 
@@ -630,17 +633,17 @@ def joint_contrastive_loss_fn(
 
     shared_tokens = model.encode_shared(batch["current_planes"])
     z_dfm = model.dfm_latents(shared_tokens)
-    z_jepa = model.jepa_latents(shared_tokens)
+    z_jepa = model.encode_current_jepa(batch["current_planes"])
     z_dfm_cand = jnp.broadcast_to(z_dfm[:, None, :, :], (batch_size, candidate_count, 64, model.config.token_dim))
-    z_jepa_cand = jnp.broadcast_to(z_jepa[:, None, :, :], (batch_size, candidate_count, 64, model.config.token_dim))
+    z_jepa_cand = jnp.broadcast_to(z_jepa[:, None, :, :], (batch_size, candidate_count, 64, model.encoder_dim))
     flat_z_dfm = z_dfm_cand.reshape((batch_size * candidate_count, 64, model.config.token_dim))
-    flat_z_jepa = z_jepa_cand.reshape((batch_size * candidate_count, 64, model.config.token_dim))
+    flat_z_jepa = z_jepa_cand.reshape((batch_size * candidate_count, 64, model.encoder_dim))
     flat_actions = cand_actions.reshape((batch_size * candidate_count, horizon))
 
     clean_t = jnp.ones((batch_size * candidate_count,), dtype=jnp.float32)
     _, hidden = model.planner_from_latents(flat_z_dfm, flat_actions, clean_t, return_hidden=True)
     flat_pred = model.jepa_rollout_from_latents(flat_z_jepa, flat_actions, hidden["action_tokens"])
-    pred = flat_pred.reshape((batch_size, candidate_count, horizon, 64, model.config.token_dim))
+    pred = flat_pred.reshape((batch_size, candidate_count, horizon, 64, model.encoder_dim))
     target = model.encode_future_targets(jnp.asarray(batch["future_planes"], dtype=jnp.float32)[:, :horizon])
 
     batch_idx = jnp.arange(batch_size, dtype=jnp.int32)[:, None]
@@ -763,7 +766,7 @@ def joint_coupling_gradient_diagnostics(
         "coupling_grad_norm_jepa_path": _tree_l2_norm(
             {
                 key: pure[key]
-                for key in ("jepa_adapter", "jepa_blocks", "jepa_out_norm")
+                for key in ("jepa_action_adapter", "jepa_action_embed", "jepa_blocks", "jepa_out_norm")
                 if key in pure
             }
         ),

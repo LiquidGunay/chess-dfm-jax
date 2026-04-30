@@ -54,14 +54,16 @@ and JEPA beats identity/random-action baselines on changed-square metrics. The
 first unfreeze should be adapter/LoRA-style or last-block-only with a smaller
 learning rate; full BT4 fine-tuning is a late joint-refinement stage.
 
-Standalone DFM and JEPA keep their existing separate projectors as baselines.
+Standalone DFM keeps its compact current-state projector because its targets
+are actions/legal masks. Standalone JEPA and joint JEPA use raw frozen BT4
+tokens as current inputs and future targets.
 Joint Latent-SASA should use:
 
-- shared online BT4-to-planning-latent base projector
-- small DFM and JEPA adapters
-- shared action embedding
-- stop-gradient or EMA target projector for JEPA targets
-- later DFM action-token hidden-state conditioning into the JEPA transition
+- compact DFM BT4-to-planning-latent projector
+- small DFM adapter
+- JEPA action embedding plus DFM-action-hidden adapter into BT4 width
+- raw `stopgrad(BT4(s_t))` JEPA input and raw `stopgrad(BT4(s_{t+h}))` targets
+- DFM action-token hidden-state conditioning into the JEPA transition
 
 ## Phase A Loss
 
@@ -167,9 +169,11 @@ lambda_wdl = 0.0 initially
 lambda_rank = 0.0 first, then 0.2
 ```
 
-For the current queued Stage 1 runs, use `learning_rate=6e-4`,
-`target_projector_mode=shared`, and `legality_on_masked_only=true`. The legacy
-`--legality-coeff` flag is only an alias for `--first-legality-coeff`.
+For queued Stage 1 runs after the raw-BT4 fix, use `learning_rate=6e-4`
+and `legality_on_masked_only=true`. `--target-projector-mode` is deprecated
+and ignored; JEPA input/targets are frozen raw BT4 tokens with shape
+`[B, 64, 1024]` and `[B, H, 64, 1024]`. The legacy `--legality-coeff` flag is
+only an alias for `--first-legality-coeff`.
 
 Do not sweep batch size. Probe the largest batch that fits the allocated TPU
 shape and keep the learning rate fixed for the first baseline queue.
@@ -185,9 +189,10 @@ Before launching non-smoke `joint` experiments, all of these must be true:
   `hidden["action_tokens"]` shaped `[B, H, D]`.
 - Done: JEPA exposes `jepa_rollout_from_latents(z0_jepa, actions, action_hidden)` and
   can consume DFM action-token hidden states.
-- Done: the initial joint model uses a shared online projector, small DFM/JEPA adapters,
-  shared action embedding, and stop-gradient target projector. EMA target
-  projector updates are allowed after the stop-gradient path is stable.
+- Done: the joint model uses a compact DFM projector/adapter for action
+  denoising, but JEPA consumes raw frozen BT4 current tokens and predicts raw
+  frozen BT4 future tokens. There is no trainable JEPA target projector in the
+  active path.
 - Done: a one-step joint smoke test saves and restores a raw NumPy checkpoint under
   `runs/joint/<run_id>/checkpoints`.
 - Done: coupling diagnostics show finite, non-zero JEPA-loss gradients into the DFM
@@ -213,7 +218,9 @@ Current Stage 1 defaults:
 first_legality_coeff = 7.64
 horizon_legality_coeff = 0.0
 legality_on_masked_only = true
-target_projector_mode = shared
+jepa_target_space = raw_bt4_tokens
+jepa_num_heads = 8 for BT4 width 1024 unless the run explicitly overrides it
+jepa_mlp_dim = 4096 by default, or a smaller explicit ablation
 jepa_sigreg_coeff = 0.0 initially, then 0.01 ablation
 jepa_action_contrast_coeff = 0.0 initially, then 0.1-0.5 ablation
 ```

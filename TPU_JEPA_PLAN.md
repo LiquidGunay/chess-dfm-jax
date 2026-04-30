@@ -4,7 +4,7 @@ This file captures the current implementation plan and the choices already made 
 
 ## Summary
 
-The training path is built around a frozen LC0 BT4 encoder plus a trainable token-level JEPA head. BT4 emits one token per square. The JEPA head projects those 64 tokens, prepends an action token, runs a small transformer, and predicts the next state's 64 projected BT4 tokens. The training loss is one-step next-state latent prediction only. Two-ply probes stay out of the training loss and are fit post hoc in analysis notebooks.
+The training path is built around a frozen LC0 BT4 encoder plus a trainable token-level JEPA head. BT4 emits one token per square. The JEPA head now consumes raw frozen BT4 tokens directly, conditions them on action tokens, runs a small transformer, and predicts the next state's raw frozen BT4 tokens. The training loss is anchored to BT4 token space, not a trainable projected target space.
 
 The cloud path uses multi-host `v5litepod-16` Spot TPU VMs. A local controller uploads an immutable source snapshot to GCS, requests a queued resource with a startup script, and retries across an ordered zone list. Checkpointing uses Orbax async checkpoints to GCS so the next launch can resume after preemption. Multi-host coordination is handled via `jax.distributed.initialize()`.
 
@@ -12,14 +12,14 @@ The cloud path uses multi-host `v5litepod-16` Spot TPU VMs. A local controller u
 
 - Frozen BT4 encoder is loaded from the pinned LC0 BT4 model files.
 - JEPA trainable head:
-  - token projector: `1024 -> token_dim`
-  - action embedding: policy-index vocabulary to `token_dim`
-  - square position embeddings: one learned embedding per square
-  - action token prepended to the 64 board tokens
-  - small transformer over `65` tokens
-  - output is the predicted next-state `64 x token_dim` board tokens
+  - raw current tokens: `64 x 1024`
+  - action embedding: policy-index vocabulary to BT4 width `1024`
+  - action token is added to the 64 board tokens at each rollout step
+  - small transformer over `64` square tokens
+  - output is the predicted next-state `64 x 1024` BT4 token tensor
 - Default training config:
-  - `token_dim=256`
+  - raw JEPA width is `1024`
+  - `token_dim=256` is retained only as a compatibility/hidden-size knob
   - `num_layers=4`
   - `num_heads=8`
   - `mlp_dim=1024`
