@@ -129,8 +129,9 @@ Remaining blockers before serious new sweeps:
 ## Near-Term Plan
 
 1. Finish the loader and queue-runner work:
-   - DFM action batches should avoid materializing unused future boards.
-   - TPU-side queues should run several experiments on one provisioned VM.
+   - Done: DFM action batches avoid materializing unused future boards.
+   - Done: `trajectory-v3` shards load through the normal DFM action view.
+   - Done: TPU-side queues can run several experiments on one provisioned VM.
    - Controller-side queue splitting should request multiple workers only when
      we intentionally want parallel capacity.
 2. Let the LC0 10M build finish, then validate sampled train/val/test shards:
@@ -146,11 +147,13 @@ Remaining blockers before serious new sweeps:
    `first_action_loss_weight=0`, `horizon_legality_loss_weight=0`, cache-all
    startup, and the measured random-policy-balanced legality weight. Do not
    sweep this Phase A launch.
-6. Finish and validate the combined TCEC+LC0 exact-deduplicated H8 dataset.
+6. Keep the CPU data worker converting LC0 trajectory-v2 shards into
+   trajectory-v3 while TPU experiments run from validated dense v2 prefixes.
+   Switch training prefixes to v3 only after a manifest exists and a sampled
+   loader smoke test passes against the converted train/val/test shards.
+7. Finish and validate the combined TCEC+LC0 exact-deduplicated H8 dataset.
    Do not train from that prefix until `manifest.json` exists and a sample shard
    validation passes.
-7. Keep the LC0 CPU data worker running on a new immutable prefix for future
-   Phase B/C data while the Phase A TPU run trains.
 8. Run short queued baselines, then move quickly to joint Latent-SASA:
    - DFM H1 and H4 action-only baselines.
    - JEPA H2 and H4 teacher-forced latent transition baselines.

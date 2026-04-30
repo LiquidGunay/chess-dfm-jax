@@ -285,20 +285,25 @@ def make_gcs_cache(
     return cache
 
 
-def sync_checkpoint_uri(checkpoint_uri: str, destination: Path) -> Path:
-    """Sync a local or GCS checkpoint directory to a local path."""
+def sync_checkpoint_uri(checkpoint_uri: str, destination: Path, *, step: int | None = None) -> Path:
+    """Sync one checkpoint step from a local or GCS checkpoint directory to a local path."""
     if not checkpoint_uri.startswith("gs://"):
         return Path(checkpoint_uri)
 
     destination.mkdir(parents=True, exist_ok=True)
+    sync_step = step if step is not None else latest_checkpoint_step(checkpoint_uri)
+    if sync_step is None:
+        return destination
+
+    step_name = f"step{int(sync_step):07d}"
+    (destination / step_name).mkdir(parents=True, exist_ok=True)
     subprocess.run(
         [
             "/snap/google-cloud-cli/current/bin/gcloud",
             "storage",
             "cp",
-            "--recursive",
-            f"{checkpoint_uri.rstrip('/')}/*",
-            str(destination),
+            f"{checkpoint_uri.rstrip('/')}/{step_name}/state.npz",
+            str(destination / step_name / "state.npz"),
         ],
         check=True,
     )
@@ -372,7 +377,7 @@ def main() -> int:
                 print(f"No local checkpoints. Syncing from {gcs_checkpoint_root}...")
                 sys.stdout.flush()
                 try:
-                    subprocess.run(["/snap/google-cloud-cli/current/bin/gcloud", "storage", "cp", "-r", f"{gcs_checkpoint_root}/*", str(local_checkpoint_root)], check=True)
+                    sync_checkpoint_uri(gcs_checkpoint_root, local_checkpoint_root)
                     resume_step = latest_checkpoint_step(local_checkpoint_root)
                     source_root = local_checkpoint_root
                     print(f"DEBUG: After sync, latest_checkpoint_step({local_checkpoint_root}) -> {resume_step}")
@@ -404,6 +409,7 @@ def main() -> int:
         init_checkpoint_root = sync_checkpoint_uri(
             args.init_checkpoint_uri,
             output_dir / "init_checkpoint",
+            step=args.init_checkpoint_step,
         )
         init_step = args.init_checkpoint_step or latest_checkpoint_step(init_checkpoint_root)
         if init_step is None:

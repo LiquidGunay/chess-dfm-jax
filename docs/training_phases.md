@@ -243,6 +243,11 @@ asynchronous GCS uploader for completed local checkpoints and queue status that
 reports both local and uploaded latest steps. Do not migrate to Orbax until the
 queue and loader paths are stable.
 
+For curriculum branches, use `--init-checkpoint-uri` to initialize from the
+latest or selected checkpoint of a prior run while writing to a new run ID.
+GCS initialization and resume sync only the selected `stepXXXXXXX/state.npz`
+instead of copying every checkpoint in the source directory.
+
 Example dry validation:
 
 ```bash

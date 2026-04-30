@@ -38,8 +38,8 @@ to be read when legality losses are enabled.
 
 ## Compact Latent-SASA v3 Plan
 
-Trajectory-v2 remains the source of truth. The next loader milestone is a
-derived compact view for throughput:
+Trajectory-v2 remains the source of truth. `trajectory-v3` is the derived
+compact view for throughput:
 
 - bitpacked or `uint8` `planes_t`
 - bitpacked or `uint8` `planes_future`
@@ -55,8 +55,17 @@ Training views over the same compact source:
 - `joint_latent_sasa`: all required action, future-state, legal, and optional
   value/WDL columns
 
+Current implementation status:
+
+- `scripts/convert_trajectory_v2_to_v3.py` converts local or GCS trajectory-v2
+  shards to compact trajectory-v3 shards with status and manifest output.
+- `LeelaChunkDataLoader` can read trajectory-v3 `.npz` shards through the same
+  `full` and `dfm_action` batch views used by trajectory-v2.
+- DFM-only batches use the `dfm_action` view so future boards are not decoded or
+  materialized during action-only training.
+
 Use a custom deterministic loader first. Grain remains a later backend option
-once the compact schema and training views are stable. The loader boundary
+once compact v3 throughput and sharding needs are measured. The loader boundary
 should still be Grain-compatible: explicit sampler, column reader, host
 transform, prefetch queue, and device transfer stages.
 
@@ -70,6 +79,7 @@ Trajectory-v2 datasets currently used by the DFM runs:
 | TCEC S20-S28 standard H8 | 2,067,443 | 111,168 | 104,502 | 2,283,113 | ready and validated |
 | LC0 test80 H8 10M | pending | pending | pending | about 10M target | write in progress |
 | TCEC+LC0 exact dedup H8 | pending | pending | pending | pending | write in progress |
+| LC0 test80 H8 sets 1-3 trajectory-v3 | pending | pending | pending | about 30M target | conversion in progress |
 
 The LC0 10M build uses `scripts/process_lc0_parallel_shards.py`, which splits
 LC0 archive URLs across workers and assigns non-overlapping chunk index ranges.

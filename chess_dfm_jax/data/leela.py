@@ -28,6 +28,7 @@ from chess_dfm_jax.data.trajectory import (
     trajectory_shard_from_npz,
     trajectory_shard_to_batch,
 )
+from chess_dfm_jax.data.trajectory_v3 import TRAJECTORY_V3, trajectory_v3_to_batch
 
 
 V3_RECORD_SIZE = 8276
@@ -133,7 +134,19 @@ class LeelaChunkDataLoader:
             if path.endswith(".npz"):
                 try:
                     with np.load(path, allow_pickle=False) as data:
-                        if self.batch_view == "dfm_action":
+                        schema = (
+                            str(np.asarray(data["schema_version"]).item())
+                            if "schema_version" in data
+                            else ""
+                        )
+                        if schema == TRAJECTORY_V3:
+                            batch = trajectory_v3_to_batch(
+                                data,
+                                view=self.batch_view,
+                                horizon=self.horizon,
+                                include_metadata=self.include_metadata,
+                            )
+                        elif self.batch_view == "dfm_action":
                             batch = trajectory_action_batch_from_npz(
                                 data,
                                 horizon=self.horizon,

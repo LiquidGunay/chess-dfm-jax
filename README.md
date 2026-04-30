@@ -162,6 +162,9 @@ normal resume, optimizer state.
 - Local runs default to `runs/jepa/<run-name>/checkpoints/` or
   `runs/dfm/<run-name>/checkpoints/`.
 - Resume uses `--resume` and restores the latest step from the checkpoint directory.
+- Curriculum branches can use `--init-checkpoint-uri` to initialize model
+  weights from a prior run while writing checkpoints under a new run ID; GCS
+  initialization copies only the selected checkpoint step.
 - The trainer handles `SIGTERM` and writes a final checkpoint before exiting.
 - Only trainable head/projector state and optimizer state are checkpointed;
   frozen BT4 weights are reloaded from the pinned model file.
