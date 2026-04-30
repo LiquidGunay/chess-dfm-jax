@@ -20,7 +20,7 @@ from chess_dfm_jax.nnx_bt4 import (
     make_bt4_model,
 )
 from chess_dfm_jax.training.dfm import mask_actions
-from chess_dfm_jax.training.jepa import TokenProjector, _l2_normalize, _parse_compute_dtype
+from chess_dfm_jax.training.jepa import TokenProjector, _l2_normalize, _parse_compute_dtype, _sigreg_loss
 
 
 @dataclasses.dataclass
@@ -44,6 +44,9 @@ class JointLatentSASAConfig:
     legality_on_masked_only: bool = True
     jepa_positive_coeff: float = 1.0
     jepa_gamma: float = 0.9
+    jepa_sigreg_coeff: float = 0.0
+    jepa_action_contrast_coeff: float = 0.0
+    jepa_action_contrast_margin: float = 0.05
     target_projector_mode: str = "shared"
     contrastive_coeff: float = 0.0
     contrastive_temperature: float = 0.1
@@ -347,7 +350,7 @@ def joint_stage1_loss_fn(
     z_dfm = model.dfm_latents(shared_tokens)
     z_jepa = model.jepa_latents(shared_tokens)
 
-    rng_t, rng_mask = jax.random.split(rng)
+    rng_t, rng_mask, rng_contrast = jax.random.split(rng, 3)
     t = jax.random.uniform(rng_t, shape=(batch_size,))
     if "deterministic_t" in batch:
         t = jnp.full_like(t, batch["deterministic_t"])
@@ -416,6 +419,7 @@ def joint_stage1_loss_fn(
     jepa_normalized_mse = jnp.sum(sample_normalized_mse * jepa_mask) / jepa_denom
     pred_token_norm = jnp.sum(jnp.mean(jnp.linalg.norm(pred_tokens, axis=-1), axis=-1) * jepa_mask) / jepa_denom
     target_token_norm = jnp.sum(jnp.mean(jnp.linalg.norm(target_tokens, axis=-1), axis=-1) * jepa_mask) / jepa_denom
+    jepa_sigreg_loss = _sigreg_loss(jnp.asarray(pred_tokens, dtype=jnp.float32).reshape((-1, pred_tokens.shape[-1])))
 
     horizon_valid = future_valid * valid[:, None]
     horizon_denom = jnp.maximum(jnp.sum(horizon_valid, axis=0), 1.0)
@@ -431,10 +435,26 @@ def joint_stage1_loss_fn(
     identity_jepa_loss = jnp.sum(identity_sample_jepa * jepa_mask) / jepa_denom
     identity_mean_token_cosine = jnp.sum(jnp.mean(identity_cosine, axis=-1) * jepa_mask) / jepa_denom
 
+    shuffled_actions = actions[jax.random.permutation(rng_contrast, batch_size)]
+    _, shuffled_hidden = model.planner_from_latents(z_dfm, shuffled_actions, clean_t, return_hidden=True)
+    shuffled_tokens = model.jepa_rollout_from_latents(z_jepa, shuffled_actions, shuffled_hidden["action_tokens"])
+    shuffled_norm = _l2_normalize(jnp.asarray(shuffled_tokens, dtype=jnp.float32))
+    shuffled_cosine = jnp.sum(shuffled_norm * target_norm, axis=-1)
+    shuffled_distance = 2.0 - 2.0 * shuffled_cosine
+    sample_shuffled_jepa = jnp.mean(shuffled_distance, axis=-1)
+    shuffled_jepa_loss = jnp.sum(sample_shuffled_jepa * jepa_mask) / jepa_denom
+    action_contrast_loss = jnp.maximum(
+        model.config.jepa_action_contrast_margin + jepa_positive_loss - shuffled_jepa_loss,
+        0.0,
+    )
+    shuffled_mean_token_cosine = jnp.sum(jnp.mean(shuffled_cosine, axis=-1) * jepa_mask) / jepa_denom
+
     loss = (
         model.config.dfm_ce_coeff * dfm_ce_loss
         + weighted_legality_loss
         + model.config.jepa_positive_coeff * jepa_positive_loss
+        + model.config.jepa_sigreg_coeff * jepa_sigreg_loss
+        + model.config.jepa_action_contrast_coeff * action_contrast_loss
     )
 
     preds = jnp.argmax(logits, axis=-1)
@@ -454,6 +474,11 @@ def joint_stage1_loss_fn(
         "jepa_positive_loss": jepa_positive_loss,
         "jepa_raw_mse": jepa_raw_mse,
         "jepa_normalized_mse": jepa_normalized_mse,
+        "jepa_sigreg_loss": jepa_sigreg_loss,
+        "jepa_action_contrast_loss": action_contrast_loss,
+        "jepa_shuffled_loss": shuffled_jepa_loss,
+        "jepa_shuffled_mean_token_cosine": shuffled_mean_token_cosine,
+        "jepa_true_minus_shuffled": jepa_positive_loss - shuffled_jepa_loss,
         "jepa_loss_by_horizon": jepa_loss_by_horizon,
         "jepa_raw_mse_by_horizon": jepa_raw_mse_by_horizon,
         "mean_token_cosine": mean_token_cosine,

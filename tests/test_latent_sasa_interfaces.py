@@ -115,6 +115,8 @@ def test_joint_stage1_step_uses_compact_legal_batch():
         encoder_dtype="float32",
         first_legality_coeff=1.0,
         horizon_legality_coeff=0.25,
+        jepa_sigreg_coeff=0.01,
+        jepa_action_contrast_coeff=0.1,
     )
     model = JointLatentSASAModel(DummyEncoder(), config, rngs=nnx.Rngs(2))
     optimizer = nnx.Optimizer(model, optax.adamw(1e-3), wrt=TrainableParam)
@@ -127,6 +129,9 @@ def test_joint_stage1_step_uses_compact_legal_batch():
     assert jnp.isfinite(aux["first_legality_loss"])
     assert jnp.isfinite(aux["horizon_legality_loss"])
     assert jnp.isfinite(aux["jepa_raw_mse"])
+    assert jnp.isfinite(aux["jepa_sigreg_loss"])
+    assert jnp.isfinite(aux["jepa_action_contrast_loss"])
+    assert jnp.isfinite(aux["jepa_true_minus_shuffled"])
     assert jnp.isfinite(aux["jepa_positive_loss"])
     assert aux["loss_horizon"] == 2.0
 

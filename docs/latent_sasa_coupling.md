@@ -227,6 +227,8 @@ L = 1.0 * L_dfm_ce
   + lambda_first * L_first_legal
   + lambda_horizon * L_horizon_legal
   + 1.0 * L_jepa_positive
+  + lambda_sigreg * L_jepa_sigreg
+  + lambda_action_contrast * L_action_contrast
 ```
 
 Current definitions:
@@ -239,6 +241,11 @@ Current definitions:
   all supervised slots are masked.
 - `L_jepa_positive = mean(2 - 2*cos(pred_norm, target_norm))`, equivalent to
   squared distance between L2-normalized latent tokens.
+- `L_jepa_sigreg` matches the standalone JEPA SigReg quantile regularizer and
+  is off unless `--jepa-sigreg-coeff > 0`.
+- `L_action_contrast = max(margin + L_true_actions - L_shuffled_actions, 0)`.
+  It directly targets the observed failure mode where true-action and
+  shuffled-action JEPA rollouts score nearly the same.
 - JEPA diagnostics also log raw MSE, normalized MSE, token norms, per-horizon
   losses, identity baseline, and shuffled-action baseline.
 

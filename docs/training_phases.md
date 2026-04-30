@@ -200,6 +200,8 @@ L = 1.0 * L_dfm_ce
   + lambda_first * L_first_legal
   + lambda_horizon * L_horizon_legal
   + 1.0 * L_jepa_positive
+  + lambda_sigreg * L_jepa_sigreg
+  + lambda_action_contrast * L_action_contrast
 ```
 
 Use `H=1 or 2`, `K=1`, `token_dim=256`, DFM `L4`, JEPA `L1-L2`, and
@@ -212,13 +214,17 @@ first_legality_coeff = 7.64
 horizon_legality_coeff = 0.0
 legality_on_masked_only = true
 target_projector_mode = shared
+jepa_sigreg_coeff = 0.0 initially, then 0.01 ablation
+jepa_action_contrast_coeff = 0.0 initially, then 0.1-0.5 ablation
 ```
 
 `L_horizon_legal` applies only to later teacher-forced horizon slots and should
 be treated as an ablation because it is not sampler legality. JEPA still trains
 with normalized cosine distance, but the trainer logs raw MSE, normalized MSE,
 token norms, per-horizon JEPA losses, identity baseline, and shuffled-action
-baseline diagnostics.
+baseline diagnostics. `L_action_contrast = max(margin + L_true_actions -
+L_shuffled_actions, 0)` is the next ablation if the diagnostics show true and
+shuffled action sequences scoring equally.
 
 Stage 2 joint loss:
 

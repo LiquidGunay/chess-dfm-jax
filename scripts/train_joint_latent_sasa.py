@@ -91,6 +91,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--legality-on-masked-only", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--jepa-positive-coeff", type=float, default=1.0)
     parser.add_argument("--jepa-gamma", type=float, default=0.9)
+    parser.add_argument("--jepa-sigreg-coeff", type=float, default=0.0)
+    parser.add_argument("--jepa-action-contrast-coeff", type=float, default=0.0)
+    parser.add_argument("--jepa-action-contrast-margin", type=float, default=0.05)
     parser.add_argument("--target-projector-mode", type=str, default="shared", choices=["shared", "separate"])
     parser.add_argument("--contrastive-coeff", type=float, default=0.0)
     parser.add_argument("--contrastive-temperature", type=float, default=0.1)
@@ -356,6 +359,9 @@ def main() -> int:
         legality_on_masked_only=args.legality_on_masked_only,
         jepa_positive_coeff=args.jepa_positive_coeff,
         jepa_gamma=args.jepa_gamma,
+        jepa_sigreg_coeff=args.jepa_sigreg_coeff,
+        jepa_action_contrast_coeff=args.jepa_action_contrast_coeff,
+        jepa_action_contrast_margin=args.jepa_action_contrast_margin,
         target_projector_mode=args.target_projector_mode,
         contrastive_coeff=args.contrastive_coeff,
         contrastive_temperature=args.contrastive_temperature,
@@ -606,6 +612,8 @@ def main() -> int:
                             f"first_legal={metrics.get('first_legality_loss', 0.0):.6f}",
                             f"horizon_legal={metrics.get('horizon_legality_loss', 0.0):.6f}",
                             f"jepa={metrics.get('jepa_positive_loss', 0.0):.6f}",
+                            f"sigreg={metrics.get('jepa_sigreg_loss', 0.0):.6f}",
+                            f"act_contrast={metrics.get('jepa_action_contrast_loss', 0.0):.6f}",
                             f"raw_mse={metrics.get('jepa_raw_mse', 0.0):.6f}",
                             f"cos={metrics.get('mean_token_cosine', 0.0):.4f}",
                             f"acc={metrics.get('accuracy', 0.0):.4f}",
