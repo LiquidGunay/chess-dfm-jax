@@ -159,12 +159,17 @@ num_heads = 4
 mlp_dim = 1024
 learning_rate = 3e-4
 lambda_action = 1.0
-lambda_legal = 7.64
+lambda_first_legal = 7.64
+lambda_horizon_legal = 0.0
 lambda_jepa = 1.0
 lambda_value = 0.0 initially
 lambda_wdl = 0.0 initially
 lambda_rank = 0.0 first, then 0.2
 ```
+
+For the current queued Stage 1 runs, use `learning_rate=6e-4`,
+`target_projector_mode=shared`, and `legality_on_masked_only=true`. The legacy
+`--legality-coeff` flag is only an alias for `--first-legality-coeff`.
 
 Do not sweep batch size. Probe the largest batch that fits the allocated TPU
 shape and keep the learning rate fixed for the first baseline queue.
@@ -192,12 +197,28 @@ Stage 1 joint loss:
 
 ```text
 L = 1.0 * L_dfm_ce
-  + lambda_legal * L_legal
+  + lambda_first * L_first_legal
+  + lambda_horizon * L_horizon_legal
   + 1.0 * L_jepa_positive
 ```
 
 Use `H=1 or 2`, `K=1`, `token_dim=256`, DFM `L4`, JEPA `L1-L2`, and
 `value_coeff=wdl_coeff=0.0` until latent dynamics is stable.
+
+Current Stage 1 defaults:
+
+```text
+first_legality_coeff = 7.64
+horizon_legality_coeff = 0.0
+legality_on_masked_only = true
+target_projector_mode = shared
+```
+
+`L_horizon_legal` applies only to later teacher-forced horizon slots and should
+be treated as an ablation because it is not sampler legality. JEPA still trains
+with normalized cosine distance, but the trainer logs raw MSE, normalized MSE,
+token norms, per-horizon JEPA losses, identity baseline, and shuffled-action
+baseline diagnostics.
 
 Stage 2 joint loss:
 

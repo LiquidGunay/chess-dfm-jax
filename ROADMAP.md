@@ -87,8 +87,9 @@ otherwise:
 | DFM H4 action baseline | 4 | `6e-4` | `D640/L8/H10/MLP2560` | `CE(a0:a3) + 7.64 * illegal_mass(a0) + 7.64 * teacher_forced_illegal_mass(a1:a3)` |
 | JEPA H2 | 2 | `1e-4` | `D256/L4/H4/MLP1024` | `latent_cosine + 0.01 * sigreg` |
 | JEPA H4 | 4 | `1e-4` | `D256/L4/H4/MLP1024` | `latent_cosine + 0.01 * sigreg` |
-| Joint Latent-SASA H2 | 2 | `3e-4` | `D256/L4/H4/MLP1024` | `DFM CE + legal + latent_jepa` |
-| Joint Latent-SASA H4 | 4 | `3e-4` | `D256/L4/H4/MLP1024` | `DFM CE + legal + latent_jepa` |
+| Joint Latent-SASA H2 | 2 | `6e-4` | `D256/L4/H4/MLP1024` | `DFM CE + 7.64 * first_legal + latent_jepa` |
+| Joint Latent-SASA H4 | 4 | `6e-4` | `D256/L4/H4/MLP1024` | `DFM CE + 7.64 * first_legal + latent_jepa` |
+| Joint H4 horizon-legal ablation | 4 | `6e-4` | `D256/L4/H4/MLP1024` | previous loss plus `0.5 * horizon_legal` |
 | Joint H4 rank | 4 | `3e-4` | `D256/L4/H4/MLP1024` | previous loss plus `0.2 * chunk_rank` |
 
 The `7.64` legality coefficient is the current random-policy-balanced default:

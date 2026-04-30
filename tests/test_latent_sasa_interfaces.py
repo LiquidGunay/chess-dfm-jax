@@ -19,6 +19,7 @@ from chess_dfm_jax.training.joint_latent_sasa import (  # noqa: E402
     JointLatentSASAConfig,
     JointLatentSASAModel,
     joint_coupling_gradient_diagnostics,
+    joint_jepa_action_baseline_diagnostics,
     sample_legal_prefix_candidates,
     train_joint_stage1_step,
     train_joint_stage2_step,
@@ -112,7 +113,8 @@ def test_joint_stage1_step_uses_compact_legal_batch():
         compute_dtype="float32",
         param_dtype="float32",
         encoder_dtype="float32",
-        legality_coeff=1.0,
+        first_legality_coeff=1.0,
+        horizon_legality_coeff=0.25,
     )
     model = JointLatentSASAModel(DummyEncoder(), config, rngs=nnx.Rngs(2))
     optimizer = nnx.Optimizer(model, optax.adamw(1e-3), wrt=TrainableParam)
@@ -122,6 +124,9 @@ def test_joint_stage1_step_uses_compact_legal_batch():
     assert jnp.isfinite(loss)
     assert jnp.isfinite(aux["dfm_ce_loss"])
     assert jnp.isfinite(aux["legality_loss"])
+    assert jnp.isfinite(aux["first_legality_loss"])
+    assert jnp.isfinite(aux["horizon_legality_loss"])
+    assert jnp.isfinite(aux["jepa_raw_mse"])
     assert jnp.isfinite(aux["jepa_positive_loss"])
     assert aux["loss_horizon"] == 2.0
 
@@ -130,6 +135,10 @@ def test_joint_stage1_step_uses_compact_legal_batch():
     assert diagnostics["coupling_grad_norm_shared_projector"] > 0
     assert diagnostics["coupling_grad_norm_jepa_path"] > 0
     assert diagnostics["coupling_grad_norm_target_projector"] == 0
+    baseline_diag = joint_jepa_action_baseline_diagnostics(model, batch, jnp.asarray([3, 4], dtype=jnp.uint32))
+    assert jnp.isfinite(baseline_diag["jepa_diag_true_loss"])
+    assert jnp.isfinite(baseline_diag["jepa_diag_shuffled_loss"])
+    assert jnp.isfinite(baseline_diag["jepa_diag_identity_loss"])
 
 
 def test_joint_stage2_step_adds_contrastive_metrics():
@@ -156,7 +165,8 @@ def test_joint_stage2_step_adds_contrastive_metrics():
         compute_dtype="float32",
         param_dtype="float32",
         encoder_dtype="float32",
-        legality_coeff=1.0,
+        first_legality_coeff=1.0,
+        horizon_legality_coeff=0.25,
         contrastive_coeff=0.5,
         contrastive_temperature=0.2,
         candidate_count=3,

@@ -39,9 +39,12 @@ class JointLatentSASAConfig:
     horizon: int = 2
     loss_horizon: int = 0
     dfm_ce_coeff: float = 1.0
-    legality_coeff: float = 7.64
+    first_legality_coeff: float = 7.64
+    horizon_legality_coeff: float = 0.0
+    legality_on_masked_only: bool = True
     jepa_positive_coeff: float = 1.0
     jepa_gamma: float = 0.9
+    target_projector_mode: str = "shared"
     contrastive_coeff: float = 0.0
     contrastive_temperature: float = 0.1
     candidate_count: int = 1
@@ -165,11 +168,23 @@ class JointLatentSASAModel(nnx.Module):
         encoder_tokens = jax.lax.stop_gradient(self.encoder.encode_tokens(current_planes))
         return self.shared_projector(encoder_tokens)
 
+    def _project_target_tokens(self, encoder_tokens: jnp.ndarray) -> jnp.ndarray:
+        if self.config.target_projector_mode == "shared":
+            return self.shared_projector(encoder_tokens)
+        if self.config.target_projector_mode == "separate":
+            return self.target_projector(encoder_tokens)
+        raise ValueError(f"Unsupported target_projector_mode: {self.config.target_projector_mode!r}")
+
+    def encode_current_targets(self, current_planes: jnp.ndarray) -> jnp.ndarray:
+        encoder_tokens = jax.lax.stop_gradient(self.encoder.encode_tokens(current_planes))
+        target_tokens = self._project_target_tokens(encoder_tokens)
+        return jax.lax.stop_gradient(target_tokens)
+
     def encode_future_targets(self, future_planes: jnp.ndarray) -> jnp.ndarray:
         batch_size, horizon, channels, height, width = future_planes.shape
         flat_planes = future_planes.reshape((batch_size * horizon, channels, height, width))
         encoder_tokens = jax.lax.stop_gradient(self.encoder.encode_tokens(flat_planes))
-        target_tokens = self.target_projector(encoder_tokens)
+        target_tokens = self._project_target_tokens(encoder_tokens)
         target_tokens = target_tokens.reshape((batch_size, horizon, 64, self.config.token_dim))
         return jax.lax.stop_gradient(target_tokens)
 
@@ -355,29 +370,70 @@ def joint_stage1_loss_fn(
     legal_valid = jnp.ones_like(legal_mass)
     if "legal_masks_valid" in batch:
         legal_valid = jnp.asarray(batch["legal_masks_valid"], dtype=jnp.float32)[:, :loss_horizon]
-    legal_slot_valid = valid[:, None] * legal_valid * loss_horizon_mask[None, :loss_horizon]
-    legality_loss = (
-        jnp.sum((1.0 - legal_mass) * legal_slot_valid)
-        / jnp.maximum(jnp.sum(legal_slot_valid), 1.0)
+    legal_gate = jnp.asarray(is_masked, dtype=jnp.float32)[:, :loss_horizon]
+    if not model.config.legality_on_masked_only:
+        legal_gate = jnp.ones_like(legal_gate)
+    legal_slot_valid = valid[:, None] * legal_valid * loss_horizon_mask[None, :loss_horizon] * legal_gate
+    first_slot_valid = legal_slot_valid[:, 0]
+    first_legality_loss = (
+        jnp.sum((1.0 - legal_mass[:, 0]) * first_slot_valid)
+        / jnp.maximum(jnp.sum(first_slot_valid), 1.0)
+    )
+    later_horizon_mask = (jnp.arange(loss_horizon) > 0).astype(jnp.float32)
+    horizon_slot_valid = legal_slot_valid * later_horizon_mask[None, :]
+    horizon_legality_loss = (
+        jnp.sum((1.0 - legal_mass) * horizon_slot_valid)
+        / jnp.maximum(jnp.sum(horizon_slot_valid), 1.0)
+    )
+    legality_loss = first_legality_loss + horizon_legality_loss
+    weighted_legality_loss = (
+        model.config.first_legality_coeff * first_legality_loss
+        + model.config.horizon_legality_coeff * horizon_legality_loss
     )
 
     clean_t = jnp.ones((batch_size,), dtype=jnp.float32)
     _, clean_hidden = model.planner_from_latents(z_dfm, actions, clean_t, return_hidden=True)
     pred_tokens = model.jepa_rollout_from_latents(z_jepa, actions, clean_hidden["action_tokens"])
     target_tokens = model.encode_future_targets(future_planes)
+    raw_mse_by_token = jnp.mean(
+        (jnp.asarray(pred_tokens, dtype=jnp.float32) - jnp.asarray(target_tokens, dtype=jnp.float32)) ** 2,
+        axis=-1,
+    )
     pred_norm = _l2_normalize(jnp.asarray(pred_tokens, dtype=jnp.float32))
     target_norm = _l2_normalize(jnp.asarray(target_tokens, dtype=jnp.float32))
     cosine = jnp.sum(pred_norm * target_norm, axis=-1)
     token_distance = 2.0 - 2.0 * cosine
+    normalized_mse_by_token = jnp.mean((pred_norm - target_norm) ** 2, axis=-1)
     sample_jepa = jnp.mean(token_distance, axis=-1)
+    sample_raw_mse = jnp.mean(raw_mse_by_token, axis=-1)
+    sample_normalized_mse = jnp.mean(normalized_mse_by_token, axis=-1)
     horizon_weights = model.config.jepa_gamma ** jnp.arange(horizon, dtype=jnp.float32)
     jepa_mask = future_valid * valid[:, None] * horizon_weights[None, :]
-    jepa_positive_loss = jnp.sum(sample_jepa * jepa_mask) / jnp.maximum(jnp.sum(jepa_mask), 1.0)
-    mean_token_cosine = jnp.sum(jnp.mean(cosine, axis=-1) * jepa_mask) / jnp.maximum(jnp.sum(jepa_mask), 1.0)
+    jepa_denom = jnp.maximum(jnp.sum(jepa_mask), 1.0)
+    jepa_positive_loss = jnp.sum(sample_jepa * jepa_mask) / jepa_denom
+    mean_token_cosine = jnp.sum(jnp.mean(cosine, axis=-1) * jepa_mask) / jepa_denom
+    jepa_raw_mse = jnp.sum(sample_raw_mse * jepa_mask) / jepa_denom
+    jepa_normalized_mse = jnp.sum(sample_normalized_mse * jepa_mask) / jepa_denom
+    pred_token_norm = jnp.sum(jnp.mean(jnp.linalg.norm(pred_tokens, axis=-1), axis=-1) * jepa_mask) / jepa_denom
+    target_token_norm = jnp.sum(jnp.mean(jnp.linalg.norm(target_tokens, axis=-1), axis=-1) * jepa_mask) / jepa_denom
+
+    horizon_valid = future_valid * valid[:, None]
+    horizon_denom = jnp.maximum(jnp.sum(horizon_valid, axis=0), 1.0)
+    jepa_loss_by_horizon = jnp.sum(sample_jepa * horizon_valid, axis=0) / horizon_denom
+    jepa_raw_mse_by_horizon = jnp.sum(sample_raw_mse * horizon_valid, axis=0) / horizon_denom
+    mean_token_cosine_by_horizon = jnp.sum(jnp.mean(cosine, axis=-1) * horizon_valid, axis=0) / horizon_denom
+
+    current_target_tokens = model.encode_current_targets(batch["current_planes"])
+    identity_tokens = jnp.broadcast_to(current_target_tokens[:, None, :, :], target_tokens.shape)
+    identity_norm = _l2_normalize(jnp.asarray(identity_tokens, dtype=jnp.float32))
+    identity_cosine = jnp.sum(identity_norm * target_norm, axis=-1)
+    identity_sample_jepa = jnp.mean(2.0 - 2.0 * identity_cosine, axis=-1)
+    identity_jepa_loss = jnp.sum(identity_sample_jepa * jepa_mask) / jepa_denom
+    identity_mean_token_cosine = jnp.sum(jnp.mean(identity_cosine, axis=-1) * jepa_mask) / jepa_denom
 
     loss = (
         model.config.dfm_ce_coeff * dfm_ce_loss
-        + model.config.legality_coeff * legality_loss
+        + weighted_legality_loss
         + model.config.jepa_positive_coeff * jepa_positive_loss
     )
 
@@ -390,8 +446,23 @@ def joint_stage1_loss_fn(
         "loss": loss,
         "dfm_ce_loss": dfm_ce_loss,
         "legality_loss": legality_loss,
+        "first_legality_loss": first_legality_loss,
+        "horizon_legality_loss": horizon_legality_loss,
+        "weighted_legality_loss": weighted_legality_loss,
+        "first_legal_mass": 1.0 - first_legality_loss,
+        "horizon_legal_mass": 1.0 - horizon_legality_loss,
         "jepa_positive_loss": jepa_positive_loss,
+        "jepa_raw_mse": jepa_raw_mse,
+        "jepa_normalized_mse": jepa_normalized_mse,
+        "jepa_loss_by_horizon": jepa_loss_by_horizon,
+        "jepa_raw_mse_by_horizon": jepa_raw_mse_by_horizon,
         "mean_token_cosine": mean_token_cosine,
+        "mean_token_cosine_by_horizon": mean_token_cosine_by_horizon,
+        "pred_token_norm": pred_token_norm,
+        "target_token_norm": target_token_norm,
+        "identity_jepa_loss": identity_jepa_loss,
+        "identity_mean_token_cosine": identity_mean_token_cosine,
+        "jepa_loss_minus_identity": jepa_positive_loss - identity_jepa_loss,
         "accuracy": accuracy,
         "mask_prob": jnp.mean(1.0 - t),
         "loss_horizon": jnp.asarray(loss_horizon, dtype=jnp.float32),
@@ -419,17 +490,96 @@ def joint_jepa_positive_loss_fn(
     pred_tokens = model.jepa_rollout_from_latents(z_jepa, actions, clean_hidden["action_tokens"])
     target_tokens = model.encode_future_targets(future_planes)
 
+    raw_mse_by_token = jnp.mean(
+        (jnp.asarray(pred_tokens, dtype=jnp.float32) - jnp.asarray(target_tokens, dtype=jnp.float32)) ** 2,
+        axis=-1,
+    )
     pred_norm = _l2_normalize(jnp.asarray(pred_tokens, dtype=jnp.float32))
     target_norm = _l2_normalize(jnp.asarray(target_tokens, dtype=jnp.float32))
     cosine = jnp.sum(pred_norm * target_norm, axis=-1)
     token_distance = 2.0 - 2.0 * cosine
+    normalized_mse_by_token = jnp.mean((pred_norm - target_norm) ** 2, axis=-1)
     sample_jepa = jnp.mean(token_distance, axis=-1)
+    sample_raw_mse = jnp.mean(raw_mse_by_token, axis=-1)
+    sample_normalized_mse = jnp.mean(normalized_mse_by_token, axis=-1)
     horizon_weights = model.config.jepa_gamma ** jnp.arange(horizon, dtype=jnp.float32)
     jepa_mask = future_valid * valid[:, None] * horizon_weights[None, :]
     denom = jnp.maximum(jnp.sum(jepa_mask), 1.0)
     loss = jnp.sum(sample_jepa * jepa_mask) / denom
     mean_token_cosine = jnp.sum(jnp.mean(cosine, axis=-1) * jepa_mask) / denom
-    return loss, {"jepa_positive_loss": loss, "mean_token_cosine": mean_token_cosine}
+    raw_mse = jnp.sum(sample_raw_mse * jepa_mask) / denom
+    normalized_mse = jnp.sum(sample_normalized_mse * jepa_mask) / denom
+    return loss, {
+        "jepa_positive_loss": loss,
+        "mean_token_cosine": mean_token_cosine,
+        "jepa_raw_mse": raw_mse,
+        "jepa_normalized_mse": normalized_mse,
+    }
+
+
+def joint_jepa_action_baseline_diagnostics(
+    model: JointLatentSASAModel,
+    batch: dict[str, jnp.ndarray],
+    rng: jnp.ndarray,
+) -> dict[str, jnp.ndarray]:
+    """Compare true-action JEPA rollout against shuffled-action and identity baselines."""
+    actions = batch["action_indices"][:, : model.config.horizon]
+    batch_size, horizon = actions.shape
+    valid = jnp.asarray(batch["valid"], dtype=jnp.float32)
+    future_valid = jnp.asarray(batch["future_valid"], dtype=jnp.float32)[:, :horizon]
+    future_planes = jnp.asarray(batch["future_planes"], dtype=jnp.float32)[:, :horizon]
+
+    shared_tokens = model.encode_shared(batch["current_planes"])
+    z_dfm = model.dfm_latents(shared_tokens)
+    z_jepa = model.jepa_latents(shared_tokens)
+    target_tokens = model.encode_future_targets(future_planes)
+    target_norm = _l2_normalize(jnp.asarray(target_tokens, dtype=jnp.float32))
+
+    clean_t = jnp.ones((batch_size,), dtype=jnp.float32)
+    _, true_hidden = model.planner_from_latents(z_dfm, actions, clean_t, return_hidden=True)
+    true_pred = model.jepa_rollout_from_latents(z_jepa, actions, true_hidden["action_tokens"])
+
+    permutation = jax.random.permutation(rng, batch_size)
+    shuffled_actions = actions[permutation]
+    _, shuffled_hidden = model.planner_from_latents(z_dfm, shuffled_actions, clean_t, return_hidden=True)
+    shuffled_pred = model.jepa_rollout_from_latents(z_jepa, shuffled_actions, shuffled_hidden["action_tokens"])
+
+    current_target_tokens = model.encode_current_targets(batch["current_planes"])
+    identity_pred = jnp.broadcast_to(current_target_tokens[:, None, :, :], target_tokens.shape)
+
+    horizon_weights = model.config.jepa_gamma ** jnp.arange(horizon, dtype=jnp.float32)
+    mask = future_valid * valid[:, None] * horizon_weights[None, :]
+    denom = jnp.maximum(jnp.sum(mask), 1.0)
+
+    def score(pred_tokens: jnp.ndarray) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+        pred_norm = _l2_normalize(jnp.asarray(pred_tokens, dtype=jnp.float32))
+        cosine = jnp.sum(pred_norm * target_norm, axis=-1)
+        loss_by_sample = jnp.mean(2.0 - 2.0 * cosine, axis=-1)
+        raw_mse_by_sample = jnp.mean(
+            jnp.mean((jnp.asarray(pred_tokens, dtype=jnp.float32) - jnp.asarray(target_tokens, dtype=jnp.float32)) ** 2, axis=-1),
+            axis=-1,
+        )
+        loss = jnp.sum(loss_by_sample * mask) / denom
+        raw_mse = jnp.sum(raw_mse_by_sample * mask) / denom
+        mean_cosine = jnp.sum(jnp.mean(cosine, axis=-1) * mask) / denom
+        return loss, raw_mse, mean_cosine
+
+    true_loss, true_raw_mse, true_cosine = score(true_pred)
+    shuffled_loss, shuffled_raw_mse, shuffled_cosine = score(shuffled_pred)
+    identity_loss, identity_raw_mse, identity_cosine = score(identity_pred)
+    return {
+        "jepa_diag_true_loss": true_loss,
+        "jepa_diag_true_raw_mse": true_raw_mse,
+        "jepa_diag_true_cosine": true_cosine,
+        "jepa_diag_shuffled_loss": shuffled_loss,
+        "jepa_diag_shuffled_raw_mse": shuffled_raw_mse,
+        "jepa_diag_shuffled_cosine": shuffled_cosine,
+        "jepa_diag_identity_loss": identity_loss,
+        "jepa_diag_identity_raw_mse": identity_raw_mse,
+        "jepa_diag_identity_cosine": identity_cosine,
+        "jepa_diag_true_minus_shuffled": true_loss - shuffled_loss,
+        "jepa_diag_true_minus_identity": true_loss - identity_loss,
+    }
 
 
 def joint_contrastive_loss_fn(
@@ -581,6 +731,8 @@ def joint_coupling_gradient_diagnostics(
     out = {
         "coupling_jepa_positive_loss": loss,
         "coupling_mean_token_cosine": aux["mean_token_cosine"],
+        "coupling_jepa_raw_mse": aux["jepa_raw_mse"],
+        "coupling_jepa_normalized_mse": aux["jepa_normalized_mse"],
         "coupling_grad_norm_dfm_path": _tree_l2_norm(dfm_path),
         "coupling_grad_norm_shared_projector": _tree_l2_norm(pure.get("shared_projector", {})),
         "coupling_grad_norm_jepa_path": _tree_l2_norm(
@@ -664,6 +816,7 @@ __all__ = [
     "eval_joint_stage2_step",
     "joint_contrastive_loss_fn",
     "joint_coupling_gradient_diagnostics",
+    "joint_jepa_action_baseline_diagnostics",
     "joint_jepa_positive_loss_fn",
     "joint_stage1_loss_fn",
     "joint_stage2_loss_fn",

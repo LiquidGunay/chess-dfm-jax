@@ -36,6 +36,7 @@ from chess_dfm_jax.training.joint_latent_sasa import (  # noqa: E402
     eval_joint_stage1_step,
     eval_joint_stage2_step,
     joint_coupling_gradient_diagnostics,
+    joint_jepa_action_baseline_diagnostics,
     train_joint_stage1_step,
     train_joint_stage2_step,
 )
@@ -84,9 +85,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--horizon", type=int, default=2)
     parser.add_argument("--loss-horizon", type=int, default=0)
     parser.add_argument("--dfm-ce-coeff", type=float, default=1.0)
-    parser.add_argument("--legality-coeff", type=float, default=7.64)
+    parser.add_argument("--legality-coeff", type=float, default=None, help="Deprecated alias for --first-legality-coeff.")
+    parser.add_argument("--first-legality-coeff", type=float, default=None)
+    parser.add_argument("--horizon-legality-coeff", type=float, default=0.0)
+    parser.add_argument("--legality-on-masked-only", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--jepa-positive-coeff", type=float, default=1.0)
     parser.add_argument("--jepa-gamma", type=float, default=0.9)
+    parser.add_argument("--target-projector-mode", type=str, default="shared", choices=["shared", "separate"])
     parser.add_argument("--contrastive-coeff", type=float, default=0.0)
     parser.add_argument("--contrastive-temperature", type=float, default=0.1)
     parser.add_argument("--candidate-count", type=int, default=1)
@@ -325,6 +330,13 @@ def main() -> int:
 
     model_paths = default_bt4_paths(args.models_dir)
     params = load_mapped_bt4_params(models_dir=model_paths["models_dir"])
+    first_legality_coeff = (
+        args.first_legality_coeff
+        if args.first_legality_coeff is not None
+        else args.legality_coeff
+        if args.legality_coeff is not None
+        else 7.64
+    )
     config = JointLatentSASAConfig(
         token_dim=args.token_dim,
         dfm_layers=args.dfm_layers,
@@ -339,9 +351,12 @@ def main() -> int:
         horizon=args.horizon,
         loss_horizon=args.loss_horizon,
         dfm_ce_coeff=args.dfm_ce_coeff,
-        legality_coeff=args.legality_coeff,
+        first_legality_coeff=first_legality_coeff,
+        horizon_legality_coeff=args.horizon_legality_coeff,
+        legality_on_masked_only=args.legality_on_masked_only,
         jepa_positive_coeff=args.jepa_positive_coeff,
         jepa_gamma=args.jepa_gamma,
+        target_projector_mode=args.target_projector_mode,
         contrastive_coeff=args.contrastive_coeff,
         contrastive_temperature=args.contrastive_temperature,
         candidate_count=args.candidate_count,
@@ -459,6 +474,7 @@ def main() -> int:
 
     run_config = config.__dict__.copy()
     run_config.update(vars(args))
+    run_config["first_legality_coeff"] = first_legality_coeff
     run_config.update(
         {
             "model_family": "joint_latent_sasa",
@@ -553,6 +569,13 @@ def main() -> int:
                 diag = joint_coupling_gradient_diagnostics(model, batch)
                 jax.block_until_ready(diag)
                 metrics.update(flatten_aux_metrics(diag))
+                baseline_diag = joint_jepa_action_baseline_diagnostics(
+                    model,
+                    batch,
+                    jax.random.fold_in(step_rng, completed_step),
+                )
+                jax.block_until_ready(baseline_diag)
+                metrics.update(flatten_aux_metrics(baseline_diag))
 
             if args.val_batches > 0 and (completed_step % val_every == 0 or completed_step == args.steps):
                 val_metrics, val_rng = evaluate_validation_batches(
@@ -580,7 +603,10 @@ def main() -> int:
                             f"loss={metrics['loss']:.6f}",
                             f"dfm_ce={metrics.get('dfm_ce_loss', 0.0):.6f}",
                             f"legal={metrics.get('legality_loss', 0.0):.6f}",
+                            f"first_legal={metrics.get('first_legality_loss', 0.0):.6f}",
+                            f"horizon_legal={metrics.get('horizon_legality_loss', 0.0):.6f}",
                             f"jepa={metrics.get('jepa_positive_loss', 0.0):.6f}",
+                            f"raw_mse={metrics.get('jepa_raw_mse', 0.0):.6f}",
                             f"cos={metrics.get('mean_token_cosine', 0.0):.4f}",
                             f"acc={metrics.get('accuracy', 0.0):.4f}",
                             f"step_time_s={metrics['step_time_s']:.3f}",

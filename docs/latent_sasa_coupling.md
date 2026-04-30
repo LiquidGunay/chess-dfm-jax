@@ -217,15 +217,30 @@ Tests:
 
 Status: Stage 1 model/loss/train-step primitive and queue-compatible trainer
 implemented. Local synthetic smoke verified checkpoint save/resume, validation,
-W&B-disabled script mode, and coupling-gradient diagnostics.
+W&B-disabled script mode, coupling-gradient diagnostics, and action-baseline
+JEPA diagnostics. TPU H2/H4 smoke and short queued runs completed.
 
 Add the first joint objective:
 
 ```text
 L = 1.0 * L_dfm_ce
-  + lambda_legal * L_legal
+  + lambda_first * L_first_legal
+  + lambda_horizon * L_horizon_legal
   + 1.0 * L_jepa_positive
 ```
+
+Current definitions:
+
+- `L_dfm_ce` is masked-token CE over `loss_horizon`.
+- `L_first_legal = 1 - sum_a p(a) 1[a legal at s0]` for horizon slot 0.
+- `L_horizon_legal` is the same illegal-mass penalty for later teacher-forced
+  horizon slots only. It is off by default for Stage 1.
+- Legality defaults to masked-token positions only. Validation uses `t=0`, so
+  all supervised slots are masked.
+- `L_jepa_positive = mean(2 - 2*cos(pred_norm, target_norm))`, equivalent to
+  squared distance between L2-normalized latent tokens.
+- JEPA diagnostics also log raw MSE, normalized MSE, token norms, per-horizon
+  losses, identity baseline, and shuffled-action baseline.
 
 Initial config:
 
@@ -243,6 +258,9 @@ Guidelines:
 
 - Use the random-policy-balanced legality coefficient for first-ply legality
   unless a run explicitly tests another value.
+- Prefer `target_projector_mode=shared` for the next Stage 1 runs. The older
+  separate stop-gradient target projector is kept as an ablation because it
+  provides a fixed random target space.
 - Use lower or scheduled JEPA learning rates before scaling JEPA depth.
 - Report gradient norms from `L_jepa` into DFM action-token/pathway modules.
 
