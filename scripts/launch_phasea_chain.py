@@ -24,6 +24,8 @@ SET2 = "gs://gunay-chess-experiments-us-central1/data/trajectory_v2_lc0_test80_h
 RUN_ID = "dfm-lc010m-h8-phaseA-h1-lr6e4-leg764-20260429"
 SET2_TPU_NAME = "dfm-phasea-resume-set2-20260430"
 COMBINED_STAGE = "combined_same_vm"
+CACHE_MOUNT = "/mnt/chess-dfm-cache"
+CACHE_DIR = f"{CACHE_MOUNT}/gcs_cache"
 
 
 def run_cli(args: list[str], *, check: bool = True) -> subprocess.CompletedProcess[str]:
@@ -60,7 +62,7 @@ def train_command(
         "--gcs-prefetch-workers",
         "16",
         "--gcs-cache-dir",
-        "/tmp/chess_dfm_jax/gcs_cache",
+        CACHE_DIR,
         "--models-dir",
         "/tmp/chess_dfm_jax/repo/models",
         "--save-dir",
@@ -170,6 +172,31 @@ def launch_combined_on_same_tpu(base: dict, bucket: str, work_dir: Path) -> None
     remote_script = f"""#!/bin/bash
 set -euo pipefail
 export HOME=/root
+CACHE_MOUNT={shlex.quote(CACHE_MOUNT)}
+CACHE_DEVICE=""
+for candidate in /dev/disk/by-id/google-persistent-disk-1 /dev/disk/by-id/scsi-0Google_PersistentDisk_persistent-disk-1; do
+  if [ -e "$candidate" ]; then
+    CACHE_DEVICE="$candidate"
+    break
+  fi
+done
+if [ -n "$CACHE_DEVICE" ]; then
+  if ! sudo blkid "$CACHE_DEVICE" >/dev/null 2>&1; then
+    sudo mkfs.ext4 -F -m 0 "$CACHE_DEVICE"
+  fi
+  sudo mkdir -p "$CACHE_MOUNT"
+  if ! mountpoint -q "$CACHE_MOUNT"; then
+    sudo mount -o discard,defaults "$CACHE_DEVICE" "$CACHE_MOUNT"
+  fi
+  sudo chmod 777 "$CACHE_MOUNT"
+  mkdir -p "$CACHE_MOUNT/gcs_cache/train" "$CACHE_MOUNT/gcs_cache/val"
+fi
+if [ -d /tmp/chess_dfm_jax/gcs_cache/train ] && [ -d "$CACHE_MOUNT/gcs_cache/train" ]; then
+  rsync -a --ignore-existing --include="*.npz" --exclude="*" /tmp/chess_dfm_jax/gcs_cache/train/ "$CACHE_MOUNT/gcs_cache/train/" || true
+fi
+if [ -d /tmp/chess_dfm_jax/gcs_cache/val ] && [ -d "$CACHE_MOUNT/gcs_cache/val" ]; then
+  rsync -a --ignore-existing --include="*.npz" --exclude="*" /tmp/chess_dfm_jax/gcs_cache/val/ "$CACHE_MOUNT/gcs_cache/val/" || true
+fi
 if [ -f /tmp/chess_dfm_wandb.env ]; then
   set -a
   source /tmp/chess_dfm_wandb.env

@@ -81,6 +81,17 @@ The older behavior is still available only for explicit streaming experiments:
 
 Do not use `minimum` for model-selection runs.
 
+For TPU runs, put `--gcs-cache-dir` on an attached persistent disk instead of
+the boot disk, for example:
+
+```bash
+--gcs-cache-dir /mnt/chess-dfm-cache/gcs_cache
+```
+
+This keeps immutable shard downloads warm across TPU relaunches and across
+curriculum stages. GCS remains the source of truth; the persistent disk is only
+a reusable local cache.
+
 ## Deduplication
 
 Use `scripts/trajectory_dedup.py` for duplicate statistics and exact

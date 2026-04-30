@@ -110,6 +110,13 @@ def validate_launch_spec(spec: "TPUJobSpec", *, override_source_uri: str | None 
             raise ValueError(f"Refusing stale or placeholder source snapshot: {override_source_uri}")
     if spec.entry_command and "verified_source_v27_dfm" in spec.entry_command:
         raise ValueError("Refusing stale entry_command that references verified_source_v27_dfm.")
+    if "WANDB_API_KEY" in spec.env:
+        raise ValueError(
+            "Do not put WANDB_API_KEY in TPUJobSpec.env; startup metadata is visible in TPU metadata. "
+            "Use TPUJobSpec.secret_env or an SSH-scoped env file instead."
+        )
+    if spec.cache_disk_mode not in {"read-write", "read-only"}:
+        raise ValueError("cache_disk_mode must be either 'read-write' or 'read-only'.")
 
 
 @dataclass
@@ -120,8 +127,10 @@ class TPUJobSpec:
     bucket_by_region: dict[str, str]
     run_name: str | None = None
     run_family: str = "jepa"
+    wandb_entity: str | None = None
     wandb_project: str = "chess_dfm_jax-jepa"
     wandb_group: str = "bt4-token-jepa"
+    wandb_run_id: str | None = None
     accelerator_type: str = "v5litepod-8"
     runtime_version: str = "tpu-ubuntu2204-base"
     service_account: str | None = None
@@ -132,6 +141,9 @@ class TPUJobSpec:
     allocation_timeout_s: int = 1800
     poll_interval_s: int = 30
     workdir: str = "/tmp/chess_dfm_jax"
+    cache_disk_by_zone: dict[str, str] = field(default_factory=dict)
+    cache_disk_mode: str = "read-write"
+    cache_mount_point: str = "/mnt/chess-dfm-cache"
     models_uri: str | None = None
     models_uri_by_region: dict[str, str] = field(default_factory=dict)
     chunk_data_uri: str | None = None
@@ -139,6 +151,7 @@ class TPUJobSpec:
     entry_command: str | None = None
     train_args: dict[str, Any] = field(default_factory=dict)
     env: dict[str, str] = field(default_factory=dict)
+    secret_env: dict[str, str] = field(default_factory=dict)
     spot: bool = True
 
     @classmethod
@@ -181,6 +194,17 @@ class TPUJobSpec:
     def chunk_data_uri_for_zone(self, zone: str) -> str | None:
         region = zone_region(zone)
         return self.chunk_data_uri_by_region.get(region, self.chunk_data_uri)
+
+    def cache_disk_for_zone(self, zone: str) -> str | None:
+        return self.cache_disk_by_zone.get(zone)
+
+    def cache_disk_source_for_zone(self, zone: str) -> str | None:
+        disk = self.cache_disk_for_zone(zone)
+        if not disk:
+            return None
+        if disk.startswith("projects/"):
+            return disk
+        return f"projects/{self.project_id}/zones/{zone}/disks/{disk}"
 
 
 def create_source_snapshot(repo_root: str | Path, output_path: str | Path) -> Path:
@@ -282,15 +306,15 @@ def read_json(gs_uri: str) -> dict[str, Any] | None:
 
 def render_train_command(spec: TPUJobSpec, zone: str) -> str:
     args = {
-        "run-name": spec.effective_run_name,
         "run-id": spec.run_id,
-        "project": spec.wandb_project,
-        "group": spec.wandb_group,
-        "platform": "tpu",
+        "wandb-project": spec.wandb_project,
+        "wandb-group": spec.wandb_group,
         "checkpoint-uri": spec.checkpoint_uri(zone),
         "resume": True,
         **spec.train_args,
     }
+    if spec.wandb_entity:
+        args["wandb-entity"] = spec.wandb_entity
     parts = ["python3", "scripts/train_jepa.py"]
     for key, value in args.items():
         flag = f"--{key}"
@@ -306,17 +330,67 @@ def render_entry_command(spec: TPUJobSpec, zone: str) -> str:
     if spec.entry_command:
         # Older sweep specs used the pre-rename workdir. Keep those specs usable
         # while the startup script downloads chunks into the canonical workdir.
-        return spec.entry_command.replace("/tmp/lc0jaxhuman/chunks", f"{spec.workdir}/chunks")
-    return render_train_command(spec, zone)
+        command = spec.entry_command.replace("/tmp/lc0jaxhuman/chunks", f"{spec.workdir}/chunks")
+    else:
+        command = render_train_command(spec, zone)
+    if spec.cache_disk_for_zone(zone):
+        command = command.replace(
+            f"{spec.workdir}/gcs_cache",
+            f"{spec.cache_mount_point.rstrip('/')}/gcs_cache",
+        )
+    return command
+
+
+def render_cache_disk_mount_script(spec: TPUJobSpec, zone: str) -> str:
+    if not spec.cache_disk_for_zone(zone):
+        return ""
+    mount_point = spec.cache_mount_point.rstrip("/")
+    return f"""
+CACHE_MOUNT={shlex.quote(mount_point)}
+CACHE_DEVICE=""
+for candidate in /dev/disk/by-id/google-persistent-disk-1 /dev/disk/by-id/scsi-0Google_PersistentDisk_persistent-disk-1; do
+  if [ -e "$candidate" ]; then
+    CACHE_DEVICE="$candidate"
+    break
+  fi
+done
+if [ -z "$CACHE_DEVICE" ]; then
+  echo "Cache disk configured but no data-disk device was found." >&2
+  ls -l /dev/disk/by-id || true
+  exit 2
+fi
+if ! blkid "$CACHE_DEVICE" >/dev/null 2>&1; then
+  mkfs.ext4 -F -m 0 "$CACHE_DEVICE"
+fi
+mkdir -p "$CACHE_MOUNT"
+if ! mountpoint -q "$CACHE_MOUNT"; then
+  mount -o discard,defaults "$CACHE_DEVICE" "$CACHE_MOUNT"
+fi
+chmod 777 "$CACHE_MOUNT"
+mkdir -p "$CACHE_MOUNT/gcs_cache/train" "$CACHE_MOUNT/gcs_cache/val"
+df -h "$CACHE_MOUNT"
+"""
 
 
 def render_startup_script(spec: TPUJobSpec, zone: str, source_uri: str) -> str:
     env_vars = dict(spec.env)
-    if "WANDB_API_KEY" not in env_vars and os.environ.get("WANDB_API_KEY"):
-        env_vars["WANDB_API_KEY"] = os.environ["WANDB_API_KEY"]
+    if "WANDB_API_KEY" in env_vars:
+        raise ValueError(
+            "Do not put WANDB_API_KEY in TPUJobSpec.env; startup metadata is visible in TPU metadata. "
+            "Use a local SSH-scoped env file or Secret Manager instead."
+        )
     env_exports = "\n".join(
         f"export {name}={shlex.quote(value)}" for name, value in sorted(env_vars.items())
     )
+    secret_exports = "\n".join(
+        (
+            f"export {name}="
+            f"$(/snap/google-cloud-cli/current/bin/gcloud secrets versions access latest "
+            f"--secret={shlex.quote(secret_name)})"
+        )
+        for name, secret_name in sorted(spec.secret_env.items())
+    )
+    cache_disk_mount = render_cache_disk_mount_script(spec, zone)
     model_sync = ""
     models_uri = spec.models_uri_for_zone(zone)
     if models_uri:
@@ -367,6 +441,8 @@ uv venv /tmp/venv --python 3.11
 uv pip install --python /tmp/venv "jax[tpu]" -f https://storage.googleapis.com/jax-releases/libtpu_releases.html
 uv pip install --python /tmp/venv -e .
 {env_exports}
+{secret_exports}
+{cache_disk_mount}
 {model_sync}{chunk_sync}
 cat <<'JSON' >/tmp/chess_dfm_jax_status.json
 {{"state": "running", "run_id": "{spec.run_id}", "zone": "{zone}"}}
@@ -426,6 +502,9 @@ def request_spot_tpu(spec: TPUJobSpec, zone: str, startup_script: str, attempt: 
             cmd.append(f"--subnetwork={spec.subnetwork_by_zone[zone]}")
         if not spec.enable_external_ips:
             cmd.append("--internal-ips")
+        cache_disk_source = spec.cache_disk_source_for_zone(zone)
+        if cache_disk_source:
+            cmd.append(f"--data-disk=source={cache_disk_source},mode={spec.cache_disk_mode}")
         _run_cli(cmd)
     finally:
         Path(startup_path).unlink(missing_ok=True)

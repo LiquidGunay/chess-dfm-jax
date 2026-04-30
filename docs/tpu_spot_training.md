@@ -34,9 +34,24 @@ Important fields:
 - `bucket_by_region`: same-region buckets for source snapshots, checkpoints, and status files.
 - `models_uri_by_region`: per-region bucket directories containing `BT4_exported.pb.gz` and the other BT4 artifacts.
 - `chunk_data_uri_by_region`: per-region bucket directories containing the chunk files.
+- `cache_disk_by_zone`: optional existing zonal persistent disks to attach as reusable shard caches. The disk must be in the same zone as the TPU VM. When set, startup mounts it at `cache_mount_point` and rewrites the default `--gcs-cache-dir /tmp/chess_dfm_jax/gcs_cache` to `cache_mount_point/gcs_cache`.
 - `train_args`: arguments forwarded directly to `scripts/train_jepa.py`.
 - `entry_command`: optional full command. Use this for DFM smoke/sweep specs that
   call `scripts/train_dfm.py`; otherwise `train_args` renders a JEPA command.
+- `secret_env`: optional environment variables loaded from Google Secret Manager at startup. Use this for `WANDB_API_KEY`; do not put real API keys in `env`, because startup metadata is visible through TPU metadata.
+
+Example private overrides:
+
+```json
+{
+  "cache_disk_by_zone": {
+    "us-west1-c": "chess-dfm-cache-usw1c-500gb"
+  },
+  "secret_env": {
+    "WANDB_API_KEY": "wandb-api-key"
+  }
+}
+```
 
 ## Launch
 
@@ -53,8 +68,9 @@ What the controller does:
    `runs/`, `wandb/`, local config, caches, and `.venv/`.
 3. Uploads that tarball to the same-region bucket for the current zone attempt.
 4. Requests a queued resource with a TPU VM startup script.
-5. The startup script installs `jax[tpu]`, installs the repo, downloads models
-   and chunk data, and starts the rendered training command.
+5. The startup script installs `jax[tpu]`, installs the repo, mounts any configured
+   persistent cache disk, downloads models and chunk data, and starts the rendered
+   training command.
 6. The trainer saves checkpoints every `save-every` steps and writes
    `status.json` on job start and exit.
 7. The controller deletes the queued resource after completion, job failure,

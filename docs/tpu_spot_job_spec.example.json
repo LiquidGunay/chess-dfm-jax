@@ -25,6 +25,9 @@
   "allocation_timeout_s": 1800,
   "poll_interval_s": 30,
   "workdir": "/tmp/chess_dfm_jax",
+  "cache_disk_by_zone": {},
+  "cache_disk_mode": "read-write",
+  "cache_mount_point": "/mnt/chess-dfm-cache",
   "models_uri": null,
   "models_uri_by_region": {
     "us-central1": "gs://your-us-central1-bucket/models",
@@ -49,7 +52,6 @@
     "mlp-dim": 1024,
     "action-source": "best"
   },
-  "env": {
-    "WANDB_API_KEY": "set-me"
-  }
+  "env": {},
+  "secret_env": {}
 }
