@@ -123,6 +123,11 @@ behavior at harder noise levels.
 
 ## Latent-SASA Defaults
 
+`docs/implementation_plan_gold.md` is the full design reference for coupling,
+and `docs/latent_sasa_coupling.md` is the implementation checklist. The current
+repo has standalone DFM and JEPA baselines plus Stage 1 and Stage 2 joint
+trainer paths. The next missing research piece is reranking evaluation.
+
 Initial JEPA baselines:
 
 ```text
@@ -163,6 +168,56 @@ lambda_rank = 0.0 first, then 0.2
 
 Do not sweep batch size. Probe the largest batch that fits the allocated TPU
 shape and keep the learning rate fixed for the first baseline queue.
+
+## Joint Implementation Gates
+
+Before launching non-smoke `joint` experiments, all of these must be true:
+
+- Done: `LeelaChunkDataLoader` supports a `joint_latent_sasa` view with
+  `current_planes`, `action_indices`, `future_planes`, `future_valid`, `valid`,
+  and compact `legal_idx/legal_count`.
+- Done: DFM exposes `planner_from_latents(..., return_hidden=True)` and returns
+  `hidden["action_tokens"]` shaped `[B, H, D]`.
+- Done: JEPA exposes `jepa_rollout_from_latents(z0_jepa, actions, action_hidden)` and
+  can consume DFM action-token hidden states.
+- Done: the initial joint model uses a shared online projector, small DFM/JEPA adapters,
+  shared action embedding, and stop-gradient target projector. EMA target
+  projector updates are allowed after the stop-gradient path is stable.
+- Done: a one-step joint smoke test saves and restores a raw NumPy checkpoint under
+  `runs/joint/<run_id>/checkpoints`.
+- Done: coupling diagnostics show finite, non-zero JEPA-loss gradients into the DFM
+  planner/action-token path and no gradients into frozen BT4.
+
+Stage 1 joint loss:
+
+```text
+L = 1.0 * L_dfm_ce
+  + lambda_legal * L_legal
+  + 1.0 * L_jepa_positive
+```
+
+Use `H=1 or 2`, `K=1`, `token_dim=256`, DFM `L4`, JEPA `L1-L2`, and
+`value_coeff=wdl_coeff=0.0` until latent dynamics is stable.
+
+Stage 2 joint loss:
+
+```text
+L = L_dfm_ce
+  + lambda_legal * L_legal
+  + L_jepa_positive
+  + 0.5 * L_contrast
+```
+
+Use legal-prefix corruptions from stored legal sets, start with `H=4`, `K=2-3`,
+and flatten candidates to `[B*K, ...]`. If `legal_count <= 1`, mask that
+candidate/sample out of the contrastive loss.
+
+Stage 2 support is implemented locally and logs contrastive accuracy,
+positive/negative similarity, margin, and valid fraction. Stage 3 adds
+rank/reranking only after Stage 2 held-out contrastive accuracy is above chance.
+Stage 4 adds all-mask distillation only after reranking beats raw DFM.
+Distillation candidate log-probabilities must come from an all-mask pass, not
+from the clean candidate pass where the candidate tokens were visible.
 
 ## Next Runs
 

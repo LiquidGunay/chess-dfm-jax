@@ -88,41 +88,62 @@ class DFMDenoiser(nnx.Module):
         t_emb = t_emb @ self.time_embed2[...] + self.time_bias[...]
         return t_emb
 
+    def encode_current(self, current_planes: jnp.ndarray) -> jnp.ndarray:
+        """Encode current board planes into DFM latent state tokens."""
+        z = jax.lax.stop_gradient(self.encoder.encode_tokens(current_planes)) # [B, 64, encoder_dim]
+        z = z @ jnp.asarray(self.z_proj[...], dtype=self.compute_dtype) + jnp.asarray(self.z_bias[...], dtype=self.compute_dtype)
+        return z
+
+    def embed_actions(self, noisy_actions: jnp.ndarray, t: jnp.ndarray) -> jnp.ndarray:
+        """Embed noisy action tokens with position and diffusion-time features."""
+        K = noisy_actions.shape[1]
+        
+        a_emb = self.action_embed(noisy_actions) # [B, K, token_dim]
+        a_emb = a_emb + jnp.asarray(self.pos_embed[...], dtype=self.compute_dtype)[None, :K, :]
+        
+        t_emb = self.get_time_embedding(t) # [B, token_dim]
+        
+        return a_emb + t_emb[:, None, :]
+
+    def logits_from_action_hidden(self, action_hidden: jnp.ndarray) -> jnp.ndarray:
+        """Project planner action hidden states to action logits."""
+        a_out = self.out_norm(action_hidden)
+        return a_out @ jnp.asarray(self.out_proj[...], dtype=self.compute_dtype) + jnp.asarray(self.out_bias[...], dtype=self.compute_dtype)
+
+    def planner_from_latents(
+        self,
+        z_dfm: jnp.ndarray,
+        noisy_actions: jnp.ndarray,
+        t: jnp.ndarray,
+        *,
+        return_hidden: bool = False,
+    ):
+        """Run the DFM planner from already-computed board latents.
+
+        This is the coupling boundary used by Latent-SASA. The compatibility
+        `__call__` path below still encodes board planes internally.
+        """
+        a_emb = self.embed_actions(noisy_actions, t)
+        
+        # Sequence: [Z_1...Z_64, A_1...A_K]
+        seq = jnp.concatenate([z_dfm, a_emb], axis=1) # [B, 64 + K, token_dim]
+        
+        for block in self.blocks:
+            seq = block(seq)
+
+        state_hidden = seq[:, :64, :]
+        action_hidden = seq[:, 64:, :] # [B, K, token_dim]
+        logits = self.logits_from_action_hidden(action_hidden)
+        if return_hidden:
+            return logits, {"state_tokens": state_hidden, "action_tokens": action_hidden}
+        return logits # [B, K, vocab_size]
+
     def __call__(self, current_planes: jnp.ndarray, noisy_actions: jnp.ndarray, t: jnp.ndarray):
         # current_planes: [B, 112, 8, 8]
         # noisy_actions: [B, K]
         # t: [B]
-        
-        K = noisy_actions.shape[1]
-        
-        # 1. Encode board state (frozen)
-        z = jax.lax.stop_gradient(self.encoder.encode_tokens(current_planes)) # [B, 64, encoder_dim]
-        z = z @ jnp.asarray(self.z_proj[...], dtype=self.compute_dtype) + jnp.asarray(self.z_bias[...], dtype=self.compute_dtype)
-        
-        # 2. Embed actions and add positional encoding
-        a_emb = self.action_embed(noisy_actions) # [B, K, token_dim]
-        a_emb = a_emb + jnp.asarray(self.pos_embed[...], dtype=self.compute_dtype)[None, :K, :]
-        
-        # 3. Time embedding
-        t_emb = self.get_time_embedding(t) # [B, token_dim]
-        
-        # Add time embedding to action embeddings (could also use AdaLN, but addition is standard)
-        a_emb = a_emb + t_emb[:, None, :]
-        
-        # 4. Concatenate board tokens and action tokens
-        # Sequence: [Z_1...Z_64, A_1...A_K]
-        seq = jnp.concatenate([z, a_emb], axis=1) # [B, 64 + K, token_dim]
-        
-        # 5. Apply Transformer
-        for block in self.blocks:
-            seq = block(seq)
-            
-        # 6. Extract action tokens and project to vocab
-        a_out = seq[:, 64:, :] # [B, K, token_dim]
-        a_out = self.out_norm(a_out)
-        logits = a_out @ jnp.asarray(self.out_proj[...], dtype=self.compute_dtype) + jnp.asarray(self.out_bias[...], dtype=self.compute_dtype)
-        
-        return logits # [B, K, vocab_size]
+        z = self.encode_current(current_planes)
+        return self.planner_from_latents(z, noisy_actions, t)
 
 
 def mask_actions(actions: jnp.ndarray, mask_prob: jnp.ndarray, mask_token_id: int, rng: jnp.ndarray) -> tuple[jnp.ndarray, jnp.ndarray]:

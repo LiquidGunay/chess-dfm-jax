@@ -230,7 +230,13 @@ def trajectory_v3_to_batch(
         "valid": (future_valid.sum(axis=1) > 0).astype(np.float32),
     }
 
-    if view != "jepa_latent" and "legal_idx_u16" in data and "legal_count_u16" in data:
+    has_compact_legal = "legal_idx_u16" in data and "legal_count_u16" in data
+    if view == "joint_latent_sasa":
+        if not has_compact_legal:
+            raise KeyError("joint_latent_sasa view requires legal_idx_u16 and legal_count_u16.")
+        batch["legal_idx"] = np.asarray(data["legal_idx_u16"], dtype=np.int32)[:, :view_horizon]
+        batch["legal_count"] = np.asarray(data["legal_count_u16"], dtype=np.int32)[:, :view_horizon]
+    elif view != "jepa_latent" and has_compact_legal:
         legal_masks = legal_indices_to_masks(
             np.asarray(data["legal_idx_u16"], dtype=np.uint16)[:, :view_horizon],
             np.asarray(data["legal_count_u16"], dtype=np.uint16)[:, :view_horizon],
@@ -242,7 +248,7 @@ def trajectory_v3_to_batch(
     if view != "jepa_latent" and "legal_valid_u8" in data:
         batch["legal_masks_valid"] = np.asarray(data["legal_valid_u8"], dtype=np.float32)[:, :view_horizon]
 
-    if view in {"full", "jepa_latent"}:
+    if view in {"full", "jepa_latent", "joint_latent_sasa"}:
         if plane_codec == "packbits":
             future_planes = unpack_planes(data["planes_future_pack"])[:, :view_horizon]
         else:

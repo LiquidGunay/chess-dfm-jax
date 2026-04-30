@@ -125,11 +125,20 @@ The next research target is Latent-SASA joint pretraining:
 - A shared online BT4-to-planning-latent base feeds small DFM and JEPA adapters.
 - DFM denoises explicit action chunks.
 - JEPA predicts BT4-derived future latents for those action chunks.
+- JEPA consumes DFM action-token hidden states, not only action IDs, so
+  future-latent losses shape the DFM planner representation.
 - Later ranking/value heads score real chunks above corrupted legal chunks.
 
-Standalone DFM and JEPA remain baselines. Grain is deferred until the compact
-loader schema is stable; the current implementation starts with a custom
-deterministic, column-selective loader.
+Standalone DFM and JEPA remain baselines. The detailed design lives in
+`docs/implementation_plan_gold.md`; the repo-grounded implementation checklist
+is `docs/latent_sasa_coupling.md`. The first joint APIs are in place:
+`planner_from_latents(..., return_hidden=True)`,
+`jepa_rollout_from_latents(..., action_hidden=...)`, a `joint_latent_sasa`
+loader view, legal-prefix candidates, a Stage 1 joint loss primitive, and a
+queue-compatible Stage 1 trainer with checkpoint save/resume. The remaining
+work is reranking evals and later distillation; Stage 2 contrastive loss has a
+local smoke-tested trainer path. Grain is deferred until the compact loader schema is stable; the current
+implementation starts with a custom deterministic, column-selective loader.
 
 ## JEPA architecture
 

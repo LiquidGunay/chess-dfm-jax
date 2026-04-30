@@ -440,6 +440,8 @@ export PATH="/root/.cargo/bin:/root/.local/bin:/usr/local/sbin:/usr/local/bin:/u
 uv venv /tmp/venv --python 3.11
 uv pip install --python /tmp/venv "jax[tpu]" -f https://storage.googleapis.com/jax-releases/libtpu_releases.html
 uv pip install --python /tmp/venv -e .
+export VIRTUAL_ENV=/tmp/venv
+export PATH="/tmp/venv/bin:$PATH"
 {env_exports}
 {secret_exports}
 {cache_disk_mount}
@@ -620,6 +622,16 @@ def run_spot_controller(spec: TPUJobSpec, *, repo_root: str | Path | None = None
             upload_json(spec.to_dict(), f"{spec.run_root_uri(zone)}/job_spec.json")
             startup_script = render_startup_script(spec, zone, source_uri)
             queued_resource_id = f"{spec.run_id}-{attempt:03d}"
+            upload_json(
+                {
+                    "state": "requesting",
+                    "run_id": spec.run_id,
+                    "zone": zone,
+                    "queued_resource_id": queued_resource_id,
+                    "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                },
+                spec.status_uri(zone),
+            )
             print(f"Requesting spot TPU {queued_resource_id} in {zone}...")
             try:
                 resource_name = request_spot_tpu(spec, zone, startup_script, attempt)

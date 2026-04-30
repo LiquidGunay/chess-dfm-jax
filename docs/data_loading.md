@@ -45,26 +45,50 @@ compact view for throughput:
 - bitpacked or `uint8` `planes_future`
 - `uint16` actions
 - `uint8` future-valid flags
-- `legal_idx_u16` plus `legal_count`, replacing dense float legal masks
+- `legal_idx_u16` plus `legal_count_u16`, replacing dense float legal masks
 - stable row metadata for replay, dedup, and debugging
 
 Training views over the same compact source:
 
-- `dfm_action`: `planes_t`, `actions`, legal indices/counts, validity
+- `dfm_action`: `planes_t`, `actions`, legal indices/counts or dense masks,
+  validity
 - `jepa_latent`: `planes_t`, `actions`, `planes_future`, `future_valid`
-- `joint_latent_sasa`: all required action, future-state, legal, and optional
-  value/WDL columns
+- `joint_latent_sasa`: all required action, future-state, compact legal, and
+  optional value/WDL columns
 
 Current implementation status:
 
 - `scripts/convert_trajectory_v2_to_v3.py` converts local or GCS trajectory-v2
   shards to compact trajectory-v3 shards with status and manifest output.
-- `LeelaChunkDataLoader` can read trajectory-v3 `.npz` shards through the same
-  `full`, `dfm_action`, and `jepa_latent` batch views used by trajectory-v2.
+- `LeelaChunkDataLoader` can read trajectory-v3 `.npz` shards through `full`,
+  `dfm_action`, `jepa_latent`, and `joint_latent_sasa` batch views.
 - DFM-only batches use the `dfm_action` view so future boards are not decoded or
   materialized during action-only training.
 - JEPA-only batches use the `jepa_latent` view so dense legal masks are not
   decoded or transferred during latent transition training.
+- trajectory-v3 stores `legal_idx_u16` and `legal_count_u16`. Current non-JEPA
+  views reconstruct dense `legal_masks`; the joint view exposes compact
+  `legal_idx` and `legal_count` directly.
+
+The `joint_latent_sasa` batch contract is:
+
+```text
+current_planes: [B, 112, 8, 8]
+action_indices: [B, H]
+future_planes: [B, H, 112, 8, 8]
+future_valid: [B, H]
+valid: [B]
+legal_idx: [B, H, Lmax]
+legal_count: [B, H]
+optional value_targets: [B, H]
+optional wdl_targets: [B, H, 3]
+optional metadata: source, game_id, ply, fen_t, actions_uci
+```
+
+For trajectory-v2 input, the joint view may convert dense `legal_masks` to
+`legal_idx/legal_count` on load. For trajectory-v3 input, it should use the
+stored compact legal columns and avoid reconstructing dense masks unless a
+legacy metric explicitly requests them.
 
 Use a custom deterministic loader first. Grain remains a later backend option
 once compact v3 throughput and sharding needs are measured. The loader boundary

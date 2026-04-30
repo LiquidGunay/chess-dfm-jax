@@ -21,6 +21,9 @@ TRAJECTORY_V1 = "trajectory-v1"
 TRAJECTORY_V1_ADAPTED = "trajectory-v1-adapted"
 TRAJECTORY_V2 = "trajectory-v2"
 DEFAULT_INPUT_FORMAT = "INPUT_CLASSICAL_112_PLANE"
+ACTION_VOCAB_SIZE = 1858
+DEFAULT_LEGAL_LMAX = 128
+LEGAL_PAD = np.iinfo(np.uint16).max
 
 
 @dataclass
@@ -241,6 +244,33 @@ def terminal_target_indices(future_valid: np.ndarray) -> np.ndarray:
     has_valid = np.any(valid > 0, axis=1)
     last_valid = valid.shape[1] - 1 - reversed_idx
     return np.where(has_valid, last_valid, 0).astype(np.int32)
+
+
+def legal_masks_to_indices(
+    legal_masks: np.ndarray,
+    *,
+    lmax: int = DEFAULT_LEGAL_LMAX,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Convert dense legal masks `[B,H,1858]` to padded compact legal lists."""
+    masks = np.asarray(legal_masks) > 0
+    if masks.ndim != 3 or masks.shape[-1] != ACTION_VOCAB_SIZE:
+        raise ValueError(f"legal_masks must have shape [B,H,{ACTION_VOCAB_SIZE}], got {masks.shape}.")
+    if lmax <= 0 or lmax >= LEGAL_PAD:
+        raise ValueError(f"lmax must be in [1, {LEGAL_PAD - 1}], got {lmax}.")
+    batch_size, horizon, _ = masks.shape
+    indices = np.full((batch_size, horizon, lmax), LEGAL_PAD, dtype=np.uint16)
+    counts = np.zeros((batch_size, horizon), dtype=np.uint16)
+    for sample_idx in range(batch_size):
+        for horizon_idx in range(horizon):
+            legal = np.flatnonzero(masks[sample_idx, horizon_idx])
+            if legal.size > lmax:
+                raise ValueError(
+                    "Legal move count exceeds lmax at "
+                    f"sample={sample_idx}, horizon={horizon_idx}: {legal.size} > {lmax}."
+                )
+            counts[sample_idx, horizon_idx] = np.uint16(legal.size)
+            indices[sample_idx, horizon_idx, : legal.size] = legal.astype(np.uint16)
+    return indices, counts
 
 
 def trajectory_shard_to_batch(
@@ -477,6 +507,86 @@ def trajectory_latent_batch_from_npz(
     return batch
 
 
+def trajectory_joint_batch_from_npz(
+    data: Mapping[str, np.ndarray],
+    *,
+    horizon: int | None = None,
+    legal_lmax: int = DEFAULT_LEGAL_LMAX,
+    include_metadata: bool = False,
+) -> dict[str, np.ndarray]:
+    """Build a joint Latent-SASA batch with future states and compact legal sets."""
+    schema = infer_trajectory_schema(data)
+    if schema != TRAJECTORY_V2:
+        raise ValueError("joint_latent_sasa view requires trajectory-v2 shards.")
+
+    planes_t = np.asarray(data["planes_t"], dtype=np.float32)
+    actions = _normalize_actions(data["actions"])
+    batch_size, shard_horizon = actions.shape
+    view_horizon = shard_horizon if horizon is None or horizon <= 0 else min(horizon, shard_horizon)
+    actions = actions[:, :view_horizon]
+
+    planes_future = np.asarray(data["planes_future"], dtype=np.float32)[:, :view_horizon]
+    future_valid = np.asarray(
+        _maybe_get(data, "future_valid", np.ones((batch_size, shard_horizon), dtype=np.float32)),
+        dtype=np.float32,
+    )[:, :view_horizon]
+    if "legal_masks" not in data:
+        raise KeyError("joint_latent_sasa view requires legal_masks for trajectory-v2 shards.")
+    legal_masks = np.asarray(data["legal_masks"], dtype=np.float32)[:, :view_horizon]
+    legal_idx, legal_count = legal_masks_to_indices(legal_masks, lmax=legal_lmax)
+    legal_valid = (
+        np.asarray(data["legal_masks_valid"], dtype=np.float32)[:, :view_horizon]
+        if "legal_masks_valid" in data
+        else np.ones((batch_size, view_horizon), dtype=np.float32)
+    )
+
+    if planes_t.shape != (batch_size, 112, 8, 8):
+        raise ValueError(f"planes_t must have shape {(batch_size, 112, 8, 8)}, got {planes_t.shape}.")
+    if planes_future.shape != (batch_size, view_horizon, 112, 8, 8):
+        raise ValueError(
+            f"planes_future must have shape {(batch_size, view_horizon, 112, 8, 8)}, got {planes_future.shape}."
+        )
+    if future_valid.shape != (batch_size, view_horizon):
+        raise ValueError(
+            f"future_valid must have shape {(batch_size, view_horizon)}, got {future_valid.shape}."
+        )
+
+    terminal_idx = terminal_target_indices(future_valid)
+    valid = (future_valid.sum(axis=1) > 0).astype(np.float32)
+    value_targets = (
+        np.asarray(data["value_targets"], dtype=np.float32)[:, :view_horizon]
+        if "value_targets" in data
+        else np.zeros((batch_size, view_horizon), dtype=np.float32)
+    )
+    wdl_targets = (
+        np.asarray(data["wdl_targets"], dtype=np.float32)[:, :view_horizon]
+        if "wdl_targets" in data
+        else np.zeros((batch_size, view_horizon, 3), dtype=np.float32)
+    )
+    batch: dict[str, np.ndarray] = {
+        "current_planes": planes_t,
+        "action_indices": actions.astype(np.int32),
+        "action_idx": actions[:, 0].astype(np.int32),
+        "future_planes": planes_future,
+        "future_valid": future_valid,
+        "terminal_target_index": terminal_idx.astype(np.int32),
+        "next_planes": planes_future[np.arange(batch_size), terminal_idx],
+        "valid": valid,
+        "legal_idx": legal_idx.astype(np.int32),
+        "legal_count": legal_count.astype(np.int32),
+        "legal_masks_valid": legal_valid,
+        "value_targets": value_targets,
+        "value_target": value_targets[np.arange(batch_size), terminal_idx],
+        "wdl_targets": wdl_targets,
+        "wdl_target": wdl_targets[np.arange(batch_size), terminal_idx],
+    }
+    if include_metadata:
+        for name in ("source", "game_id", "ply", "result", "fen_t", "input_format", "actions_uci"):
+            if name in data:
+                batch[name] = _expand_optional(data[name], batch_size=batch_size)
+    return batch
+
+
 def rollout_from_fen(
     fen: str,
     actions: np.ndarray,
@@ -578,7 +688,10 @@ def build_synthetic_trajectory_shard(batch_size: int = 2, horizon: int = 4) -> T
 
 
 __all__ = [
+    "ACTION_VOCAB_SIZE",
     "DEFAULT_INPUT_FORMAT",
+    "DEFAULT_LEGAL_LMAX",
+    "LEGAL_PAD",
     "TRAJECTORY_V1",
     "TRAJECTORY_V1_ADAPTED",
     "TRAJECTORY_V2",
@@ -586,9 +699,11 @@ __all__ = [
     "build_synthetic_trajectory_shard",
     "infer_trajectory_schema",
     "load_trajectory_shard",
+    "legal_masks_to_indices",
     "rollout_from_fen",
     "terminal_target_indices",
     "trajectory_action_batch_from_npz",
+    "trajectory_joint_batch_from_npz",
     "trajectory_latent_batch_from_npz",
     "trajectory_shard_from_npz",
     "trajectory_shard_to_batch",

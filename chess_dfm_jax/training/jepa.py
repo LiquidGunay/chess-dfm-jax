@@ -171,23 +171,52 @@ class TokenTransitionHead(nnx.Module):
         token_dim = flat_tokens.shape[-1]
         return flat_tokens.reshape((batch_size, horizon, 64, token_dim))
 
-    def predict_next(self, tokens: jnp.ndarray, action_idx: jnp.ndarray) -> jnp.ndarray:
+    def predict_next(
+        self,
+        tokens: jnp.ndarray,
+        action_idx: jnp.ndarray,
+        action_hidden: jnp.ndarray | None = None,
+    ) -> jnp.ndarray:
         action_token = self.action_mlp(action_idx)
+        if action_hidden is not None:
+            action_token = action_token + jnp.asarray(action_hidden, dtype=self.compute_dtype)
         seq = tokens + action_token[:, None, :]
         for block in self.blocks:
             seq = block(seq)
         return self.output_norm(seq)
 
-    def predict_sequence(self, current_planes: jnp.ndarray, action_indices: jnp.ndarray) -> jnp.ndarray:
-        current_tokens = self.encode_state_tokens(current_planes)
+    def rollout_from_latents(
+        self,
+        z0_jepa: jnp.ndarray,
+        action_indices: jnp.ndarray,
+        action_hidden: jnp.ndarray | None = None,
+    ) -> jnp.ndarray:
+        """Predict future latent tokens from current latents and action context."""
+        current_tokens = jnp.asarray(z0_jepa, dtype=self.compute_dtype)
+        if action_hidden is None:
+            action_hidden_seq = jnp.zeros(
+                (
+                    action_indices.shape[1],
+                    action_indices.shape[0],
+                    current_tokens.shape[-1],
+                ),
+                dtype=self.compute_dtype,
+            )
+        else:
+            action_hidden_seq = jnp.transpose(jnp.asarray(action_hidden, dtype=self.compute_dtype), (1, 0, 2))
 
-        def loop_body(tokens, action_idx):
-            next_tokens = self.predict_next(tokens, action_idx)
+        def loop_body(tokens, inputs):
+            action_idx, hidden = inputs
+            next_tokens = self.predict_next(tokens, action_idx, hidden)
             return next_tokens, next_tokens
 
         actions_seq = jnp.transpose(action_indices, (1, 0))
-        _, pred_tokens_seq = jax.lax.scan(loop_body, current_tokens, actions_seq)
+        _, pred_tokens_seq = jax.lax.scan(loop_body, current_tokens, (actions_seq, action_hidden_seq))
         return jnp.transpose(pred_tokens_seq, (1, 0, 2, 3))
+
+    def predict_sequence(self, current_planes: jnp.ndarray, action_indices: jnp.ndarray) -> jnp.ndarray:
+        current_tokens = self.encode_state_tokens(current_planes)
+        return self.rollout_from_latents(current_tokens, action_indices)
 
     def __call__(
         self,
@@ -307,6 +336,14 @@ class LC0JEPA(nnx.Module):
         action_indices: jnp.ndarray,
     ) -> jnp.ndarray:
         return self.transition.predict_sequence(current_planes, action_indices)
+
+    def jepa_rollout_from_latents(
+        self,
+        z0_jepa: jnp.ndarray,
+        action_indices: jnp.ndarray,
+        action_hidden: jnp.ndarray | None = None,
+    ) -> jnp.ndarray:
+        return self.transition.rollout_from_latents(z0_jepa, action_indices, action_hidden)
 
     def __call__(
         self,

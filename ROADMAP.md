@@ -22,6 +22,9 @@ The first implementation wave is substantially in place:
 7. Persistent experiment queues: `scripts/run_experiment_queue.py` can execute
    multiple experiments sequentially on one already-provisioned worker, with
    per-experiment status files and checkpoint namespace validation.
+8. Latent-SASA coupling design: `docs/implementation_plan_gold.md` is the
+   detailed research plan, and `docs/latent_sasa_coupling.md` is the
+   repo-grounded implementation checklist.
 
 ## Current Status Snapshot
 
@@ -53,6 +56,10 @@ As of 2026-04-29:
   online BT4-to-planning-latent base, small DFM and JEPA adapters, shared action
   embeddings, and a stop-gradient or EMA target projector for JEPA targets. The
   existing standalone DFM and JEPA scripts remain baselines.
+- Joint coupling is not implemented just by passing action IDs into JEPA. The
+  required bridge is DFM action-token hidden states consumed by the JEPA
+  transition, with gradient diagnostics showing that JEPA losses reach the DFM
+  planner/action-token path.
 - Normal training runs must use immutable dataset prefixes. The CPU data worker
   can keep producing additional LC0 trajectory-v2 chunks while TPU training
   runs, but it should write to a new prefix that is not consumed until manifest,
@@ -113,12 +120,15 @@ The latest repo audit is useful, but some findings are already addressed:
 - DFM evaluation restores the training loss horizon and loss weights from
   checkpoint metadata.
 
-Remaining blockers before serious new sweeps:
+Remaining blockers before serious new joint sweeps:
 
 - Add policy-sampled raw LC0 targets if we decide to train DFM against the LC0
   visit distribution instead of hard best/played targets.
 - Add JEPA metrics that defeat the identity shortcut: changed-square cosine,
   identity-baseline cosine, and true-action-vs-random-action delta.
+- Add held-out reranking evaluation on top of the current Stage 2 contrastive
+  trainer.
+- Add no-leakage distillation tests before any rank/distill runs.
 - Add DFM model-selection metrics beyond CE: legal argmax rate, legal top-k,
   illegal probability mass, accuracy by `t` bin, and full exact-rollout sequence
   legality from the sampler.
@@ -157,9 +167,20 @@ Remaining blockers before serious new sweeps:
 8. Run short queued baselines, then move quickly to joint Latent-SASA:
    - DFM H1 and H4 action-only baselines.
    - JEPA H2 and H4 teacher-forced latent transition baselines.
-   - Joint H2 with shared latent base and clean teacher-forced actions.
-   - Joint H4 with DFM action-state conditioning.
-   - Joint H4 with chunk-ranking negatives.
+   - Done: Stage 0 joint API smoke has shared latent components, the
+     `joint_latent_sasa` loader view, DFM hidden-state return, JEPA
+     rollout-from-latents, and legal-prefix candidate generation.
+   - Done: Stage 1 joint loss primitive supports `DFM CE + legal + positive
+     JEPA latent loss`, using DFM action hidden states as JEPA conditioning.
+   - Done: Stage 1 joint trainer/checkpoint path and coupling-gradient metrics
+     pass local synthetic smoke/resume.
+   - Done: Stage 2 joint trainer adds legal-prefix contrastive candidates with
+     `K=2-3` and flattened `[B,K,...] -> [B*K,...]` execution; local smoke logs
+     contrastive metrics.
+   - Next: add reranking evaluation before any distillation.
+   - Stage 3 joint H4: add rank head and reranking eval only after contrastive
+     accuracy exceeds chance.
+   - Stage 4: add all-mask distillation only after reranking beats raw DFM.
 9. Run comparable LC0-only, TCEC-only, and deduplicated TCEC+LC0 validation
    curves before scaling depth/width.
 10. Add sampler/reranking evaluation before treating a checkpoint as
@@ -190,6 +211,10 @@ Remaining blockers before serious new sweeps:
   checkpoint URI.
 - DFM-only loaders should not materialize `planes_future`; JEPA and joint views
   may load future states.
+- Joint checkpoints should live under `runs/joint/<run_id>/checkpoints` and
+  must include metadata identifying the joint module layout. Do not restore a
+  standalone DFM/JEPA checkpoint as a full joint checkpoint except through an
+  explicit initialization path.
 
 ## Evaluation Gaps
 
@@ -203,3 +228,7 @@ Remaining blockers before serious new sweeps:
   first-move legal rate, full exact-rollout legal sequence rate, first-move top-k accuracy,
   action-chunk accuracy by horizon, and loss/legality curves on a fixed validation split.
 - JEPA selection should report horizon-wise latent error, value/WDL accuracy, and predicted-vs-exact rollout agreement.
+- Joint selection must additionally report coupling diagnostics: JEPA gradient
+  norm into DFM planner/action-token layers, gradient norm into the shared
+  projector, contrastive candidate accuracy, positive-vs-negative similarity
+  margin, and raw-DFM versus JEPA-reranked action quality.

@@ -25,6 +25,7 @@ from chess_dfm_jax import encoding as encode_mod
 from chess_dfm_jax import policy as policy_mod
 from chess_dfm_jax.data.trajectory import (
     trajectory_action_batch_from_npz,
+    trajectory_joint_batch_from_npz,
     trajectory_latent_batch_from_npz,
     trajectory_shard_from_npz,
     trajectory_shard_to_batch,
@@ -99,6 +100,7 @@ class LeelaChunkDataLoader:
         chunk_paths_provider: Callable[[], Sequence[str]] | None = None,
         action_source: str = "best",
         batch_view: str = "full",
+        legal_lmax: int = 128,
     ):
         self.chunk_paths = [str(path) for path in chunk_paths]
         self.batch_size = batch_size
@@ -116,9 +118,10 @@ class LeelaChunkDataLoader:
         if action_source not in {"best", "played"}:
             raise ValueError(f"Unsupported action_source: {action_source}")
         self.action_source = action_source
-        if batch_view not in {"full", "dfm_action", "jepa_latent"}:
+        if batch_view not in {"full", "dfm_action", "jepa_latent", "joint_latent_sasa"}:
             raise ValueError(f"Unsupported batch_view: {batch_view}")
         self.batch_view = batch_view
+        self.legal_lmax = legal_lmax
 
     def __iter__(self) -> Iterator[dict[str, np.ndarray]]:
         paths = (
@@ -159,6 +162,13 @@ class LeelaChunkDataLoader:
                                 horizon=self.horizon,
                                 include_metadata=self.include_metadata,
                             )
+                        elif self.batch_view == "joint_latent_sasa":
+                            batch = trajectory_joint_batch_from_npz(
+                                data,
+                                horizon=self.horizon,
+                                legal_lmax=self.legal_lmax,
+                                include_metadata=self.include_metadata,
+                            )
                         else:
                             shard = trajectory_shard_from_npz(data)
                             batch = trajectory_shard_to_batch(
@@ -175,6 +185,9 @@ class LeelaChunkDataLoader:
                 except Exception as e:
                     print(f"Failed to read npz {path}: {e}")
                 continue
+
+            if self.batch_view == "joint_latent_sasa":
+                raise ValueError("joint_latent_sasa view requires trajectory .npz shards, not raw LC0 chunks.")
 
             for record in iter_records(path):
                 sample = self._unroll_jepa_sample(record)
