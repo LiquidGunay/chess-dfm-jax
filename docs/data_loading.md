@@ -92,6 +92,11 @@ This keeps immutable shard downloads warm across TPU relaunches and across
 curriculum stages. GCS remains the source of truth; the persistent disk is only
 a reusable local cache.
 
+When `--gcs-startup-cache-policy all` is used, the loader now tries a bulk
+`gcloud storage rsync` into a prefix-specific staging directory and then
+hard-links shards into the flat cache layout. That avoids the older pattern of
+relisting the whole prefix after every small download batch.
+
 ## Deduplication
 
 Use `scripts/trajectory_dedup.py` for duplicate statistics and exact

@@ -7,6 +7,7 @@ import hashlib
 import os
 from pathlib import Path
 import random
+import shutil
 import subprocess
 import threading
 import time
@@ -40,6 +41,11 @@ def local_name_for_uri(uri: str) -> str:
     return f"{suffix}_{filename}"
 
 
+def _bulk_dir_for_prefix(cache_path: Path, prefix: str) -> Path:
+    suffix = hashlib.sha1(prefix.rstrip("/").encode("utf-8")).hexdigest()[:12]
+    return cache_path / ".bulk" / suffix
+
+
 @dataclass
 class GCSShardCache:
     """Maintain a local cache of immutable GCS .npz shards."""
@@ -56,6 +62,7 @@ class GCSShardCache:
     _lock: threading.Lock = field(default_factory=threading.Lock, init=False)
     _remote_seen: int = field(default=0, init=False)
     _downloaded: int = field(default=0, init=False)
+    _promoted: int = field(default=0, init=False)
     _failed: int = field(default=0, init=False)
 
     def __post_init__(self) -> None:
@@ -92,6 +99,10 @@ class GCSShardCache:
     def wait_for_all_visible(self, timeout_s: int = 7200) -> None:
         """Block until every currently visible remote shard is cached locally."""
         deadline = time.time() + timeout_s
+        if self.max_cached_shards <= 0 and self.bulk_sync_once():
+            stats = self.stats()
+            if stats["remote_seen"] > 0 and stats["cached"] >= stats["remote_seen"]:
+                return
         self.refresh_once()
         while True:
             stats = self.stats()
@@ -112,8 +123,71 @@ class GCSShardCache:
                 "remote_seen": self._remote_seen,
                 "cached": len(self.local_paths()),
                 "downloaded": self._downloaded,
+                "promoted": self._promoted,
                 "failed": self._failed,
             }
+
+    def bulk_sync_once(self) -> bool:
+        """Bulk-sync visible prefixes and promote files into the flat cache layout.
+
+        The background cache uses one `gcloud storage cp` per shard because it
+        needs fine-grained polling. Startup prefill is different: it should move
+        thousands of immutable shards as quickly as possible. For that path,
+        sync each remote prefix into a prefix-specific staging directory, then
+        hard-link staged `.npz` files into the historical flat hashed layout.
+        Keeping the flat layout preserves compatibility with older trainers and
+        avoids duplicate shard paths being returned to callers.
+        """
+        remote = list_gcs_npz(self.gcs_prefix)
+        with self._lock:
+            self._remote_seen = len(remote)
+        if not remote:
+            return False
+
+        remote_by_prefix: dict[str, list[str]] = {}
+        for prefix in split_gcs_prefixes(self.gcs_prefix):
+            prefix_root = prefix.rstrip("/") + "/"
+            remote_by_prefix[prefix] = [uri for uri in remote if uri.startswith(prefix_root)]
+
+        any_synced = False
+        for prefix, uris in remote_by_prefix.items():
+            if not uris:
+                continue
+            missing = [uri for uri in uris if not (self.cache_path / local_name_for_uri(uri)).exists()]
+            if not missing:
+                continue
+            bulk_dir = _bulk_dir_for_prefix(self.cache_path, prefix)
+            bulk_dir.mkdir(parents=True, exist_ok=True)
+            result = _run_gcloud(
+                [
+                    "gcloud",
+                    "storage",
+                    "rsync",
+                    "--recursive",
+                    prefix.rstrip("/"),
+                    str(bulk_dir),
+                ]
+            )
+            if result.returncode != 0:
+                with self._lock:
+                    self._failed += len(missing)
+                return False
+            any_synced = True
+            promoted = 0
+            for uri in uris:
+                staged = bulk_dir / uri.rsplit("/", 1)[-1]
+                local = self.cache_path / local_name_for_uri(uri)
+                if local.exists() or not staged.exists():
+                    continue
+                try:
+                    os.link(staged, local)
+                except OSError:
+                    shutil.copy2(staged, local)
+                promoted += 1
+            with self._lock:
+                self._promoted += promoted
+                self._downloaded += promoted
+        return any_synced
 
     def refresh_once(self) -> None:
         remote = list_gcs_npz(self.gcs_prefix)
