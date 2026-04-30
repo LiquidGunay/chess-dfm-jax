@@ -271,7 +271,7 @@ class QueueRunner:
         self._experiment_status(exp, "dry_run" if self.dry_run else "running", index=index)
         if self.dry_run:
             print(f"[dry-run] {exp.experiment_id}: {exp.entry_command}", flush=True)
-            self._experiment_status(exp, "completed", index=index, exit_code=0, dry_run=True)
+            self._experiment_status(exp, "dry_run", index=index, exit_code=0, dry_run=True)
             return 0
 
         started_at = utc_now()

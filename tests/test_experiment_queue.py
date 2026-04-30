@@ -74,7 +74,7 @@ def test_load_queue_and_dry_run(tmp_path):
     )
     assert runner.run() == 0
     status = json.loads((status_dir / "smoke.json").read_text(encoding="utf-8"))
-    assert status["state"] == "completed"
+    assert status["state"] == "dry_run"
     assert status["dry_run"] is True
 
 
