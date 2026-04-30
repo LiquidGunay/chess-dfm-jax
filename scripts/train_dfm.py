@@ -307,9 +307,6 @@ def sync_checkpoint_uri(checkpoint_uri: str, destination: Path) -> Path:
 
 def main() -> int:
     args = parse_args()
-
-    if args.resume and args.init_checkpoint_uri:
-        raise ValueError("--resume and --init-checkpoint-uri are different operations; use only one.")
     
     if args.backend == "tpu":
         jax.distributed.initialize(initialization_timeout=1200)
@@ -361,28 +358,7 @@ def main() -> int:
     )
 
     start_step = 0
-    if args.init_checkpoint_uri:
-        init_checkpoint_root = sync_checkpoint_uri(
-            args.init_checkpoint_uri,
-            output_dir / "init_checkpoint",
-        )
-        init_step = args.init_checkpoint_step or latest_checkpoint_step(init_checkpoint_root)
-        if init_step is None:
-            raise FileNotFoundError(f"No checkpoint found under {args.init_checkpoint_uri}.")
-        load_training_checkpoint(
-            init_checkpoint_root,
-            model=model,
-            optimizer=optimizer if args.init_restore_optimizer else None,
-            step=init_step,
-        )
-        if jax.process_index() == 0:
-            print(f"Initialized model weights from {args.init_checkpoint_uri} step={init_step}")
-            if args.init_restore_optimizer:
-                print("Optimizer state was restored; this is a continuation branch with a fresh run ID.")
-            else:
-                print("Optimizer state was not restored; this is a fresh optimizer branch.")
-            sys.stdout.flush()
-
+    resumed = False
     if args.resume:
         resume_step = latest_checkpoint_step(local_checkpoint_root)
         source_root = local_checkpoint_root
@@ -419,8 +395,32 @@ def main() -> int:
                     sys.stdout.flush()
         else:
             if jax.process_index() == 0:
-                print("No checkpoint found. Starting from scratch.")
-                sys.stdout.flush()
+                    print("No checkpoint found. Starting from scratch.")
+                    sys.stdout.flush()
+
+        resumed = start_step > 0
+
+    if args.init_checkpoint_uri and not resumed:
+        init_checkpoint_root = sync_checkpoint_uri(
+            args.init_checkpoint_uri,
+            output_dir / "init_checkpoint",
+        )
+        init_step = args.init_checkpoint_step or latest_checkpoint_step(init_checkpoint_root)
+        if init_step is None:
+            raise FileNotFoundError(f"No checkpoint found under {args.init_checkpoint_uri}.")
+        load_training_checkpoint(
+            init_checkpoint_root,
+            model=model,
+            optimizer=optimizer if args.init_restore_optimizer else None,
+            step=init_step,
+        )
+        if jax.process_index() == 0:
+            print(f"Initialized model weights from {args.init_checkpoint_uri} step={init_step}")
+            if args.init_restore_optimizer:
+                print("Optimizer state was restored; this is a continuation branch with a fresh run ID.")
+            else:
+                print("Optimizer state was not restored; this is a fresh optimizer branch.")
+            sys.stdout.flush()
 
     stop_requested = {"flag": False, "signal": None}
     def handle_signal(signum, _frame):
