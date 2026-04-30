@@ -449,6 +449,8 @@ def main() -> int:
             entity=args.wandb_entity,
             group=args.wandb_group,
             name=run_name,
+            run_id=run_name,
+            resume="allow" if args.resume else None,
             config=run_config,
         )
 
