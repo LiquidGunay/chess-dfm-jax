@@ -5,20 +5,14 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shlex
 import subprocess
 import time
 from pathlib import Path
 
 from chess_dfm_jax.tracking import load_env_file
-from chess_dfm_jax.training.tpu_jobs import (
-    TPUJobSpec,
-    create_source_snapshot,
-    read_json,
-    render_startup_script,
-    upload_file,
-    upload_json,
-)
+from chess_dfm_jax.training.tpu_jobs import read_json
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -29,7 +23,7 @@ SET1 = "gs://gunay-chess-experiments-us-central1/data/trajectory_v2_lc0_test80_h
 SET2 = "gs://gunay-chess-experiments-us-central1/data/trajectory_v2_lc0_test80_h8_10m_skip704_20260429"
 RUN_ID = "dfm-lc010m-h8-phaseA-h1-lr6e4-leg764-20260429"
 SET2_TPU_NAME = "dfm-phasea-resume-set2-20260430"
-BOTH_TPU_NAME = "dfm-phasea-resume-both-20260430"
+COMBINED_STAGE = "combined_same_vm"
 
 
 def run_cli(args: list[str], *, check: bool = True) -> subprocess.CompletedProcess[str]:
@@ -125,32 +119,6 @@ def train_command(
     return " ".join(shlex.quote(part) for part in parts)
 
 
-def combined_spec(base: dict, bucket: str) -> TPUJobSpec:
-    command = train_command(
-        run_id=RUN_ID,
-        bucket=bucket,
-        train_prefix=f"{SET1}/train,{SET2}/train",
-        val_prefix=f"{SET1}/val,{SET2}/val",
-        steps=196980,
-        wandb_project=base.get("wandb_project", "chess_dfm_jax-jepa-sweep"),
-    )
-    return TPUJobSpec.from_dict(
-        {
-            **base,
-            "run_id": RUN_ID,
-            "run_name": RUN_ID,
-            "run_family": "dfm",
-            "zone_order": [ZONE],
-            "accelerator_type": "v5litepod-1",
-            "wandb_group": "dfm-lc0-phaseA",
-            "workdir": "/tmp/chess_dfm_jax",
-            "entry_command": command,
-            "spot": True,
-            "enable_external_ips": True,
-        }
-    )
-
-
 def delete_tpu(*, project_id: str, name: str) -> None:
     run_cli(
         [
@@ -168,60 +136,93 @@ def delete_tpu(*, project_id: str, name: str) -> None:
     )
 
 
-def tpu_exists(*, project_id: str, name: str) -> bool:
-    result = run_cli(
-        [
-            "gcloud",
-            "compute",
-            "tpus",
-            "tpu-vm",
-            "describe",
-            name,
-            f"--project={project_id}",
-            f"--zone={ZONE}",
-            "--format=json",
-        ],
-        check=False,
+def launch_combined_on_same_tpu(base: dict, bucket: str, work_dir: Path) -> None:
+    command = train_command(
+        run_id=RUN_ID,
+        bucket=bucket,
+        train_prefix=f"{SET1}/train,{SET2}/train",
+        val_prefix=f"{SET1}/val,{SET2}/val",
+        steps=196980,
+        wandb_project=base.get("wandb_project", "chess_dfm_jax-jepa-sweep"),
     )
-    return result.returncode == 0
-
-
-def launch_combined(base: dict, bucket: str, work_dir: Path) -> None:
-    spec = combined_spec(base, bucket)
-    if tpu_exists(project_id=spec.project_id, name=BOTH_TPU_NAME):
-        print(f"{BOTH_TPU_NAME} already exists; not launching a duplicate.", flush=True)
-        return
-
-    stamp = time.strftime("%Y%m%d_%H%M%S", time.gmtime())
     work_dir.mkdir(parents=True, exist_ok=True)
-    source_archive = create_source_snapshot(PROJECT_ROOT, work_dir / "source.tar.gz")
-    source_uri = spec.source_uri(ZONE, stamp)
-    upload_file(source_archive, source_uri)
-    upload_json(spec.to_dict(), f"{spec.run_root_uri(ZONE)}/job_spec.json")
-    startup_path = work_dir / "startup_phasea_same_run_combined.sh"
-    startup_path.write_text(render_startup_script(spec, ZONE, source_uri), encoding="utf-8")
-    try:
+    env_path = work_dir / "wandb.env"
+    wandb_key = os.environ.get("WANDB_API_KEY", "")
+    if wandb_key:
+        env_path.write_text(f"WANDB_API_KEY={shlex.quote(wandb_key)}\n", encoding="utf-8")
         run_cli(
             [
                 "gcloud",
                 "compute",
                 "tpus",
                 "tpu-vm",
-                "create",
-                BOTH_TPU_NAME,
-                f"--project={spec.project_id}",
+                "scp",
+                str(env_path),
+                f"{SET2_TPU_NAME}:/tmp/chess_dfm_wandb.env",
+                f"--project={base['project_id']}",
                 f"--zone={ZONE}",
-                "--accelerator-type=v5litepod-1",
-                "--version=tpu-ubuntu2204-base",
-                "--spot",
-                f"--service-account={spec.service_account}",
-                "--network=default",
-                f"--metadata-from-file=startup-script={startup_path}",
-                f"--labels=run_id={RUN_ID.lower()},controller=chess_dfm_jax",
             ]
         )
-    finally:
-        startup_path.unlink(missing_ok=True)
+        env_path.unlink(missing_ok=True)
+
+    status_uri = f"{bucket}/runs/dfm/{RUN_ID}/status.json"
+    log_file = "/var/log/chess_dfm_jax-phasea-combined.log"
+    remote_script = f"""#!/bin/bash
+set -euo pipefail
+export HOME=/root
+if [ -f /tmp/chess_dfm_wandb.env ]; then
+  set -a
+  source /tmp/chess_dfm_wandb.env
+  set +a
+  rm -f /tmp/chess_dfm_wandb.env
+fi
+cd /tmp/chess_dfm_jax/repo
+python3 - <<'PY' >/tmp/chess_dfm_jax_status.json
+import json, time
+print(json.dumps({{"state": "running", "stage": "{COMBINED_STAGE}", "run_id": "{RUN_ID}", "zone": "{ZONE}", "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "log_file": "{log_file}"}}))
+PY
+gcloud storage cp /tmp/chess_dfm_jax_status.json {shlex.quote(status_uri)} --quiet || true
+set +e
+{command} >>{shlex.quote(log_file)} 2>&1
+STATUS=$?
+set -e
+python3 - <<PY >/tmp/chess_dfm_jax_status.json
+import json, time
+status = int("$STATUS")
+print(json.dumps({{"state": "completed" if status == 0 else "failed", "exit_code": status, "stage": "{COMBINED_STAGE}", "run_id": "{RUN_ID}", "zone": "{ZONE}", "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "log_file": "{log_file}"}}))
+PY
+gcloud storage cp /tmp/chess_dfm_jax_status.json {shlex.quote(status_uri)} --quiet || true
+exit "$STATUS"
+"""
+    remote_script_path = work_dir / "run_combined_same_vm.sh"
+    remote_script_path.write_text(remote_script, encoding="utf-8")
+    run_cli(
+        [
+            "gcloud",
+            "compute",
+            "tpus",
+            "tpu-vm",
+            "scp",
+            str(remote_script_path),
+            f"{SET2_TPU_NAME}:/tmp/run_combined_same_vm.sh",
+            f"--project={base['project_id']}",
+            f"--zone={ZONE}",
+        ]
+    )
+    remote_script_path.unlink(missing_ok=True)
+    run_cli(
+        [
+            "gcloud",
+            "compute",
+            "tpus",
+            "tpu-vm",
+            "ssh",
+            SET2_TPU_NAME,
+            f"--project={base['project_id']}",
+            f"--zone={ZONE}",
+            "--command=chmod +x /tmp/run_combined_same_vm.sh && nohup /tmp/run_combined_same_vm.sh >/tmp/run_combined_same_vm.nohup 2>&1 &",
+        ]
+    )
 
 
 def main() -> int:
@@ -234,15 +235,22 @@ def main() -> int:
     base = json.loads(SPEC_PATH.read_text(encoding="utf-8"))
     bucket = base["bucket_by_region"][REGION].rstrip("/")
     status_uri = f"{bucket}/runs/dfm/{RUN_ID}/status.json"
+    combined_launched = False
 
     while True:
         status = read_json(status_uri) or {}
         state = status.get("state")
+        stage = status.get("stage")
         print(json.dumps({"event": "poll", "run_id": RUN_ID, "state": state, "status": status}), flush=True)
-        if state == "completed":
+        if state == "completed" and stage == COMBINED_STAGE:
             delete_tpu(project_id=base["project_id"], name=SET2_TPU_NAME)
-            launch_combined(base, bucket, args.work_dir)
             return 0
+        if state == "completed" and not combined_launched:
+            launch_combined_on_same_tpu(base, bucket, args.work_dir)
+            combined_launched = True
+        if state == "failed" and stage == COMBINED_STAGE:
+            delete_tpu(project_id=base["project_id"], name=SET2_TPU_NAME)
+            return 1
         if state == "failed":
             delete_tpu(project_id=base["project_id"], name=SET2_TPU_NAME)
             print("Phase A set2 continuation failed; not launching combined continuation.", flush=True)
