@@ -16,12 +16,20 @@ def _run_gcloud(args: list[str]) -> subprocess.CompletedProcess[str]:
     return subprocess.run(args, capture_output=True, text=True, check=False)
 
 
+def split_gcs_prefixes(prefix: str) -> list[str]:
+    """Return non-empty comma-separated GCS prefixes."""
+    return [part.strip() for part in prefix.split(",") if part.strip()]
+
+
 def list_gcs_npz(prefix: str) -> list[str]:
-    uri = prefix.rstrip("/") + "/*.npz"
-    result = _run_gcloud(["gcloud", "storage", "ls", uri])
-    if result.returncode != 0:
-        return []
-    return sorted(line.strip() for line in result.stdout.splitlines() if line.strip().endswith(".npz"))
+    uris: list[str] = []
+    for part in split_gcs_prefixes(prefix):
+        uri = part.rstrip("/") + "/*.npz"
+        result = _run_gcloud(["gcloud", "storage", "ls", uri])
+        if result.returncode != 0:
+            continue
+        uris.extend(line.strip() for line in result.stdout.splitlines() if line.strip().endswith(".npz"))
+    return sorted(set(uris))
 
 
 def local_name_for_uri(uri: str) -> str:
@@ -155,4 +163,4 @@ class GCSShardCache:
             self._stop_event.wait(self.poll_interval_s)
 
 
-__all__ = ["GCSShardCache", "list_gcs_npz", "local_name_for_uri"]
+__all__ = ["GCSShardCache", "list_gcs_npz", "local_name_for_uri", "split_gcs_prefixes"]

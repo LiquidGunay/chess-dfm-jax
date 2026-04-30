@@ -57,7 +57,10 @@ LC0 validation checks already run on sampled train/val/test shards:
 ## GCS Cache Policy
 
 `scripts/train_dfm.py` supports trainer-side GCS caching through
-`--gcs-train-prefix` and `--gcs-val-prefix`.
+`--gcs-train-prefix` and `--gcs-val-prefix`. Each argument may be either one
+immutable shard prefix or a comma-separated list of immutable shard prefixes.
+The cache hashes each source directory into the local filename, so shards with
+the same basename from different prefixes do not collide.
 
 The default startup policy is:
 
