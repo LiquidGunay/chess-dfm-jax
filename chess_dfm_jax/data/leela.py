@@ -25,6 +25,7 @@ from chess_dfm_jax import encoding as encode_mod
 from chess_dfm_jax import policy as policy_mod
 from chess_dfm_jax.data.trajectory import (
     trajectory_action_batch_from_npz,
+    trajectory_latent_batch_from_npz,
     trajectory_shard_from_npz,
     trajectory_shard_to_batch,
 )
@@ -115,7 +116,7 @@ class LeelaChunkDataLoader:
         if action_source not in {"best", "played"}:
             raise ValueError(f"Unsupported action_source: {action_source}")
         self.action_source = action_source
-        if batch_view not in {"full", "dfm_action"}:
+        if batch_view not in {"full", "dfm_action", "jepa_latent"}:
             raise ValueError(f"Unsupported batch_view: {batch_view}")
         self.batch_view = batch_view
 
@@ -148,6 +149,12 @@ class LeelaChunkDataLoader:
                             )
                         elif self.batch_view == "dfm_action":
                             batch = trajectory_action_batch_from_npz(
+                                data,
+                                horizon=self.horizon,
+                                include_metadata=self.include_metadata,
+                            )
+                        elif self.batch_view == "jepa_latent":
+                            batch = trajectory_latent_batch_from_npz(
                                 data,
                                 horizon=self.horizon,
                                 include_metadata=self.include_metadata,

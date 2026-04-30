@@ -60,9 +60,11 @@ Current implementation status:
 - `scripts/convert_trajectory_v2_to_v3.py` converts local or GCS trajectory-v2
   shards to compact trajectory-v3 shards with status and manifest output.
 - `LeelaChunkDataLoader` can read trajectory-v3 `.npz` shards through the same
-  `full` and `dfm_action` batch views used by trajectory-v2.
+  `full`, `dfm_action`, and `jepa_latent` batch views used by trajectory-v2.
 - DFM-only batches use the `dfm_action` view so future boards are not decoded or
   materialized during action-only training.
+- JEPA-only batches use the `jepa_latent` view so dense legal masks are not
+  decoded or transferred during latent transition training.
 
 Use a custom deterministic loader first. Grain remains a later backend option
 once compact v3 throughput and sharding needs are measured. The loader boundary

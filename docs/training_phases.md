@@ -137,6 +137,12 @@ value_coeff = 0.0
 wdl_coeff = 0.0
 ```
 
+`scripts/train_jepa.py` now supports the same trainer-side GCS cache pattern as
+DFM: `--gcs-train-prefix`, `--gcs-val-prefix`, cache-all startup, validation
+batches, W&B credential preflight, and single-step GCS checkpoint resume. Use
+the `jepa_latent` loader view for JEPA-only baselines so legal masks are not
+loaded.
+
 Initial joint baselines:
 
 ```text

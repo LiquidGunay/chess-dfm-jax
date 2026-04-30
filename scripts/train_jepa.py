@@ -13,31 +13,31 @@ import shlex
 from pathlib import Path
 
 import jax
-import jax.numpy as jnp
+import numpy as np
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from chess_dfm_jax.analysis.profile_targets import load_mapped_bt4_params
-from chess_dfm_jax.data.leela import LeelaChunkDataLoader, discover_chunk_files
-from chess_dfm_jax.paths import default_bt4_paths, project_root
-from chess_dfm_jax.training.checkpoints import (
-    checkpoint_paths,
+from chess_dfm_jax.analysis.profile_targets import load_mapped_bt4_params  # noqa: E402
+from chess_dfm_jax.data.gcs_cache import GCSShardCache  # noqa: E402
+from chess_dfm_jax.data.leela import LeelaChunkDataLoader, discover_chunk_files  # noqa: E402
+from chess_dfm_jax.paths import default_bt4_paths, project_root  # noqa: E402
+from chess_dfm_jax.training.checkpoints import (  # noqa: E402
     create_checkpoint_manager,
     latest_checkpoint_step,
     load_training_checkpoint,
     save_training_checkpoint,
-    wait_for_checkpoint_completion,
 )
-from chess_dfm_jax.training.jepa import (
+from chess_dfm_jax.training.jepa import (  # noqa: E402
     JEPAConfig,
     build_synthetic_transition_batch,
     build_transition_batch,
     create_jepa_components,
+    eval_jepa_step,
     train_step,
 )
-from chess_dfm_jax.tracking import init_wandb_run, load_env_file
+from chess_dfm_jax.tracking import has_wandb_credentials, init_wandb_run  # noqa: E402
 
 
 def parse_args() -> argparse.Namespace:
@@ -47,6 +47,25 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--seed", type=int, default=0, help="Random seed.")
     parser.add_argument("--models-dir", type=str, default=None, help="Path to BT4 models.")
     parser.add_argument("--chunk-dir", type=str, default=None, help="Path to Leela chunks.")
+    parser.add_argument("--val-chunk-dir", type=str, default=None, help="Optional path to held-out validation chunks.")
+    parser.add_argument("--gcs-train-prefix", type=str, default="", help="Optional GCS prefix containing train .npz shards.")
+    parser.add_argument("--gcs-val-prefix", type=str, default="", help="Optional GCS prefix containing validation .npz shards.")
+    parser.add_argument("--gcs-cache-dir", type=str, default="/tmp/chess_dfm_jax/gcs_cache", help="Local cache root for GCS shards.")
+    parser.add_argument("--gcs-prefetch-interval-s", type=int, default=60)
+    parser.add_argument("--gcs-prefetch-workers", type=int, default=2)
+    parser.add_argument("--gcs-max-cached-train-shards", type=int, default=0, help="0 means cache all visible train shards.")
+    parser.add_argument("--gcs-min-train-shards", type=int, default=1)
+    parser.add_argument("--gcs-min-val-shards", type=int, default=1)
+    parser.add_argument(
+        "--gcs-startup-cache-policy",
+        choices=["all", "minimum"],
+        default="all",
+        help="For GCS data, 'all' blocks until every visible train shard is local.",
+    )
+    parser.add_argument("--val-fraction", type=float, default=0.0)
+    parser.add_argument("--val-batches", type=int, default=0)
+    parser.add_argument("--val-every", type=int, default=0)
+    parser.add_argument("--val-seed", type=int, default=10_000)
     parser.add_argument("--backend", type=str, default="tpu", choices=["tpu", "cpu"], help="JAX backend.")
     parser.add_argument("--wandb-project", type=str, default="chess_dfm_jax-jepa", help="W&B project name.")
     parser.add_argument("--wandb-entity", type=str, default=None, help="W&B entity.")
@@ -86,8 +105,122 @@ def resolve_run_name(args: argparse.Namespace) -> str:
     return f"jepa-{args.num_layers}l-{args.token_dim}d-{timestamp}"
 
 
+def split_train_validation_chunks(
+    chunk_paths: list[str],
+    *,
+    val_fraction: float,
+) -> tuple[list[str], list[str]]:
+    if val_fraction <= 0.0 or not chunk_paths:
+        return chunk_paths, []
+    if val_fraction >= 1.0:
+        raise ValueError("--val-fraction must be < 1.0 so at least one training shard remains.")
+    val_count = max(1, int(round(len(chunk_paths) * val_fraction)))
+    val_count = min(val_count, len(chunk_paths) - 1)
+    return chunk_paths[:-val_count], chunk_paths[-val_count:]
+
+
+def add_validation_prefix(metrics: dict[str, float], *, prefix: str = "val_") -> dict[str, float]:
+    return {f"{prefix}{key}": value for key, value in metrics.items()}
+
+
+def flatten_aux_metrics(metrics: dict[str, object]) -> dict[str, float]:
+    flat: dict[str, float] = {}
+    for key, value in metrics.items():
+        array = np.asarray(value)
+        if array.ndim == 0:
+            flat[key] = float(array)
+        elif array.ndim == 1:
+            for idx, item in enumerate(array):
+                flat[f"{key}_h{idx + 1}"] = float(item)
+        else:
+            flat[key] = float(np.mean(array))
+    return flat
+
+
+def evaluate_validation_batches(
+    *,
+    model,
+    loader_obj: LeelaChunkDataLoader,
+    val_batches: int,
+) -> dict[str, float]:
+    loader = iter(loader_obj)
+    totals: dict[str, float] = {}
+    count = 0
+    for _ in range(val_batches):
+        try:
+            batch = next(loader)
+        except StopIteration:
+            loader = iter(loader_obj)
+            batch = next(loader)
+        batch = build_transition_batch(batch)
+        loss, aux = eval_jepa_step(model, batch)
+        jax.block_until_ready((loss, aux))
+        batch_metrics = {"loss": float(loss)}
+        batch_metrics.update(flatten_aux_metrics(aux))
+        for key, value in batch_metrics.items():
+            totals[key] = totals.get(key, 0.0) + value
+        count += 1
+    if count == 0:
+        return {}
+    return {key: value / count for key, value in totals.items()}
+
+
+def make_gcs_cache(
+    *,
+    prefix: str,
+    cache_dir: Path,
+    poll_interval_s: int,
+    download_workers: int,
+    max_cached_shards: int = 0,
+    seed: int = 0,
+) -> GCSShardCache | None:
+    if not prefix:
+        return None
+    cache = GCSShardCache(
+        prefix,
+        cache_dir,
+        poll_interval_s=poll_interval_s,
+        download_workers=download_workers,
+        max_cached_shards=max_cached_shards,
+        seed=seed,
+    )
+    cache.start()
+    return cache
+
+
+def sync_checkpoint_uri(checkpoint_uri: str, destination: Path, *, step: int | None = None) -> Path:
+    """Sync one checkpoint step from a local or GCS checkpoint directory to a local path."""
+    if not checkpoint_uri.startswith("gs://"):
+        return Path(checkpoint_uri)
+
+    destination.mkdir(parents=True, exist_ok=True)
+    sync_step = step if step is not None else latest_checkpoint_step(checkpoint_uri)
+    if sync_step is None:
+        return destination
+
+    step_name = f"step{int(sync_step):07d}"
+    (destination / step_name).mkdir(parents=True, exist_ok=True)
+    subprocess.run(
+        [
+            "/snap/google-cloud-cli/current/bin/gcloud",
+            "storage",
+            "cp",
+            f"{checkpoint_uri.rstrip('/')}/{step_name}/state.npz",
+            str(destination / step_name / "state.npz"),
+        ],
+        check=True,
+    )
+    return destination
+
+
 def main() -> int:
     args = parse_args()
+    if not args.no_wandb and not has_wandb_credentials():
+        raise SystemExit(
+            "W&B logging is enabled but no non-interactive credentials were found. "
+            "Set WANDB_API_KEY, create a restricted ~/.netrc entry for api.wandb.ai, "
+            "set WANDB_MODE=offline, or pass --no-wandb."
+        )
     
     if args.backend == "tpu":
         jax.distributed.initialize(initialization_timeout=1200)
@@ -153,7 +286,7 @@ def main() -> int:
                 print(f"No local checkpoints. Syncing from {gcs_checkpoint_root}...")
                 sys.stdout.flush()
                 try:
-                    subprocess.run(["/snap/google-cloud-cli/current/bin/gcloud", "storage", "cp", "-r", f"{gcs_checkpoint_root}/*", str(local_checkpoint_root)], check=True)
+                    sync_checkpoint_uri(gcs_checkpoint_root, local_checkpoint_root)
                     resume_step = latest_checkpoint_step(local_checkpoint_root)
                     source_root = local_checkpoint_root
                     print(f"DEBUG: After sync, latest_checkpoint_step({local_checkpoint_root}) -> {resume_step}")
@@ -176,7 +309,7 @@ def main() -> int:
                     sys.stdout.flush()
         else:
             if jax.process_index() == 0:
-                print(f"No checkpoint found. Starting from scratch.")
+                print("No checkpoint found. Starting from scratch.")
                 sys.stdout.flush()
 
     stop_requested = {"flag": False, "signal": None}
@@ -190,29 +323,96 @@ def main() -> int:
     signal.signal(signal.SIGINT, handle_signal)
 
     # Data loading with horizon support
+    train_cache = make_gcs_cache(
+        prefix=args.gcs_train_prefix,
+        cache_dir=Path(args.gcs_cache_dir) / "train",
+        poll_interval_s=args.gcs_prefetch_interval_s,
+        download_workers=args.gcs_prefetch_workers,
+        max_cached_shards=args.gcs_max_cached_train_shards,
+        seed=args.seed,
+    )
+    val_cache = make_gcs_cache(
+        prefix=args.gcs_val_prefix,
+        cache_dir=Path(args.gcs_cache_dir) / "val",
+        poll_interval_s=args.gcs_prefetch_interval_s,
+        download_workers=args.gcs_prefetch_workers,
+        seed=args.val_seed,
+    )
+    if train_cache is not None:
+        if args.gcs_startup_cache_policy == "all":
+            train_cache.wait_for_all_visible()
+        else:
+            train_cache.wait_for_minimum(args.gcs_min_train_shards)
+    if val_cache is not None and args.val_batches > 0:
+        val_cache.wait_for_minimum(args.gcs_min_val_shards)
+
     chunk_dir = Path(args.chunk_dir) if args.chunk_dir else None
-    chunk_paths = discover_chunk_files(str(chunk_dir)) if chunk_dir and chunk_dir.exists() else []
+    chunk_paths = (
+        train_cache.local_paths()
+        if train_cache is not None
+        else discover_chunk_files(str(chunk_dir))
+        if chunk_dir and chunk_dir.exists()
+        else []
+    )
+    val_chunk_paths: list[str] = []
+    if val_cache is not None:
+        val_chunk_paths = val_cache.local_paths()
+    elif args.val_chunk_dir:
+        val_chunk_dir = Path(args.val_chunk_dir)
+        val_chunk_paths = discover_chunk_files(str(val_chunk_dir)) if val_chunk_dir.exists() else []
+        if not val_chunk_paths:
+            raise ValueError(f"No validation chunk files found in {args.val_chunk_dir}.")
+    elif args.val_fraction > 0.0:
+        chunk_paths, val_chunk_paths = split_train_validation_chunks(
+            chunk_paths,
+            val_fraction=args.val_fraction,
+        )
     
-    if args.chunk_dir and args.chunk_dir != "synthetic" and not chunk_paths:
+    if args.chunk_dir and args.chunk_dir != "synthetic" and train_cache is None and not chunk_paths:
         raise ValueError(f"No chunk files found in {args.chunk_dir}. Aborting to prevent silent synthetic fallback.")
         
     data_source = "synthetic"
     loader = None
-    if chunk_paths and args.chunk_dir != "synthetic":
-        data_source = str(chunk_dir)
+    val_loader_obj = None
+    if chunk_paths and (args.chunk_dir != "synthetic" or train_cache is not None):
+        data_source = args.gcs_train_prefix or str(chunk_dir)
         loader_obj = LeelaChunkDataLoader(
             chunk_paths,
             batch_size=args.batch_size,
             seed=args.seed,
             horizon=args.horizon,
             action_source=args.action_source,
+            batch_view="jepa_latent",
+            chunk_paths_provider=train_cache.local_paths if train_cache is not None else None,
+            shuffle_files=True if train_cache is not None else False,
             drop_last=True,
         )
         loader = iter(loader_obj)
+    if val_chunk_paths:
+        val_loader_obj = LeelaChunkDataLoader(
+            val_chunk_paths,
+            batch_size=args.batch_size,
+            seed=args.val_seed,
+            horizon=args.horizon,
+            action_source=args.action_source,
+            batch_view="jepa_latent",
+            shuffle_files=False,
+            drop_last=False,
+            chunk_paths_provider=val_cache.local_paths if val_cache is not None else None,
+        )
 
     run = None
     run_config = config.__dict__.copy()
     run_config.update(vars(args))
+    run_config.update(
+        {
+            "train_chunk_count": len(chunk_paths),
+            "val_chunk_count": len(val_chunk_paths),
+            "gcs_train_prefix": args.gcs_train_prefix,
+            "gcs_val_prefix": args.gcs_val_prefix,
+            "batch_view": "jepa_latent",
+        }
+    )
     if jax.process_index() == 0 and not args.no_wandb:
         run = init_wandb_run(
             project=args.wandb_project,
@@ -228,6 +428,11 @@ def main() -> int:
     print(f"output_dir={output_dir}")
     print(f"checkpoint_uri={gcs_checkpoint_root}")
     print(f"horizon={args.horizon}")
+    print(f"train_chunk_count={len(chunk_paths)} val_chunk_count={len(val_chunk_paths)}")
+    if train_cache is not None:
+        print(f"gcs_train_cache_stats={train_cache.stats()}")
+    if val_cache is not None:
+        print(f"gcs_val_cache_stats={val_cache.stats()}")
     sys.stdout.flush()
 
     metrics_log = (output_dir / "metrics.jsonl").open("a", encoding="utf-8")
@@ -244,6 +449,7 @@ def main() -> int:
                     batch = next(loader)
             else:
                 batch = build_synthetic_transition_batch(args.batch_size, horizon=args.horizon)
+            batch = build_transition_batch(batch)
 
             step_start = time.perf_counter()
             loss, aux = train_step(model, optimizer, batch)
@@ -251,6 +457,20 @@ def main() -> int:
             completed_step = step + 1
             metrics = {"step": completed_step, "loss": float(loss), "step_time_s": step_time}
             metrics.update({key: float(value) for key, value in aux.items()})
+            if train_cache is not None:
+                metrics.update({f"gcs_train_cache_{key}": value for key, value in train_cache.stats().items()})
+            if val_cache is not None:
+                metrics.update({f"gcs_val_cache_{key}": value for key, value in val_cache.stats().items()})
+            val_every = args.val_every or args.save_every
+            if val_loader_obj is not None and args.val_batches > 0 and (
+                completed_step % val_every == 0 or completed_step == args.steps
+            ):
+                val_metrics = evaluate_validation_batches(
+                    model=model,
+                    loader_obj=val_loader_obj,
+                    val_batches=args.val_batches,
+                )
+                metrics.update(add_validation_prefix(val_metrics))
             last_metrics = metrics
             metrics_log.write(json.dumps(metrics) + "\n")
             metrics_log.flush()

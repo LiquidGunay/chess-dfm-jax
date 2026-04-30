@@ -331,6 +331,11 @@ def train_step(model: LC0JEPA, optimizer: nnx.Optimizer, batch: dict[str, jnp.nd
     return loss, aux
 
 
+@nnx.jit
+def eval_jepa_step(model: LC0JEPA, batch: dict[str, jnp.ndarray]):
+    return transition_jepa_loss(model, batch)
+
+
 def build_synthetic_transition_batch(batch_size: int, horizon: int = 1) -> dict[str, jnp.ndarray]:
     shard = build_synthetic_trajectory_shard(batch_size=batch_size, horizon=horizon)
     batch = trajectory_shard_to_batch(shard)
@@ -497,6 +502,7 @@ __all__ = [
     "build_synthetic_transition_batch",
     "build_transition_batch",
     "create_jepa_components",
+    "eval_jepa_step",
     "extract_train_state",
     "restore_train_state",
     "train_step",

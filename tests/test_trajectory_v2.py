@@ -19,6 +19,7 @@ from chess_dfm_jax.data.trajectory import (  # noqa: E402
     load_trajectory_shard,
     rollout_from_fen,
     trajectory_action_batch_from_npz,
+    trajectory_latent_batch_from_npz,
     validate_trajectory_shard,
 )  # noqa: E402
 from chess_dfm_jax.encoding import encode_board  # noqa: E402
@@ -164,6 +165,27 @@ def test_action_batch_view_skips_future_planes_for_dfm():
     assert "next_planes" not in batch
 
 
+def test_latent_batch_view_skips_legal_masks_for_jepa():
+    shard = build_synthetic_trajectory_shard(batch_size=2, horizon=4)
+    payload = {
+        "schema_version": np.asarray("trajectory-v2"),
+        "planes_t": shard.planes_t,
+        "actions": shard.actions,
+        "planes_future": shard.planes_future,
+        "future_valid": shard.future_valid,
+        "legal_masks": shard.legal_masks,
+        "value_targets": shard.value_targets,
+        "wdl_targets": shard.wdl_targets,
+    }
+
+    batch = trajectory_latent_batch_from_npz(payload, horizon=2)
+    assert batch["current_planes"].shape == (2, 112, 8, 8)
+    assert batch["action_indices"].shape == (2, 2)
+    assert batch["future_planes"].shape == (2, 2, 112, 8, 8)
+    assert "legal_masks" not in batch
+    assert "legal_mask" not in batch
+
+
 def test_leela_loader_dfm_action_view_omits_future_planes():
     shard = build_synthetic_trajectory_shard(batch_size=3, horizon=4)
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -189,6 +211,33 @@ def test_leela_loader_dfm_action_view_omits_future_planes():
         assert batch["action_indices"].shape == (2, 1)
         assert batch["legal_masks"].shape == (2, 1, 1858)
         assert "future_planes" not in batch
+
+
+def test_leela_loader_jepa_latent_view_omits_legal_masks():
+    shard = build_synthetic_trajectory_shard(batch_size=3, horizon=4)
+    with tempfile.TemporaryDirectory() as tmpdir:
+        chunk_path = Path(tmpdir) / "chunk_000000.npz"
+        np.savez_compressed(
+            chunk_path,
+            schema_version=np.asarray("trajectory-v2"),
+            planes_t=shard.planes_t,
+            actions=shard.actions,
+            planes_future=shard.planes_future,
+            future_valid=shard.future_valid,
+            legal_masks=shard.legal_masks,
+        )
+
+        loader = LeelaChunkDataLoader(
+            [str(chunk_path)],
+            batch_size=2,
+            horizon=2,
+            batch_view="jepa_latent",
+        )
+        batch = next(iter(loader))
+        assert batch["current_planes"].shape == (2, 112, 8, 8)
+        assert batch["action_indices"].shape == (2, 2)
+        assert batch["future_planes"].shape == (2, 2, 112, 8, 8)
+        assert "legal_masks" not in batch
 
 
 def test_gcs_cache_local_name_avoids_split_collisions():

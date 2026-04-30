@@ -399,6 +399,84 @@ def trajectory_action_batch_from_npz(
     return batch
 
 
+def trajectory_latent_batch_from_npz(
+    data: Mapping[str, np.ndarray],
+    *,
+    horizon: int | None = None,
+    include_metadata: bool = False,
+) -> dict[str, np.ndarray]:
+    """Build a JEPA latent batch without materializing unused legal masks."""
+    schema = infer_trajectory_schema(data)
+    planes_t = np.asarray(data["planes_t"], dtype=np.float32)
+    actions = _normalize_actions(data["actions"])
+    batch_size, shard_horizon = actions.shape
+    view_horizon = shard_horizon if horizon is None or horizon <= 0 else min(horizon, shard_horizon)
+    actions = actions[:, :view_horizon]
+
+    if schema == TRAJECTORY_V2:
+        planes_future = np.asarray(data["planes_future"], dtype=np.float32)[:, :view_horizon]
+        future_valid = np.asarray(
+            _maybe_get(data, "future_valid", np.ones((batch_size, shard_horizon), dtype=np.float32)),
+            dtype=np.float32,
+        )[:, :view_horizon]
+        value_targets = (
+            np.asarray(data["value_targets"], dtype=np.float32)[:, :view_horizon]
+            if "value_targets" in data
+            else np.zeros((batch_size, view_horizon), dtype=np.float32)
+        )
+        wdl_targets = (
+            np.asarray(data["wdl_targets"], dtype=np.float32)[:, :view_horizon]
+            if "wdl_targets" in data
+            else np.zeros((batch_size, view_horizon, 3), dtype=np.float32)
+        )
+    else:
+        planes_target = np.asarray(data["planes_target"], dtype=np.float32)
+        planes_future = np.zeros((batch_size, view_horizon, 112, 8, 8), dtype=np.float32)
+        future_valid = np.zeros((batch_size, view_horizon), dtype=np.float32)
+        if view_horizon > 0:
+            planes_future[:, -1] = planes_target
+            future_valid[:, -1] = 1.0
+        value_targets = np.zeros((batch_size, view_horizon), dtype=np.float32)
+        if "value_target" in data and view_horizon > 0:
+            value_targets[:, -1] = np.asarray(data["value_target"], dtype=np.float32)
+        wdl_targets = np.zeros((batch_size, view_horizon, 3), dtype=np.float32)
+        if "wdl_target" in data and view_horizon > 0:
+            wdl_targets[:, -1] = np.asarray(data["wdl_target"], dtype=np.float32)
+
+    if planes_t.shape != (batch_size, 112, 8, 8):
+        raise ValueError(f"planes_t must have shape {(batch_size, 112, 8, 8)}, got {planes_t.shape}.")
+    if planes_future.shape != (batch_size, view_horizon, 112, 8, 8):
+        raise ValueError(
+            f"planes_future must have shape {(batch_size, view_horizon, 112, 8, 8)}, got {planes_future.shape}."
+        )
+    if future_valid.shape != (batch_size, view_horizon):
+        raise ValueError(
+            f"future_valid must have shape {(batch_size, view_horizon)}, got {future_valid.shape}."
+        )
+
+    terminal_idx = terminal_target_indices(future_valid)
+    valid = (future_valid.sum(axis=1) > 0).astype(np.float32)
+    batch: dict[str, np.ndarray] = {
+        "current_planes": planes_t,
+        "action_indices": actions.astype(np.int32),
+        "action_idx": actions[:, 0].astype(np.int32),
+        "future_planes": planes_future,
+        "future_valid": future_valid,
+        "terminal_target_index": terminal_idx.astype(np.int32),
+        "next_planes": planes_future[np.arange(batch_size), terminal_idx],
+        "valid": valid,
+        "value_targets": value_targets,
+        "value_target": value_targets[np.arange(batch_size), terminal_idx],
+        "wdl_targets": wdl_targets,
+        "wdl_target": wdl_targets[np.arange(batch_size), terminal_idx],
+    }
+    if include_metadata:
+        for name in ("source", "game_id", "ply", "result", "fen_t", "input_format", "actions_uci"):
+            if name in data:
+                batch[name] = _expand_optional(data[name], batch_size=batch_size)
+    return batch
+
+
 def rollout_from_fen(
     fen: str,
     actions: np.ndarray,
@@ -511,6 +589,7 @@ __all__ = [
     "rollout_from_fen",
     "terminal_target_indices",
     "trajectory_action_batch_from_npz",
+    "trajectory_latent_batch_from_npz",
     "trajectory_shard_from_npz",
     "trajectory_shard_to_batch",
     "validate_trajectory_shard",

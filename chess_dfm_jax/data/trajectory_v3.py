@@ -230,19 +230,19 @@ def trajectory_v3_to_batch(
         "valid": (future_valid.sum(axis=1) > 0).astype(np.float32),
     }
 
-    if "legal_idx_u16" in data and "legal_count_u16" in data:
+    if view != "jepa_latent" and "legal_idx_u16" in data and "legal_count_u16" in data:
         legal_masks = legal_indices_to_masks(
             np.asarray(data["legal_idx_u16"], dtype=np.uint16)[:, :view_horizon],
             np.asarray(data["legal_count_u16"], dtype=np.uint16)[:, :view_horizon],
         )
         batch["legal_masks"] = legal_masks
         batch["legal_mask"] = legal_masks[:, 0]
-    else:
+    elif view != "jepa_latent":
         batch["legal_mask"] = np.ones((batch_size, ACTION_VOCAB_SIZE), dtype=np.float32)
-    if "legal_valid_u8" in data:
+    if view != "jepa_latent" and "legal_valid_u8" in data:
         batch["legal_masks_valid"] = np.asarray(data["legal_valid_u8"], dtype=np.float32)[:, :view_horizon]
 
-    if view == "full":
+    if view in {"full", "jepa_latent"}:
         if plane_codec == "packbits":
             future_planes = unpack_planes(data["planes_future_pack"])[:, :view_horizon]
         else:

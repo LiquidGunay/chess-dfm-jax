@@ -153,6 +153,11 @@ The trainable model keeps BT4 frozen and trains only a small transition head:
 
 The Spot TPU example spec uses a smaller `token_dim=256, mlp_dim=1024` configuration for cost-controlled training. Two-ply probes are analysis-only and are not part of the training loss.
 
+The JEPA trainer uses the `jepa_latent` loader view for trajectory shards. That
+view keeps `planes_t`, `actions`, `planes_future`, `future_valid`, and optional
+value/WDL targets, but skips dense legal masks because latent transition
+training does not consume them.
+
 ## Checkpoints and resume
 
 `scripts/train_jepa.py` and `scripts/train_dfm.py` use raw NumPy checkpoint
@@ -165,6 +170,8 @@ normal resume, optimizer state.
 - Curriculum branches can use `--init-checkpoint-uri` to initialize model
   weights from a prior run while writing checkpoints under a new run ID; GCS
   initialization copies only the selected checkpoint step.
+- GCS resume in both DFM and JEPA syncs only the selected checkpoint step, not
+  the whole checkpoint tree.
 - The trainer handles `SIGTERM` and writes a final checkpoint before exiting.
 - Only trainable head/projector state and optimizer state are checkpointed;
   frozen BT4 weights are reloaded from the pinned model file.

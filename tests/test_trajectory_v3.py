@@ -62,6 +62,11 @@ def test_trajectory_v3_roundtrip_full_and_dfm_views():
     assert dfm["legal_masks"].shape == (2, 2, 1858)
     assert "future_planes" not in dfm
 
+    jepa = trajectory_v3_to_batch(compact, view="jepa_latent", horizon=2)
+    assert jepa["action_indices"].shape == (2, 2)
+    assert jepa["future_planes"].shape == (2, 2, 112, 8, 8)
+    assert "legal_masks" not in jepa
+
 
 def test_leela_loader_reads_trajectory_v3_dfm_action_view():
     shard = build_synthetic_trajectory_shard(batch_size=3, horizon=4)
