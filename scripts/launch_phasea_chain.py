@@ -217,7 +217,7 @@ def launch_combined(base: dict, bucket: str, work_dir: Path) -> None:
                 f"--service-account={spec.service_account}",
                 "--network=default",
                 f"--metadata-from-file=startup-script={startup_path}",
-                f"--labels=run_id={RUN_ID},controller=chess_dfm_jax",
+                f"--labels=run_id={RUN_ID.lower()},controller=chess_dfm_jax",
             ]
         )
     finally:
