@@ -19,6 +19,8 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+from chess_dfm_jax.analysis.bt4_theory import estimate_bt4_theory  # noqa: E402
+from chess_dfm_jax.analysis.jepa_theory import estimate_jepa_theory  # noqa: E402
 from chess_dfm_jax.analysis.profile_targets import load_mapped_bt4_params  # noqa: E402
 from chess_dfm_jax.data.gcs_cache import GCSShardCache  # noqa: E402
 from chess_dfm_jax.data.leela import LeelaChunkDataLoader, discover_chunk_files  # noqa: E402
@@ -97,6 +99,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--checkpoint-uri", type=str, default=None, help="Explicit checkpoint GCS URI.")
     parser.add_argument("--horizon", type=int, default=1, help="Prediction horizon.")
     parser.add_argument("--job-spec", type=str, default=None, help="Optional job spec JSON.")
+    parser.add_argument(
+        "--peak-tflops",
+        type=float,
+        default=197.0,
+        help="Approximate device peak TFLOP/s used for estimated MFU metrics. Set 0 to disable.",
+    )
     return parser.parse_args()
 
 
@@ -404,8 +412,30 @@ def main() -> int:
     run = None
     run_config = config.__dict__.copy()
     run_config.update(vars(args))
+    estimated_bt4_encoder_forward_flops = float(
+        estimate_bt4_theory(params, batch_size=args.batch_size).encoder_forward_flops
+    )
+    estimated_jepa_head_forward_flops = float(
+        estimate_jepa_theory(
+            batch_size=args.batch_size,
+            token_dim=args.token_dim,
+            num_layers=args.num_layers,
+            num_heads=args.num_heads,
+            mlp_dim=args.mlp_dim,
+        ).forward_flops
+    )
+    estimated_jepa_head_train_flops = 3.0 * estimated_jepa_head_forward_flops * max(args.horizon, 1)
+    estimated_encoder_flops = estimated_bt4_encoder_forward_flops * (max(args.horizon, 1) + 1)
+    estimated_total_step_flops = estimated_encoder_flops + estimated_jepa_head_train_flops
     run_config.update(
         {
+            "estimated_bt4_encoder_forward_flops_per_state": estimated_bt4_encoder_forward_flops,
+            "estimated_bt4_encoder_forward_flops_per_step": estimated_encoder_flops,
+            "estimated_jepa_head_forward_flops_h1": estimated_jepa_head_forward_flops,
+            "estimated_jepa_head_train_flops_per_step": estimated_jepa_head_train_flops,
+            "estimated_total_step_flops": estimated_total_step_flops,
+            "estimated_mfu_peak_tflops": args.peak_tflops,
+            "estimated_mfu_note": "Approximate FLOPs. total_mfu includes frozen BT4 encoder forward for current+future states plus JEPA head forward/backward/update rule-of-thumb.",
             "train_chunk_count": len(chunk_paths),
             "val_chunk_count": len(val_chunk_paths),
             "gcs_train_prefix": args.gcs_train_prefix,
@@ -456,6 +486,26 @@ def main() -> int:
             step_time = time.perf_counter() - step_start
             completed_step = step + 1
             metrics = {"step": completed_step, "loss": float(loss), "step_time_s": step_time}
+            examples_per_second = args.batch_size / step_time if step_time > 0 else 0.0
+            metrics.update(
+                {
+                    "examples_per_second": examples_per_second,
+                    "estimated_bt4_encoder_forward_flops_per_step": estimated_encoder_flops,
+                    "estimated_jepa_head_train_flops_per_step": estimated_jepa_head_train_flops,
+                    "estimated_total_step_flops": estimated_total_step_flops,
+                }
+            )
+            if args.peak_tflops > 0 and step_time > 0:
+                metrics.update(
+                    {
+                        "estimated_jepa_head_tflops": estimated_jepa_head_train_flops / step_time / 1e12,
+                        "estimated_total_tflops": estimated_total_step_flops / step_time / 1e12,
+                        "estimated_jepa_head_mfu": (estimated_jepa_head_train_flops / step_time / 1e12)
+                        / args.peak_tflops,
+                        "estimated_total_mfu": (estimated_total_step_flops / step_time / 1e12)
+                        / args.peak_tflops,
+                    }
+                )
             metrics.update({key: float(value) for key, value in aux.items()})
             if train_cache is not None:
                 metrics.update({f"gcs_train_cache_{key}": value for key, value in train_cache.stats().items()})
@@ -484,6 +534,8 @@ def main() -> int:
                         f"valid={metrics['valid_fraction']:.3f}",
                         f"token_cos={metrics['mean_token_cosine']:.4f}",
                         f"step_time_s={metrics['step_time_s']:.3f}",
+                        f"ex_per_s={metrics['examples_per_second']:.1f}",
+                        f"total_mfu={metrics.get('estimated_total_mfu', 0.0):.4f}",
                     ])
                 )
                 sys.stdout.flush()

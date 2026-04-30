@@ -141,7 +141,8 @@ wdl_coeff = 0.0
 DFM: `--gcs-train-prefix`, `--gcs-val-prefix`, cache-all startup, validation
 batches, W&B credential preflight, and single-step GCS checkpoint resume. Use
 the `jepa_latent` loader view for JEPA-only baselines so legal masks are not
-loaded.
+loaded. JEPA logs approximate MFU from precomputed shape-based FLOP estimates;
+actual BT4 current/future encodings are still computed at runtime.
 
 Initial joint baselines:
 
