@@ -144,6 +144,8 @@ class TPUJobSpec:
     cache_disk_by_zone: dict[str, str] = field(default_factory=dict)
     cache_disk_mode: str = "read-write"
     cache_mount_point: str = "/mnt/chess-dfm-cache"
+    keep_resource_on_completion: bool = False
+    keep_resource_on_failure: bool = False
     models_uri: str | None = None
     models_uri_by_region: dict[str, str] = field(default_factory=dict)
     chunk_data_uri: str | None = None
@@ -677,21 +679,43 @@ def run_spot_controller(spec: TPUJobSpec, *, repo_root: str | Path | None = None
 
                 if status and status.get("state") == "completed":
                     print(f"Job completed successfully in {zone}.")
-                    delete_queued_resource(resource_name)
+                    if spec.keep_resource_on_completion:
+                        print(f"Preserving queued resource for reuse/debugging: {resource_name}")
+                    else:
+                        delete_queued_resource(resource_name)
                     return {
                         "status": "completed",
                         "zone": zone,
                         "resource": resource_name,
+                        "resource_preserved": spec.keep_resource_on_completion,
                         "details": status,
                     }
                 if state_name in {"FAILED", "SUSPENDED"}:
-                    print(f"Resource {resource_name} failed or suspended (state={state_name}). Deleting and retrying...")
-                    delete_queued_resource(resource_name)
-                    return {"status": "preempted", "zone": zone}
+                    print(f"Resource {resource_name} failed or suspended (state={state_name}).")
+                    if spec.keep_resource_on_failure:
+                        print(f"Preserving failed queued resource for debugging: {resource_name}")
+                    else:
+                        print("Deleting failed queued resource.")
+                        delete_queued_resource(resource_name)
+                    return {
+                        "status": "preempted",
+                        "zone": zone,
+                        "resource": resource_name,
+                        "resource_preserved": spec.keep_resource_on_failure,
+                    }
                 if status and status.get("state") == "failed":
-                    print(f"Job failed on resource {resource_name} (state={state_name}). Deleting and retrying...")
-                    delete_queued_resource(resource_name)
-                    return {"status": "job_failed", "zone": zone}
+                    print(f"Job failed on resource {resource_name} (state={state_name}).")
+                    if spec.keep_resource_on_failure:
+                        print(f"Preserving failed queued resource for debugging: {resource_name}")
+                    else:
+                        print("Deleting failed queued resource.")
+                        delete_queued_resource(resource_name)
+                    return {
+                        "status": "job_failed",
+                        "zone": zone,
+                        "resource": resource_name,
+                        "resource_preserved": spec.keep_resource_on_failure,
+                    }
                 if state_name in {"ACCEPTED", "WAITING_FOR_RESOURCES", "CREATING"}:
                     if time.monotonic() - started > spec.allocation_timeout_s:
                         print(f"Resource {resource_name} timed out in {state_name}. Deleting and retrying...")

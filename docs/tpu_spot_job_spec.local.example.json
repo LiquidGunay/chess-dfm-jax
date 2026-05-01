@@ -31,6 +31,8 @@
   "cache_disk_by_zone": {},
   "cache_disk_mode": "read-write",
   "cache_mount_point": "/mnt/chess-dfm-cache",
+  "keep_resource_on_completion": false,
+  "keep_resource_on_failure": false,
   "models_uri_by_region": {
     "us-central1": "gs://your-us-central1-bucket/models",
     "europe-west4": "gs://your-europe-west4-bucket/models"

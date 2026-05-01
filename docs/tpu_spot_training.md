@@ -37,6 +37,11 @@ Important fields:
 - `models_uri_by_region`: per-region bucket directories containing `BT4_exported.pb.gz` and the other BT4 artifacts.
 - `chunk_data_uri_by_region`: per-region bucket directories containing the chunk files.
 - `cache_disk_by_zone`: optional existing zonal persistent disks to attach as reusable shard caches. The disk must be in the same zone as the TPU VM. When set, startup mounts it at `cache_mount_point` and rewrites the default `--gcs-cache-dir /tmp/chess_dfm_jax/gcs_cache` to `cache_mount_point/gcs_cache`.
+- `keep_resource_on_completion`: set to `true` for profiling/debug sessions where
+  you want the TPU VM to remain available for SSH after the queued experiment
+  exits. Leave it `false` for normal training jobs.
+- `keep_resource_on_failure`: set to `true` only when you need to inspect a
+  failed TPU VM before deletion.
 - `train_args`: arguments forwarded directly to `scripts/train_jepa.py`.
 - `entry_command`: optional full command. Use this for DFM/JEPA smoke specs or
   for queued sweeps that call `scripts/run_experiment_queue.py`; otherwise
@@ -94,7 +99,14 @@ What the controller does:
 6. The trainer saves checkpoints every `save-every` steps and writes
    `status.json` on job start and exit.
 7. The controller deletes the queued resource after completion, job failure,
-   resource failure, or allocation timeout.
+   resource failure, or allocation timeout, unless the corresponding
+   `keep_resource_on_*` field is set for debugging/profiling.
+
+For profiling iterations, prefer a short queued run with
+`keep_resource_on_completion: true`, then SSH into the preserved TPU and run
+additional commands from `/tmp/chess_dfm_jax/repo`. This avoids repeated TPU
+provisioning and keeps the persistent disk plus JAX compilation cache mounted.
+Delete the queued resource manually when finished.
 
 For queued sweeps, set `entry_command` to the queue runner and point it at a
 queue JSONL in GCS:
