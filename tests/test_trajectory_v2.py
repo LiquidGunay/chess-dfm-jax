@@ -1,4 +1,6 @@
 import io
+import json
+import subprocess
 import tempfile
 from pathlib import Path
 
@@ -12,6 +14,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from chess_dfm_jax.data.leela import LeelaChunkDataLoader  # noqa: E402
+from chess_dfm_jax.data import gcs_cache  # noqa: E402
 from chess_dfm_jax.data.gcs_cache import local_name_for_uri  # noqa: E402
 from chess_dfm_jax.data.trajectory import (  # noqa: E402
     TrajectoryShard,
@@ -246,3 +249,27 @@ def test_gcs_cache_local_name_avoids_split_collisions():
     assert train_name.endswith("chunk_000000.npz")
     assert val_name.endswith("chunk_000000.npz")
     assert train_name != val_name
+
+
+def test_gcs_npz_listing_uses_completed_manifest(monkeypatch):
+    calls = []
+
+    def fake_run(args):
+        calls.append(args)
+        assert args[:3] == ["gcloud", "storage", "cat"]
+        manifest = {
+            "state": "completed",
+            "chunks_written": {"train": 3, "val": 1},
+        }
+        return subprocess.CompletedProcess(args, 0, stdout=json.dumps(manifest), stderr="")
+
+    monkeypatch.setattr(gcs_cache, "_run_gcloud", fake_run)
+
+    uris = gcs_cache.list_gcs_npz("gs://bucket/data/train")
+
+    assert uris == [
+        "gs://bucket/data/train/chunk_000000.npz",
+        "gs://bucket/data/train/chunk_000001.npz",
+        "gs://bucket/data/train/chunk_000002.npz",
+    ]
+    assert calls == [["gcloud", "storage", "cat", "gs://bucket/data/manifest.json"]]

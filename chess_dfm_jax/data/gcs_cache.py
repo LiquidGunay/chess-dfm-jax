@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import hashlib
+import json
 import os
 from pathlib import Path
 import random
@@ -25,12 +26,44 @@ def split_gcs_prefixes(prefix: str) -> list[str]:
 def list_gcs_npz(prefix: str) -> list[str]:
     uris: list[str] = []
     for part in split_gcs_prefixes(prefix):
+        manifest_uris = _list_manifest_shards(part)
+        if manifest_uris is not None:
+            uris.extend(manifest_uris)
+            continue
         uri = part.rstrip("/") + "/*.npz"
         result = _run_gcloud(["gcloud", "storage", "ls", uri])
         if result.returncode != 0:
             continue
         uris.extend(line.strip() for line in result.stdout.splitlines() if line.strip().endswith(".npz"))
     return sorted(set(uris))
+
+
+def _list_manifest_shards(prefix: str) -> list[str] | None:
+    """Return deterministic shard URIs from a sibling trajectory manifest when possible."""
+    clean_prefix = prefix.rstrip("/")
+    if not clean_prefix.startswith("gs://") or "/" not in clean_prefix[len("gs://") :]:
+        return None
+    root, split = clean_prefix.rsplit("/", 1)
+    manifest_uri = root + "/manifest.json"
+    result = _run_gcloud(["gcloud", "storage", "cat", manifest_uri])
+    if result.returncode != 0:
+        return None
+    try:
+        manifest = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        return None
+    if manifest.get("state") not in {None, "completed"}:
+        return None
+    chunks_written = manifest.get("chunks_written")
+    if not isinstance(chunks_written, dict) or split not in chunks_written:
+        return None
+    try:
+        count = int(chunks_written[split])
+    except (TypeError, ValueError):
+        return None
+    if count <= 0:
+        return []
+    return [f"{clean_prefix}/chunk_{idx:06d}.npz" for idx in range(count)]
 
 
 def local_name_for_uri(uri: str) -> str:
