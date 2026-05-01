@@ -368,6 +368,10 @@ if ! mountpoint -q "$CACHE_MOUNT"; then
 fi
 chmod 777 "$CACHE_MOUNT"
 mkdir -p "$CACHE_MOUNT/gcs_cache/train" "$CACHE_MOUNT/gcs_cache/val"
+# Queue entries may omit --gcs-cache-dir and rely on trainer defaults. Keep the
+# default workdir cache path backed by the persistent disk in that case too.
+rm -rf "$WORKDIR/gcs_cache"
+ln -sfn "$CACHE_MOUNT/gcs_cache" "$WORKDIR/gcs_cache"
 df -h "$CACHE_MOUNT"
 """
 

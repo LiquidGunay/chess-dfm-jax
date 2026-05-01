@@ -56,6 +56,11 @@ Example private overrides:
 }
 ```
 
+When a cache disk is configured, startup also symlinks
+`$WORKDIR/gcs_cache -> $cache_mount_point/gcs_cache`. This covers queued
+experiment commands that rely on each trainer's default `--gcs-cache-dir`
+instead of passing it explicitly.
+
 ## Launch
 
 Run the controller from the repo root:
