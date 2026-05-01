@@ -316,6 +316,11 @@ checkpoints, and cleaned up the TPU resource.
 - For `--phase dfm`, entries must run `scripts/train_dfm.py`.
 - For `--phase jepa`, entries must run `scripts/train_jepa.py`.
 - For `--phase profile`, entries must run `scripts/profile_jepa_tpu.py`.
+- For real joint-trainer TPU traces, use `scripts/train_joint_latent_sasa.py`
+  with `--profile-steps > 0`, `--profile-start-step`, `--profile-dir`, and
+  optional `--profile-uri`. This captures the actual data-loader, BT4 encoder,
+  DFM, JEPA, optimizer, and host/device synchronization path rather than the
+  synthetic standalone JEPA profile target.
 - Failed experiments are not requeued unless `--requeue-on-failure` is set.
 - For GCS-backed DFM training, use `--gcs-startup-cache-policy all` unless the
   experiment is explicitly testing streaming behavior.

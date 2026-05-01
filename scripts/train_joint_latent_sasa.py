@@ -125,6 +125,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--run-id", type=str, default=None)
     parser.add_argument("--checkpoint-uri", type=str, default=None)
     parser.add_argument("--peak-tflops", type=float, default=197.0)
+    parser.add_argument("--profile-dir", type=str, default="", help="Local TensorBoard trace directory.")
+    parser.add_argument("--profile-uri", type=str, default="", help="Optional gs:// prefix for uploading trace artifacts.")
+    parser.add_argument("--profile-start-step", type=int, default=20, help="1-indexed step at which to start JAX tracing.")
+    parser.add_argument("--profile-steps", type=int, default=0, help="Number of train steps to capture in a JAX trace.")
     return parser.parse_args()
 
 
@@ -235,6 +239,15 @@ def sync_run_sidecars(output_dir: Path, checkpoint_uri: str | None) -> None:
             [_gcloud_binary(), "storage", "cp", str(path), f"{run_root}/{name}"],
             check=False,
         )
+
+
+def sync_profile_dir(profile_dir: Path, profile_uri: str) -> None:
+    if not profile_uri or jax.process_index() != 0:
+        return
+    subprocess.run(
+        [_gcloud_binary(), "storage", "cp", "--recursive", str(profile_dir), profile_uri.rstrip("/") + "/"],
+        check=False,
+    )
 
 
 def build_synthetic_joint_batch(batch_size: int, horizon: int, legal_lmax: int) -> dict[str, np.ndarray]:
@@ -555,6 +568,10 @@ def main() -> int:
     rng = jax.random.PRNGKey(args.seed + jax.process_index())
     val_rng = jax.random.PRNGKey(args.val_seed + jax.process_index())
     val_every = args.val_every if args.val_every > 0 else args.save_every
+    profile_dir = Path(args.profile_dir) if args.profile_dir else output_dir / "tb_trace"
+    profile_enabled = args.profile_steps > 0
+    profile_started = False
+    profile_active = False
 
     try:
         for step in range(start_step, args.steps):
@@ -571,6 +588,20 @@ def main() -> int:
                 batch = dict(batch)
                 batch["deterministic_t"] = np.asarray(args.train_deterministic_t, dtype=np.float32)
 
+            next_step = step + 1
+            if (
+                profile_enabled
+                and not profile_started
+                and next_step >= args.profile_start_step
+                and jax.process_index() == 0
+            ):
+                profile_dir.mkdir(parents=True, exist_ok=True)
+                jax.profiler.start_trace(str(profile_dir))
+                profile_started = True
+                profile_active = True
+                print(f"jax_profile_start step={next_step} dir={profile_dir}")
+                sys.stdout.flush()
+
             step_start = time.perf_counter()
             if args.stage == "stage2":
                 loss, aux = train_joint_stage2_step(model, optimizer, batch, step_rng)
@@ -582,6 +613,8 @@ def main() -> int:
 
             metrics = {"step": completed_step, "loss": float(loss), "step_time_s": step_time}
             metrics.update(flatten_aux_metrics(aux))
+            if profile_active:
+                metrics["jax_profile_active"] = 1.0
             examples_per_second = args.batch_size / max(step_time, 1e-12)
             metrics["examples_per_second"] = examples_per_second
             metrics.update(flops)
@@ -652,6 +685,13 @@ def main() -> int:
             if run is not None and jax.process_index() == 0:
                 run.log(metrics, step=completed_step)
 
+            if profile_active and completed_step >= args.profile_start_step + args.profile_steps - 1:
+                jax.profiler.stop_trace()
+                profile_active = False
+                print(f"jax_profile_stop step={completed_step} dir={profile_dir}")
+                sys.stdout.flush()
+                sync_profile_dir(profile_dir, args.profile_uri)
+
             should_save = (completed_step % args.save_every == 0) or (completed_step == args.steps)
             if should_save:
                 save_training_checkpoint(
@@ -676,6 +716,10 @@ def main() -> int:
                 sys.stdout.flush()
                 break
     finally:
+        if profile_active:
+            jax.profiler.stop_trace()
+            profile_active = False
+            sync_profile_dir(profile_dir, args.profile_uri)
         if train_cache is not None:
             train_cache.stop()
         if val_cache is not None:
