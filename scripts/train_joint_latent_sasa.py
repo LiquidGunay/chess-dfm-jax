@@ -108,8 +108,8 @@ def parse_args() -> argparse.Namespace:
         "--jepa-loss-type",
         type=str,
         default="raw_mse",
-        choices=["raw_mse", "cosine", "normalized_mse"],
-        help="JEPA term optimized by --jepa-positive-coeff. Cosine metrics are still logged.",
+        choices=["raw_mse"],
+        help="JEPA term optimized by --jepa-positive-coeff. Cosine/identity comparisons run via diagnostics, not the hot step.",
     )
     parser.add_argument("--jepa-gamma", type=float, default=0.9)
     parser.add_argument("--jepa-sigreg-coeff", type=float, default=0.0)
@@ -738,7 +738,6 @@ def main() -> int:
                             f"sigreg={metrics.get('jepa_sigreg_loss', 0.0):.6f}",
                             f"act_contrast={metrics.get('jepa_action_contrast_loss', 0.0):.6f}",
                             f"raw_mse={metrics.get('jepa_raw_mse', 0.0):.6f}",
-                            f"cos={metrics.get('mean_token_cosine', 0.0):.4f}",
                             f"acc={metrics.get('accuracy', 0.0):.4f}",
                             f"step_time_s={metrics['step_time_s']:.3f}",
                             f"fetch_s={metrics.get('data_fetch_time_s', 0.0):.3f}",

@@ -112,6 +112,8 @@ class JointLatentSASAModel(nnx.Module):
         compute_dtype = _parse_compute_dtype(config.compute_dtype)
         self.compute_dtype = jnp.dtype(compute_dtype)
         self.encoder_dim = int(encoder.embedding_size)
+        if config.jepa_loss_type != "raw_mse":
+            raise ValueError("Joint stage-1 hot training supports raw_mse JEPA loss only.")
         jepa_num_heads = config.jepa_num_heads if config.jepa_num_heads > 0 else config.num_heads
         if self.encoder_dim % jepa_num_heads != 0:
             raise ValueError(
@@ -217,6 +219,19 @@ class JointLatentSASAModel(nnx.Module):
         encoder_tokens = self.encoder.encode_tokens(flat_planes)
         target_tokens = encoder_tokens.reshape((batch_size, horizon, 64, self.encoder_dim))
         return jax.lax.stop_gradient(jnp.asarray(target_tokens, dtype=self.compute_dtype))
+
+    def encode_current_and_future_targets(
+        self,
+        current_planes: jnp.ndarray,
+        future_planes: jnp.ndarray,
+    ) -> tuple[jnp.ndarray, jnp.ndarray]:
+        batch_size, horizon, channels, height, width = future_planes.shape
+        all_planes = jnp.concatenate((current_planes[:, None, :, :, :], future_planes), axis=1)
+        flat_planes = all_planes.reshape((batch_size * (horizon + 1), channels, height, width))
+        encoder_tokens = self.encoder.encode_tokens(flat_planes)
+        tokens = encoder_tokens.reshape((batch_size, horizon + 1, 64, self.encoder_dim))
+        tokens = jax.lax.stop_gradient(jnp.asarray(tokens, dtype=self.compute_dtype))
+        return tokens[:, 0], tokens[:, 1:]
 
     def dfm_latents(self, shared_tokens: jnp.ndarray) -> jnp.ndarray:
         return self.dfm_adapter(jnp.asarray(shared_tokens, dtype=self.compute_dtype))
@@ -370,7 +385,7 @@ def joint_stage1_loss_fn(
     future_valid = jnp.asarray(batch["future_valid"], dtype=jnp.float32)[:, :horizon]
     future_planes = jnp.asarray(batch["future_planes"], dtype=jnp.float32)[:, :horizon]
 
-    current_tokens = model.encode_current_jepa(batch["current_planes"])
+    current_tokens, target_tokens = model.encode_current_and_future_targets(batch["current_planes"], future_planes)
     shared_tokens = model.shared_projector(current_tokens)
     z_dfm = model.dfm_latents(shared_tokens)
     z_jepa = current_tokens
@@ -412,35 +427,17 @@ def joint_stage1_loss_fn(
     clean_t = jnp.ones((batch_size,), dtype=jnp.float32)
     _, clean_hidden = model.planner_from_latents(z_dfm, actions, clean_t, return_hidden=True)
     pred_tokens = model.jepa_rollout_from_latents(z_jepa, actions, clean_hidden["action_tokens"])
-    target_tokens = model.encode_future_targets(future_planes)
-    raw_mse_by_token = jnp.mean(
-        (jnp.asarray(pred_tokens, dtype=jnp.float32) - jnp.asarray(target_tokens, dtype=jnp.float32)) ** 2,
+    sample_jepa = jnp.mean(
+        jnp.mean(
+            (jnp.asarray(pred_tokens, dtype=jnp.float32) - jnp.asarray(target_tokens, dtype=jnp.float32)) ** 2,
+            axis=-1,
+        ),
         axis=-1,
-    )
-    pred_norm = _l2_normalize(jnp.asarray(pred_tokens, dtype=jnp.float32))
-    target_norm = _l2_normalize(jnp.asarray(target_tokens, dtype=jnp.float32))
-    cosine = jnp.sum(pred_norm * target_norm, axis=-1)
-    token_distance = 2.0 - 2.0 * cosine
-    normalized_mse_by_token = jnp.mean((pred_norm - target_norm) ** 2, axis=-1)
-    sample_cosine_distance = jnp.mean(token_distance, axis=-1)
-    sample_raw_mse = jnp.mean(raw_mse_by_token, axis=-1)
-    sample_normalized_mse = jnp.mean(normalized_mse_by_token, axis=-1)
-    sample_jepa = _select_jepa_sample_loss(
-        raw_mse=sample_raw_mse,
-        cosine_distance=sample_cosine_distance,
-        normalized_mse=sample_normalized_mse,
-        loss_type=model.config.jepa_loss_type,
     )
     horizon_weights = model.config.jepa_gamma ** jnp.arange(horizon, dtype=jnp.float32)
     jepa_mask = future_valid * valid[:, None] * horizon_weights[None, :]
-    jepa_denom = jnp.maximum(jnp.sum(jepa_mask), 1.0)
     jepa_positive_loss = _weighted_horizon_mean(sample_jepa, jepa_mask)
-    jepa_cosine_loss = _weighted_horizon_mean(sample_cosine_distance, jepa_mask)
-    mean_token_cosine = jnp.sum(jnp.mean(cosine, axis=-1) * jepa_mask) / jepa_denom
-    jepa_raw_mse = _weighted_horizon_mean(sample_raw_mse, jepa_mask)
-    jepa_normalized_mse = _weighted_horizon_mean(sample_normalized_mse, jepa_mask)
-    pred_token_norm = jnp.sum(jnp.mean(jnp.linalg.norm(pred_tokens, axis=-1), axis=-1) * jepa_mask) / jepa_denom
-    target_token_norm = jnp.sum(jnp.mean(jnp.linalg.norm(target_tokens, axis=-1), axis=-1) * jepa_mask) / jepa_denom
+    jepa_raw_mse = jepa_positive_loss
     jepa_sigreg_loss = jnp.asarray(0.0, dtype=jnp.float32)
     if model.config.jepa_sigreg_coeff != 0.0:
         jepa_sigreg_loss = _sigreg_loss(jnp.asarray(pred_tokens, dtype=jnp.float32).reshape((-1, pred_tokens.shape[-1])))
@@ -448,28 +445,19 @@ def joint_stage1_loss_fn(
     horizon_valid = future_valid * valid[:, None]
     horizon_denom = jnp.maximum(jnp.sum(horizon_valid, axis=0), 1.0)
     jepa_loss_by_horizon = jnp.sum(sample_jepa * horizon_valid, axis=0) / horizon_denom
-    jepa_raw_mse_by_horizon = jnp.sum(sample_raw_mse * horizon_valid, axis=0) / horizon_denom
-    mean_token_cosine_by_horizon = jnp.sum(jnp.mean(cosine, axis=-1) * horizon_valid, axis=0) / horizon_denom
+    jepa_raw_mse_by_horizon = jepa_loss_by_horizon
 
-    identity_tokens = jnp.broadcast_to(z_jepa[:, None, :, :], target_tokens.shape)
-    identity_raw_mse_by_token = jnp.mean(
-        (jnp.asarray(identity_tokens, dtype=jnp.float32) - jnp.asarray(target_tokens, dtype=jnp.float32)) ** 2,
-        axis=-1,
-    )
-    identity_norm = _l2_normalize(jnp.asarray(identity_tokens, dtype=jnp.float32))
-    identity_cosine = jnp.sum(identity_norm * target_norm, axis=-1)
-    identity_cosine_distance = 2.0 - 2.0 * identity_cosine
-    identity_normalized_mse_by_token = jnp.mean((identity_norm - target_norm) ** 2, axis=-1)
-    identity_sample_jepa = _select_jepa_sample_loss(
-        raw_mse=jnp.mean(identity_raw_mse_by_token, axis=-1),
-        cosine_distance=jnp.mean(identity_cosine_distance, axis=-1),
-        normalized_mse=jnp.mean(identity_normalized_mse_by_token, axis=-1),
-        loss_type=model.config.jepa_loss_type,
-    )
-    identity_jepa_loss = _weighted_horizon_mean(identity_sample_jepa, jepa_mask)
-    identity_jepa_cosine_loss = _weighted_horizon_mean(jnp.mean(identity_cosine_distance, axis=-1), jepa_mask)
-    identity_mean_token_cosine = jnp.sum(jnp.mean(identity_cosine, axis=-1) * jepa_mask) / jepa_denom
-
+    zero = jnp.asarray(0.0, dtype=jnp.float32)
+    zero_by_horizon = jnp.zeros((horizon,), dtype=jnp.float32)
+    jepa_cosine_loss = zero
+    jepa_normalized_mse = zero
+    mean_token_cosine = zero
+    mean_token_cosine_by_horizon = zero_by_horizon
+    pred_token_norm = zero
+    target_token_norm = zero
+    identity_jepa_loss = zero
+    identity_jepa_cosine_loss = zero
+    identity_mean_token_cosine = zero
     shuffled_jepa_loss = jnp.asarray(0.0, dtype=jnp.float32)
     shuffled_jepa_cosine_loss = jnp.asarray(0.0, dtype=jnp.float32)
     shuffled_mean_token_cosine = jnp.asarray(0.0, dtype=jnp.float32)
@@ -507,7 +495,7 @@ def joint_stage1_loss_fn(
         "jepa_shuffled_loss": shuffled_jepa_loss,
         "jepa_shuffled_cosine_loss": shuffled_jepa_cosine_loss,
         "jepa_shuffled_mean_token_cosine": shuffled_mean_token_cosine,
-        "jepa_true_minus_shuffled": jepa_positive_loss - shuffled_jepa_loss,
+        "jepa_true_minus_shuffled": zero,
         "jepa_loss_by_horizon": jepa_loss_by_horizon,
         "jepa_raw_mse_by_horizon": jepa_raw_mse_by_horizon,
         "mean_token_cosine": mean_token_cosine,
@@ -517,7 +505,7 @@ def joint_stage1_loss_fn(
         "identity_jepa_loss": identity_jepa_loss,
         "identity_jepa_cosine_loss": identity_jepa_cosine_loss,
         "identity_mean_token_cosine": identity_mean_token_cosine,
-        "jepa_loss_minus_identity": jepa_positive_loss - identity_jepa_loss,
+        "jepa_loss_minus_identity": zero,
         "accuracy": accuracy,
         "mask_prob": jnp.mean(1.0 - t),
         "loss_horizon": jnp.asarray(loss_horizon, dtype=jnp.float32),
