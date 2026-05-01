@@ -234,11 +234,12 @@ therefore computes only first-move illegal probability mass and logs
 `horizon_legality_evaluated=0`; generated-prefix legality belongs in
 sampler/evaluation code.
 
-JEPA now trains with raw BT4-token MSE in the hot path. Current and future BT4
-targets are encoded as one combined `[B * (H + 1), 112, 8, 8]` batch, then split
-back into `z_t` and `z_{t+1:t+H}`. Cosine distance, normalized MSE, token norms,
-identity baseline, and shuffled-action baseline are diagnostics, not per-step
-training work. `L_action_contrast = max(margin + L_true_actions -
+JEPA now trains with raw BT4-token MSE in the hot path. Cosine distance,
+normalized MSE, token norms, identity baseline, and shuffled-action baseline are
+diagnostics, not per-step training work. Current `z_t` and future
+`z_{t+1:t+H}` BT4 targets are encoded as separate calls; a combined
+`[B * (H + 1), 112, 8, 8]` encoder call was tested on v5litepod-1 and was slower
+for H2/B64. `L_action_contrast = max(margin + L_true_actions -
 L_shuffled_actions, 0)` is the next ablation if post-hoc diagnostics show true
 and shuffled action sequences scoring equally.
 

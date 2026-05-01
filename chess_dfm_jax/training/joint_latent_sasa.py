@@ -385,7 +385,7 @@ def joint_stage1_loss_fn(
     future_valid = jnp.asarray(batch["future_valid"], dtype=jnp.float32)[:, :horizon]
     future_planes = jnp.asarray(batch["future_planes"], dtype=jnp.float32)[:, :horizon]
 
-    current_tokens, target_tokens = model.encode_current_and_future_targets(batch["current_planes"], future_planes)
+    current_tokens = model.encode_current_jepa(batch["current_planes"])
     shared_tokens = model.shared_projector(current_tokens)
     z_dfm = model.dfm_latents(shared_tokens)
     z_jepa = current_tokens
@@ -427,6 +427,7 @@ def joint_stage1_loss_fn(
     clean_t = jnp.ones((batch_size,), dtype=jnp.float32)
     _, clean_hidden = model.planner_from_latents(z_dfm, actions, clean_t, return_hidden=True)
     pred_tokens = model.jepa_rollout_from_latents(z_jepa, actions, clean_hidden["action_tokens"])
+    target_tokens = model.encode_future_targets(future_planes)
     sample_jepa = jnp.mean(
         jnp.mean(
             (jnp.asarray(pred_tokens, dtype=jnp.float32) - jnp.asarray(target_tokens, dtype=jnp.float32)) ** 2,
