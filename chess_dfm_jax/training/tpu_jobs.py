@@ -368,10 +368,14 @@ if ! mountpoint -q "$CACHE_MOUNT"; then
 fi
 chmod 777 "$CACHE_MOUNT"
 mkdir -p "$CACHE_MOUNT/gcs_cache/train" "$CACHE_MOUNT/gcs_cache/val"
+mkdir -p "$CACHE_MOUNT/jax_compilation_cache"
 # Queue entries may omit --gcs-cache-dir and rely on trainer defaults. Keep the
 # default workdir cache path backed by the persistent disk in that case too.
 rm -rf "$WORKDIR/gcs_cache"
 ln -sfn "$CACHE_MOUNT/gcs_cache" "$WORKDIR/gcs_cache"
+export JAX_COMPILATION_CACHE_DIR="$CACHE_MOUNT/jax_compilation_cache"
+export JAX_PERSISTENT_CACHE_MIN_COMPILE_TIME_SECS=0
+export JAX_ENABLE_COMPILATION_CACHE=true
 df -h "$CACHE_MOUNT"
 """
 

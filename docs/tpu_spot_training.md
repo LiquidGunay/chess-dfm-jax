@@ -61,6 +61,18 @@ When a cache disk is configured, startup also symlinks
 experiment commands that rely on each trainer's default `--gcs-cache-dir`
 instead of passing it explicitly.
 
+The same disk also stores the JAX persistent compilation cache:
+
+```bash
+JAX_COMPILATION_CACHE_DIR=$cache_mount_point/jax_compilation_cache
+JAX_PERSISTENT_CACHE_MIN_COMPILE_TIME_SECS=0
+JAX_ENABLE_COMPILATION_CACHE=true
+```
+
+This reduces repeated compile latency across relaunches when code, shapes,
+JAX/jaxlib versions, and TPU topology stay compatible. It does not improve
+steady-state train-step MFU after compilation.
+
 ## Launch
 
 Run the controller from the repo root:
