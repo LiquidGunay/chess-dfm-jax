@@ -242,6 +242,12 @@ training work. `L_action_contrast = max(margin + L_true_actions -
 L_shuffled_actions, 0)` is the next ablation if post-hoc diagnostics show true
 and shuffled action sequences scoring equally.
 
+BT4 attention has a manual implementation and a `jax.nn.dot_product_attention`
+implementation. The manual path remains the default for TPU training because
+the first v5litepod-1 SDPA profile for the BT4 smolgen-biased 64-token shape was
+slower than the manual path. Keep SDPA as a correctness-tested option, not the
+default, unless a later TPU profile shows a real speedup.
+
 Stage 2 joint loss:
 
 ```text

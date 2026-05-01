@@ -170,7 +170,7 @@ class EncoderLayer(nnx.Module):
         compute_dtype=jnp.float32,
         use_qk_gain: bool = False,
         use_xsa: bool = False,
-        attention_impl: str = "sdpa",
+        attention_impl: str = "manual",
         layer_params: dict | None = None,
         shared_smolgen_w: np.ndarray | None = None,
     ):
@@ -356,7 +356,7 @@ class MovesLeftHead(nnx.Module):
 
 
 class BT4Model(nnx.Module):
-    def __init__(self, params: dict, *, dtype=jnp.float32, attention_impl: str = "sdpa"):
+    def __init__(self, params: dict, *, dtype=jnp.float32, attention_impl: str = "manual"):
         self.dtype = jnp.dtype(dtype)
         p = params
         self.embedding = InputEmbedding(
@@ -406,7 +406,7 @@ class BT4Model(nnx.Module):
         return p, v, ml
 
 
-def make_bt4_model(params: dict, *, dtype=jnp.float32, attention_impl: str = "sdpa") -> BT4Model:
+def make_bt4_model(params: dict, *, dtype=jnp.float32, attention_impl: str = "manual") -> BT4Model:
     return BT4Model(params, dtype=dtype, attention_impl=attention_impl)
 
 
