@@ -92,6 +92,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--horizon-legality-coeff", type=float, default=0.0)
     parser.add_argument("--legality-on-masked-only", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--jepa-positive-coeff", type=float, default=1.0)
+    parser.add_argument(
+        "--jepa-loss-type",
+        type=str,
+        default="raw_mse",
+        choices=["raw_mse", "cosine", "normalized_mse"],
+        help="JEPA term optimized by --jepa-positive-coeff. Cosine metrics are still logged.",
+    )
     parser.add_argument("--jepa-gamma", type=float, default=0.9)
     parser.add_argument("--jepa-sigreg-coeff", type=float, default=0.0)
     parser.add_argument("--jepa-action-contrast-coeff", type=float, default=0.0)
@@ -372,6 +379,7 @@ def main() -> int:
         horizon_legality_coeff=args.horizon_legality_coeff,
         legality_on_masked_only=args.legality_on_masked_only,
         jepa_positive_coeff=args.jepa_positive_coeff,
+        jepa_loss_type=args.jepa_loss_type,
         jepa_gamma=args.jepa_gamma,
         jepa_sigreg_coeff=args.jepa_sigreg_coeff,
         jepa_action_contrast_coeff=args.jepa_action_contrast_coeff,

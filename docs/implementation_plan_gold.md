@@ -545,21 +545,22 @@ Track first-ply legality and horizon legality separately.
 Target branch:
 
 ```python
-e_future = stopgrad(BT4(future_planes))
-z_target = stopgrad(P_target(e_future))
+z_target = stopgrad(BT4(future_planes))
 ```
 
 Prediction:
 
 ```python
-z_pred = JEPA(z0_jepa, actions, dfm_action_hidden)
+z_pred = JEPA(z0_raw_bt4, actions, dfm_action_hidden)
 ```
 
-Use normalized MSE / cosine loss:
+Use raw BT4-token MSE as the primary loss. Cosine distance remains a diagnostic,
+not the optimized objective, because normalized cosine can improve while raw
+coordinate reconstruction gets worse if predicted token norms drift.
 
 ```text
 L_jepa =
-    Σ_h γ^h * [2 - 2 * cosine(normalize(z_pred_h), normalize(z_target_h))]
+    Σ_h γ^h * mean((z_pred_h - z_target_h)^2)
 ```
 
 Mask with `future_valid`.

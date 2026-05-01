@@ -135,6 +135,8 @@ def test_joint_stage1_step_uses_compact_legal_batch():
     assert jnp.isfinite(aux["first_legality_loss"])
     assert jnp.isfinite(aux["horizon_legality_loss"])
     assert jnp.isfinite(aux["jepa_raw_mse"])
+    assert jnp.isclose(aux["jepa_positive_loss"], aux["jepa_raw_mse"], rtol=1e-5, atol=1e-5)
+    assert jnp.isfinite(aux["jepa_cosine_loss"])
     assert jnp.isfinite(aux["jepa_sigreg_loss"])
     assert jnp.isfinite(aux["jepa_action_contrast_loss"])
     assert jnp.isfinite(aux["jepa_true_minus_shuffled"])
