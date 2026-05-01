@@ -111,6 +111,25 @@ def parse_args() -> argparse.Namespace:
         choices=["raw_mse"],
         help="JEPA term optimized by --jepa-positive-coeff. Cosine/identity comparisons run via diagnostics, not the hot step.",
     )
+    parser.add_argument(
+        "--jepa-target-mode",
+        type=str,
+        default="future_bt4",
+        choices=["future_bt4", "current_repeat"],
+        help=(
+            "JEPA target source. future_bt4 is the real training objective. "
+            "current_repeat is a profiling-only diagnostic that removes future BT4 target encodes."
+        ),
+    )
+    parser.add_argument(
+        "--jepa-target-sample-count",
+        type=int,
+        default=0,
+        help=(
+            "Number of future horizons to supervise per step. 0 means all horizons. "
+            "Use 1 for stochastic target-horizon sampling to reduce future BT4 target encodes."
+        ),
+    )
     parser.add_argument("--jepa-gamma", type=float, default=0.9)
     parser.add_argument("--jepa-sigreg-coeff", type=float, default=0.0)
     parser.add_argument("--jepa-action-contrast-coeff", type=float, default=0.0)
@@ -288,6 +307,7 @@ def estimate_joint_step_flops(
     jepa_mlp_dim: int,
     mlp_dim: int,
     bt4_encoder_forward_flops_per_batch: float = 0.0,
+    bt4_encoder_forward_count: int | float | None = None,
 ) -> dict[str, float]:
     seq_len = 64 + horizon
     state_len = 64
@@ -303,13 +323,15 @@ def estimate_joint_step_flops(
     )
     dfm_train = 3.0 * dfm_layer_forward * 2.0
     jepa_train = 3.0 * jepa_layer_forward
-    bt4_encoder_forward = float(horizon + 1) * float(bt4_encoder_forward_flops_per_batch)
+    encoder_forward_count = float(horizon + 1 if bt4_encoder_forward_count is None else bt4_encoder_forward_count)
+    bt4_encoder_forward = encoder_forward_count * float(bt4_encoder_forward_flops_per_batch)
     trainable_train = dfm_train + jepa_train
     return {
         "estimated_dfm_train_flops_per_step": float(dfm_train),
         "estimated_jepa_train_flops_per_step": float(jepa_train),
         "estimated_trainable_step_flops": float(trainable_train),
         "estimated_bt4_encoder_forward_flops_per_step": float(bt4_encoder_forward),
+        "estimated_bt4_encoder_forward_count": float(encoder_forward_count),
         "estimated_total_step_flops": float(trainable_train + bt4_encoder_forward),
         "estimated_jepa_width": float(jepa_width),
         "estimated_jepa_mlp_dim": float(jepa_mlp_dim),
@@ -419,6 +441,8 @@ def main() -> int:
         legality_on_masked_only=args.legality_on_masked_only,
         jepa_positive_coeff=args.jepa_positive_coeff,
         jepa_loss_type=args.jepa_loss_type,
+        jepa_target_mode=args.jepa_target_mode,
+        jepa_target_sample_count=args.jepa_target_sample_count,
         jepa_gamma=args.jepa_gamma,
         jepa_sigreg_coeff=args.jepa_sigreg_coeff,
         jepa_action_contrast_coeff=args.jepa_action_contrast_coeff,
@@ -543,7 +567,7 @@ def main() -> int:
     run_config = config.__dict__.copy()
     run_config.update(vars(args))
     run_config["first_legality_coeff"] = first_legality_coeff
-    run_config["jepa_target_space"] = "raw_bt4_tokens"
+    run_config["jepa_target_space"] = "raw_bt4_tokens" if args.jepa_target_mode == "future_bt4" else "current_bt4_tokens_repeated_diagnostic"
     run_config.update(
         {
             "model_family": "joint_latent_sasa",
@@ -554,6 +578,11 @@ def main() -> int:
             "gcs_train_prefix": args.gcs_train_prefix,
             "gcs_val_prefix": args.gcs_val_prefix,
         }
+    )
+    target_encoder_count = 0 if args.jepa_target_mode == "current_repeat" else (
+        args.horizon
+        if args.jepa_target_sample_count <= 0
+        else min(args.jepa_target_sample_count, args.horizon)
     )
     flops = estimate_joint_step_flops(
         batch_size=args.batch_size,
@@ -568,6 +597,7 @@ def main() -> int:
             params,
             batch_size=args.batch_size,
         ).encoder_forward_flops,
+        bt4_encoder_forward_count=1 + target_encoder_count,
     )
     run_config.update(flops)
     (output_dir / "run_config.json").write_text(json.dumps(run_config, indent=2, sort_keys=True), encoding="utf-8")

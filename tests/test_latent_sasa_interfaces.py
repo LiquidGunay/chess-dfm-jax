@@ -154,6 +154,46 @@ def test_joint_stage1_step_uses_compact_legal_batch():
     assert jnp.isfinite(baseline_diag["jepa_diag_identity_loss"])
 
 
+def test_joint_stage1_step_supports_sampled_jepa_targets():
+    shard = build_synthetic_trajectory_shard(batch_size=2, horizon=3)
+    payload = {
+        "schema_version": np.asarray("trajectory-v2"),
+        "planes_t": shard.planes_t,
+        "actions": shard.actions,
+        "planes_future": shard.planes_future,
+        "future_valid": shard.future_valid,
+        "legal_masks": shard.legal_masks,
+    }
+    batch_np = trajectory_joint_batch_from_npz(payload, horizon=3)
+    batch = {key: jnp.asarray(value) for key, value in batch_np.items()}
+    batch["deterministic_t"] = jnp.asarray(0.0, dtype=jnp.float32)
+
+    config = JointLatentSASAConfig(
+        token_dim=8,
+        dfm_layers=1,
+        jepa_layers=1,
+        num_heads=4,
+        mlp_dim=32,
+        horizon=3,
+        compute_dtype="float32",
+        param_dtype="float32",
+        encoder_dtype="float32",
+        first_legality_coeff=1.0,
+        jepa_target_sample_count=1,
+    )
+    model = JointLatentSASAModel(DummyEncoder(), config, rngs=nnx.Rngs(4))
+    optimizer = nnx.Optimizer(model, optax.adamw(1e-3), wrt=TrainableParam)
+
+    loss, aux = train_joint_stage1_step(model, optimizer, batch, jnp.asarray([9, 10], dtype=jnp.uint32))
+
+    assert jnp.isfinite(loss)
+    assert jnp.isfinite(aux["jepa_positive_loss"])
+    assert aux["jepa_target_sample_count"] == 1.0
+    assert jnp.isclose(aux["jepa_target_sample_fraction"], 1.0 / 3.0)
+    assert jnp.sum(aux["jepa_target_horizon_mask"]) == 1.0
+    assert aux["jepa_loss_by_horizon"].shape == (3,)
+
+
 def test_joint_stage2_step_adds_contrastive_metrics():
     shard = build_synthetic_trajectory_shard(batch_size=2, horizon=3)
     payload = {

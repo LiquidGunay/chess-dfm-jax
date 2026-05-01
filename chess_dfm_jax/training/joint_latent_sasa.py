@@ -46,6 +46,8 @@ class JointLatentSASAConfig:
     legality_on_masked_only: bool = True
     jepa_positive_coeff: float = 1.0
     jepa_loss_type: str = "raw_mse"
+    jepa_target_mode: str = "future_bt4"
+    jepa_target_sample_count: int = 0
     jepa_gamma: float = 0.9
     jepa_sigreg_coeff: float = 0.0
     jepa_action_contrast_coeff: float = 0.0
@@ -114,6 +116,10 @@ class JointLatentSASAModel(nnx.Module):
         self.encoder_dim = int(encoder.embedding_size)
         if config.jepa_loss_type != "raw_mse":
             raise ValueError("Joint stage-1 hot training supports raw_mse JEPA loss only.")
+        if config.jepa_target_mode not in ("future_bt4", "current_repeat"):
+            raise ValueError(f"Unsupported jepa_target_mode: {config.jepa_target_mode!r}.")
+        if config.jepa_target_sample_count < 0:
+            raise ValueError("jepa_target_sample_count must be >= 0.")
         jepa_num_heads = config.jepa_num_heads if config.jepa_num_heads > 0 else config.num_heads
         if self.encoder_dim % jepa_num_heads != 0:
             raise ValueError(
@@ -390,7 +396,7 @@ def joint_stage1_loss_fn(
     z_dfm = model.dfm_latents(shared_tokens)
     z_jepa = current_tokens
 
-    rng_t, rng_mask = jax.random.split(rng, 2)
+    rng_t, rng_mask, rng_jepa_target = jax.random.split(rng, 3)
     t = jax.random.uniform(rng_t, shape=(batch_size,))
     if "deterministic_t" in batch:
         t = jnp.full_like(t, batch["deterministic_t"])
@@ -427,26 +433,43 @@ def joint_stage1_loss_fn(
     clean_t = jnp.ones((batch_size,), dtype=jnp.float32)
     _, clean_hidden = model.planner_from_latents(z_dfm, actions, clean_t, return_hidden=True)
     pred_tokens = model.jepa_rollout_from_latents(z_jepa, actions, clean_hidden["action_tokens"])
-    target_tokens = model.encode_future_targets(future_planes)
+    target_sample_count = model.config.jepa_target_sample_count
+    if target_sample_count <= 0 or target_sample_count >= horizon:
+        selected_horizons = jnp.arange(horizon, dtype=jnp.int32)
+    else:
+        selected_horizons = jnp.sort(jax.random.permutation(rng_jepa_target, horizon)[:target_sample_count])
+    pred_for_loss = jnp.take(pred_tokens, selected_horizons, axis=1)
+    future_valid_for_loss = jnp.take(future_valid, selected_horizons, axis=1)
+    if model.config.jepa_target_mode == "current_repeat":
+        # Profiling-only target: removes future BT4 target encodes from the hot path.
+        # This is not a meaningful training objective.
+        target_tokens = jnp.broadcast_to(z_jepa[:, None, :, :], pred_for_loss.shape)
+    else:
+        future_planes_for_loss = jnp.take(future_planes, selected_horizons, axis=1)
+        target_tokens = model.encode_future_targets(future_planes_for_loss)
     sample_jepa = jnp.mean(
         jnp.mean(
-            (jnp.asarray(pred_tokens, dtype=jnp.float32) - jnp.asarray(target_tokens, dtype=jnp.float32)) ** 2,
+            (jnp.asarray(pred_for_loss, dtype=jnp.float32) - jnp.asarray(target_tokens, dtype=jnp.float32)) ** 2,
             axis=-1,
         ),
         axis=-1,
     )
-    horizon_weights = model.config.jepa_gamma ** jnp.arange(horizon, dtype=jnp.float32)
-    jepa_mask = future_valid * valid[:, None] * horizon_weights[None, :]
+    horizon_weights = model.config.jepa_gamma ** selected_horizons.astype(jnp.float32)
+    jepa_mask = future_valid_for_loss * valid[:, None] * horizon_weights[None, :]
     jepa_positive_loss = _weighted_horizon_mean(sample_jepa, jepa_mask)
     jepa_raw_mse = jepa_positive_loss
     jepa_sigreg_loss = jnp.asarray(0.0, dtype=jnp.float32)
     if model.config.jepa_sigreg_coeff != 0.0:
         jepa_sigreg_loss = _sigreg_loss(jnp.asarray(pred_tokens, dtype=jnp.float32).reshape((-1, pred_tokens.shape[-1])))
 
-    horizon_valid = future_valid * valid[:, None]
-    horizon_denom = jnp.maximum(jnp.sum(horizon_valid, axis=0), 1.0)
-    jepa_loss_by_horizon = jnp.sum(sample_jepa * horizon_valid, axis=0) / horizon_denom
+    horizon_valid = future_valid_for_loss * valid[:, None]
+    horizon_num = jnp.zeros((horizon,), dtype=jnp.float32).at[selected_horizons].add(
+        jnp.sum(sample_jepa * horizon_valid, axis=0)
+    )
+    horizon_denom = jnp.zeros((horizon,), dtype=jnp.float32).at[selected_horizons].add(jnp.sum(horizon_valid, axis=0))
+    jepa_loss_by_horizon = horizon_num / jnp.maximum(horizon_denom, 1.0)
     jepa_raw_mse_by_horizon = jepa_loss_by_horizon
+    target_horizon_mask = jnp.zeros((horizon,), dtype=jnp.float32).at[selected_horizons].set(1.0)
 
     zero = jnp.asarray(0.0, dtype=jnp.float32)
     zero_by_horizon = jnp.zeros((horizon,), dtype=jnp.float32)
@@ -499,6 +522,10 @@ def joint_stage1_loss_fn(
         "jepa_true_minus_shuffled": zero,
         "jepa_loss_by_horizon": jepa_loss_by_horizon,
         "jepa_raw_mse_by_horizon": jepa_raw_mse_by_horizon,
+        "jepa_target_horizon_mask": target_horizon_mask,
+        "jepa_target_sample_count": jnp.asarray(selected_horizons.shape[0], dtype=jnp.float32),
+        "jepa_target_sample_fraction": jnp.asarray(selected_horizons.shape[0] / horizon, dtype=jnp.float32),
+        "jepa_target_mean_horizon": jnp.mean(selected_horizons.astype(jnp.float32) + 1.0),
         "mean_token_cosine": mean_token_cosine,
         "mean_token_cosine_by_horizon": mean_token_cosine_by_horizon,
         "pred_token_norm": pred_token_norm,

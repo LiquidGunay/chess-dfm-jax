@@ -243,6 +243,31 @@ for H2/B64. `L_action_contrast = max(margin + L_true_actions -
 L_shuffled_actions, 0)` is the next ablation if post-hoc diagnostics show true
 and shuffled action sequences scoring equally.
 
+`--jepa-target-mode current_repeat` exists only as a profiling diagnostic. It
+replaces future BT4 targets with a repeated copy of `z_t`, so the trainer does
+not encode `s_{t+1:t+H}`. This run is invalid for model selection, but it
+measures how much wall time is caused by future target encodes. Its FLOP
+accounting uses one BT4 encoder forward per step instead of `H + 1`.
+
+For valid JEPA/joint training, use `--jepa-target-sample-count` to reduce target
+encoder cost without changing the target definition. `0` means all future
+horizons. `1` samples one future horizon each step, encodes only that
+`s_{t+h}`, computes raw BT4 MSE for that horizon, and logs
+`jepa_target_horizon_mask`. This is the preferred first efficiency ablation for
+H4/H8 because it preserves stochastic supervision while avoiding `H` future BT4
+target encodes on every optimizer step.
+
+Encoder efficiency remains a core roadmap item because BT4 will eventually be
+partially unfrozen. Profile work should therefore track both target-encode
+avoidance and encoder-side improvements:
+
+- attention kernel choice for the 64-token smolgen-biased BT4 blocks
+- current/future batching layout
+- horizon target sampling instead of encoding every future board every step
+- rematerialization/checkpointing once encoder gradients are enabled
+- precision and activation layout choices
+- explicit multi-device sharding before using larger TPU slices
+
 BT4 attention has a manual implementation and a `jax.nn.dot_product_attention`
 implementation. The manual path remains the default for TPU training because
 the first v5litepod-1 SDPA profile for the BT4 smolgen-biased 64-token shape was
