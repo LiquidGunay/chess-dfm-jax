@@ -227,14 +227,19 @@ jepa_sigreg_coeff = 0.0 initially, then 0.01 ablation
 jepa_action_contrast_coeff = 0.0 initially, then 0.1-0.5 ablation
 ```
 
-`L_horizon_legal` applies only to later teacher-forced horizon slots and should
-be treated as an ablation because it is not sampler legality. JEPA now trains
-with raw BT4-token MSE by default; cosine distance, normalized MSE, token norms,
-per-horizon JEPA losses, identity baseline, and shuffled-action baseline remain
-diagnostics. `L_action_contrast = max(margin + L_true_actions -
-L_shuffled_actions, 0)` uses the selected JEPA loss type and is the next
-ablation if the diagnostics show true and shuffled action sequences scoring
-equally.
+`L_horizon_legal` is disabled in the joint training hot path. Later-move
+legality depends on the generated prefix, while stored legal sets correspond to
+the dataset's true future states after the true prefix actions. The trainer
+therefore computes only first-move illegal probability mass and logs
+`horizon_legality_evaluated=0`; generated-prefix legality belongs in
+sampler/evaluation code.
+
+JEPA now trains with raw BT4-token MSE by default; cosine distance, normalized
+MSE, token norms, per-horizon JEPA losses, identity baseline, and
+shuffled-action baseline remain diagnostics. `L_action_contrast = max(margin +
+L_true_actions - L_shuffled_actions, 0)` uses the selected JEPA loss type and is
+the next ablation if the diagnostics show true and shuffled action sequences
+scoring equally.
 
 Stage 2 joint loss:
 

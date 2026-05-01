@@ -389,34 +389,25 @@ def joint_stage1_loss_fn(
     dfm_ce_loss = jnp.sum(sample_ce * valid) / denom
 
     probs = jax.nn.softmax(logits, axis=-1)
-    legal_mass = legal_mass_from_indices(
-        probs[:, :loss_horizon],
-        batch["legal_idx"][:, :loss_horizon],
-        batch["legal_count"][:, :loss_horizon],
-    )
-    legal_valid = jnp.ones_like(legal_mass)
+    first_legal_mass = legal_mass_from_indices(
+        probs[:, :1],
+        batch["legal_idx"][:, :1],
+        batch["legal_count"][:, :1],
+    )[:, 0]
+    first_legal_valid = jnp.ones_like(first_legal_mass)
     if "legal_masks_valid" in batch:
-        legal_valid = jnp.asarray(batch["legal_masks_valid"], dtype=jnp.float32)[:, :loss_horizon]
-    legal_gate = jnp.asarray(is_masked, dtype=jnp.float32)[:, :loss_horizon]
+        first_legal_valid = jnp.asarray(batch["legal_masks_valid"], dtype=jnp.float32)[:, 0]
+    first_legal_gate = jnp.asarray(is_masked, dtype=jnp.float32)[:, 0]
     if not model.config.legality_on_masked_only:
-        legal_gate = jnp.ones_like(legal_gate)
-    legal_slot_valid = valid[:, None] * legal_valid * loss_horizon_mask[None, :loss_horizon] * legal_gate
-    first_slot_valid = legal_slot_valid[:, 0]
+        first_legal_gate = jnp.ones_like(first_legal_gate)
+    first_slot_valid = valid * first_legal_valid * loss_horizon_mask[0] * first_legal_gate
     first_legality_loss = (
-        jnp.sum((1.0 - legal_mass[:, 0]) * first_slot_valid)
+        jnp.sum((1.0 - first_legal_mass) * first_slot_valid)
         / jnp.maximum(jnp.sum(first_slot_valid), 1.0)
     )
-    later_horizon_mask = (jnp.arange(loss_horizon) > 0).astype(jnp.float32)
-    horizon_slot_valid = legal_slot_valid * later_horizon_mask[None, :]
-    horizon_legality_loss = (
-        jnp.sum((1.0 - legal_mass) * horizon_slot_valid)
-        / jnp.maximum(jnp.sum(horizon_slot_valid), 1.0)
-    )
-    legality_loss = first_legality_loss + horizon_legality_loss
-    weighted_legality_loss = (
-        model.config.first_legality_coeff * first_legality_loss
-        + model.config.horizon_legality_coeff * horizon_legality_loss
-    )
+    horizon_legality_loss = jnp.asarray(0.0, dtype=jnp.float32)
+    legality_loss = first_legality_loss
+    weighted_legality_loss = model.config.first_legality_coeff * first_legality_loss
 
     clean_t = jnp.ones((batch_size,), dtype=jnp.float32)
     _, clean_hidden = model.planner_from_latents(z_dfm, actions, clean_t, return_hidden=True)
@@ -524,7 +515,8 @@ def joint_stage1_loss_fn(
         "horizon_legality_loss": horizon_legality_loss,
         "weighted_legality_loss": weighted_legality_loss,
         "first_legal_mass": 1.0 - first_legality_loss,
-        "horizon_legal_mass": 1.0 - horizon_legality_loss,
+        "horizon_legal_mass": jnp.asarray(0.0, dtype=jnp.float32),
+        "horizon_legality_evaluated": jnp.asarray(0.0, dtype=jnp.float32),
         "jepa_positive_loss": jepa_positive_loss,
         "jepa_cosine_loss": jepa_cosine_loss,
         "jepa_raw_mse": jepa_raw_mse,

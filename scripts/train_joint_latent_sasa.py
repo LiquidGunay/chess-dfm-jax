@@ -89,7 +89,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--dfm-ce-coeff", type=float, default=1.0)
     parser.add_argument("--legality-coeff", type=float, default=None, help="Deprecated alias for --first-legality-coeff.")
     parser.add_argument("--first-legality-coeff", type=float, default=None)
-    parser.add_argument("--horizon-legality-coeff", type=float, default=0.0)
+    parser.add_argument(
+        "--horizon-legality-coeff",
+        type=float,
+        default=0.0,
+        help="Deprecated no-op for joint training. Later generated-prefix legality belongs in eval/sampling.",
+    )
     parser.add_argument("--legality-on-masked-only", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--jepa-positive-coeff", type=float, default=1.0)
     parser.add_argument(
