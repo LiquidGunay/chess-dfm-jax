@@ -170,6 +170,7 @@ class EncoderLayer(nnx.Module):
         compute_dtype=jnp.float32,
         use_qk_gain: bool = False,
         use_xsa: bool = False,
+        attention_impl: str = "sdpa",
         layer_params: dict | None = None,
         shared_smolgen_w: np.ndarray | None = None,
     ):
@@ -180,6 +181,9 @@ class EncoderLayer(nnx.Module):
         self.compute_dtype = jnp.dtype(compute_dtype)
         self.use_qk_gain = use_qk_gain
         self.use_xsa = use_xsa
+        if attention_impl not in {"sdpa", "manual"}:
+            raise ValueError(f"Unsupported attention_impl: {attention_impl!r}")
+        self.attention_impl = attention_impl
 
         if layer_params:
             self.wq = nnx.Param(jnp.asarray(layer_params["mha"]["q_w"], dtype=self.param_dtype))
@@ -232,20 +236,29 @@ class EncoderLayer(nnx.Module):
             v = v + jnp.asarray(self.wv_b[...], dtype=self.compute_dtype)
 
         q = q.reshape((batch, seq_len, self.num_heads, self.head_dim)).transpose(0, 2, 1, 3)
-        k = k.reshape((batch, seq_len, self.num_heads, self.head_dim)).transpose(0, 2, 3, 1)
+        k = k.reshape((batch, seq_len, self.num_heads, self.head_dim)).transpose(0, 2, 1, 3)
         v = v.reshape((batch, seq_len, self.num_heads, self.head_dim)).transpose(0, 2, 1, 3)
 
-        logits = jnp.matmul(q, k)
-        if self.use_qk_gain:
-            logits = logits * self.qk_gain[...]
+        bias = self.smolgen(x) if self.smolgen else None
+        if self.attention_impl == "sdpa" and not self.use_qk_gain:
+            out = jax.nn.dot_product_attention(
+                q.transpose(0, 2, 1, 3),
+                k.transpose(0, 2, 1, 3),
+                v.transpose(0, 2, 1, 3),
+                bias=bias,
+                implementation="xla",
+            )
+            out = out.transpose(0, 2, 1, 3)
         else:
-            logits = logits / np.sqrt(self.head_dim)
-
-        if self.smolgen:
-            logits = logits + self.smolgen(x)
-
-        attn = jax.nn.softmax(logits, axis=-1)
-        out = jnp.matmul(attn, v)
+            logits = jnp.matmul(q, k.transpose(0, 1, 3, 2))
+            if self.use_qk_gain:
+                logits = logits * self.qk_gain[...]
+            else:
+                logits = logits / np.sqrt(self.head_dim)
+            if bias is not None:
+                logits = logits + bias
+            attn = jax.nn.softmax(logits, axis=-1)
+            out = jnp.matmul(attn, v)
         out = out.transpose(0, 2, 1, 3).reshape((batch * seq_len, self.width))
         
         if hasattr(self, "wo_b"): # Trainable version
@@ -343,7 +356,7 @@ class MovesLeftHead(nnx.Module):
 
 
 class BT4Model(nnx.Module):
-    def __init__(self, params: dict, *, dtype=jnp.float32):
+    def __init__(self, params: dict, *, dtype=jnp.float32, attention_impl: str = "sdpa"):
         self.dtype = jnp.dtype(dtype)
         p = params
         self.embedding = InputEmbedding(
@@ -362,6 +375,7 @@ class BT4Model(nnx.Module):
                     rngs=nnx.Rngs(0),
                     param_dtype=self.dtype,
                     compute_dtype=self.dtype,
+                    attention_impl=attention_impl,
                     layer_params=lp,
                     shared_smolgen_w=p["smolgen_w"],
                 )
@@ -392,8 +406,8 @@ class BT4Model(nnx.Module):
         return p, v, ml
 
 
-def make_bt4_model(params: dict, *, dtype=jnp.float32) -> BT4Model:
-    return BT4Model(params, dtype=dtype)
+def make_bt4_model(params: dict, *, dtype=jnp.float32, attention_impl: str = "sdpa") -> BT4Model:
+    return BT4Model(params, dtype=dtype, attention_impl=attention_impl)
 
 
 @nnx.jit
