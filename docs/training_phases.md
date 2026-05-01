@@ -257,6 +257,38 @@ horizons. `1` samples one future horizon each step, encodes only that
 H4/H8 because it preserves stochastic supervision while avoiding `H` future BT4
 target encodes on every optimizer step.
 
+Single-chip v5litepod-1 profiling on May 1, 2026 found that target-horizon
+sampling is a real throughput win, but not enough to reach 30% MFU on this
+small-sequence architecture:
+
+```text
+config                         median step     median MFU
+H2, all future targets, B64     ~0.0758 s       ~24.0%
+H2, one future target, B64      ~0.0628 s       ~22.3%
+H4, one future target, B64      ~0.0736 s       ~23.4%
+H8, one future target, B64      ~0.0968 s       ~24.4%
+H8, one future target, B128     ~0.1850 s       ~25.5%
+H2, no future target diagnostic ~0.0517 s       diagnostic only
+```
+
+The no-future-target diagnostic shows future BT4 target encodes are a material
+part of H2 wall time. The B128 H8 profile shows the remaining MFU ceiling is
+not just batch underfill. On a single v5litepod-1, the current BT4 encoder plus
+64-token JEPA/DFM scan stack appears to top out around 25% measured MFU with
+manual attention. Further utilization work should focus on architectural or
+systems changes rather than more cache warmup:
+
+- explicit multi-device sharding before using larger TPU slices
+- precomputed/raw BT4-token datasets for fixed-frozen-encoder experiments
+- sampled JEPA horizons for H4/H8 as the default valid training path
+- encoder attention/kernel changes that still matter after BT4 is unfrozen
+- rematerialization and optimizer-state choices once encoder gradients are enabled
+
+Enabling transparent hugepages on the TPU VM reduced first-step startup from
+about 40 seconds to about 4 seconds on the preserved test VM, but did not change
+steady-state step time. It should be set in TPU setup scripts for quality of
+life, not counted as a throughput fix.
+
 Encoder efficiency remains a core roadmap item because BT4 will eventually be
 partially unfrozen. Profile work should therefore track both target-encode
 avoidance and encoder-side improvements:
