@@ -19,6 +19,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+from chess_dfm_jax.analysis.bt4_theory import estimate_bt4_theory  # noqa: E402
 from chess_dfm_jax.analysis.profile_targets import load_mapped_bt4_params  # noqa: E402
 from chess_dfm_jax.data.gcs_cache import GCSShardCache  # noqa: E402
 from chess_dfm_jax.data.leela import LeelaChunkDataLoader, discover_chunk_files  # noqa: E402
@@ -286,6 +287,7 @@ def estimate_joint_step_flops(
     jepa_width: int,
     jepa_mlp_dim: int,
     mlp_dim: int,
+    bt4_encoder_forward_flops_per_batch: float = 0.0,
 ) -> dict[str, float]:
     seq_len = 64 + horizon
     state_len = 64
@@ -301,10 +303,14 @@ def estimate_joint_step_flops(
     )
     dfm_train = 3.0 * dfm_layer_forward * 2.0
     jepa_train = 3.0 * jepa_layer_forward
+    bt4_encoder_forward = float(horizon + 1) * float(bt4_encoder_forward_flops_per_batch)
+    trainable_train = dfm_train + jepa_train
     return {
         "estimated_dfm_train_flops_per_step": float(dfm_train),
         "estimated_jepa_train_flops_per_step": float(jepa_train),
-        "estimated_total_step_flops": float(dfm_train + jepa_train),
+        "estimated_trainable_step_flops": float(trainable_train),
+        "estimated_bt4_encoder_forward_flops_per_step": float(bt4_encoder_forward),
+        "estimated_total_step_flops": float(trainable_train + bt4_encoder_forward),
         "estimated_jepa_width": float(jepa_width),
         "estimated_jepa_mlp_dim": float(jepa_mlp_dim),
     }
@@ -558,6 +564,10 @@ def main() -> int:
         jepa_width=int(params["embedding_size"]),
         jepa_mlp_dim=args.jepa_mlp_dim if args.jepa_mlp_dim > 0 else int(params["embedding_size"]) * 4,
         mlp_dim=args.mlp_dim,
+        bt4_encoder_forward_flops_per_batch=estimate_bt4_theory(
+            params,
+            batch_size=args.batch_size,
+        ).encoder_forward_flops,
     )
     run_config.update(flops)
     (output_dir / "run_config.json").write_text(json.dumps(run_config, indent=2, sort_keys=True), encoding="utf-8")

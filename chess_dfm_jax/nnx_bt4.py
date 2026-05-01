@@ -3,13 +3,11 @@
 from __future__ import annotations
 
 import math
-from typing import Any
 
 import flax.nnx as nnx
 import jax
 import jax.numpy as jnp
 import numpy as np
-import optax
 
 
 def _stats_dtype(dtype) -> jnp.dtype:
@@ -217,8 +215,8 @@ class EncoderLayer(nnx.Module):
             self.qk_gain = TrainableParam(jnp.array(1.0 / np.sqrt(self.head_dim), dtype=self.param_dtype))
 
     def __call__(self, x: jnp.ndarray, alpha: float | None = None) -> jnp.ndarray:
-        res = x
         x = jnp.asarray(x, dtype=self.compute_dtype)
+        res = x
         batch, seq_len, _ = x.shape
         alpha_val = alpha if alpha is not None else 1.0
         
@@ -251,7 +249,10 @@ class EncoderLayer(nnx.Module):
         out = out.transpose(0, 2, 1, 3).reshape((batch * seq_len, self.width))
         
         if hasattr(self, "wo_b"): # Trainable version
-             out = out @ jnp.asarray(self.wo[...], dtype=self.compute_dtype) + self.wo_b[...]
+             out = (
+                 out @ jnp.asarray(self.wo[...], dtype=self.compute_dtype)
+                 + jnp.asarray(self.wo_b[...], dtype=self.compute_dtype)
+             )
         else: # Fixed version
              out = self.wo(out)
         
@@ -262,8 +263,14 @@ class EncoderLayer(nnx.Module):
         res = x
         x_flat = x.reshape((batch * seq_len, self.width))
         if hasattr(self, "ffn1_b"): # Trainable JEPA version
-            h = mish(x_flat @ self.ffn1[...] + self.ffn1_b[...])
-            out_flat = h @ self.ffn2[...] + self.ffn2_b[...]
+            h = mish(
+                x_flat @ jnp.asarray(self.ffn1[...], dtype=self.compute_dtype)
+                + jnp.asarray(self.ffn1_b[...], dtype=self.compute_dtype)
+            )
+            out_flat = (
+                h @ jnp.asarray(self.ffn2[...], dtype=self.compute_dtype)
+                + jnp.asarray(self.ffn2_b[...], dtype=self.compute_dtype)
+            )
         else: # Fixed BT4 version
             out_flat = self.ffn2(mish(self.ffn1(x_flat)))
             

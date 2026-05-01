@@ -330,7 +330,9 @@ checkpoints, and cleaned up the TPU resource.
   unless the experiment is explicitly measuring the unprefetched loader path.
   The joint trainer logs `data_fetch_time_s`, `train_step_time_s`,
   `total_step_time_s`, `host_overhead_fraction`, and both train-step and
-  iteration-level MFU estimates.
+  iteration-level MFU estimates. Joint MFU estimates include frozen BT4 encoder
+  forward FLOPs for the current board plus the requested future horizon; older
+  runs that only counted JEPA/DFM head FLOPs underreported utilization.
 - Failed experiments are not requeued unless `--requeue-on-failure` is set.
 - For GCS-backed DFM training, use `--gcs-startup-cache-policy all` unless the
   experiment is explicitly testing streaming behavior.
