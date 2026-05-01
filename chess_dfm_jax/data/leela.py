@@ -6,7 +6,9 @@ import collections
 from dataclasses import dataclass
 import gzip
 import os
+import queue
 import random
+import threading
 from typing import Callable, Iterator, Sequence
 
 import numpy as np
@@ -124,6 +126,37 @@ class LeelaChunkDataLoader:
         self.legal_lmax = legal_lmax
 
     def __iter__(self) -> Iterator[dict[str, np.ndarray]]:
+        batches = self._iter_batches()
+        if self.prefetch_batches <= 0:
+            return batches
+        return self._prefetched_batches(batches)
+
+    def _prefetched_batches(self, batches: Iterator[dict[str, np.ndarray]]) -> Iterator[dict[str, np.ndarray]]:
+        batch_queue: queue.Queue[dict[str, np.ndarray] | BaseException | object] = queue.Queue(
+            maxsize=max(1, self.prefetch_batches)
+        )
+        sentinel = object()
+
+        def worker() -> None:
+            try:
+                for batch in batches:
+                    batch_queue.put(batch)
+            except BaseException as exc:  # pragma: no cover - surfaced in consumer thread
+                batch_queue.put(exc)
+            finally:
+                batch_queue.put(sentinel)
+
+        thread = threading.Thread(target=worker, name="leela-batch-prefetch", daemon=True)
+        thread.start()
+        while True:
+            item = batch_queue.get()
+            if item is sentinel:
+                return
+            if isinstance(item, BaseException):
+                raise item
+            yield item
+
+    def _iter_batches(self) -> Iterator[dict[str, np.ndarray]]:
         paths = (
             [str(path) for path in self.chunk_paths_provider()]
             if self.chunk_paths_provider is not None
@@ -176,12 +209,7 @@ class LeelaChunkDataLoader:
                                 include_metadata=self.include_metadata,
                             )
                     batch_size = int(batch["current_planes"].shape[0])
-                    for i in range(batch_size):
-                        for key, value in batch.items():
-                            current_batch[key].append(value[i])
-                        if len(current_batch["current_planes"]) >= self.batch_size:
-                            yield self._finalize_batch(current_batch)
-                            current_batch = collections.defaultdict(list)
+                    current_batch = yield from self._yield_array_batches(batch, batch_size, current_batch)
                 except Exception as e:
                     print(f"Failed to read npz {path}: {e}")
                 continue
@@ -269,6 +297,43 @@ class LeelaChunkDataLoader:
 
     def _finalize_batch(self, batch_dict: dict[str, list]) -> dict[str, np.ndarray]:
         return {k: np.stack(v) for k, v in batch_dict.items()}
+
+    def _append_rows(
+        self,
+        current_batch: collections.defaultdict[str, list],
+        batch: dict[str, np.ndarray],
+        start: int,
+        end: int,
+    ) -> None:
+        for key, value in batch.items():
+            current_batch[key].extend(value[start:end])
+
+    def _slice_batch(self, batch: dict[str, np.ndarray], start: int, end: int) -> dict[str, np.ndarray]:
+        return {key: np.asarray(value[start:end]) for key, value in batch.items()}
+
+    def _yield_array_batches(
+        self,
+        batch: dict[str, np.ndarray],
+        batch_size: int,
+        current_batch: collections.defaultdict[str, list],
+    ) -> Iterator[dict[str, np.ndarray]]:
+        start = 0
+        buffered = len(current_batch["current_planes"])
+        if buffered:
+            take = min(self.batch_size - buffered, batch_size)
+            self._append_rows(current_batch, batch, 0, take)
+            start = take
+            if len(current_batch["current_planes"]) >= self.batch_size:
+                yield self._finalize_batch(current_batch)
+                current_batch = collections.defaultdict(list)
+
+        while start + self.batch_size <= batch_size:
+            yield self._slice_batch(batch, start, start + self.batch_size)
+            start += self.batch_size
+
+        if start < batch_size:
+            self._append_rows(current_batch, batch, start, batch_size)
+        return current_batch
 
 
 def discover_chunk_files(chunk_dir: str | None) -> list[str]:

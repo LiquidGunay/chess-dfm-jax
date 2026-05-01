@@ -326,6 +326,11 @@ checkpoints, and cleaned up the TPU resource.
   optional `--profile-uri`. This captures the actual data-loader, BT4 encoder,
   DFM, JEPA, optimizer, and host/device synchronization path rather than the
   synthetic standalone JEPA profile target.
+- Joint traces should be launched with `--loader-prefetch-batches` enabled
+  unless the experiment is explicitly measuring the unprefetched loader path.
+  The joint trainer logs `data_fetch_time_s`, `train_step_time_s`,
+  `total_step_time_s`, `host_overhead_fraction`, and both train-step and
+  iteration-level MFU estimates.
 - Failed experiments are not requeued unless `--requeue-on-failure` is set.
 - For GCS-backed DFM training, use `--gcs-startup-cache-policy all` unless the
   experiment is explicitly testing streaming behavior.

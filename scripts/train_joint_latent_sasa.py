@@ -60,6 +60,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--gcs-min-train-shards", type=int, default=1)
     parser.add_argument("--gcs-min-val-shards", type=int, default=1)
     parser.add_argument("--gcs-startup-cache-policy", choices=["all", "minimum"], default="all")
+    parser.add_argument(
+        "--loader-prefetch-batches",
+        type=int,
+        default=2,
+        help="Background host batches to prepare ahead of the TPU step. Set 0 to disable.",
+    )
     parser.add_argument("--val-fraction", type=float, default=0.0)
     parser.add_argument("--val-batches", type=int, default=0)
     parser.add_argument("--val-every", type=int, default=0)
@@ -318,8 +324,11 @@ def evaluate_validation_batches(
 ) -> tuple[dict[str, float], jax.Array]:
     loader = iter(loader_obj) if loader_obj is not None else None
     totals: dict[str, float] = {}
+    fetch_time_total = 0.0
+    eval_time_total = 0.0
     count = 0
     for _ in range(val_batches):
+        fetch_start = time.perf_counter()
         if loader is None:
             batch = build_synthetic_joint_batch(batch_size, horizon, legal_lmax)
         else:
@@ -328,15 +337,18 @@ def evaluate_validation_batches(
             except StopIteration:
                 loader = iter(loader_obj)
                 batch = next(loader)
+        fetch_time_total += time.perf_counter() - fetch_start
         if 0.0 <= deterministic_t <= 1.0:
             batch = dict(batch)
             batch["deterministic_t"] = np.asarray(deterministic_t, dtype=np.float32)
         rng, eval_rng = jax.random.split(rng)
+        eval_start = time.perf_counter()
         if stage == "stage2":
             loss, aux = eval_joint_stage2_step(model, batch, eval_rng)
         else:
             loss, aux = eval_joint_stage1_step(model, batch, eval_rng)
         jax.block_until_ready((loss, aux))
+        eval_time_total += time.perf_counter() - eval_start
         batch_metrics = {"loss": float(loss)}
         batch_metrics.update(flatten_aux_metrics(aux))
         for key, value in batch_metrics.items():
@@ -344,7 +356,10 @@ def evaluate_validation_batches(
         count += 1
     if count == 0:
         return {}, rng
-    return {key: value / count for key, value in totals.items()}, rng
+    averaged = {key: value / count for key, value in totals.items()}
+    averaged["data_fetch_time_s"] = fetch_time_total / count
+    averaged["eval_step_time_s"] = eval_time_total / count
+    return averaged, rng
 
 
 def main() -> int:
@@ -502,6 +517,7 @@ def main() -> int:
             chunk_paths_provider=train_cache.local_paths if train_cache is not None else None,
             shuffle_files=True if train_cache is not None else False,
             drop_last=True,
+            prefetch_batches=args.loader_prefetch_batches,
         )
         loader = iter(loader_obj)
     if val_chunk_paths:
@@ -515,6 +531,7 @@ def main() -> int:
             shuffle_files=False,
             drop_last=False,
             chunk_paths_provider=val_cache.local_paths if val_cache is not None else None,
+            prefetch_batches=max(0, min(args.loader_prefetch_batches, 2)),
         )
 
     run_config = config.__dict__.copy()
@@ -580,7 +597,9 @@ def main() -> int:
 
     try:
         for step in range(start_step, args.steps):
+            iteration_start = time.perf_counter()
             rng, step_rng = jax.random.split(rng)
+            fetch_start = time.perf_counter()
             if loader is not None:
                 try:
                     batch = next(loader)
@@ -589,9 +608,12 @@ def main() -> int:
                     batch = next(loader)
             else:
                 batch = build_synthetic_joint_batch(args.batch_size, args.horizon, args.legal_lmax)
+            data_fetch_time = time.perf_counter() - fetch_start
+            host_batch_start = time.perf_counter()
             if 0.0 <= args.train_deterministic_t <= 1.0:
                 batch = dict(batch)
                 batch["deterministic_t"] = np.asarray(args.train_deterministic_t, dtype=np.float32)
+            host_batch_time = time.perf_counter() - host_batch_start
 
             next_step = step + 1
             if (
@@ -607,16 +629,25 @@ def main() -> int:
                 print(f"jax_profile_start step={next_step} dir={profile_dir}")
                 sys.stdout.flush()
 
-            step_start = time.perf_counter()
-            if args.stage == "stage2":
-                loss, aux = train_joint_stage2_step(model, optimizer, batch, step_rng)
-            else:
-                loss, aux = train_joint_stage1_step(model, optimizer, batch, step_rng)
+            train_step_start = time.perf_counter()
+            with jax.profiler.StepTraceAnnotation("train_joint_latent_sasa", step_num=next_step):
+                if args.stage == "stage2":
+                    loss, aux = train_joint_stage2_step(model, optimizer, batch, step_rng)
+                else:
+                    loss, aux = train_joint_stage1_step(model, optimizer, batch, step_rng)
             jax.block_until_ready((loss, aux))
-            step_time = time.perf_counter() - step_start
+            step_time = time.perf_counter() - train_step_start
             completed_step = step + 1
 
-            metrics = {"step": completed_step, "loss": float(loss), "step_time_s": step_time}
+            metrics = {
+                "step": completed_step,
+                "loss": float(loss),
+                "step_time_s": step_time,
+                "train_step_time_s": step_time,
+                "data_fetch_time_s": data_fetch_time,
+                "host_batch_time_s": host_batch_time,
+                "loader_prefetch_batches": float(args.loader_prefetch_batches),
+            }
             metrics.update(flatten_aux_metrics(aux))
             if profile_active:
                 metrics["jax_profile_active"] = 1.0
@@ -634,6 +665,7 @@ def main() -> int:
             if args.diagnostics_every > 0 and (
                 completed_step % args.diagnostics_every == 0 or completed_step == args.steps
             ):
+                diagnostics_start = time.perf_counter()
                 diag = joint_coupling_gradient_diagnostics(model, batch)
                 jax.block_until_ready(diag)
                 metrics.update(flatten_aux_metrics(diag))
@@ -644,8 +676,12 @@ def main() -> int:
                 )
                 jax.block_until_ready(baseline_diag)
                 metrics.update(flatten_aux_metrics(baseline_diag))
+                metrics["diagnostics_time_s"] = time.perf_counter() - diagnostics_start
+            else:
+                metrics["diagnostics_time_s"] = 0.0
 
             if args.val_batches > 0 and (completed_step % val_every == 0 or completed_step == args.steps):
+                validation_start = time.perf_counter()
                 val_metrics, val_rng = evaluate_validation_batches(
                     model=model,
                     loader_obj=val_loader_obj,
@@ -658,6 +694,21 @@ def main() -> int:
                     stage=args.stage,
                 )
                 metrics.update(add_validation_prefix(val_metrics))
+                metrics["validation_time_s"] = time.perf_counter() - validation_start
+            else:
+                metrics["validation_time_s"] = 0.0
+
+            total_step_time = time.perf_counter() - iteration_start
+            metrics["total_step_time_s"] = total_step_time
+            metrics["iteration_examples_per_second"] = args.batch_size / max(total_step_time, 1e-12)
+            metrics["estimated_iteration_total_tflops"] = (
+                flops["estimated_total_step_flops"] / max(total_step_time, 1e-12) / 1e12
+            )
+            metrics["estimated_iteration_mfu"] = (
+                metrics["estimated_iteration_total_tflops"] / args.peak_tflops if args.peak_tflops > 0 else 0.0
+            )
+            metrics["host_overhead_time_s"] = max(0.0, total_step_time - step_time)
+            metrics["host_overhead_fraction"] = metrics["host_overhead_time_s"] / max(total_step_time, 1e-12)
 
             last_metrics = metrics
             metrics_log.write(json.dumps(metrics) + "\n")
@@ -680,8 +731,11 @@ def main() -> int:
                             f"cos={metrics.get('mean_token_cosine', 0.0):.4f}",
                             f"acc={metrics.get('accuracy', 0.0):.4f}",
                             f"step_time_s={metrics['step_time_s']:.3f}",
+                            f"fetch_s={metrics.get('data_fetch_time_s', 0.0):.3f}",
+                            f"host_frac={metrics.get('host_overhead_fraction', 0.0):.2f}",
                             f"ex_per_s={metrics['examples_per_second']:.1f}",
                             f"total_mfu={metrics['estimated_total_mfu']:.4f}",
+                            f"iter_mfu={metrics.get('estimated_iteration_mfu', 0.0):.4f}",
                         ]
                     )
                 )

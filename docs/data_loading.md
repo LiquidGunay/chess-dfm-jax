@@ -91,9 +91,32 @@ stored compact legal columns and avoid reconstructing dense masks unless a
 legacy metric explicitly requests them.
 
 Use a custom deterministic loader first. Grain remains a later backend option
-once compact v3 throughput and sharding needs are measured. The loader boundary
-should still be Grain-compatible: explicit sampler, column reader, host
-transform, prefetch queue, and device transfer stages.
+once compact v3 throughput and sharding needs are measured. The current v3
+loader already has the Grain-compatible boundaries we need: explicit shard
+selection, compact-column decode, host batch prefetch, and a clean handoff to
+the trainer.
+
+For trajectory-v3, decode only the requested horizon. H2/H4 experiments should
+slice compact `planes_future_*`, `legal_idx_u16`, and target columns before
+expanding/casting them. Decoding all stored H8 columns for an H2 run is a loader
+bug, not a training cost.
+
+The trainer logs separate timing metrics:
+
+```text
+data_fetch_time_s
+train_step_time_s
+total_step_time_s
+host_overhead_fraction
+validation_time_s
+estimated_total_mfu
+estimated_iteration_mfu
+```
+
+Use `estimated_total_mfu` for compiled train-step throughput and
+`estimated_iteration_mfu` for end-to-end throughput including data fetch,
+diagnostics, and validation. If those diverge, optimize the host path before
+changing model size.
 
 ## Current Datasets
 

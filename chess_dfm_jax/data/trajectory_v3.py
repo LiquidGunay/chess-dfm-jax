@@ -234,12 +234,12 @@ def trajectory_v3_to_batch(
     if view == "joint_latent_sasa":
         if not has_compact_legal:
             raise KeyError("joint_latent_sasa view requires legal_idx_u16 and legal_count_u16.")
-        batch["legal_idx"] = np.asarray(data["legal_idx_u16"], dtype=np.int32)[:, :view_horizon]
-        batch["legal_count"] = np.asarray(data["legal_count_u16"], dtype=np.int32)[:, :view_horizon]
+        batch["legal_idx"] = np.asarray(data["legal_idx_u16"][:, :view_horizon], dtype=np.int32)
+        batch["legal_count"] = np.asarray(data["legal_count_u16"][:, :view_horizon], dtype=np.int32)
     elif view != "jepa_latent" and has_compact_legal:
         legal_masks = legal_indices_to_masks(
-            np.asarray(data["legal_idx_u16"], dtype=np.uint16)[:, :view_horizon],
-            np.asarray(data["legal_count_u16"], dtype=np.uint16)[:, :view_horizon],
+            np.asarray(data["legal_idx_u16"][:, :view_horizon], dtype=np.uint16),
+            np.asarray(data["legal_count_u16"][:, :view_horizon], dtype=np.uint16),
         )
         batch["legal_masks"] = legal_masks
         batch["legal_mask"] = legal_masks[:, 0]
@@ -250,18 +250,18 @@ def trajectory_v3_to_batch(
 
     if view in {"full", "jepa_latent", "joint_latent_sasa"}:
         if plane_codec == "packbits":
-            future_planes = unpack_planes(data["planes_future_pack"])[:, :view_horizon]
+            future_planes = unpack_planes(data["planes_future_pack"][:, :view_horizon])
         else:
-            future_planes = decode_planes_u8(data["planes_future_u8"])[:, :view_horizon]
+            future_planes = decode_planes_u8(data["planes_future_u8"][:, :view_horizon])
         terminal_idx = batch["terminal_target_index"]
         batch["future_planes"] = future_planes
         batch["next_planes"] = future_planes[np.arange(batch_size), terminal_idx]
         if "value_targets" in data:
-            value_targets = np.asarray(data["value_targets"], dtype=np.float32)[:, :view_horizon]
+            value_targets = np.asarray(data["value_targets"][:, :view_horizon], dtype=np.float32)
             batch["value_targets"] = value_targets
             batch["value_target"] = value_targets[np.arange(batch_size), terminal_idx]
         if "wdl_targets" in data:
-            wdl_targets = np.asarray(data["wdl_targets"], dtype=np.float32)[:, :view_horizon]
+            wdl_targets = np.asarray(data["wdl_targets"][:, :view_horizon], dtype=np.float32)
             batch["wdl_targets"] = wdl_targets
             batch["wdl_target"] = wdl_targets[np.arange(batch_size), terminal_idx]
     elif view != "dfm_action":
