@@ -18,6 +18,7 @@ from chess_dfm_jax.nnx_bt4 import (
     TrainableRMSNorm,
     TrainableTransformerStack,
     make_bt4_model,
+    rounded_swiglu_dim,
 )
 from chess_dfm_jax.training.dfm import mask_actions
 from chess_dfm_jax.training.jepa import _l2_normalize, _parse_compute_dtype, _sigreg_loss as _quantile_sigreg_loss
@@ -79,7 +80,7 @@ class JointLatentSASAConfig:
     jepa_state_rmsnorm: bool = False
     jepa_state_rms_scale_max: float = 2.0
     jepa_teacher_forcing_steps: int = 0
-    jepa_delta_rms_clip: float = 2.0
+    jepa_delta_rms_clip: float = 0.5
     remat_blocks: bool = True
     scan_layers: bool = False
 
@@ -104,12 +105,17 @@ def _select_jepa_sample_loss(
     raise ValueError(f"Unsupported jepa_loss_type: {loss_type!r}")
 
 
-def _sigreg_moments_loss(z: jnp.ndarray) -> jnp.ndarray:
+def _sigreg_moments_loss(z: jnp.ndarray, sample_weight: jnp.ndarray | None = None) -> jnp.ndarray:
     """Cheap SigReg surrogate without per-dimension sorting."""
     z = jnp.asarray(z, dtype=jnp.float32)
-    mean = jnp.mean(z, axis=0)
+    if sample_weight is None:
+        sample_weight = jnp.ones((z.shape[0],), dtype=jnp.float32)
+    sample_weight = jnp.maximum(jnp.asarray(sample_weight, dtype=jnp.float32), 0.0)
+    denom = jnp.maximum(jnp.sum(sample_weight), 1.0)
+    weight = sample_weight[:, None]
+    mean = jnp.sum(z * weight, axis=0) / denom
     centered = z - mean
-    variance = jnp.mean(jnp.square(centered), axis=0)
+    variance = jnp.sum(jnp.square(centered) * weight, axis=0) / denom
     return jnp.mean(jnp.square(mean)) + jnp.mean(jnp.square(variance - 1.0))
 
 
@@ -126,6 +132,7 @@ def _official_le_jepa_sigreg_loss(
     *,
     proj_dim: int,
     rng: jnp.ndarray,
+    sample_weight: jnp.ndarray | None = None,
     axis_name: str | None = None,
     t_max: float = 3.0,
     n_points: int = 17,
@@ -145,6 +152,10 @@ def _official_le_jepa_sigreg_loss(
     rng = _sync_rng_for_pmap(rng, axis_name)
     directions = jax.random.normal(rng, (dim, proj_dim), dtype=jnp.float32)
     directions = directions / jnp.maximum(jnp.linalg.norm(directions, axis=0, keepdims=True), 1e-12)
+    if sample_weight is None:
+        sample_weight = jnp.ones((sample_count,), dtype=jnp.float32)
+    sample_weight = jnp.maximum(jnp.asarray(sample_weight, dtype=jnp.float32), 0.0)
+
     projected = z @ directions
 
     t = jnp.linspace(0.0, t_max, n_points, dtype=jnp.float32)
@@ -156,17 +167,21 @@ def _official_le_jepa_sigreg_loss(
     weights = weights * phi
 
     xt = projected[:, :, None] * t[None, None, :]
-    cos_mean = jnp.mean(jnp.cos(xt), axis=0)
-    sin_mean = jnp.mean(jnp.sin(xt), axis=0)
-    global_sample_count = jnp.asarray(sample_count, dtype=jnp.float32)
+    weight = sample_weight[:, None, None]
+    cos_sum = jnp.sum(jnp.cos(xt) * weight, axis=0)
+    sin_sum = jnp.sum(jnp.sin(xt) * weight, axis=0)
+    global_sample_count = jnp.sum(sample_weight)
     if axis_name is not None:
-        cos_mean = jax.lax.pmean(cos_mean, axis_name=axis_name)
-        sin_mean = jax.lax.pmean(sin_mean, axis_name=axis_name)
-        global_sample_count = global_sample_count * jax.lax.psum(jnp.asarray(1.0, dtype=jnp.float32), axis_name)
+        cos_sum = jax.lax.psum(cos_sum, axis_name=axis_name)
+        sin_sum = jax.lax.psum(sin_sum, axis_name=axis_name)
+        global_sample_count = jax.lax.psum(global_sample_count, axis_name=axis_name)
+    denom = jnp.maximum(global_sample_count, 1.0)
+    cos_mean = cos_sum / denom
+    sin_mean = sin_sum / denom
 
     err = jnp.square(cos_mean - phi[None, :]) + jnp.square(sin_mean)
     per_slice = (err @ weights) * global_sample_count
-    return jnp.mean(per_slice)
+    return jnp.where(global_sample_count > 0.0, jnp.mean(per_slice), jnp.zeros((), dtype=jnp.float32))
 
 
 def _clip_loss_preserve_gradient(loss: jnp.ndarray, clip_value: float) -> tuple[jnp.ndarray, jnp.ndarray]:
@@ -323,7 +338,7 @@ class ConditionedVectorTransition(nnx.Module):
         self.z_dim = int(z_dim)
         self.condition_dim = int(condition_dim)
         self.num_layers = int(num_layers)
-        self.swiglu_dim = max(1, int(round((2.0 / 3.0) * int(mlp_dim))))
+        self.swiglu_dim = rounded_swiglu_dim(mlp_dim)
         self.compute_dtype = jnp.dtype(compute_dtype)
         self.rms_eps = float(rms_eps)
         self.delta_rms_clip = float(delta_rms_clip)
@@ -836,20 +851,31 @@ def joint_stage1_loss_fn(
     else:
         target_vectors = target_z
     with jax.named_scope("joint_jepa_raw_mse_loss"):
-        sample_jepa = jnp.mean(
+        sample_raw_mse = jnp.mean(
             (jnp.asarray(pred_for_loss, dtype=jnp.float32) - jnp.asarray(target_vectors, dtype=jnp.float32)) ** 2,
             axis=-1,
         )
+    with jax.named_scope("joint_jepa_rms_norm_loss"):
+        pred_rms = jnp.sqrt(jnp.mean(jnp.square(jnp.asarray(pred_for_loss, dtype=jnp.float32)), axis=-1) + 1e-6)
+        target_rms = jax.lax.stop_gradient(
+            jnp.sqrt(jnp.mean(jnp.square(jnp.asarray(target_vectors, dtype=jnp.float32)), axis=-1) + 1e-6)
+        )
+        sample_norm_loss = jnp.square(pred_rms - target_rms)
+        sample_jepa = sample_raw_mse + sample_norm_loss
     horizon_weights = model.config.jepa_gamma ** selected_horizons.astype(jnp.float32)
     jepa_mask = future_valid_for_loss * valid[:, None] * horizon_weights[None, :]
     jepa_positive_loss = _weighted_horizon_mean(sample_jepa, jepa_mask)
-    jepa_raw_mse = jepa_positive_loss
+    jepa_raw_mse = _weighted_horizon_mean(sample_raw_mse, jepa_mask)
+    jepa_norm_loss = _weighted_horizon_mean(sample_norm_loss, jepa_mask)
     jepa_sigreg_loss = jnp.asarray(0.0, dtype=jnp.float32)
+    valid_all = jnp.concatenate([valid[:, None], valid[:, None] * future_valid], axis=1)
+    sigreg_weight = valid_all.reshape((-1,))
+    sigreg_valid_count = jnp.sum(sigreg_weight)
     if model.config.jepa_sigreg_coeff != 0.0:
         with jax.named_scope("joint_jepa_sigreg"):
             sigreg_tokens = jnp.asarray(z_all, dtype=jnp.float32).reshape((-1, z_all.shape[-1]))
             if model.config.jepa_sigreg_kind == "moments":
-                jepa_sigreg_loss = _sigreg_moments_loss(sigreg_tokens)
+                jepa_sigreg_loss = _sigreg_moments_loss(sigreg_tokens, sample_weight=sigreg_weight)
             elif model.config.jepa_sigreg_kind == "quantile":
                 jepa_sigreg_loss = _quantile_sigreg_loss(
                     sigreg_tokens,
@@ -861,16 +887,19 @@ def joint_stage1_loss_fn(
                     sigreg_tokens,
                     proj_dim=model.config.jepa_sigreg_proj_dim,
                     rng=rng_sigreg,
+                    sample_weight=sigreg_weight,
                     axis_name=sigreg_axis_name,
                 )
             else:
                 raise ValueError(f"Unsupported jepa_sigreg_kind: {model.config.jepa_sigreg_kind!r}")
     jepa_pred_sigreg_loss = jnp.asarray(0.0, dtype=jnp.float32)
+    pred_sigreg_weight = (future_valid_for_loss * valid[:, None]).reshape((-1,))
+    pred_sigreg_valid_count = jnp.sum(pred_sigreg_weight)
     if model.config.jepa_pred_sigreg_coeff != 0.0:
         with jax.named_scope("joint_jepa_pred_sigreg"):
             pred_sigreg_tokens = jnp.asarray(pred_z, dtype=jnp.float32).reshape((-1, pred_z.shape[-1]))
             if model.config.jepa_sigreg_kind == "moments":
-                jepa_pred_sigreg_loss = _sigreg_moments_loss(pred_sigreg_tokens)
+                jepa_pred_sigreg_loss = _sigreg_moments_loss(pred_sigreg_tokens, sample_weight=pred_sigreg_weight)
             elif model.config.jepa_sigreg_kind == "quantile":
                 jepa_pred_sigreg_loss = _quantile_sigreg_loss(
                     pred_sigreg_tokens,
@@ -882,6 +911,7 @@ def joint_stage1_loss_fn(
                     pred_sigreg_tokens,
                     proj_dim=model.config.jepa_sigreg_proj_dim,
                     rng=rng_sigreg,
+                    sample_weight=pred_sigreg_weight,
                     axis_name=sigreg_axis_name,
                 )
             else:
@@ -910,9 +940,16 @@ def joint_stage1_loss_fn(
     horizon_num = jnp.zeros((horizon,), dtype=jnp.float32).at[selected_horizons].add(
         jnp.sum(sample_jepa * horizon_valid, axis=0)
     )
+    horizon_raw_mse_num = jnp.zeros((horizon,), dtype=jnp.float32).at[selected_horizons].add(
+        jnp.sum(sample_raw_mse * horizon_valid, axis=0)
+    )
+    horizon_norm_num = jnp.zeros((horizon,), dtype=jnp.float32).at[selected_horizons].add(
+        jnp.sum(sample_norm_loss * horizon_valid, axis=0)
+    )
     horizon_denom = jnp.zeros((horizon,), dtype=jnp.float32).at[selected_horizons].add(jnp.sum(horizon_valid, axis=0))
     jepa_loss_by_horizon = horizon_num / jnp.maximum(horizon_denom, 1.0)
-    jepa_raw_mse_by_horizon = jepa_loss_by_horizon
+    jepa_raw_mse_by_horizon = horizon_raw_mse_num / jnp.maximum(horizon_denom, 1.0)
+    jepa_norm_loss_by_horizon = horizon_norm_num / jnp.maximum(horizon_denom, 1.0)
     target_horizon_mask = jnp.zeros((horizon,), dtype=jnp.float32).at[selected_horizons].set(1.0)
 
     zero = jnp.asarray(0.0, dtype=jnp.float32)
@@ -975,9 +1012,12 @@ def joint_stage1_loss_fn(
         "jepa_positive_loss": jepa_positive_loss,
         "jepa_cosine_loss": jepa_cosine_loss,
         "jepa_raw_mse": jepa_raw_mse,
+        "jepa_norm_loss": jepa_norm_loss,
         "jepa_normalized_mse": jepa_normalized_mse,
         "jepa_sigreg_loss": jepa_sigreg_loss,
         "jepa_pred_sigreg_loss": jepa_pred_sigreg_loss,
+        "jepa_sigreg_valid_count": sigreg_valid_count,
+        "jepa_pred_sigreg_valid_count": pred_sigreg_valid_count,
         "jepa_teacher_forcing": teacher_forcing,
         "value_loss": value_loss,
         "wdl_loss": wdl_loss,
@@ -990,6 +1030,7 @@ def joint_stage1_loss_fn(
         "jepa_true_minus_shuffled": zero,
         "jepa_loss_by_horizon": jepa_loss_by_horizon,
         "jepa_raw_mse_by_horizon": jepa_raw_mse_by_horizon,
+        "jepa_norm_loss_by_horizon": jepa_norm_loss_by_horizon,
         "jepa_target_horizon_mask": target_horizon_mask,
         "jepa_target_sample_count": jnp.asarray(selected_horizons.shape[0], dtype=jnp.float32),
         "jepa_target_sample_fraction": jnp.asarray(selected_horizons.shape[0] / horizon, dtype=jnp.float32),
@@ -1047,12 +1088,15 @@ def joint_jepa_positive_loss_fn(
         (jnp.asarray(pred_z, dtype=jnp.float32) - jnp.asarray(target, dtype=jnp.float32)) ** 2,
         axis=-1,
     )
+    pred_rms = jnp.sqrt(jnp.mean(jnp.square(jnp.asarray(pred_z, dtype=jnp.float32)), axis=-1) + 1e-6)
+    target_rms = jax.lax.stop_gradient(jnp.sqrt(jnp.mean(jnp.square(jnp.asarray(target, dtype=jnp.float32)), axis=-1) + 1e-6))
+    sample_norm_loss = jnp.square(pred_rms - target_rms)
     pred_norm = _l2_normalize(jnp.asarray(pred_z, dtype=jnp.float32))
     target_norm = _l2_normalize(jnp.asarray(target, dtype=jnp.float32))
     cosine = jnp.sum(pred_norm * target_norm, axis=-1)
     sample_cosine_distance = 2.0 - 2.0 * cosine
     sample_normalized_mse = jnp.mean((pred_norm - target_norm) ** 2, axis=-1)
-    sample_jepa = sample_raw_mse
+    sample_jepa = sample_raw_mse + sample_norm_loss
     horizon_weights = model.config.jepa_gamma ** jnp.arange(horizon, dtype=jnp.float32)
     jepa_mask = future_valid * valid[:, None] * horizon_weights[None, :]
     denom = jnp.maximum(jnp.sum(jepa_mask), 1.0)
@@ -1060,12 +1104,14 @@ def joint_jepa_positive_loss_fn(
     cosine_loss = jnp.sum(sample_cosine_distance * jepa_mask) / denom
     mean_token_cosine = jnp.sum(cosine * jepa_mask) / denom
     raw_mse = jnp.sum(sample_raw_mse * jepa_mask) / denom
+    norm_loss = jnp.sum(sample_norm_loss * jepa_mask) / denom
     normalized_mse = jnp.sum(sample_normalized_mse * jepa_mask) / denom
     return loss, {
         "jepa_positive_loss": loss,
         "jepa_cosine_loss": cosine_loss,
         "mean_token_cosine": mean_token_cosine,
         "jepa_raw_mse": raw_mse,
+        "jepa_norm_loss": norm_loss,
         "jepa_normalized_mse": normalized_mse,
     }
 

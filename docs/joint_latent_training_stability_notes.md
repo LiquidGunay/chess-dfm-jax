@@ -16,6 +16,8 @@ The current run family trains a joint model with:
   hidden action states to predict future projected latents.
 - Main losses are DFM cross entropy, first-move legality, JEPA latent MSE, and
   SIGReg on target projected latents.
+- JEPA positive loss is now the sum of per-coordinate latent MSE and an equal
+  scalar RMS norm-matching term between predictions and stop-gradient targets.
 - Value and WDL losses are disabled for the current long runs because their
   labels are too noisy and were making the total objective harder to interpret.
 
@@ -30,7 +32,7 @@ loss =
   + optional terms, currently disabled
 ```
 
-For the current `20260503d` free-rollout run:
+For the current `20260503e` teacher-then-free rollout run:
 
 ```text
 horizon = 8
@@ -45,11 +47,11 @@ jepa_sigreg_kind = le_jepa
 jepa_sigreg_proj_dim = 1024
 jepa_sigreg_coeff = 0.1
 jepa_pred_sigreg_coeff = 0.0
-jepa_teacher_forcing_steps = 0
+jepa_teacher_forcing_steps = 20000
 value_coeff = 0.0
 wdl_coeff = 0.0
 loss_clip_value = 20.0
-jepa_delta_rms_clip = 2.0
+jepa_delta_rms_clip = 0.5
 ```
 
 ## Loss Scales
@@ -104,14 +106,22 @@ naturally in sampling/evaluation than in this supervised denoising loss.
 
 ### JEPA Positive Loss
 
-`jepa_positive_loss` is raw per-coordinate MSE:
+`jepa_positive_loss` is:
 
 ```text
-mean((pred_z - target_z) ** 2, axis=-1)
+jepa_raw_mse + jepa_norm_loss
+```
+
+where:
+
+```text
+jepa_raw_mse = mean((pred_z - target_z) ** 2, axis=-1)
+jepa_norm_loss = (rms(pred_z) - stop_gradient(rms(target_z))) ** 2
 ```
 
 It is averaged over valid examples and horizons. `jepa_loss_by_horizon` is this
-same MSE broken out by horizon.
+combined loss broken out by horizon; `jepa_raw_mse_by_horizon` and
+`jepa_norm_loss_by_horizon` expose the two parts separately.
 
 Because the target latent is intended to be approximately `N(0, I)`, a zero
 prediction has:
@@ -131,7 +141,7 @@ z_state_std ~= 1
 z_pred_std ~= 1
 ```
 
-`jepa_positive_loss ~= 1` is ambiguous. It can mean useful partial alignment, or
+`jepa_raw_mse ~= 1` is ambiguous. It can mean useful partial alignment, or
 it can mean a collapsed/low-norm predictor that is close to the zero baseline.
 It must be interpreted together with `z_pred_norm`, `z_target_norm`,
 `jepa_loss_by_horizon`, and cosine/shuffle diagnostics.
@@ -233,13 +243,16 @@ Resolution:
 
 - Track `z_pred_norm`, `z_target_norm`, and `jepa_loss_by_horizon` together.
 - Add a free-rollout diagnostic run with `jepa_teacher_forcing_steps = 0`.
+- Add an equal-weight RMS norm-matching term inside `jepa_positive_loss` so a
+  low-norm prediction pays an additional penalty even when raw MSE is near the
+  zero-predictor baseline.
 - Keep prediction SIGReg disabled for now (`jepa_pred_sigreg_coeff = 0.0`) so we
   can first see whether recurrent training alone fixes the low prediction norm.
 
 Potential next fixes if free rollout still collapses:
 
 - Add a small prediction SIGReg coefficient.
-- Add a norm-matching auxiliary term.
+- Increase the prediction-scale regularizer if the norm-matching term is not enough.
 - Adjust JEPA residual/delta scale or clipping.
 - Use a SIGReg coefficient schedule after the latent std/norm stabilizes.
 
@@ -255,9 +268,30 @@ Resolution:
 - Disable value and WDL losses.
 - Clip global gradient norm at `1.0`.
 - Clip scalar loss value at `20.0` while preserving gradient direction/scale.
-- Add `jepa_delta_rms_clip = 2.0` to bound per-step JEPA residual updates.
+- Add `jepa_delta_rms_clip` to bound per-step JEPA residual updates. The current
+  candidate value is `0.5`, down from `2.0`, to make recurrent drift harder.
 - Keep small/near-zero final predictor initialization so the transition starts
   close to identity.
+
+### Invalid Future States in SIGReg
+
+Trajectory batches provide `future_planes` and `future_valid` separately. Future
+planes for invalid horizons are still present in the tensor, so treating
+`z_all.reshape(-1, z_dim)` as fully valid can regularize invalid/terminal states
+as if they were real targets.
+
+Resolution:
+
+- Target SIGReg is now weighted by:
+
+```text
+valid_all[:, 0] = valid
+valid_all[:, h + 1] = valid * future_valid[:, h]
+```
+
+- Prediction SIGReg, when enabled, is weighted by `valid * future_valid`.
+- The official characteristic-function SIGReg computes weighted empirical means
+  without boolean indexing, preserving static JAX shapes under `jit`/`pmap`.
 
 ### Teacher Forcing vs Free Rollout
 
@@ -279,10 +313,10 @@ recurrent dynamics that will be used by the model.
 
 Current decision:
 
-- Start a no-teacher-forcing run (`20260503d`) with the same `sig0p1` official
-  SIGReg settings.
-- If it is stable and `z_pred_norm` moves toward `32`, use free rollout as the
-  base and then schedule SIGReg.
+- Run `20260503e` with `20000` teacher-forced steps, then free rollout for the
+  remainder of two epochs.
+- Use the equal-weight RMS norm term and lower JEPA delta RMS clip to address
+  low-norm predictor collapse before adding prediction SIGReg.
 - If it collapses/explodes, add a prediction-scale regularizer rather than hard
   normalizing target latents.
 
@@ -338,10 +372,10 @@ Resolution:
 
 ## Current Run to Watch
 
-The current free-rollout diagnostic queue is:
+The current teacher-then-free diagnostic queue is:
 
 ```text
-sweeps/jph8v5p4sig0p1officialsig_freeroll_20260503d.jsonl
+sweeps/jph8v5p4sig0p1_normloss_dclip0p5_tf20k_20260503e.jsonl
 ```
 
 The important metrics are:
@@ -352,6 +386,9 @@ accuracy
 first_legality_loss
 jepa_positive_loss
 jepa_loss_by_horizon
+jepa_raw_mse
+jepa_norm_loss
+jepa_norm_loss_by_horizon
 jepa_sigreg_loss
 z_state_std
 z_target_norm

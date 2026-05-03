@@ -29,6 +29,7 @@ from chess_dfm_jax.data.grain_loader import (  # noqa: E402
 )
 from chess_dfm_jax.data.leela import LeelaChunkDataLoader, discover_chunk_files  # noqa: E402
 from chess_dfm_jax.data.trajectory import build_synthetic_trajectory_shard, trajectory_joint_batch_from_npz  # noqa: E402
+from chess_dfm_jax.nnx_bt4 import rounded_swiglu_dim  # noqa: E402
 from chess_dfm_jax.paths import default_bt4_paths, project_root  # noqa: E402
 from chess_dfm_jax.training.checkpoints import (  # noqa: E402
     create_checkpoint_manager,
@@ -185,7 +186,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--jepa-delta-rms-clip",
         type=float,
-        default=2.0,
+        default=0.5,
         help=(
             "Clip each JEPA transition residual delta to this per-sample RMS before adding it to the "
             "latent state. This stabilizes recurrent rollout without hard-normalizing z itself. 0 disables."
@@ -507,8 +508,8 @@ def estimate_joint_step_flops(
 ) -> dict[str, float]:
     seq_len = 64 + horizon
     state_len = 64
-    dfm_swiglu_dim = max(1, int(round((2.0 / 3.0) * mlp_dim)))
-    jepa_swiglu_dim = max(1, int(round((2.0 / 3.0) * jepa_mlp_dim)))
+    dfm_swiglu_dim = rounded_swiglu_dim(mlp_dim)
+    jepa_swiglu_dim = rounded_swiglu_dim(jepa_mlp_dim)
 
     def dfm_forward(batch: int) -> float:
         return batch * dfm_layers * (
@@ -1199,6 +1200,7 @@ def main() -> int:
                     f"wdl={metrics.get('wdl_loss', 0.0):.6f}",
                     f"act_contrast={metrics.get('jepa_action_contrast_loss', 0.0):.6f}",
                     f"raw_mse={metrics.get('jepa_raw_mse', 0.0):.6f}",
+                    f"norm={metrics.get('jepa_norm_loss', 0.0):.6f}",
                     f"z_std={metrics.get('z_state_std', 0.0):.4f}",
                     f"acc={metrics.get('accuracy', 0.0):.4f}",
                 ]

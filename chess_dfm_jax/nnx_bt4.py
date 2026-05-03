@@ -350,6 +350,13 @@ def exclusive_self_attention_output(
     return jnp.asarray(projected, dtype=attn_out.dtype)
 
 
+def rounded_swiglu_dim(mlp_dim: int, *, multiple: int = 256) -> int:
+    """Return the SwiGLU hidden size rounded up for accelerator-friendly matmuls."""
+    raw = max(1, int(round((2.0 / 3.0) * int(mlp_dim))))
+    multiple = max(1, int(multiple))
+    return int(((raw + multiple - 1) // multiple) * multiple)
+
+
 class TrainableTransformerStack(nnx.Module):
     """Pre-RMSNorm transformer stack for trainable DFM/JEPA heads.
 
@@ -381,7 +388,7 @@ class TrainableTransformerStack(nnx.Module):
         self.width = int(width)
         self.num_heads = int(num_heads)
         self.head_dim = int(width // num_heads)
-        self.swiglu_dim = max(1, int(round((2.0 / 3.0) * mlp_dim)))
+        self.swiglu_dim = rounded_swiglu_dim(mlp_dim)
         self.param_dtype = jnp.dtype(param_dtype)
         self.compute_dtype = jnp.dtype(compute_dtype)
         self.use_qk_gain = bool(use_qk_gain)
@@ -761,5 +768,6 @@ __all__ = [
     "muon_adamw",
     "remat_encoder_layer",
     "remat_encoder_layer_with_alpha",
+    "rounded_swiglu_dim",
     "swish",
 ]
