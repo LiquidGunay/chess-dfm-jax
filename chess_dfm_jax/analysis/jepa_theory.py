@@ -46,31 +46,34 @@ def estimate_jepa_theory(
     jepa_width = encoder_width
     action_embed_dim = 128
     action_hidden_dim = max(token_dim * 2, jepa_width)
+    swiglu_dim = max(1, int(round((2.0 / 3.0) * mlp_dim)))
 
     trainable_params = 0
     trainable_params += action_vocab_size * action_embed_dim  # action embedding
     trainable_params += _linear_params(action_embed_dim, action_hidden_dim)
     trainable_params += _linear_params(action_hidden_dim, jepa_width)
 
-    # output norm
-    trainable_params += 2 * jepa_width
+    # output RMSNorm
+    trainable_params += jepa_width
 
     for _ in range(num_layers):
-        # two layer norms
-        trainable_params += 4 * jepa_width
-        # q, k, v, out
-        trainable_params += 4 * _linear_params(jepa_width, jepa_width)
-        # MLP up/down
-        trainable_params += _linear_params(jepa_width, mlp_dim)
-        trainable_params += _linear_params(mlp_dim, jepa_width)
+        # two RMSNorm scales
+        trainable_params += 2 * jepa_width
+        # fused qkv + out
+        trainable_params += _linear_params(jepa_width, 3 * jepa_width)
+        trainable_params += _linear_params(jepa_width, jepa_width)
+        # fused SwiGLU gate/up + down. mlp_dim is the old dense-FFN equivalent,
+        # so swiglu_dim ~= 2/3 * mlp_dim gives parameter/FLOP parity.
+        trainable_params += _linear_params(jepa_width, 2 * swiglu_dim)
+        trainable_params += _linear_params(swiglu_dim, jepa_width)
 
     forward_flops = 0
     forward_flops += _linear_flops(batch_size, action_embed_dim, action_hidden_dim)
     forward_flops += _linear_flops(batch_size, action_hidden_dim, jepa_width)
     for _ in range(num_layers):
         forward_flops += _attention_flops(batch_size, seq, jepa_width, num_heads)
-        forward_flops += _linear_flops(batch_size * seq, jepa_width, mlp_dim)
-        forward_flops += _linear_flops(batch_size * seq, mlp_dim, jepa_width)
+        forward_flops += _linear_flops(batch_size * seq, jepa_width, 2 * swiglu_dim)
+        forward_flops += _linear_flops(batch_size * seq, swiglu_dim, jepa_width)
 
     # rule of thumb: forward pass plus backward through trainable head is about 3x forward
     return JEPATheory(

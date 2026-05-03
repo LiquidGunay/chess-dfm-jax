@@ -79,6 +79,44 @@ def _bulk_dir_for_prefix(cache_path: Path, prefix: str) -> Path:
     return cache_path / ".bulk" / suffix
 
 
+def _bulk_copy_prefix(prefix: str, bulk_dir: Path) -> subprocess.CompletedProcess[str]:
+    """Copy a whole GCS prefix into ``bulk_dir`` with broad gcloud compatibility."""
+    rsync_result = _run_gcloud(
+        [
+            "gcloud",
+            "storage",
+            "rsync",
+            "--recursive",
+            prefix.rstrip("/"),
+            str(bulk_dir),
+        ]
+    )
+    if rsync_result.returncode == 0:
+        return rsync_result
+
+    # Some TPU VM images ship an older storage surface without `gcloud storage rsync`.
+    # Fall back to wildcard bulk copy; gcloud handles the wildcard, not the shell.
+    cp_result = _run_gcloud(
+        [
+            "gcloud",
+            "storage",
+            "cp",
+            "--recursive",
+            "--no-clobber",
+            prefix.rstrip("/") + "/*.npz",
+            str(bulk_dir),
+        ]
+    )
+    if cp_result.returncode != 0:
+        cp_result.stderr = (  # type: ignore[misc]
+            "rsync failed:\n"
+            + rsync_result.stderr
+            + "\ncp fallback failed:\n"
+            + cp_result.stderr
+        )
+    return cp_result
+
+
 @dataclass
 class GCSShardCache:
     """Maintain a local cache of immutable GCS .npz shards."""
@@ -191,26 +229,18 @@ class GCSShardCache:
                 continue
             bulk_dir = _bulk_dir_for_prefix(self.cache_path, prefix)
             bulk_dir.mkdir(parents=True, exist_ok=True)
-            result = _run_gcloud(
-                [
-                    "gcloud",
-                    "storage",
-                    "rsync",
-                    "--recursive",
-                    prefix.rstrip("/"),
-                    str(bulk_dir),
-                ]
-            )
+            result = _bulk_copy_prefix(prefix, bulk_dir)
             if result.returncode != 0:
                 with self._lock:
                     self._failed += len(missing)
                 return False
             any_synced = True
+            staged_by_name = {path.name: path for path in bulk_dir.rglob("*.npz")}
             promoted = 0
             for uri in uris:
-                staged = bulk_dir / uri.rsplit("/", 1)[-1]
+                staged = staged_by_name.get(uri.rsplit("/", 1)[-1])
                 local = self.cache_path / local_name_for_uri(uri)
-                if local.exists() or not staged.exists():
+                if local.exists() or staged is None or not staged.exists():
                     continue
                 try:
                     os.link(staged, local)

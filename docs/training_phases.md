@@ -48,22 +48,24 @@ Current live work:
 
 ## BT4 and Projectors
 
-BT4 stays frozen for DFM Phase A/B/C, TCEC diagnostics, and initial JEPA runs.
-Only consider unfreezing after DFM has held-out legal/plausible action chunks
-and JEPA beats identity/random-action baselines on changed-square metrics. The
-first unfreeze should be adapter/LoRA-style or last-block-only with a smaller
-learning rate; full BT4 fine-tuning is a late joint-refinement stage.
+BT4 stays frozen for standalone DFM Phase A/B/C, TCEC diagnostics, and legacy
+standalone JEPA baselines. The active joint Latent-SASA direction now unfreezes
+the BT4 input embedding and encoder blocks from the start with a separate
+`1e-5` learning rate. BT4 policy/value heads are not trained by the joint loss,
+and BT4 architecture remains checkpoint-compatible.
 
 Standalone DFM keeps its compact current-state projector because its targets
-are actions/legal masks. Standalone JEPA and joint JEPA use raw frozen BT4
-tokens as current inputs and future targets.
-Joint Latent-SASA should use:
+are actions/legal masks. Active joint JEPA uses projected BT4 state vectors, not
+raw BT4 token targets:
 
 - compact DFM BT4-to-planning-latent projector
-- small DFM adapter
-- JEPA action embedding plus DFM-action-hidden adapter into BT4 width
-- raw `stopgrad(BT4(s_t))` JEPA input and raw `stopgrad(BT4(s_{t+h}))` targets
+- state projector `BT4(s) [B,64,1024] -> z(s) [B,z_dim]`
+- JEPA action embedding plus DFM-action-hidden adapter into the JEPA condition
+- projected `BT4+projector` current and future state vectors as JEPA inputs and
+  targets
 - DFM action-token hidden-state conditioning into the JEPA transition
+- SigReg on projected current/future state vectors so the learned latent space
+  does not collapse
 
 ## Phase A Loss
 
@@ -151,30 +153,40 @@ the `jepa_latent` loader view for JEPA-only baselines so legal masks are not
 loaded. JEPA logs approximate MFU from precomputed shape-based FLOP estimates;
 actual BT4 current/future encodings are still computed at runtime.
 
-Initial joint baselines:
+Active projected-JEPA joint baseline:
 
 ```text
-H = 2, then H = 4
+H = 4 smoke, then H = 8
 token_dim = 256
-num_layers = 4
-num_heads = 4
+z_dim = 2048
+projector_layers = 2
+projector_num_heads = 8
+dfm_layers = 4
+jepa_layers = 4
+num_heads = 4 for DFM
 mlp_dim = 1024
-learning_rate = 3e-4
+learning_rate = 6e-4
+bt4_learning_rate = 1e-5
+lr_warmup_steps = 1000
+use_muon = true
+use_qk_norm = true
+use_xsa = true
+grad_clip_norm = 1.0
 lambda_action = 1.0
 lambda_first_legal = 7.64
 lambda_horizon_legal = 0.0
 lambda_jepa = 1.0
-jepa_loss_type = raw_mse
-lambda_value = 0.0 initially
-lambda_wdl = 0.0 initially
-lambda_rank = 0.0 first, then 0.2
+jepa_loss_type = raw_mse over projected state vectors
+lambda_sigreg = 0.1
+lambda_value = 0.05
+lambda_wdl = 0.05
+lambda_rank = 0.0
 ```
 
-For queued Stage 1 runs after the raw-BT4 fix, use `learning_rate=6e-4`
-and `legality_on_masked_only=true`. `--target-projector-mode` is deprecated
-and ignored; JEPA input/targets are frozen raw BT4 tokens with shape
-`[B, 64, 1024]` and `[B, H, 64, 1024]`. The legacy `--legality-coeff` flag is
-only an alias for `--first-legality-coeff`.
+For queued Stage 1 runs, use `legality_on_masked_only=true`.
+`--target-projector-mode` is deprecated and ignored. JEPA input/targets are
+projected state vectors with shape `[B, z_dim]` and `[B, H, z_dim]`. The legacy
+`--legality-coeff` flag is only an alias for `--first-legality-coeff`.
 
 Do not sweep batch size. Probe the largest batch that fits the allocated TPU
 shape and keep the learning rate fixed for the first baseline queue.
@@ -190,28 +202,28 @@ Before launching non-smoke `joint` experiments, all of these must be true:
   `hidden["action_tokens"]` shaped `[B, H, D]`.
 - Done: JEPA exposes `jepa_rollout_from_latents(z0_jepa, actions, action_hidden)` and
   can consume DFM action-token hidden states.
-- Done: the joint model uses a compact DFM projector/adapter for action
-  denoising, but JEPA consumes raw frozen BT4 current tokens and predicts raw
-  frozen BT4 future tokens. There is no trainable JEPA target projector in the
-  active path.
+- Done: the joint model uses a compact DFM projector for action denoising and a
+  trainable state-vector projector for JEPA. JEPA consumes projected current
+  state vectors and predicts projected future state vectors.
 - Done: a one-step joint smoke test saves and restores a raw NumPy checkpoint under
   `runs/joint/<run_id>/checkpoints`.
-- Done: coupling diagnostics show finite, non-zero JEPA-loss gradients into the DFM
-  planner/action-token path and no gradients into frozen BT4.
+- Done: coupling diagnostics show finite JEPA-loss gradients into the DFM
+  planner/action-token path, JEPA transition, state projector, and trainable BT4
+  encoder path.
 
 Stage 1 joint loss:
 
 ```text
 L = 1.0 * L_dfm_ce
   + lambda_first * L_first_legal
-  + lambda_horizon * L_horizon_legal
   + 1.0 * L_jepa_positive
   + lambda_sigreg * L_jepa_sigreg
-  + lambda_action_contrast * L_action_contrast
+  + lambda_value * L_value
+  + lambda_wdl * L_wdl
 ```
 
-Use `H=1 or 2`, `K=1`, `token_dim=256`, DFM `L4`, JEPA `L1-L2`, and
-`value_coeff=wdl_coeff=0.0` until latent dynamics is stable.
+Use `K=1`, `token_dim=256`, `z_dim=2048`, DFM `L4`, JEPA `L4`, and
+`value_coeff=wdl_coeff=0.05` for the first projected-JEPA runs.
 
 Current Stage 1 defaults:
 
@@ -219,12 +231,13 @@ Current Stage 1 defaults:
 first_legality_coeff = 7.64
 horizon_legality_coeff = 0.0
 legality_on_masked_only = true
-jepa_target_space = raw_bt4_tokens
+jepa_target_space = projected_bt4_vectors
 jepa_loss_type = raw_mse
-jepa_num_heads = 8 for BT4 width 1024 unless the run explicitly overrides it
-jepa_mlp_dim = 4096 by default, or a smaller explicit ablation
-jepa_sigreg_coeff = 0.0 initially, then 0.01 ablation
-jepa_action_contrast_coeff = 0.0 initially, then 0.1-0.5 ablation
+jepa_mlp_dim = 4 * z_dim by default
+jepa_sigreg_coeff = 0.1
+jepa_sigreg_kind = le_jepa
+jepa_sigreg_proj_dim = 128
+jepa_action_contrast_coeff = 0.0
 ```
 
 `L_horizon_legal` is disabled in the joint training hot path. Later-move
@@ -234,28 +247,24 @@ therefore computes only first-move illegal probability mass and logs
 `horizon_legality_evaluated=0`; generated-prefix legality belongs in
 sampler/evaluation code.
 
-JEPA now trains with raw BT4-token MSE in the hot path. Cosine distance,
-normalized MSE, token norms, identity baseline, and shuffled-action baseline are
-diagnostics, not per-step training work. Current `z_t` and future
-`z_{t+1:t+H}` BT4 targets are encoded as separate calls; a combined
-`[B * (H + 1), 112, 8, 8]` encoder call was tested on v5litepod-1 and was slower
-for H2/B64. `L_action_contrast = max(margin + L_true_actions -
-L_shuffled_actions, 0)` is the next ablation if post-hoc diagnostics show true
-and shuffled action sequences scoring equally.
+JEPA now trains with projected-vector MSE in the hot path. Cosine distance,
+normalized MSE, vector norms, identity baseline, and shuffled-action baseline
+are diagnostics, not per-step training objectives. Current `z_t` and future
+`z_{t+1:t+H}` states are built by a combined `[B * (H + 1), 112, 8, 8]` BT4
+encoder call followed by the state projector. `L_action_contrast` and Stage 2
+contrastive loss are disabled in the active plan until projected JEPA dynamics
+beat identity/shuffled controls.
 
 `--jepa-target-mode current_repeat` exists only as a profiling diagnostic. It
-replaces future BT4 targets with a repeated copy of `z_t`, so the trainer does
-not encode `s_{t+1:t+H}`. This run is invalid for model selection, but it
+replaces future projected targets with a repeated copy of `z_t`, so the trainer
+does not encode `s_{t+1:t+H}`. This run is invalid for model selection, but it
 measures how much wall time is caused by future target encodes. Its FLOP
 accounting uses one BT4 encoder forward per step instead of `H + 1`.
 
-For valid JEPA/joint training, use `--jepa-target-sample-count` to reduce target
-encoder cost without changing the target definition. `0` means all future
-horizons. `1` samples one future horizon each step, encodes only that
-`s_{t+h}`, computes raw BT4 MSE for that horizon, and logs
-`jepa_target_horizon_mask`. This is the preferred first efficiency ablation for
-H4/H8 because it preserves stochastic supervision while avoiding `H` future BT4
-target encodes on every optimizer step.
+For active projected-vector JEPA training, `--jepa-target-sample-count` should
+remain `0`. The current implementation supervises all horizons because SigReg,
+value/WDL, and the vector projector all operate on the full current/future state
+batch. Horizon sampling is an older raw-BT4-token efficiency ablation.
 
 Single-chip v5litepod-1 profiling on May 1, 2026 found that target-horizon
 sampling is a real throughput win, but not enough to reach 30% MFU on this

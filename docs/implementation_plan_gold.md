@@ -33,17 +33,20 @@ z0, a0, z1, a1, z2, ...
 where:
 
 ```text
-zh = raw frozen BT4 token representation of board state sh
-   = stopgrad(BT4(sh)) with shape [64, 1024]
+zh = projected BT4 state representation of board state sh
+   = P(BT4(sh)) with shape [z_dim]
 ```
 
 This is **Latent-SASA**, not discrete board-token SASA.
 
-Implementation correction, 2026-04-30: JEPA targets must not be defined by a
-trainable projector. Earlier references in this document to EMA/stop-gradient
-target projectors are superseded by the current repo plan: DFM may use compact
-projected planning tokens, but JEPA input and output targets are raw frozen BT4
-tokens.
+Implementation correction, 2026-05-02: the active repo plan is projected-vector
+JEPA with BT4 unfreezing from the start. Earlier references in this document to
+raw frozen BT4-token JEPA targets, EMA/stop-gradient target projectors, and
+contrastive Stage 2 as the immediate next objective are superseded by
+`docs/projected_jepa_unfreeze_plan.md`. The current objective uses
+`z = P(BT4(s))`, backpropagates SigReg through the projected states, trains BT4
+embedding/encoder params at `1e-5`, trains the rest at `6e-4`, and keeps
+contrastive/ranking deferred until projected JEPA dynamics are stable.
 
 ---
 
@@ -58,7 +61,9 @@ Do not start with:
 - Chess-specific evaluation heuristics such as material bonuses, king-safety handcrafted scores, capture bonuses, etc.
 - Feeding illegal actions into JEPA as normal transition inputs.
 - Distillation before the JEPA reranker has proven useful.
-- Unfreezing BT4 before the joint objective is stable.
+- Changing BT4 architecture internals while loading the pinned BT4 checkpoint.
+- Reintroducing contrastive/ranking before projected JEPA beats identity and
+  shuffled-action controls.
 ```
 
 Legal move constraints are allowed. They are environment constraints, not evaluation heuristics.

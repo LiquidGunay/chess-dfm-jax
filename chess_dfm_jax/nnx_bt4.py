@@ -27,11 +27,16 @@ class TrainableParam(nnx.Param):
     pass
 
 
+class BT4TrainableParam(TrainableParam):
+    """Marker class for unfrozen BT4 encoder parameters."""
+    pass
+
+
 class FixedLinear(nnx.Module):
-    def __init__(self, w, b=None, *, dtype=jnp.float32):
+    def __init__(self, w, b=None, *, dtype=jnp.float32, param_cls=nnx.Param):
         self.dtype = jnp.dtype(dtype)
-        self.w = nnx.Param(jnp.asarray(w, dtype=self.dtype))
-        self.b = None if b is None else nnx.Param(jnp.asarray(b, dtype=self.dtype))
+        self.w = param_cls(jnp.asarray(w, dtype=self.dtype))
+        self.b = None if b is None else param_cls(jnp.asarray(b, dtype=self.dtype))
 
     def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
         y = jnp.asarray(x, dtype=self.dtype) @ self.w[...]
@@ -58,6 +63,22 @@ class TrainableLayerNorm(nnx.Module):
         return out
 
 
+class TrainableRMSNorm(nnx.Module):
+    def __init__(self, width: int, *, param_dtype=jnp.float32, compute_dtype=jnp.float32, eps: float = 1e-6):
+        self.width = width
+        self.eps = eps
+        self.param_dtype = jnp.dtype(param_dtype)
+        self.compute_dtype = jnp.dtype(compute_dtype)
+        self.scale = TrainableParam(jnp.ones((width,), dtype=self.param_dtype))
+
+    def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
+        x = jnp.asarray(x, dtype=self.compute_dtype)
+        stats_x = jnp.asarray(x, dtype=jnp.float32)
+        inv_rms = jax.lax.rsqrt(jnp.mean(jnp.square(stats_x), axis=-1, keepdims=True) + self.eps)
+        out = stats_x * inv_rms * jnp.asarray(self.scale[...], dtype=jnp.float32)
+        return jnp.asarray(out, dtype=self.compute_dtype)
+
+
 class TrainableEmbedding(nnx.Module):
     def __init__(self, num_embeddings: int, features: int, *, rngs: nnx.Rngs, param_dtype=jnp.float32, compute_dtype=jnp.float32):
         self.num_embeddings = num_embeddings
@@ -75,10 +96,10 @@ class TrainableEmbedding(nnx.Module):
 
 
 class FixedLayerNorm(nnx.Module):
-    def __init__(self, scale, bias, eps: float = 1e-3, *, dtype=jnp.float32):
+    def __init__(self, scale, bias, eps: float = 1e-3, *, dtype=jnp.float32, param_cls=nnx.Param):
         self.dtype = jnp.dtype(dtype)
-        self.scale = nnx.Param(jnp.asarray(scale, dtype=self.dtype))
-        self.bias = nnx.Param(jnp.asarray(bias, dtype=self.dtype))
+        self.scale = param_cls(jnp.asarray(scale, dtype=self.dtype))
+        self.bias = param_cls(jnp.asarray(bias, dtype=self.dtype))
         self.eps = float(eps)
 
     def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
@@ -92,17 +113,26 @@ class FixedLayerNorm(nnx.Module):
 
 class InputEmbedding(nnx.Module):
     def __init__(
-        self, emb_params: dict, *, embedding_size: int, embedding_dense_size: int, pos_planes: int, dtype=jnp.float32
+        self,
+        emb_params: dict,
+        *,
+        embedding_size: int,
+        embedding_dense_size: int,
+        pos_planes: int,
+        dtype=jnp.float32,
+        param_cls=nnx.Param,
     ):
         self.dtype = jnp.dtype(dtype)
-        self.preproc = FixedLinear(emb_params["preproc_w"], emb_params["preproc_b"], dtype=self.dtype)
-        self.proj = FixedLinear(emb_params["w"], emb_params["b"], dtype=self.dtype)
-        self.ln = FixedLayerNorm(emb_params["ln_scale"], emb_params["ln_bias"], dtype=self.dtype)
-        self.mul_gate = nnx.Param(jnp.asarray(emb_params["mul_gate"], dtype=self.dtype))
-        self.add_gate = nnx.Param(jnp.asarray(emb_params["add_gate"], dtype=self.dtype))
-        self.ffn1 = FixedLinear(emb_params["ffn"]["dense1_w"], emb_params["ffn"]["dense1_b"], dtype=self.dtype)
-        self.ffn2 = FixedLinear(emb_params["ffn"]["dense2_w"], emb_params["ffn"]["dense2_b"], dtype=self.dtype)
-        self.ffn_ln = FixedLayerNorm(emb_params["ffn_ln_scale"], emb_params["ffn_ln_bias"], dtype=self.dtype)
+        self.preproc = FixedLinear(emb_params["preproc_w"], emb_params["preproc_b"], dtype=self.dtype, param_cls=param_cls)
+        self.proj = FixedLinear(emb_params["w"], emb_params["b"], dtype=self.dtype, param_cls=param_cls)
+        self.ln = FixedLayerNorm(emb_params["ln_scale"], emb_params["ln_bias"], dtype=self.dtype, param_cls=param_cls)
+        self.mul_gate = param_cls(jnp.asarray(emb_params["mul_gate"], dtype=self.dtype))
+        self.add_gate = param_cls(jnp.asarray(emb_params["add_gate"], dtype=self.dtype))
+        self.ffn1 = FixedLinear(emb_params["ffn"]["dense1_w"], emb_params["ffn"]["dense1_b"], dtype=self.dtype, param_cls=param_cls)
+        self.ffn2 = FixedLinear(emb_params["ffn"]["dense2_w"], emb_params["ffn"]["dense2_b"], dtype=self.dtype, param_cls=param_cls)
+        self.ffn_ln = FixedLayerNorm(
+            emb_params["ffn_ln_scale"], emb_params["ffn_ln_bias"], dtype=self.dtype, param_cls=param_cls
+        )
         self.embedding_size = int(embedding_size)
         self.embedding_dense_size = int(embedding_dense_size)
         self.pos_planes = int(pos_planes)
@@ -133,15 +163,15 @@ class InputEmbedding(nnx.Module):
 
 
 class Smolgen(nnx.Module):
-    def __init__(self, params: dict, shared_w: np.ndarray, *, headcount: int, dtype=jnp.float32):
+    def __init__(self, params: dict, shared_w: np.ndarray, *, headcount: int, dtype=jnp.float32, param_cls=nnx.Param):
         self.dtype = jnp.dtype(dtype)
         self.headcount = headcount
-        self.compress = FixedLinear(params["compress_w"], dtype=self.dtype)
-        self.dense1 = FixedLinear(params["dense1_w"], params["dense1_b"], dtype=self.dtype)
-        self.ln1 = FixedLayerNorm(params["ln1_scale"], params["ln1_bias"], dtype=self.dtype)
-        self.dense2 = FixedLinear(params["dense2_w"], params["dense2_b"], dtype=self.dtype)
-        self.ln2 = FixedLayerNorm(params["ln2_scale"], params["ln2_bias"], dtype=self.dtype)
-        self.shared_w = nnx.Param(jnp.asarray(shared_w, dtype=self.dtype))
+        self.compress = FixedLinear(params["compress_w"], dtype=self.dtype, param_cls=param_cls)
+        self.dense1 = FixedLinear(params["dense1_w"], params["dense1_b"], dtype=self.dtype, param_cls=param_cls)
+        self.ln1 = FixedLayerNorm(params["ln1_scale"], params["ln1_bias"], dtype=self.dtype, param_cls=param_cls)
+        self.dense2 = FixedLinear(params["dense2_w"], params["dense2_b"], dtype=self.dtype, param_cls=param_cls)
+        self.ln2 = FixedLayerNorm(params["ln2_scale"], params["ln2_bias"], dtype=self.dtype, param_cls=param_cls)
+        self.shared_w = param_cls(jnp.asarray(shared_w, dtype=self.dtype))
 
     def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
         # x: [Batch, 64, D]
@@ -169,10 +199,10 @@ class EncoderLayer(nnx.Module):
         param_dtype=jnp.float32,
         compute_dtype=jnp.float32,
         use_qk_gain: bool = False,
-        use_xsa: bool = False,
         attention_impl: str = "manual",
         layer_params: dict | None = None,
         shared_smolgen_w: np.ndarray | None = None,
+        param_cls=nnx.Param,
     ):
         self.width = width
         self.num_heads = num_heads
@@ -180,24 +210,37 @@ class EncoderLayer(nnx.Module):
         self.param_dtype = jnp.dtype(param_dtype)
         self.compute_dtype = jnp.dtype(compute_dtype)
         self.use_qk_gain = use_qk_gain
-        self.use_xsa = use_xsa
         if attention_impl not in {"sdpa", "manual"}:
             raise ValueError(f"Unsupported attention_impl: {attention_impl!r}")
         self.attention_impl = attention_impl
 
         if layer_params:
-            self.wq = nnx.Param(jnp.asarray(layer_params["mha"]["q_w"], dtype=self.param_dtype))
-            self.wq_b = nnx.Param(jnp.asarray(layer_params["mha"]["q_b"], dtype=self.param_dtype))
-            self.wk = nnx.Param(jnp.asarray(layer_params["mha"]["k_w"], dtype=self.param_dtype))
-            self.wk_b = nnx.Param(jnp.asarray(layer_params["mha"]["k_b"], dtype=self.param_dtype))
-            self.wv = nnx.Param(jnp.asarray(layer_params["mha"]["v_w"], dtype=self.param_dtype))
-            self.wv_b = nnx.Param(jnp.asarray(layer_params["mha"]["v_b"], dtype=self.param_dtype))
-            self.wo = FixedLinear(layer_params["mha"]["dense_w"], layer_params["mha"]["dense_b"], dtype=self.param_dtype)
-            self.ln_attn = FixedLayerNorm(layer_params["ln1"]["scale"], layer_params["ln1"]["bias"], dtype=self.param_dtype)
-            self.ffn1 = FixedLinear(layer_params["ffn"]["dense1_w"], layer_params["ffn"]["dense1_b"], dtype=self.param_dtype)
-            self.ffn2 = FixedLinear(layer_params["ffn"]["dense2_w"], layer_params["ffn"]["dense2_b"], dtype=self.param_dtype)
-            self.ln_ffn = FixedLayerNorm(layer_params["ln2"]["scale"], layer_params["ln2"]["bias"], dtype=self.param_dtype)
-            self.smolgen = Smolgen(layer_params["mha"]["smolgen"], shared_smolgen_w, headcount=num_heads, dtype=self.param_dtype) if shared_smolgen_w is not None else None
+            self.wq = param_cls(jnp.asarray(layer_params["mha"]["q_w"], dtype=self.param_dtype))
+            self.wq_b = param_cls(jnp.asarray(layer_params["mha"]["q_b"], dtype=self.param_dtype))
+            self.wk = param_cls(jnp.asarray(layer_params["mha"]["k_w"], dtype=self.param_dtype))
+            self.wk_b = param_cls(jnp.asarray(layer_params["mha"]["k_b"], dtype=self.param_dtype))
+            self.wv = param_cls(jnp.asarray(layer_params["mha"]["v_w"], dtype=self.param_dtype))
+            self.wv_b = param_cls(jnp.asarray(layer_params["mha"]["v_b"], dtype=self.param_dtype))
+            self.wo = FixedLinear(
+                layer_params["mha"]["dense_w"], layer_params["mha"]["dense_b"], dtype=self.param_dtype, param_cls=param_cls
+            )
+            self.ln_attn = FixedLayerNorm(
+                layer_params["ln1"]["scale"], layer_params["ln1"]["bias"], dtype=self.param_dtype, param_cls=param_cls
+            )
+            self.ffn1 = FixedLinear(
+                layer_params["ffn"]["dense1_w"], layer_params["ffn"]["dense1_b"], dtype=self.param_dtype, param_cls=param_cls
+            )
+            self.ffn2 = FixedLinear(
+                layer_params["ffn"]["dense2_w"], layer_params["ffn"]["dense2_b"], dtype=self.param_dtype, param_cls=param_cls
+            )
+            self.ln_ffn = FixedLayerNorm(
+                layer_params["ln2"]["scale"], layer_params["ln2"]["bias"], dtype=self.param_dtype, param_cls=param_cls
+            )
+            self.smolgen = (
+                Smolgen(layer_params["mha"]["smolgen"], shared_smolgen_w, headcount=num_heads, dtype=self.param_dtype, param_cls=param_cls)
+                if shared_smolgen_w is not None
+                else None
+            )
         else:
             self.wq = TrainableParam(jax.random.normal(rngs.params(), (width, width), dtype=self.param_dtype)/np.sqrt(width))
             self.wq_b = TrainableParam(jnp.zeros((width,), dtype=self.param_dtype))
@@ -291,6 +334,196 @@ class EncoderLayer(nnx.Module):
         return self.ln_ffn(out + res)
 
 
+def exclusive_self_attention_output(
+    attn_out: jnp.ndarray,
+    value: jnp.ndarray,
+    *,
+    eps: float = 1e-6,
+) -> jnp.ndarray:
+    """Project trainable DFM/JEPA attention output off each token's own V direction."""
+    value_f32 = jnp.asarray(value, dtype=jnp.float32)
+    inv_norm = jax.lax.rsqrt(jnp.sum(jnp.square(value_f32), axis=-1, keepdims=True) + eps)
+    value_dir = value_f32 * inv_norm
+    attn_out_f32 = jnp.asarray(attn_out, dtype=jnp.float32)
+    projection = jnp.sum(attn_out_f32 * value_dir, axis=-1, keepdims=True)
+    projected = attn_out_f32 - projection * value_dir
+    return jnp.asarray(projected, dtype=attn_out.dtype)
+
+
+class TrainableTransformerStack(nnx.Module):
+    """Pre-RMSNorm transformer stack for trainable DFM/JEPA heads.
+
+    Frozen BT4 layers keep using EncoderLayer. This stack is parameterized by
+    arrays with a leading layer axis so it can use pure lax.scan even when
+    nested inside JEPA's recurrent horizon scan.
+    """
+
+    def __init__(
+        self,
+        *,
+        num_layers: int,
+        width: int,
+        num_heads: int,
+        mlp_dim: int,
+        rngs: nnx.Rngs,
+        param_dtype=jnp.float32,
+        compute_dtype=jnp.float32,
+        use_qk_gain: bool = False,
+        use_qk_norm: bool = False,
+        use_xsa: bool = False,
+        scan_layers: bool = True,
+        remat_blocks: bool = True,
+        rms_eps: float = 1e-6,
+    ):
+        if width % num_heads != 0:
+            raise ValueError(f"width={width} must be divisible by num_heads={num_heads}.")
+        self.num_layers = int(num_layers)
+        self.width = int(width)
+        self.num_heads = int(num_heads)
+        self.head_dim = int(width // num_heads)
+        self.swiglu_dim = max(1, int(round((2.0 / 3.0) * mlp_dim)))
+        self.param_dtype = jnp.dtype(param_dtype)
+        self.compute_dtype = jnp.dtype(compute_dtype)
+        self.use_qk_gain = bool(use_qk_gain)
+        self.use_qk_norm = bool(use_qk_norm)
+        self.use_xsa = bool(use_xsa)
+        self.scan_layers = bool(scan_layers)
+        self.remat_blocks = bool(remat_blocks)
+        self.rms_eps = float(rms_eps)
+
+        def normal(shape, scale):
+            return jax.random.normal(rngs.params(), shape, dtype=self.param_dtype) * scale
+
+        self.attn_norm_scale = TrainableParam(jnp.ones((num_layers, width), dtype=self.param_dtype))
+        self.mlp_norm_scale = TrainableParam(jnp.ones((num_layers, width), dtype=self.param_dtype))
+        self.w_qkv = TrainableParam(normal((num_layers, width, 3 * width), 1.0 / np.sqrt(width)))
+        self.b_qkv = TrainableParam(jnp.zeros((num_layers, 3 * width), dtype=self.param_dtype))
+        self.w_o = TrainableParam(normal((num_layers, width, width), 1.0 / np.sqrt(width)))
+        self.b_o = TrainableParam(jnp.zeros((num_layers, width), dtype=self.param_dtype))
+        self.w_gate_up = TrainableParam(
+            normal((num_layers, width, 2 * self.swiglu_dim), 1.0 / np.sqrt(width))
+        )
+        self.b_gate_up = TrainableParam(jnp.zeros((num_layers, 2 * self.swiglu_dim), dtype=self.param_dtype))
+        self.w_down = TrainableParam(normal((num_layers, self.swiglu_dim, width), 1.0 / np.sqrt(self.swiglu_dim)))
+        self.b_down = TrainableParam(jnp.zeros((num_layers, width), dtype=self.param_dtype))
+        if use_qk_gain:
+            self.qk_gain = TrainableParam(
+                jnp.full((num_layers,), 1.0 / np.sqrt(self.head_dim), dtype=self.param_dtype)
+            )
+
+    def _rms_norm(self, x: jnp.ndarray, scale: jnp.ndarray) -> jnp.ndarray:
+        stats_x = jnp.asarray(x, dtype=jnp.float32)
+        inv_rms = jax.lax.rsqrt(jnp.mean(jnp.square(stats_x), axis=-1, keepdims=True) + self.rms_eps)
+        out = stats_x * inv_rms * jnp.asarray(scale, dtype=jnp.float32)
+        return jnp.asarray(out, dtype=self.compute_dtype)
+
+    def _qk_norm(self, x: jnp.ndarray) -> jnp.ndarray:
+        stats_x = jnp.asarray(x, dtype=jnp.float32)
+        inv_rms = jax.lax.rsqrt(jnp.mean(jnp.square(stats_x), axis=-1, keepdims=True) + self.rms_eps)
+        return jnp.asarray(stats_x * inv_rms, dtype=self.compute_dtype)
+
+    def _layer(self, x: jnp.ndarray, params: tuple[jnp.ndarray, ...]) -> jnp.ndarray:
+        (
+            attn_norm_scale,
+            mlp_norm_scale,
+            w_qkv,
+            b_qkv,
+            w_o,
+            b_o,
+            w_gate_up,
+            b_gate_up,
+            w_down,
+            b_down,
+            qk_gain,
+        ) = params
+        x = jnp.asarray(x, dtype=self.compute_dtype)
+        batch, seq_len, _ = x.shape
+
+        h = self._rms_norm(x, attn_norm_scale)
+        qkv = h.reshape((batch * seq_len, self.width)) @ w_qkv + b_qkv
+        q, k, v = jnp.split(qkv, 3, axis=-1)
+        q = q.reshape((batch, seq_len, self.num_heads, self.head_dim)).transpose(0, 2, 1, 3)
+        k = k.reshape((batch, seq_len, self.num_heads, self.head_dim)).transpose(0, 2, 1, 3)
+        v = v.reshape((batch, seq_len, self.num_heads, self.head_dim)).transpose(0, 2, 1, 3)
+        if self.use_qk_norm:
+            q = self._qk_norm(q)
+            k = self._qk_norm(k)
+        logits = jnp.matmul(q, k.transpose(0, 1, 3, 2))
+        if self.use_qk_gain:
+            logits = logits * qk_gain
+        else:
+            logits = logits / np.sqrt(self.head_dim)
+        attn = jax.nn.softmax(logits, axis=-1)
+        attn_out_heads = jnp.matmul(attn, v)
+        if self.use_xsa:
+            attn_out_heads = exclusive_self_attention_output(attn_out_heads, v, eps=self.rms_eps)
+        attn_out = attn_out_heads.transpose(0, 2, 1, 3).reshape((batch * seq_len, self.width))
+        attn_out = attn_out @ w_o + b_o
+        x = jnp.asarray(x + attn_out.reshape((batch, seq_len, self.width)), dtype=self.compute_dtype)
+
+        h = self._rms_norm(x, mlp_norm_scale)
+        gate_up = h.reshape((batch * seq_len, self.width)) @ w_gate_up + b_gate_up
+        gate, up = jnp.split(gate_up, 2, axis=-1)
+        hidden = jax.nn.silu(gate) * up
+        mlp_out = hidden @ w_down + b_down
+        return jnp.asarray(x + mlp_out.reshape((batch, seq_len, self.width)), dtype=self.compute_dtype)
+
+    def _params(self) -> tuple[jnp.ndarray, ...]:
+        qk_gain = (
+            jnp.asarray(self.qk_gain[...], dtype=self.compute_dtype)
+            if self.use_qk_gain
+            else jnp.ones((self.num_layers,), dtype=self.compute_dtype)
+        )
+        return (
+            jnp.asarray(self.attn_norm_scale[...], dtype=self.compute_dtype),
+            jnp.asarray(self.mlp_norm_scale[...], dtype=self.compute_dtype),
+            jnp.asarray(self.w_qkv[...], dtype=self.compute_dtype),
+            jnp.asarray(self.b_qkv[...], dtype=self.compute_dtype),
+            jnp.asarray(self.w_o[...], dtype=self.compute_dtype),
+            jnp.asarray(self.b_o[...], dtype=self.compute_dtype),
+            jnp.asarray(self.w_gate_up[...], dtype=self.compute_dtype),
+            jnp.asarray(self.b_gate_up[...], dtype=self.compute_dtype),
+            jnp.asarray(self.w_down[...], dtype=self.compute_dtype),
+            jnp.asarray(self.b_down[...], dtype=self.compute_dtype),
+            qk_gain,
+        )
+
+    def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
+        params = self._params()
+
+        def apply_layer(carry: jnp.ndarray, layer_params: tuple[jnp.ndarray, ...]) -> jnp.ndarray:
+            return self._layer(carry, layer_params)
+
+        layer_fn = jax.checkpoint(apply_layer, prevent_cse=False) if self.remat_blocks else apply_layer
+        if self.scan_layers:
+            def body(carry, layer_params):
+                return layer_fn(carry, layer_params), None
+
+            x, _ = jax.lax.scan(body, jnp.asarray(x, dtype=self.compute_dtype), params)
+            return x
+
+        for layer_idx in range(self.num_layers):
+            layer_params = tuple(param[layer_idx] for param in params)
+            x = layer_fn(x, layer_params)
+        return x
+
+
+@nnx.remat(prevent_cse=False)
+def remat_encoder_layer(layer: EncoderLayer, x: jnp.ndarray) -> jnp.ndarray:
+    """Recompute one trainable encoder block during the backward pass."""
+    return layer(x)
+
+
+@nnx.remat(prevent_cse=False)
+def remat_encoder_layer_with_alpha(
+    layer: EncoderLayer,
+    x: jnp.ndarray,
+    alpha: float,
+) -> jnp.ndarray:
+    """Recompute one BT4 encoder block during the backward pass."""
+    return layer(x, alpha)
+
+
 class PolicyHead(nnx.Module):
     def __init__(self, params: dict, mapping_table: np.ndarray | None = None, *, dtype=jnp.float32):
         self.dtype = jnp.dtype(dtype)
@@ -356,15 +589,17 @@ class MovesLeftHead(nnx.Module):
 
 
 class BT4Model(nnx.Module):
-    def __init__(self, params: dict, *, dtype=jnp.float32, attention_impl: str = "manual"):
+    def __init__(self, params: dict, *, dtype=jnp.float32, attention_impl: str = "manual", train_encoder: bool = False):
         self.dtype = jnp.dtype(dtype)
         p = params
+        encoder_param_cls = BT4TrainableParam if train_encoder else nnx.Param
         self.embedding = InputEmbedding(
             p["embedding"],
             embedding_size=p["embedding_size"],
             embedding_dense_size=p["embedding_dense_size"],
             pos_planes=p["pos_planes"],
             dtype=self.dtype,
+            param_cls=encoder_param_cls,
         )
         self.layers = nnx.List(
             [
@@ -378,6 +613,7 @@ class BT4Model(nnx.Module):
                     attention_impl=attention_impl,
                     layer_params=lp,
                     shared_smolgen_w=p["smolgen_w"],
+                    param_cls=encoder_param_cls,
                 )
                 for lp in p["encoder"]
             ]
@@ -406,8 +642,14 @@ class BT4Model(nnx.Module):
         return p, v, ml
 
 
-def make_bt4_model(params: dict, *, dtype=jnp.float32, attention_impl: str = "manual") -> BT4Model:
-    return BT4Model(params, dtype=dtype, attention_impl=attention_impl)
+def make_bt4_model(
+    params: dict,
+    *,
+    dtype=jnp.float32,
+    attention_impl: str = "manual",
+    train_encoder: bool = False,
+) -> BT4Model:
+    return BT4Model(params, dtype=dtype, attention_impl=attention_impl, train_encoder=train_encoder)
 
 
 @nnx.jit
@@ -447,21 +689,67 @@ def bt4_forward_fp32(params: dict, planes: jnp.ndarray) -> tuple[jnp.ndarray, jn
     return bt4_forward(params, planes)
 
 
+def _muon_dimension_numbers_for_params(
+    params,
+    *,
+    max_aspect_ratio: float = 2.0,
+    min_matrix_dim: int = 128,
+):
+    """Route only square-ish matrix weights through Muon.
+
+    Optax Muon already transposes tall matrices before Newton-Schulz, but using
+    Muon on every 2D leaf still spends optimizer compute on FFN expansion,
+    embeddings, and output heads. Those leaves are better handled by AdamW.
+    """
+    import optax.contrib
+
+    def path_name(path) -> str:
+        parts = []
+        for item in path:
+            key = getattr(item, "key", item)
+            parts.append(str(key))
+        return "/".join(parts).lower()
+
+    def label(path, value):
+        if not hasattr(value, "ndim") or value.ndim < 2:
+            return None
+        name = path_name(path)
+        if any(token in name for token in ("bias", "_b", "/b", "norm", "ln", "embed", "embedding")):
+            return None
+        rows, cols = value.shape[-2:]
+        if min(rows, cols) < min_matrix_dim:
+            return None
+        aspect = max(rows, cols) / min(rows, cols)
+        if aspect > max_aspect_ratio:
+            return None
+        return optax.contrib.MuonDimensionNumbers(
+            reduction_axis=value.ndim - 2,
+            output_axis=value.ndim - 1,
+        )
+
+    return jax.tree_util.tree_map_with_path(label, params)
+
+
 def muon_adamw(learning_rate, weight_decay):
     import optax.contrib
+
     return optax.contrib.muon(
         learning_rate=learning_rate,
         weight_decay=weight_decay,
-        adam_weight_decay=weight_decay
+        adam_weight_decay=weight_decay,
+        muon_weight_dimension_numbers=_muon_dimension_numbers_for_params,
     )
 
 
 __all__ = [
     "BT4Model",
+    "BT4TrainableParam",
     "EncoderLayer",
     "TrainableParam",
     "TrainableLayerNorm",
+    "TrainableRMSNorm",
     "TrainableEmbedding",
+    "TrainableTransformerStack",
     "bt4_forward",
     "bt4_forward_fp16",
     "bt4_forward_fp32",
@@ -470,6 +758,8 @@ __all__ = [
     "jit_encoder_loss_and_grad",
     "make_bt4_model",
     "mish",
-    "swish",
     "muon_adamw",
+    "remat_encoder_layer",
+    "remat_encoder_layer_with_alpha",
+    "swish",
 ]

@@ -25,6 +25,7 @@ dependencies = [
   "numpy>=2.0.0",
   "onnxruntime>=1.23.0",
   "optax>=0.2.5",
+  "orbax-checkpoint==0.11.36",
   "pandas>=2.2.0",
   "protobuf>=6.0.0",
   "python-chess>=1.11.0",
@@ -40,6 +41,9 @@ dev = [
   "pytest>=8.0.0",
   "ruff>=0.11.0",
 ]
+
+[tool.uv.extra-build-dependencies]
+grpcio-tools = ["setuptools<81"]
 
 [tool.setuptools.packages.find]
 where = ["."]

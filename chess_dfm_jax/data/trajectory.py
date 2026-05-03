@@ -625,6 +625,38 @@ def build_synthetic_trajectory_shard(batch_size: int = 2, horizon: int = 4) -> T
         ["d2d4", "d7d5", "c1f4", "g8f6", "e2e3", "c8f5", "f1d3", "e7e6"],
         ["c2c4", "e7e5", "b1c3", "g8f6", "g2g3", "d7d5", "c4d5", "f6d5"],
     ]
+    if horizon > min(len(line) for line in lines):
+        raise ValueError(f"Synthetic trajectories support horizon <= {min(len(line) for line in lines)}, got {horizon}.")
+
+    line_payloads = []
+    for line_idx, opening in enumerate(lines):
+        board = chess.Board()
+        selected = opening[:horizon]
+        action_ids = np.asarray(
+            [move_to_policy_index(chess.Move.from_uci(uci), "lc0_1858") for uci in selected],
+            dtype=np.int32,
+        )
+        rollout = rollout_from_fen(board.fen(), action_ids)
+        draw_wdl = np.zeros((horizon, 3), dtype=np.float32)
+        draw_wdl[:, 1] = 1.0
+        line_payloads.append(
+            {
+                "planes_t": encode_board(board, [], input_format=DEFAULT_INPUT_FORMAT).astype(np.float32),
+                "actions": action_ids,
+                "planes_future": rollout["planes_future"],
+                "legal_masks": rollout["legal_masks"],
+                "value_targets": np.zeros((horizon,), dtype=np.float32),
+                "wdl_targets": draw_wdl,
+                "future_valid": np.ones((horizon,), dtype=np.float32),
+                "source": "synthetic",
+                "game_id": f"synthetic-line-{line_idx}",
+                "ply": 0,
+                "result": "1/2-1/2",
+                "fen_t": board.fen(),
+                "actions_uci": rollout["actions_uci"],
+                "input_format": DEFAULT_INPUT_FORMAT,
+            }
+        )
 
     planes_t = []
     actions = []
@@ -642,31 +674,21 @@ def build_synthetic_trajectory_shard(batch_size: int = 2, horizon: int = 4) -> T
     input_format = []
 
     for sample_idx in range(batch_size):
-        opening = lines[sample_idx % len(lines)]
-        board = chess.Board()
-        selected = opening[:horizon]
-        action_ids = np.asarray(
-            [move_to_policy_index(chess.Move.from_uci(uci), "lc0_1858") for uci in selected],
-            dtype=np.int32,
-        )
-        rollout = rollout_from_fen(board.fen(), action_ids)
-
-        planes_t.append(encode_board(board, [], input_format=DEFAULT_INPUT_FORMAT).astype(np.float32))
-        actions.append(action_ids)
-        planes_future.append(rollout["planes_future"])
-        legal_masks.append(rollout["legal_masks"])
-        value_targets.append(np.zeros((horizon,), dtype=np.float32))
-        draw_wdl = np.zeros((horizon, 3), dtype=np.float32)
-        draw_wdl[:, 1] = 1.0
-        wdl_targets.append(draw_wdl)
-        future_valid.append(np.ones((horizon,), dtype=np.float32))
-        source.append("synthetic")
-        game_id.append(f"synthetic-line-{sample_idx % len(lines)}")
-        ply.append(0)
-        result.append("1/2-1/2")
-        fen_t.append(board.fen())
-        actions_uci.append(rollout["actions_uci"])
-        input_format.append(DEFAULT_INPUT_FORMAT)
+        payload = line_payloads[sample_idx % len(line_payloads)]
+        planes_t.append(payload["planes_t"])
+        actions.append(payload["actions"])
+        planes_future.append(payload["planes_future"])
+        legal_masks.append(payload["legal_masks"])
+        value_targets.append(payload["value_targets"])
+        wdl_targets.append(payload["wdl_targets"])
+        future_valid.append(payload["future_valid"])
+        source.append(payload["source"])
+        game_id.append(payload["game_id"])
+        ply.append(payload["ply"])
+        result.append(payload["result"])
+        fen_t.append(payload["fen_t"])
+        actions_uci.append(payload["actions_uci"])
+        input_format.append(payload["input_format"])
 
     return TrajectoryShard(
         schema_version=TRAJECTORY_V2,

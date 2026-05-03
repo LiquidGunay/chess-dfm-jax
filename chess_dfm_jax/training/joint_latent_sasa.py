@@ -13,26 +13,32 @@ from flax import nnx
 
 from chess_dfm_jax.nnx_bt4 import (
     BT4Model,
-    EncoderLayer,
     TrainableEmbedding,
-    TrainableLayerNorm,
     TrainableParam,
+    TrainableRMSNorm,
+    TrainableTransformerStack,
     make_bt4_model,
 )
 from chess_dfm_jax.training.dfm import mask_actions
-from chess_dfm_jax.training.jepa import TokenProjector, _l2_normalize, _parse_compute_dtype, _sigreg_loss
+from chess_dfm_jax.training.jepa import _l2_normalize, _parse_compute_dtype, _sigreg_loss as _quantile_sigreg_loss
 
 
 @dataclasses.dataclass
 class JointLatentSASAConfig:
     token_dim: int = 256
+    z_dim: int = 2048
+    projector_layers: int = 2
+    projector_num_heads: int = 8
+    projector_mlp_dim: int = 0
+    jepa_condition_dim: int = 0
     dfm_layers: int = 4
-    jepa_layers: int = 2
+    jepa_layers: int = 4
     jepa_num_heads: int = 0
     jepa_mlp_dim: int = 0
     num_heads: int = 4
     mlp_dim: int = 1024
-    learning_rate: float = 3e-4
+    learning_rate: float = 6e-4
+    bt4_learning_rate: float = 1e-5
     weight_decay: float = 1e-4
     encoder_dtype: str = "bfloat16"
     param_dtype: str = "float32"
@@ -46,17 +52,36 @@ class JointLatentSASAConfig:
     legality_on_masked_only: bool = True
     jepa_positive_coeff: float = 1.0
     jepa_loss_type: str = "raw_mse"
-    jepa_target_mode: str = "future_bt4"
+    jepa_target_mode: str = "projected_bt4"
     jepa_target_sample_count: int = 0
-    jepa_gamma: float = 0.9
-    jepa_sigreg_coeff: float = 0.0
+    jepa_gamma: float = 1.0
+    jepa_sigreg_coeff: float = 0.1
+    jepa_pred_sigreg_coeff: float = 0.0
+    jepa_sigreg_kind: str = "le_jepa"
+    jepa_sigreg_proj_dim: int = 1024
+    value_coeff: float = 0.0
+    wdl_coeff: float = 0.0
+    loss_clip_value: float = 0.0
     jepa_action_contrast_coeff: float = 0.0
     jepa_action_contrast_margin: float = 0.05
     contrastive_coeff: float = 0.0
     contrastive_temperature: float = 0.1
     candidate_count: int = 1
     use_qk_gain: bool = False
-    use_muon: bool = False
+    use_qk_norm: bool = True
+    use_xsa: bool = True
+    use_muon: bool = True
+    grad_clip_norm: float = 1.0
+    lr_warmup_steps: int = 1000
+    skip_nonfinite_updates: bool = True
+    unfreeze_bt4_encoder: bool = True
+    bt4_encode_chunk_size: int = 0
+    jepa_state_rmsnorm: bool = False
+    jepa_state_rms_scale_max: float = 2.0
+    jepa_teacher_forcing_steps: int = 0
+    jepa_delta_rms_clip: float = 2.0
+    remat_blocks: bool = True
+    scan_layers: bool = False
 
 
 def _weighted_horizon_mean(sample_values: jnp.ndarray, mask: jnp.ndarray) -> jnp.ndarray:
@@ -77,6 +102,82 @@ def _select_jepa_sample_loss(
     if loss_type == "normalized_mse":
         return normalized_mse
     raise ValueError(f"Unsupported jepa_loss_type: {loss_type!r}")
+
+
+def _sigreg_moments_loss(z: jnp.ndarray) -> jnp.ndarray:
+    """Cheap SigReg surrogate without per-dimension sorting."""
+    z = jnp.asarray(z, dtype=jnp.float32)
+    mean = jnp.mean(z, axis=0)
+    centered = z - mean
+    variance = jnp.mean(jnp.square(centered), axis=0)
+    return jnp.mean(jnp.square(mean)) + jnp.mean(jnp.square(variance - 1.0))
+
+
+def _sync_rng_for_pmap(rng: jnp.ndarray, axis_name: str | None) -> jnp.ndarray:
+    """Use one projection seed across replicas, while still changing it each step."""
+    rng = jnp.asarray(rng, dtype=jnp.uint32)
+    if axis_name is None:
+        return rng
+    return jax.lax.pmin(rng, axis_name=axis_name)
+
+
+def _official_le_jepa_sigreg_loss(
+    z: jnp.ndarray,
+    *,
+    proj_dim: int,
+    rng: jnp.ndarray,
+    axis_name: str | None = None,
+    t_max: float = 3.0,
+    n_points: int = 17,
+) -> jnp.ndarray:
+    """LeJEPA Epps-Pulley SIGReg with random slices.
+
+    This follows the official structure:
+      1. Project latents onto random unit directions.
+      2. Match each projected empirical characteristic function to N(0, 1).
+      3. Average the Epps-Pulley statistic over slices.
+    """
+    z = jnp.asarray(z, dtype=jnp.float32)
+    sample_count, dim = z.shape
+    if sample_count == 0:
+        return jnp.zeros((), dtype=jnp.float32)
+
+    rng = _sync_rng_for_pmap(rng, axis_name)
+    directions = jax.random.normal(rng, (dim, proj_dim), dtype=jnp.float32)
+    directions = directions / jnp.maximum(jnp.linalg.norm(directions, axis=0, keepdims=True), 1e-12)
+    projected = z @ directions
+
+    t = jnp.linspace(0.0, t_max, n_points, dtype=jnp.float32)
+    dt = jnp.asarray(t_max / max(n_points - 1, 1), dtype=jnp.float32)
+    weights = jnp.full((n_points,), 2.0 * dt, dtype=jnp.float32)
+    weights = weights.at[0].set(dt)
+    weights = weights.at[-1].set(dt)
+    phi = jnp.exp(-0.5 * jnp.square(t))
+    weights = weights * phi
+
+    xt = projected[:, :, None] * t[None, None, :]
+    cos_mean = jnp.mean(jnp.cos(xt), axis=0)
+    sin_mean = jnp.mean(jnp.sin(xt), axis=0)
+    global_sample_count = jnp.asarray(sample_count, dtype=jnp.float32)
+    if axis_name is not None:
+        cos_mean = jax.lax.pmean(cos_mean, axis_name=axis_name)
+        sin_mean = jax.lax.pmean(sin_mean, axis_name=axis_name)
+        global_sample_count = global_sample_count * jax.lax.psum(jnp.asarray(1.0, dtype=jnp.float32), axis_name)
+
+    err = jnp.square(cos_mean - phi[None, :]) + jnp.square(sin_mean)
+    per_slice = (err @ weights) * global_sample_count
+    return jnp.mean(per_slice)
+
+
+def _clip_loss_preserve_gradient(loss: jnp.ndarray, clip_value: float) -> tuple[jnp.ndarray, jnp.ndarray]:
+    """Scale an oversized scalar loss without making its gradient exactly zero."""
+    loss = jnp.asarray(loss, dtype=jnp.float32)
+    if clip_value <= 0.0:
+        return loss, jnp.asarray(1.0, dtype=jnp.float32)
+    clip = jnp.asarray(clip_value, dtype=jnp.float32)
+    stopped_loss = jax.lax.stop_gradient(jnp.maximum(loss, 1e-6))
+    scale = jnp.minimum(1.0, clip / stopped_loss)
+    return loss * scale, scale
 
 
 class LinearAdapter(nnx.Module):
@@ -104,6 +205,184 @@ class LinearAdapter(nnx.Module):
         )
 
 
+class StateVectorProjector(nnx.Module):
+    """Project BT4 square tokens to one global JEPA state vector."""
+
+    def __init__(
+        self,
+        input_dim: int,
+        z_dim: int,
+        *,
+        num_layers: int,
+        num_heads: int,
+        mlp_dim: int,
+        rngs: nnx.Rngs,
+        param_dtype: jnp.dtype = jnp.float32,
+        compute_dtype: jnp.dtype = jnp.float32,
+        use_qk_gain: bool = False,
+        use_qk_norm: bool = False,
+        use_xsa: bool = False,
+        scan_layers: bool = False,
+        remat_blocks: bool = True,
+    ):
+        self.input_dim = int(input_dim)
+        self.z_dim = int(z_dim)
+        self.compute_dtype = jnp.dtype(compute_dtype)
+        mlp_dim = int(mlp_dim) if mlp_dim > 0 else int(4 * z_dim)
+        self.in_proj = TrainableParam(
+            jax.random.normal(rngs.params(), (input_dim, z_dim), dtype=param_dtype) / np.sqrt(max(input_dim, 1))
+        )
+        self.in_bias = TrainableParam(jnp.zeros((z_dim,), dtype=param_dtype))
+        self.cls = TrainableParam(jnp.zeros((1, z_dim), dtype=param_dtype))
+        self.pos_embed = TrainableParam(
+            jax.random.normal(rngs.params(), (65, z_dim), dtype=param_dtype) * (0.02 / np.sqrt(max(z_dim, 1)))
+        )
+        self.blocks = TrainableTransformerStack(
+            num_layers=num_layers,
+            width=z_dim,
+            num_heads=num_heads,
+            mlp_dim=mlp_dim,
+            rngs=rngs,
+            param_dtype=param_dtype,
+            compute_dtype=compute_dtype,
+            use_qk_gain=use_qk_gain,
+            use_qk_norm=use_qk_norm,
+            use_xsa=use_xsa,
+            scan_layers=scan_layers,
+            remat_blocks=remat_blocks,
+        )
+
+    def __call__(self, tokens: jnp.ndarray) -> jnp.ndarray:
+        tokens = jnp.asarray(tokens, dtype=self.compute_dtype)
+        batch = tokens.shape[0]
+        square_tokens = (
+            tokens.reshape((batch * 64, self.input_dim)) @ jnp.asarray(self.in_proj[...], dtype=self.compute_dtype)
+            + jnp.asarray(self.in_bias[...], dtype=self.compute_dtype)
+        ).reshape((batch, 64, self.z_dim))
+        cls = jnp.broadcast_to(jnp.asarray(self.cls[...], dtype=self.compute_dtype), (batch, 1, self.z_dim))
+        seq = jnp.concatenate([cls, square_tokens], axis=1)
+        seq = seq + jnp.asarray(self.pos_embed[...], dtype=self.compute_dtype)[None, :, :]
+        seq = self.blocks(seq)
+        return jnp.asarray(seq[:, 0, :], dtype=self.compute_dtype)
+
+
+class VectorValueWDLHead(nnx.Module):
+    def __init__(
+        self,
+        input_dim: int,
+        hidden_dim: int,
+        *,
+        rngs: nnx.Rngs,
+        param_dtype: jnp.dtype = jnp.float32,
+        compute_dtype: jnp.dtype = jnp.float32,
+    ):
+        self.compute_dtype = jnp.dtype(compute_dtype)
+        self.w1 = TrainableParam(
+            jax.random.normal(rngs.params(), (input_dim, hidden_dim), dtype=param_dtype) / np.sqrt(max(input_dim, 1))
+        )
+        self.b1 = TrainableParam(jnp.zeros((hidden_dim,), dtype=param_dtype))
+        self.value_w = TrainableParam(
+            jax.random.normal(rngs.params(), (hidden_dim, 1), dtype=param_dtype) / np.sqrt(max(hidden_dim, 1))
+        )
+        self.value_b = TrainableParam(jnp.zeros((1,), dtype=param_dtype))
+        self.wdl_w = TrainableParam(
+            jax.random.normal(rngs.params(), (hidden_dim, 3), dtype=param_dtype) / np.sqrt(max(hidden_dim, 1))
+        )
+        self.wdl_b = TrainableParam(jnp.zeros((3,), dtype=param_dtype))
+
+    def __call__(self, z: jnp.ndarray) -> tuple[jnp.ndarray, jnp.ndarray]:
+        z = jnp.asarray(z, dtype=self.compute_dtype)
+        hidden = z @ jnp.asarray(self.w1[...], dtype=self.compute_dtype) + jnp.asarray(self.b1[...], dtype=self.compute_dtype)
+        hidden = jax.nn.silu(hidden)
+        value = hidden @ jnp.asarray(self.value_w[...], dtype=self.compute_dtype) + jnp.asarray(
+            self.value_b[...], dtype=self.compute_dtype
+        )
+        wdl = hidden @ jnp.asarray(self.wdl_w[...], dtype=self.compute_dtype) + jnp.asarray(
+            self.wdl_b[...], dtype=self.compute_dtype
+        )
+        return value.squeeze(-1), wdl
+
+
+class ConditionedVectorTransition(nnx.Module):
+    """AdaLN-style recurrent JEPA transition over projected state vectors."""
+
+    def __init__(
+        self,
+        z_dim: int,
+        condition_dim: int,
+        *,
+        num_layers: int,
+        mlp_dim: int,
+        rngs: nnx.Rngs,
+        param_dtype: jnp.dtype = jnp.float32,
+        compute_dtype: jnp.dtype = jnp.float32,
+        init_scale: float = 1e-3,
+        rms_eps: float = 1e-6,
+        delta_rms_clip: float = 0.0,
+    ):
+        self.z_dim = int(z_dim)
+        self.condition_dim = int(condition_dim)
+        self.num_layers = int(num_layers)
+        self.swiglu_dim = max(1, int(round((2.0 / 3.0) * int(mlp_dim))))
+        self.compute_dtype = jnp.dtype(compute_dtype)
+        self.rms_eps = float(rms_eps)
+        self.delta_rms_clip = float(delta_rms_clip)
+
+        def normal(shape, scale):
+            return jax.random.normal(rngs.params(), shape, dtype=param_dtype) * scale
+
+        self.norm_scale = TrainableParam(jnp.ones((num_layers, z_dim), dtype=param_dtype))
+        self.cond_w = TrainableParam(jnp.zeros((num_layers, condition_dim, 2 * z_dim), dtype=param_dtype))
+        self.cond_b = TrainableParam(jnp.zeros((num_layers, 2 * z_dim), dtype=param_dtype))
+        self.w_gate_up = TrainableParam(normal((num_layers, z_dim, 2 * self.swiglu_dim), 1.0 / np.sqrt(max(z_dim, 1))))
+        self.b_gate_up = TrainableParam(jnp.zeros((num_layers, 2 * self.swiglu_dim), dtype=param_dtype))
+        self.w_down = TrainableParam(
+            normal((num_layers, self.swiglu_dim, z_dim), init_scale / np.sqrt(max(self.swiglu_dim, 1)))
+        )
+        self.b_down = TrainableParam(jnp.zeros((num_layers, z_dim), dtype=param_dtype))
+
+    def _rms_norm(self, x: jnp.ndarray, scale: jnp.ndarray) -> jnp.ndarray:
+        stats_x = jnp.asarray(x, dtype=jnp.float32)
+        inv_rms = jax.lax.rsqrt(jnp.mean(jnp.square(stats_x), axis=-1, keepdims=True) + self.rms_eps)
+        out = stats_x * inv_rms * jnp.asarray(scale, dtype=jnp.float32)
+        return jnp.asarray(out, dtype=self.compute_dtype)
+
+    def _layer(self, z: jnp.ndarray, condition: jnp.ndarray, params: tuple[jnp.ndarray, ...]) -> jnp.ndarray:
+        norm_scale, cond_w, cond_b, w_gate_up, b_gate_up, w_down, b_down = params
+        z = jnp.asarray(z, dtype=self.compute_dtype)
+        condition = jnp.asarray(condition, dtype=self.compute_dtype)
+        shift_scale = condition @ cond_w + cond_b
+        shift, scale = jnp.split(shift_scale, 2, axis=-1)
+        hidden = self._rms_norm(z, norm_scale)
+        hidden = hidden * (1.0 + scale) + shift
+        gate_up = hidden @ w_gate_up + b_gate_up
+        gate, up = jnp.split(gate_up, 2, axis=-1)
+        delta = (jax.nn.silu(gate) * up) @ w_down + b_down
+        if self.delta_rms_clip > 0.0:
+            delta_f32 = jnp.asarray(delta, dtype=jnp.float32)
+            delta_rms = jnp.sqrt(jnp.mean(jnp.square(delta_f32), axis=-1, keepdims=True) + self.rms_eps)
+            delta_scale = jnp.minimum(1.0, jnp.asarray(self.delta_rms_clip, dtype=jnp.float32) / delta_rms)
+            delta = delta_f32 * delta_scale
+        return jnp.asarray(z + delta, dtype=self.compute_dtype)
+
+    def __call__(self, z: jnp.ndarray, condition: jnp.ndarray) -> jnp.ndarray:
+        params = (
+            jnp.asarray(self.norm_scale[...], dtype=self.compute_dtype),
+            jnp.asarray(self.cond_w[...], dtype=self.compute_dtype),
+            jnp.asarray(self.cond_b[...], dtype=self.compute_dtype),
+            jnp.asarray(self.w_gate_up[...], dtype=self.compute_dtype),
+            jnp.asarray(self.b_gate_up[...], dtype=self.compute_dtype),
+            jnp.asarray(self.w_down[...], dtype=self.compute_dtype),
+            jnp.asarray(self.b_down[...], dtype=self.compute_dtype),
+        )
+
+        def body(carry, layer_params):
+            return self._layer(carry, condition, layer_params), None
+
+        z, _ = jax.lax.scan(body, jnp.asarray(z, dtype=self.compute_dtype), params)
+        return z
+
+
 class JointLatentSASAModel(nnx.Module):
     """Minimal joint model for positive hidden-state DFM/JEPA coupling."""
 
@@ -114,27 +393,37 @@ class JointLatentSASAModel(nnx.Module):
         compute_dtype = _parse_compute_dtype(config.compute_dtype)
         self.compute_dtype = jnp.dtype(compute_dtype)
         self.encoder_dim = int(encoder.embedding_size)
+        self.z_dim = int(config.z_dim)
         if config.jepa_loss_type != "raw_mse":
-            raise ValueError("Joint stage-1 hot training supports raw_mse JEPA loss only.")
-        if config.jepa_target_mode not in ("future_bt4", "current_repeat"):
+            raise ValueError("Joint projected-vector training supports raw_mse JEPA loss only.")
+        if config.jepa_target_mode not in ("projected_bt4", "current_repeat"):
             raise ValueError(f"Unsupported jepa_target_mode: {config.jepa_target_mode!r}.")
-        if config.jepa_target_sample_count < 0:
-            raise ValueError("jepa_target_sample_count must be >= 0.")
-        jepa_num_heads = config.jepa_num_heads if config.jepa_num_heads > 0 else config.num_heads
-        if self.encoder_dim % jepa_num_heads != 0:
-            raise ValueError(
-                f"Raw-BT4 JEPA width {self.encoder_dim} must be divisible by jepa_num_heads={jepa_num_heads}."
-            )
-        jepa_mlp_dim = config.jepa_mlp_dim if config.jepa_mlp_dim > 0 else self.encoder_dim * 4
+        if config.jepa_target_sample_count not in (0, config.horizon):
+            raise ValueError("Projected-vector JEPA currently uses full-horizon targets; set jepa_target_sample_count=0.")
+        projector_heads = config.projector_num_heads
+        if config.z_dim % projector_heads != 0:
+            raise ValueError(f"z_dim={config.z_dim} must be divisible by projector_num_heads={projector_heads}.")
+        condition_dim = config.jepa_condition_dim if config.jepa_condition_dim > 0 else config.z_dim
+        jepa_mlp_dim = config.jepa_mlp_dim if config.jepa_mlp_dim > 0 else config.z_dim * 4
+        projector_mlp_dim = config.projector_mlp_dim if config.projector_mlp_dim > 0 else config.z_dim * 4
 
-        self.shared_projector = TokenProjector(
-            encoder.embedding_size,
-            config.token_dim,
+        self.state_projector = StateVectorProjector(
+            self.encoder_dim,
+            config.z_dim,
+            num_layers=config.projector_layers,
+            num_heads=projector_heads,
+            mlp_dim=projector_mlp_dim,
             rngs=rngs,
             param_dtype=param_dtype,
             compute_dtype=compute_dtype,
+            use_qk_gain=config.use_qk_gain,
+            use_qk_norm=config.use_qk_norm,
+            use_xsa=config.use_xsa,
+            scan_layers=config.scan_layers,
+            remat_blocks=config.remat_blocks,
         )
-        self.dfm_adapter = LinearAdapter(
+        self.dfm_state_projector = LinearAdapter(
+            self.encoder_dim,
             config.token_dim,
             rngs=rngs,
             param_dtype=param_dtype,
@@ -142,14 +431,32 @@ class JointLatentSASAModel(nnx.Module):
         )
         self.jepa_action_embed = TrainableEmbedding(
             config.action_vocab_size + 1,
-            self.encoder_dim,
+            condition_dim,
             rngs=rngs,
             param_dtype=param_dtype,
             compute_dtype=compute_dtype,
         )
-        self.jepa_action_adapter = LinearAdapter(
+        self.jepa_hidden_adapter = LinearAdapter(
             config.token_dim,
-            self.encoder_dim,
+            condition_dim,
+            rngs=rngs,
+            param_dtype=param_dtype,
+            compute_dtype=compute_dtype,
+        )
+        self.jepa_transition = ConditionedVectorTransition(
+            config.z_dim,
+            condition_dim,
+            num_layers=config.jepa_layers,
+            mlp_dim=jepa_mlp_dim,
+            rngs=rngs,
+            param_dtype=param_dtype,
+            compute_dtype=compute_dtype,
+            delta_rms_clip=config.jepa_delta_rms_clip,
+        )
+        self.jepa_state_norm = TrainableRMSNorm(config.z_dim, param_dtype=param_dtype, compute_dtype=compute_dtype)
+        self.value_wdl_head = VectorValueWDLHead(
+            config.z_dim,
+            max(config.z_dim, jepa_mlp_dim // 2),
             rngs=rngs,
             param_dtype=param_dtype,
             compute_dtype=compute_dtype,
@@ -171,50 +478,33 @@ class JointLatentSASAModel(nnx.Module):
             jax.random.normal(rngs.params(), (config.horizon, config.token_dim)) / np.sqrt(config.token_dim)
         )
 
-        self.dfm_blocks = nnx.List(
-            [
-                EncoderLayer(
-                    width=config.token_dim,
-                    num_heads=config.num_heads,
-                    mlp_dim=config.mlp_dim,
-                    rngs=rngs,
-                    param_dtype=param_dtype,
-                    compute_dtype=compute_dtype,
-                    use_qk_gain=config.use_qk_gain,
-                )
-                for _ in range(config.dfm_layers)
-            ]
+        self.dfm_blocks = TrainableTransformerStack(
+            num_layers=config.dfm_layers,
+            width=config.token_dim,
+            num_heads=config.num_heads,
+            mlp_dim=config.mlp_dim,
+            rngs=rngs,
+            param_dtype=param_dtype,
+            compute_dtype=compute_dtype,
+            use_qk_gain=config.use_qk_gain,
+            use_qk_norm=config.use_qk_norm,
+            use_xsa=config.use_xsa,
+            scan_layers=config.scan_layers,
+            remat_blocks=config.remat_blocks,
         )
-        self.jepa_blocks = nnx.List(
-            [
-                EncoderLayer(
-                    width=self.encoder_dim,
-                    num_heads=jepa_num_heads,
-                    mlp_dim=jepa_mlp_dim,
-                    rngs=rngs,
-                    param_dtype=param_dtype,
-                    compute_dtype=compute_dtype,
-                    use_qk_gain=config.use_qk_gain,
-                )
-                for _ in range(config.jepa_layers)
-            ]
-        )
-        self.dfm_out_norm = TrainableLayerNorm(config.token_dim, param_dtype=param_dtype, compute_dtype=compute_dtype)
-        self.jepa_out_norm = TrainableLayerNorm(self.encoder_dim, param_dtype=param_dtype, compute_dtype=compute_dtype)
+        self.dfm_out_norm = TrainableRMSNorm(config.token_dim, param_dtype=param_dtype, compute_dtype=compute_dtype)
         self.out_proj = TrainableParam(
             jax.random.normal(rngs.params(), (config.token_dim, config.action_vocab_size), dtype=param_dtype)
             / np.sqrt(config.token_dim)
         )
         self.out_bias = TrainableParam(jnp.zeros((config.action_vocab_size,), dtype=param_dtype))
 
-    def encode_shared(self, current_planes: jnp.ndarray) -> jnp.ndarray:
-        encoder_tokens = jax.lax.stop_gradient(self.encoder.encode_tokens(current_planes))
-        return self.shared_projector(encoder_tokens)
+    def encode_bt4_tokens(self, planes: jnp.ndarray) -> jnp.ndarray:
+        return jnp.asarray(self.encoder.encode_tokens(planes), dtype=self.compute_dtype)
 
     def encode_current_jepa(self, current_planes: jnp.ndarray) -> jnp.ndarray:
-        """Return anchored raw BT4 tokens for the JEPA stream."""
-        encoder_tokens = self.encoder.encode_tokens(current_planes)
-        return jax.lax.stop_gradient(jnp.asarray(encoder_tokens, dtype=self.compute_dtype))
+        """Return projected current-state JEPA vectors."""
+        return self.normalize_jepa_state(self.state_projector(self.encode_bt4_tokens(current_planes)))
 
     def encode_current_targets(self, current_planes: jnp.ndarray) -> jnp.ndarray:
         return self.encode_current_jepa(current_planes)
@@ -222,25 +512,69 @@ class JointLatentSASAModel(nnx.Module):
     def encode_future_targets(self, future_planes: jnp.ndarray) -> jnp.ndarray:
         batch_size, horizon, channels, height, width = future_planes.shape
         flat_planes = future_planes.reshape((batch_size * horizon, channels, height, width))
-        encoder_tokens = self.encoder.encode_tokens(flat_planes)
-        target_tokens = encoder_tokens.reshape((batch_size, horizon, 64, self.encoder_dim))
-        return jax.lax.stop_gradient(jnp.asarray(target_tokens, dtype=self.compute_dtype))
+        target_vectors = self.state_projector(self.encode_bt4_tokens(flat_planes))
+        target_vectors = target_vectors.reshape((batch_size, horizon, self.z_dim))
+        return self.normalize_jepa_state(target_vectors)
 
     def encode_current_and_future_targets(
         self,
         current_planes: jnp.ndarray,
         future_planes: jnp.ndarray,
     ) -> tuple[jnp.ndarray, jnp.ndarray]:
+        _, z_all = self.encode_current_and_future_tokens_and_vectors(current_planes, future_planes)
+        return z_all[:, 0], z_all[:, 1:]
+
+    def encode_current_and_future_tokens_and_vectors(
+        self,
+        current_planes: jnp.ndarray,
+        future_planes: jnp.ndarray,
+    ) -> tuple[jnp.ndarray, jnp.ndarray]:
         batch_size, horizon, channels, height, width = future_planes.shape
         all_planes = jnp.concatenate((current_planes[:, None, :, :, :], future_planes), axis=1)
-        flat_planes = all_planes.reshape((batch_size * (horizon + 1), channels, height, width))
-        encoder_tokens = self.encoder.encode_tokens(flat_planes)
-        tokens = encoder_tokens.reshape((batch_size, horizon + 1, 64, self.encoder_dim))
-        tokens = jax.lax.stop_gradient(jnp.asarray(tokens, dtype=self.compute_dtype))
-        return tokens[:, 0], tokens[:, 1:]
+        chunk_size = int(self.config.bt4_encode_chunk_size)
+        if chunk_size == 1:
+            time_major_planes = jnp.swapaxes(all_planes, 0, 1)
 
-    def dfm_latents(self, shared_tokens: jnp.ndarray) -> jnp.ndarray:
-        return self.dfm_adapter(jnp.asarray(shared_tokens, dtype=self.compute_dtype))
+            def encode_one(planes_t):
+                tokens_t = self.encode_bt4_tokens(planes_t)
+                vectors_t = self.normalize_jepa_state(self.state_projector(tokens_t))
+                return tokens_t, vectors_t
+
+            # With trainable BT4, a plain scan still saves every horizon's
+            # attention activations for backward. Remat keeps the scan memory
+            # proportional to one board-state encode, at the cost of recompute.
+            encode_one_fn = jax.checkpoint(encode_one, prevent_cse=False)
+
+            def scan_body(_, planes_t):
+                tokens_t, vectors_t = encode_one_fn(planes_t)
+                return None, (tokens_t, vectors_t)
+
+            _, (tokens_t, vectors_t) = jax.lax.scan(scan_body, None, time_major_planes, unroll=1)
+            return jnp.swapaxes(tokens_t, 0, 1), jnp.swapaxes(vectors_t, 0, 1)
+
+        flat_planes = all_planes.reshape((batch_size * (horizon + 1), channels, height, width))
+        encoder_tokens = self.encode_bt4_tokens(flat_planes)
+        tokens = encoder_tokens.reshape((batch_size, horizon + 1, 64, self.encoder_dim))
+        vectors = self.state_projector(tokens.reshape((batch_size * (horizon + 1), 64, self.encoder_dim)))
+        vectors = vectors.reshape((batch_size, horizon + 1, self.z_dim))
+        return tokens, self.normalize_jepa_state(vectors)
+
+    def normalize_jepa_state(self, z: jnp.ndarray) -> jnp.ndarray:
+        """Shared bounded RMSNorm for the JEPA state manifold."""
+        z = jnp.asarray(z, dtype=self.compute_dtype)
+        if not self.config.jepa_state_rmsnorm:
+            return z
+        stats_z = jnp.asarray(z, dtype=jnp.float32)
+        inv_rms = jax.lax.rsqrt(jnp.mean(jnp.square(stats_z), axis=-1, keepdims=True) + self.jepa_state_norm.eps)
+        scale = jnp.asarray(self.jepa_state_norm.scale[...], dtype=jnp.float32)
+        if self.config.jepa_state_rms_scale_max > 0.0:
+            max_scale = jnp.asarray(self.config.jepa_state_rms_scale_max, dtype=jnp.float32)
+            scale = jnp.clip(scale, 1.0 / max_scale, max_scale)
+        out = stats_z * inv_rms * scale
+        return jnp.asarray(out, dtype=self.compute_dtype)
+
+    def dfm_latents(self, bt4_tokens: jnp.ndarray) -> jnp.ndarray:
+        return self.dfm_state_projector(jnp.asarray(bt4_tokens, dtype=self.compute_dtype))
 
     def get_time_embedding(self, t: jnp.ndarray) -> jnp.ndarray:
         t = t[:, None]
@@ -261,8 +595,7 @@ class JointLatentSASAModel(nnx.Module):
         action_emb = action_emb + jnp.asarray(self.pos_embed[...], dtype=self.compute_dtype)[None, :horizon, :]
         action_emb = action_emb + self.get_time_embedding(t)[:, None, :]
         seq = jnp.concatenate([z_dfm, action_emb], axis=1)
-        for block in self.dfm_blocks:
-            seq = block(seq)
+        seq = self.dfm_blocks(seq)
         state_hidden = seq[:, :64, :]
         action_hidden = seq[:, 64:, :]
         logits = self.logits_from_action_hidden(action_hidden)
@@ -282,21 +615,48 @@ class JointLatentSASAModel(nnx.Module):
         z0_jepa: jnp.ndarray,
         actions: jnp.ndarray,
         action_hidden: jnp.ndarray,
+        *,
+        z0_normalized: bool = False,
     ) -> jnp.ndarray:
         action_hidden_seq = jnp.transpose(jnp.asarray(action_hidden, dtype=self.compute_dtype), (1, 0, 2))
         actions_seq = jnp.transpose(actions, (1, 0))
 
-        def loop_body(tokens, inputs):
+        def loop_body(z, inputs):
             action_idx, hidden = inputs
-            action_token = self.jepa_action_embed(action_idx) + self.jepa_action_adapter(hidden)
-            seq = tokens + action_token[:, None, :]
-            for block in self.jepa_blocks:
-                seq = block(seq)
-            next_tokens = self.jepa_out_norm(seq)
-            return next_tokens, next_tokens
+            condition = self.jepa_action_embed(action_idx) + self.jepa_hidden_adapter(hidden)
+            next_z = self.jepa_transition(z, condition)
+            next_z = self.normalize_jepa_state(next_z)
+            return next_z, next_z
 
-        _, pred_seq = jax.lax.scan(loop_body, z0_jepa, (actions_seq, action_hidden_seq))
-        return jnp.transpose(pred_seq, (1, 0, 2, 3))
+        z0 = jnp.asarray(z0_jepa, dtype=self.compute_dtype) if z0_normalized else self.normalize_jepa_state(z0_jepa)
+        _, pred_seq = jax.lax.scan(loop_body, z0, (actions_seq, action_hidden_seq))
+        return jnp.transpose(pred_seq, (1, 0, 2))
+
+    def jepa_teacher_forced_from_latents(
+        self,
+        z_context: jnp.ndarray,
+        actions: jnp.ndarray,
+        action_hidden: jnp.ndarray,
+    ) -> jnp.ndarray:
+        """One-step JEPA predictions using true previous latents as inputs."""
+        z_context_seq = jnp.transpose(jnp.asarray(z_context, dtype=self.compute_dtype), (1, 0, 2))
+        action_hidden_seq = jnp.transpose(jnp.asarray(action_hidden, dtype=self.compute_dtype), (1, 0, 2))
+        actions_seq = jnp.transpose(actions, (1, 0))
+
+        def loop_body(_, inputs):
+            z_in, action_idx, hidden = inputs
+            condition = self.jepa_action_embed(action_idx) + self.jepa_hidden_adapter(hidden)
+            next_z = self.jepa_transition(z_in, condition)
+            next_z = self.normalize_jepa_state(next_z)
+            return None, next_z
+
+        _, pred_seq = jax.lax.scan(loop_body, None, (z_context_seq, actions_seq, action_hidden_seq))
+        return jnp.transpose(pred_seq, (1, 0, 2))
+
+    def value_wdl_from_pred(self, pred_z: jnp.ndarray) -> tuple[jnp.ndarray, jnp.ndarray]:
+        batch_size, horizon, z_dim = pred_z.shape
+        value, wdl = self.value_wdl_head(pred_z.reshape((batch_size * horizon, z_dim)))
+        return value.reshape((batch_size, horizon)), wdl.reshape((batch_size, horizon, 3))
 
 
 def legal_mass_from_indices(
@@ -380,6 +740,7 @@ def joint_stage1_loss_fn(
     model: JointLatentSASAModel,
     batch: dict[str, jnp.ndarray],
     rng: jnp.ndarray,
+    sigreg_axis_name: str | None = None,
 ) -> tuple[jnp.ndarray, dict[str, jnp.ndarray]]:
     actions = batch["action_indices"][:, : model.config.horizon]
     batch_size, horizon = actions.shape
@@ -391,23 +752,39 @@ def joint_stage1_loss_fn(
     future_valid = jnp.asarray(batch["future_valid"], dtype=jnp.float32)[:, :horizon]
     future_planes = jnp.asarray(batch["future_planes"], dtype=jnp.float32)[:, :horizon]
 
-    current_tokens = model.encode_current_jepa(batch["current_planes"])
-    shared_tokens = model.shared_projector(current_tokens)
-    z_dfm = model.dfm_latents(shared_tokens)
-    z_jepa = current_tokens
+    with jax.named_scope("joint_encode_project_current_future"):
+        all_bt4_tokens, z_all = model.encode_current_and_future_tokens_and_vectors(
+            batch["current_planes"],
+            future_planes,
+        )
+    current_bt4_tokens = all_bt4_tokens[:, 0]
+    z_jepa = z_all[:, 0]
+    target_z = z_all[:, 1:]
+    with jax.named_scope("joint_dfm_state_projector"):
+        z_dfm = model.dfm_latents(current_bt4_tokens)
 
-    rng_t, rng_mask, rng_jepa_target = jax.random.split(rng, 3)
+    rng_t, rng_mask, rng_sigreg = jax.random.split(rng, 3)
     t = jax.random.uniform(rng_t, shape=(batch_size,))
     if "deterministic_t" in batch:
         t = jnp.full_like(t, batch["deterministic_t"])
     noisy_actions, is_masked = mask_actions(actions, 1.0 - t, model.config.action_vocab_size, rng_mask)
 
-    logits = model.planner_from_latents(z_dfm, noisy_actions, t)
-    log_probs = jax.nn.log_softmax(logits, axis=-1)
+    with jax.named_scope("joint_dfm_noisy_planner"):
+        logits = model.planner_from_latents(z_dfm, noisy_actions, t)
+    with jax.named_scope("joint_dfm_ce_loss"):
+        log_probs = jax.nn.log_softmax(logits, axis=-1)
     ce_by_horizon = -jnp.take_along_axis(log_probs, actions[..., None], axis=-1)[..., 0]
     loss_mask = jnp.asarray(is_masked, dtype=jnp.float32) * loss_horizon_mask[None, :]
-    sample_ce = jnp.sum(ce_by_horizon * loss_mask, axis=-1) / jnp.maximum(jnp.sum(loss_mask, axis=-1), 1e-5)
-    dfm_ce_loss = jnp.sum(sample_ce * valid) / denom
+    weighted_loss_mask = loss_mask * valid[:, None]
+    dfm_ce_num_by_horizon = jnp.sum(ce_by_horizon * weighted_loss_mask, axis=0)
+    dfm_ce_den_by_horizon = jnp.sum(weighted_loss_mask, axis=0)
+    dfm_ce_loss_by_horizon = dfm_ce_num_by_horizon / jnp.maximum(dfm_ce_den_by_horizon, 1.0)
+    dfm_ce_horizon_valid = (dfm_ce_den_by_horizon > 0).astype(jnp.float32) * loss_horizon_mask
+    dfm_ce_loss = jnp.sum(dfm_ce_loss_by_horizon * dfm_ce_horizon_valid) / jnp.maximum(
+        jnp.sum(dfm_ce_horizon_valid),
+        1.0,
+    )
+    dfm_mask_fraction_by_horizon = dfm_ce_den_by_horizon / denom
 
     probs = jnp.exp(log_probs)
     first_legal_mass = legal_mass_from_indices(
@@ -431,36 +808,103 @@ def joint_stage1_loss_fn(
     weighted_legality_loss = model.config.first_legality_coeff * first_legality_loss
 
     clean_t = jnp.ones((batch_size,), dtype=jnp.float32)
-    _, clean_hidden = model.planner_from_latents(z_dfm, actions, clean_t, return_hidden=True)
-    pred_tokens = model.jepa_rollout_from_latents(z_jepa, actions, clean_hidden["action_tokens"])
-    target_sample_count = model.config.jepa_target_sample_count
-    if target_sample_count <= 0 or target_sample_count >= horizon:
-        selected_horizons = jnp.arange(horizon, dtype=jnp.int32)
-    else:
-        selected_horizons = jnp.sort(jax.random.permutation(rng_jepa_target, horizon)[:target_sample_count])
-    pred_for_loss = jnp.take(pred_tokens, selected_horizons, axis=1)
-    future_valid_for_loss = jnp.take(future_valid, selected_horizons, axis=1)
+    with jax.named_scope("joint_dfm_clean_planner_hidden"):
+        _, clean_hidden = model.planner_from_latents(z_dfm, actions, clean_t, return_hidden=True)
+    with jax.named_scope("joint_jepa_recurrent_rollout"):
+        teacher_forcing = jnp.asarray(batch.get("jepa_teacher_forcing", 0.0), dtype=jnp.float32)
+
+        def teacher_forced_rollout(_):
+            return model.jepa_teacher_forced_from_latents(z_all[:, :horizon], actions, clean_hidden["action_tokens"])
+
+        def free_rollout(_):
+            return model.jepa_rollout_from_latents(
+                z_jepa,
+                actions,
+                clean_hidden["action_tokens"],
+                z0_normalized=True,
+            )
+
+        pred_z = jax.lax.cond(teacher_forcing > 0.5, teacher_forced_rollout, free_rollout, operand=None)
+    selected_horizons = jnp.arange(horizon, dtype=jnp.int32)
+    pred_for_loss = pred_z
+    future_valid_for_loss = future_valid
     if model.config.jepa_target_mode == "current_repeat":
-        # Profiling-only target: removes future BT4 target encodes from the hot path.
+        # Profiling-only target: removes future-state information from JEPA.
         # This is not a meaningful training objective.
-        target_tokens = jnp.broadcast_to(z_jepa[:, None, :, :], pred_for_loss.shape)
+        with jax.named_scope("joint_jepa_current_repeat_target"):
+            target_vectors = jnp.broadcast_to(z_jepa[:, None, :], pred_for_loss.shape)
     else:
-        future_planes_for_loss = jnp.take(future_planes, selected_horizons, axis=1)
-        target_tokens = model.encode_future_targets(future_planes_for_loss)
-    sample_jepa = jnp.mean(
-        jnp.mean(
-            (jnp.asarray(pred_for_loss, dtype=jnp.float32) - jnp.asarray(target_tokens, dtype=jnp.float32)) ** 2,
+        target_vectors = target_z
+    with jax.named_scope("joint_jepa_raw_mse_loss"):
+        sample_jepa = jnp.mean(
+            (jnp.asarray(pred_for_loss, dtype=jnp.float32) - jnp.asarray(target_vectors, dtype=jnp.float32)) ** 2,
             axis=-1,
-        ),
-        axis=-1,
-    )
+        )
     horizon_weights = model.config.jepa_gamma ** selected_horizons.astype(jnp.float32)
     jepa_mask = future_valid_for_loss * valid[:, None] * horizon_weights[None, :]
     jepa_positive_loss = _weighted_horizon_mean(sample_jepa, jepa_mask)
     jepa_raw_mse = jepa_positive_loss
     jepa_sigreg_loss = jnp.asarray(0.0, dtype=jnp.float32)
     if model.config.jepa_sigreg_coeff != 0.0:
-        jepa_sigreg_loss = _sigreg_loss(jnp.asarray(pred_tokens, dtype=jnp.float32).reshape((-1, pred_tokens.shape[-1])))
+        with jax.named_scope("joint_jepa_sigreg"):
+            sigreg_tokens = jnp.asarray(z_all, dtype=jnp.float32).reshape((-1, z_all.shape[-1]))
+            if model.config.jepa_sigreg_kind == "moments":
+                jepa_sigreg_loss = _sigreg_moments_loss(sigreg_tokens)
+            elif model.config.jepa_sigreg_kind == "quantile":
+                jepa_sigreg_loss = _quantile_sigreg_loss(
+                    sigreg_tokens,
+                    d_proj=model.config.jepa_sigreg_proj_dim,
+                    rng=rng_sigreg,
+                )
+            elif model.config.jepa_sigreg_kind == "le_jepa":
+                jepa_sigreg_loss = _official_le_jepa_sigreg_loss(
+                    sigreg_tokens,
+                    proj_dim=model.config.jepa_sigreg_proj_dim,
+                    rng=rng_sigreg,
+                    axis_name=sigreg_axis_name,
+                )
+            else:
+                raise ValueError(f"Unsupported jepa_sigreg_kind: {model.config.jepa_sigreg_kind!r}")
+    jepa_pred_sigreg_loss = jnp.asarray(0.0, dtype=jnp.float32)
+    if model.config.jepa_pred_sigreg_coeff != 0.0:
+        with jax.named_scope("joint_jepa_pred_sigreg"):
+            pred_sigreg_tokens = jnp.asarray(pred_z, dtype=jnp.float32).reshape((-1, pred_z.shape[-1]))
+            if model.config.jepa_sigreg_kind == "moments":
+                jepa_pred_sigreg_loss = _sigreg_moments_loss(pred_sigreg_tokens)
+            elif model.config.jepa_sigreg_kind == "quantile":
+                jepa_pred_sigreg_loss = _quantile_sigreg_loss(
+                    pred_sigreg_tokens,
+                    d_proj=model.config.jepa_sigreg_proj_dim,
+                    rng=rng_sigreg,
+                )
+            elif model.config.jepa_sigreg_kind == "le_jepa":
+                jepa_pred_sigreg_loss = _official_le_jepa_sigreg_loss(
+                    pred_sigreg_tokens,
+                    proj_dim=model.config.jepa_sigreg_proj_dim,
+                    rng=rng_sigreg,
+                    axis_name=sigreg_axis_name,
+                )
+            else:
+                raise ValueError(f"Unsupported jepa_sigreg_kind: {model.config.jepa_sigreg_kind!r}")
+
+    value_loss = jnp.asarray(0.0, dtype=jnp.float32)
+    wdl_loss = jnp.asarray(0.0, dtype=jnp.float32)
+    value_pred_mean = jnp.asarray(0.0, dtype=jnp.float32)
+    value_target_mean = jnp.asarray(0.0, dtype=jnp.float32)
+    if model.config.value_coeff != 0.0 or model.config.wdl_coeff != 0.0:
+        with jax.named_scope("joint_value_wdl_heads"):
+            value_pred, wdl_logits = model.value_wdl_from_pred(pred_z)
+        value_targets = jnp.asarray(batch.get("value_targets", jnp.zeros_like(value_pred)), dtype=jnp.float32)[:, :horizon]
+        value_loss_by_horizon = jnp.square(value_pred - value_targets)
+        value_loss = _weighted_horizon_mean(value_loss_by_horizon, future_valid * valid[:, None])
+        wdl_targets = jnp.asarray(batch.get("wdl_targets", jnp.zeros_like(wdl_logits)), dtype=jnp.float32)[:, :horizon]
+        wdl_sum = jnp.sum(wdl_targets, axis=-1, keepdims=True)
+        wdl_valid = (wdl_sum[..., 0] > 0).astype(jnp.float32)
+        wdl_targets = wdl_targets / jnp.maximum(wdl_sum, 1e-12)
+        wdl_loss_by_horizon = -jnp.sum(wdl_targets * jax.nn.log_softmax(wdl_logits, axis=-1), axis=-1)
+        wdl_loss = _weighted_horizon_mean(wdl_loss_by_horizon, future_valid * valid[:, None] * wdl_valid)
+        value_pred_mean = jnp.mean(jnp.asarray(value_pred, dtype=jnp.float32))
+        value_target_mean = jnp.mean(jnp.asarray(value_targets, dtype=jnp.float32))
 
     horizon_valid = future_valid_for_loss * valid[:, None]
     horizon_num = jnp.zeros((horizon,), dtype=jnp.float32).at[selected_horizons].add(
@@ -486,23 +930,41 @@ def joint_stage1_loss_fn(
     shuffled_jepa_cosine_loss = jnp.asarray(0.0, dtype=jnp.float32)
     shuffled_mean_token_cosine = jnp.asarray(0.0, dtype=jnp.float32)
     action_contrast_loss = jnp.asarray(0.0, dtype=jnp.float32)
+    jepa_state_rms_scale_raw = jnp.asarray(model.jepa_state_norm.scale[...], dtype=jnp.float32)
+    jepa_state_rms_scale = jepa_state_rms_scale_raw
+    if model.config.jepa_state_rms_scale_max > 0.0:
+        jepa_state_rms_scale_cap = jnp.asarray(model.config.jepa_state_rms_scale_max, dtype=jnp.float32)
+        jepa_state_rms_scale = jnp.clip(
+            jepa_state_rms_scale_raw,
+            1.0 / jepa_state_rms_scale_cap,
+            jepa_state_rms_scale_cap,
+        )
 
-    loss = (
+    unclipped_loss = (
         model.config.dfm_ce_coeff * dfm_ce_loss
         + weighted_legality_loss
         + model.config.jepa_positive_coeff * jepa_positive_loss
         + model.config.jepa_sigreg_coeff * jepa_sigreg_loss
+        + model.config.jepa_pred_sigreg_coeff * jepa_pred_sigreg_loss
+        + model.config.value_coeff * value_loss
+        + model.config.wdl_coeff * wdl_loss
         + model.config.jepa_action_contrast_coeff * action_contrast_loss
     )
+    loss, loss_clip_scale = _clip_loss_preserve_gradient(unclipped_loss, model.config.loss_clip_value)
 
     preds = jnp.argmax(logits, axis=-1)
     accuracy = (
-        jnp.sum((preds == actions) * loss_mask * valid[:, None])
-        / jnp.maximum(jnp.sum(loss_mask * valid[:, None]), 1.0)
+        jnp.sum((preds == actions) * weighted_loss_mask)
+        / jnp.maximum(jnp.sum(weighted_loss_mask), 1.0)
     )
     aux = {
         "loss": loss,
+        "unclipped_loss": unclipped_loss,
+        "loss_clip_value": jnp.asarray(model.config.loss_clip_value, dtype=jnp.float32),
+        "loss_clip_scale": loss_clip_scale,
         "dfm_ce_loss": dfm_ce_loss,
+        "dfm_ce_loss_by_horizon": dfm_ce_loss_by_horizon,
+        "dfm_mask_fraction_by_horizon": dfm_mask_fraction_by_horizon,
         "legality_loss": legality_loss,
         "first_legality_loss": first_legality_loss,
         "horizon_legality_loss": horizon_legality_loss,
@@ -515,6 +977,12 @@ def joint_stage1_loss_fn(
         "jepa_raw_mse": jepa_raw_mse,
         "jepa_normalized_mse": jepa_normalized_mse,
         "jepa_sigreg_loss": jepa_sigreg_loss,
+        "jepa_pred_sigreg_loss": jepa_pred_sigreg_loss,
+        "jepa_teacher_forcing": teacher_forcing,
+        "value_loss": value_loss,
+        "wdl_loss": wdl_loss,
+        "value_pred_mean": value_pred_mean,
+        "value_target_mean": value_target_mean,
         "jepa_action_contrast_loss": action_contrast_loss,
         "jepa_shuffled_loss": shuffled_jepa_loss,
         "jepa_shuffled_cosine_loss": shuffled_jepa_cosine_loss,
@@ -530,6 +998,14 @@ def joint_stage1_loss_fn(
         "mean_token_cosine_by_horizon": mean_token_cosine_by_horizon,
         "pred_token_norm": pred_token_norm,
         "target_token_norm": target_token_norm,
+        "z_state_norm": jnp.mean(jnp.linalg.norm(jnp.asarray(z_all, dtype=jnp.float32), axis=-1)),
+        "z_state_std": jnp.std(jnp.asarray(z_all, dtype=jnp.float32)),
+        "z_pred_norm": jnp.mean(jnp.linalg.norm(jnp.asarray(pred_z, dtype=jnp.float32), axis=-1)),
+        "z_target_norm": jnp.mean(jnp.linalg.norm(jnp.asarray(target_z, dtype=jnp.float32), axis=-1)),
+        "jepa_state_rms_scale_raw_max": jnp.max(jepa_state_rms_scale_raw),
+        "jepa_state_rms_scale_raw_min": jnp.min(jepa_state_rms_scale_raw),
+        "jepa_state_rms_scale_effective_max": jnp.max(jepa_state_rms_scale),
+        "jepa_state_rms_scale_effective_min": jnp.min(jepa_state_rms_scale),
         "identity_jepa_loss": identity_jepa_loss,
         "identity_jepa_cosine_loss": identity_jepa_cosine_loss,
         "identity_mean_token_cosine": identity_mean_token_cosine,
@@ -551,40 +1027,38 @@ def joint_jepa_positive_loss_fn(
     valid = jnp.asarray(batch["valid"], dtype=jnp.float32)
     future_valid = jnp.asarray(batch["future_valid"], dtype=jnp.float32)[:, :horizon]
     future_planes = jnp.asarray(batch["future_planes"], dtype=jnp.float32)[:, :horizon]
-
-    shared_tokens = model.encode_shared(batch["current_planes"])
-    z_dfm = model.dfm_latents(shared_tokens)
-    z_jepa = model.encode_current_jepa(batch["current_planes"])
+    with jax.named_scope("joint_diag_encode_current_future_bt4"):
+        all_bt4_tokens, z_all = model.encode_current_and_future_tokens_and_vectors(batch["current_planes"], future_planes)
+    z_jepa = z_all[:, 0]
+    target = z_all[:, 1:]
+    with jax.named_scope("joint_diag_dfm_state_projector"):
+        z_dfm = model.dfm_latents(all_bt4_tokens[:, 0])
 
     clean_t = jnp.ones((actions.shape[0],), dtype=jnp.float32)
     _, clean_hidden = model.planner_from_latents(z_dfm, actions, clean_t, return_hidden=True)
-    pred_tokens = model.jepa_rollout_from_latents(z_jepa, actions, clean_hidden["action_tokens"])
-    target_tokens = model.encode_future_targets(future_planes)
+    pred_z = model.jepa_rollout_from_latents(
+        z_jepa,
+        actions,
+        clean_hidden["action_tokens"],
+        z0_normalized=True,
+    )
 
-    raw_mse_by_token = jnp.mean(
-        (jnp.asarray(pred_tokens, dtype=jnp.float32) - jnp.asarray(target_tokens, dtype=jnp.float32)) ** 2,
+    sample_raw_mse = jnp.mean(
+        (jnp.asarray(pred_z, dtype=jnp.float32) - jnp.asarray(target, dtype=jnp.float32)) ** 2,
         axis=-1,
     )
-    pred_norm = _l2_normalize(jnp.asarray(pred_tokens, dtype=jnp.float32))
-    target_norm = _l2_normalize(jnp.asarray(target_tokens, dtype=jnp.float32))
+    pred_norm = _l2_normalize(jnp.asarray(pred_z, dtype=jnp.float32))
+    target_norm = _l2_normalize(jnp.asarray(target, dtype=jnp.float32))
     cosine = jnp.sum(pred_norm * target_norm, axis=-1)
-    token_distance = 2.0 - 2.0 * cosine
-    normalized_mse_by_token = jnp.mean((pred_norm - target_norm) ** 2, axis=-1)
-    sample_cosine_distance = jnp.mean(token_distance, axis=-1)
-    sample_raw_mse = jnp.mean(raw_mse_by_token, axis=-1)
-    sample_normalized_mse = jnp.mean(normalized_mse_by_token, axis=-1)
-    sample_jepa = _select_jepa_sample_loss(
-        raw_mse=sample_raw_mse,
-        cosine_distance=sample_cosine_distance,
-        normalized_mse=sample_normalized_mse,
-        loss_type=model.config.jepa_loss_type,
-    )
+    sample_cosine_distance = 2.0 - 2.0 * cosine
+    sample_normalized_mse = jnp.mean((pred_norm - target_norm) ** 2, axis=-1)
+    sample_jepa = sample_raw_mse
     horizon_weights = model.config.jepa_gamma ** jnp.arange(horizon, dtype=jnp.float32)
     jepa_mask = future_valid * valid[:, None] * horizon_weights[None, :]
     denom = jnp.maximum(jnp.sum(jepa_mask), 1.0)
     loss = jnp.sum(sample_jepa * jepa_mask) / denom
     cosine_loss = jnp.sum(sample_cosine_distance * jepa_mask) / denom
-    mean_token_cosine = jnp.sum(jnp.mean(cosine, axis=-1) * jepa_mask) / denom
+    mean_token_cosine = jnp.sum(cosine * jepa_mask) / denom
     raw_mse = jnp.sum(sample_raw_mse * jepa_mask) / denom
     normalized_mse = jnp.sum(sample_normalized_mse * jepa_mask) / denom
     return loss, {
@@ -607,40 +1081,50 @@ def joint_jepa_action_baseline_diagnostics(
     valid = jnp.asarray(batch["valid"], dtype=jnp.float32)
     future_valid = jnp.asarray(batch["future_valid"], dtype=jnp.float32)[:, :horizon]
     future_planes = jnp.asarray(batch["future_planes"], dtype=jnp.float32)[:, :horizon]
-
-    shared_tokens = model.encode_shared(batch["current_planes"])
-    z_dfm = model.dfm_latents(shared_tokens)
-    z_jepa = model.encode_current_jepa(batch["current_planes"])
-    target_tokens = model.encode_future_targets(future_planes)
-    target_norm = _l2_normalize(jnp.asarray(target_tokens, dtype=jnp.float32))
+    with jax.named_scope("joint_diag_encode_current_future_bt4"):
+        all_bt4_tokens, z_all = model.encode_current_and_future_tokens_and_vectors(batch["current_planes"], future_planes)
+    z_jepa = z_all[:, 0]
+    target_vectors = z_all[:, 1:]
+    with jax.named_scope("joint_diag_dfm_state_projector"):
+        z_dfm = model.dfm_latents(all_bt4_tokens[:, 0])
+    target_norm = _l2_normalize(jnp.asarray(target_vectors, dtype=jnp.float32))
 
     clean_t = jnp.ones((batch_size,), dtype=jnp.float32)
     _, true_hidden = model.planner_from_latents(z_dfm, actions, clean_t, return_hidden=True)
-    true_pred = model.jepa_rollout_from_latents(z_jepa, actions, true_hidden["action_tokens"])
+    true_pred = model.jepa_rollout_from_latents(
+        z_jepa,
+        actions,
+        true_hidden["action_tokens"],
+        z0_normalized=True,
+    )
 
     permutation = jax.random.permutation(rng, batch_size)
     shuffled_actions = actions[permutation]
     _, shuffled_hidden = model.planner_from_latents(z_dfm, shuffled_actions, clean_t, return_hidden=True)
-    shuffled_pred = model.jepa_rollout_from_latents(z_jepa, shuffled_actions, shuffled_hidden["action_tokens"])
+    shuffled_pred = model.jepa_rollout_from_latents(
+        z_jepa,
+        shuffled_actions,
+        shuffled_hidden["action_tokens"],
+        z0_normalized=True,
+    )
 
-    current_target_tokens = model.encode_current_targets(batch["current_planes"])
-    identity_pred = jnp.broadcast_to(current_target_tokens[:, None, :, :], target_tokens.shape)
+    identity_pred = jnp.broadcast_to(z_jepa[:, None, :], target_vectors.shape)
 
     horizon_weights = model.config.jepa_gamma ** jnp.arange(horizon, dtype=jnp.float32)
     mask = future_valid * valid[:, None] * horizon_weights[None, :]
     denom = jnp.maximum(jnp.sum(mask), 1.0)
 
-    def score(pred_tokens: jnp.ndarray) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
-        pred_norm = _l2_normalize(jnp.asarray(pred_tokens, dtype=jnp.float32))
+    def score(pred_vectors: jnp.ndarray) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+        pred_norm = _l2_normalize(jnp.asarray(pred_vectors, dtype=jnp.float32))
         cosine = jnp.sum(pred_norm * target_norm, axis=-1)
-        loss_by_sample = jnp.mean(2.0 - 2.0 * cosine, axis=-1)
+        loss_by_sample = 2.0 - 2.0 * cosine
         raw_mse_by_sample = jnp.mean(
-            jnp.mean((jnp.asarray(pred_tokens, dtype=jnp.float32) - jnp.asarray(target_tokens, dtype=jnp.float32)) ** 2, axis=-1),
+            (jnp.asarray(pred_vectors, dtype=jnp.float32) - jnp.asarray(target_vectors, dtype=jnp.float32)) ** 2,
             axis=-1,
         )
         loss = jnp.sum(loss_by_sample * mask) / denom
         raw_mse = jnp.sum(raw_mse_by_sample * mask) / denom
-        mean_cosine = jnp.sum(jnp.mean(cosine, axis=-1) * mask) / denom
+        mean_cosine = jnp.sum(cosine * mask) / denom
         return loss, raw_mse, mean_cosine
 
     true_loss, true_raw_mse, true_cosine = score(true_pred)
@@ -666,75 +1150,16 @@ def joint_contrastive_loss_fn(
     batch: dict[str, jnp.ndarray],
     rng: jnp.ndarray,
 ) -> tuple[jnp.ndarray, dict[str, jnp.ndarray]]:
-    """Contrast true action chunks against legal prefix corruptions."""
-    actions = batch["action_indices"][:, : model.config.horizon]
-    batch_size, horizon = actions.shape
-    candidates = sample_legal_prefix_candidates(
-        actions,
-        batch["legal_idx"][:, :horizon],
-        batch["legal_count"][:, :horizon],
-        rng,
-        candidate_count=model.config.candidate_count,
-        mask_token_id=model.config.action_vocab_size,
-    )
-    cand_actions = candidates["candidates"]
-    candidate_count = cand_actions.shape[1]
-    eval_horizon = candidates["eval_horizon"]
-    candidate_valid = candidates["candidate_valid"]
-
-    shared_tokens = model.encode_shared(batch["current_planes"])
-    z_dfm = model.dfm_latents(shared_tokens)
-    z_jepa = model.encode_current_jepa(batch["current_planes"])
-    z_dfm_cand = jnp.broadcast_to(z_dfm[:, None, :, :], (batch_size, candidate_count, 64, model.config.token_dim))
-    z_jepa_cand = jnp.broadcast_to(z_jepa[:, None, :, :], (batch_size, candidate_count, 64, model.encoder_dim))
-    flat_z_dfm = z_dfm_cand.reshape((batch_size * candidate_count, 64, model.config.token_dim))
-    flat_z_jepa = z_jepa_cand.reshape((batch_size * candidate_count, 64, model.encoder_dim))
-    flat_actions = cand_actions.reshape((batch_size * candidate_count, horizon))
-
-    clean_t = jnp.ones((batch_size * candidate_count,), dtype=jnp.float32)
-    _, hidden = model.planner_from_latents(flat_z_dfm, flat_actions, clean_t, return_hidden=True)
-    flat_pred = model.jepa_rollout_from_latents(flat_z_jepa, flat_actions, hidden["action_tokens"])
-    pred = flat_pred.reshape((batch_size, candidate_count, horizon, 64, model.encoder_dim))
-    target = model.encode_future_targets(jnp.asarray(batch["future_planes"], dtype=jnp.float32)[:, :horizon])
-
-    batch_idx = jnp.arange(batch_size, dtype=jnp.int32)[:, None]
-    cand_idx = jnp.arange(candidate_count, dtype=jnp.int32)[None, :]
-    pred_eval = pred[batch_idx, cand_idx, eval_horizon]
-    target_eval = target[batch_idx, eval_horizon]
-    pred_norm = _l2_normalize(jnp.asarray(pred_eval, dtype=jnp.float32))
-    target_norm = _l2_normalize(jnp.asarray(target_eval, dtype=jnp.float32))
-    similarity = jnp.mean(jnp.sum(pred_norm * target_norm, axis=-1), axis=-1)
-
-    future_valid = jnp.asarray(batch["future_valid"], dtype=jnp.float32)[:, :horizon]
-    valid = jnp.asarray(batch["valid"], dtype=jnp.float32)
-    target_valid = future_valid[batch_idx, eval_horizon]
-    candidate_valid = candidate_valid * target_valid * valid[:, None]
-    row_valid = (candidate_valid[:, 0] > 0) & (jnp.sum(candidate_valid[:, 1:], axis=1) > 0)
-    row_valid_f = row_valid.astype(jnp.float32)
-
-    masked_logits = jnp.where(
-        candidate_valid > 0,
-        similarity / jnp.maximum(model.config.contrastive_temperature, 1e-6),
-        -1.0e9,
-    )
-    log_probs = jax.nn.log_softmax(masked_logits, axis=-1)
-    sample_loss = -log_probs[:, 0]
-    denom = jnp.maximum(jnp.sum(row_valid_f), 1.0)
-    contrastive_loss = jnp.sum(sample_loss * row_valid_f) / denom
-
-    pred_choice = jnp.argmax(masked_logits, axis=-1)
-    accuracy = jnp.sum((pred_choice == 0).astype(jnp.float32) * row_valid_f) / denom
-    positive_similarity = jnp.sum(similarity[:, 0] * row_valid_f) / denom
-    negative_valid = candidate_valid[:, 1:] * row_valid_f[:, None]
-    negative_similarity = jnp.sum(similarity[:, 1:] * negative_valid) / jnp.maximum(jnp.sum(negative_valid), 1.0)
-    margin = positive_similarity - negative_similarity
-    return contrastive_loss, {
-        "contrastive_loss": contrastive_loss,
-        "contrastive_accuracy": accuracy,
-        "contrastive_positive_similarity": positive_similarity,
-        "contrastive_negative_similarity": negative_similarity,
-        "contrastive_similarity_margin": margin,
-        "contrastive_valid_fraction": jnp.mean(row_valid_f),
+    """Deprecated no-op: contrastive/ranking is removed from the active plan."""
+    del model, batch, rng
+    zero = jnp.asarray(0.0, dtype=jnp.float32)
+    return zero, {
+        "contrastive_loss": zero,
+        "contrastive_accuracy": zero,
+        "contrastive_positive_similarity": zero,
+        "contrastive_negative_similarity": zero,
+        "contrastive_similarity_margin": zero,
+        "contrastive_valid_fraction": zero,
     }
 
 
@@ -742,9 +1167,10 @@ def joint_stage2_loss_fn(
     model: JointLatentSASAModel,
     batch: dict[str, jnp.ndarray],
     rng: jnp.ndarray,
+    sigreg_axis_name: str | None = None,
 ) -> tuple[jnp.ndarray, dict[str, jnp.ndarray]]:
     rng_stage1, rng_contrast = jax.random.split(rng)
-    stage1_loss, aux = joint_stage1_loss_fn(model, batch, rng_stage1)
+    stage1_loss, aux = joint_stage1_loss_fn(model, batch, rng_stage1, sigreg_axis_name=sigreg_axis_name)
     contrastive_loss, contrast_aux = joint_contrastive_loss_fn(model, batch, rng_contrast)
     total_loss = stage1_loss + model.config.contrastive_coeff * contrastive_loss
     out = dict(aux)
@@ -773,6 +1199,117 @@ _joint_stage2_loss_and_grad = nnx.value_and_grad(
 )
 
 
+def joint_stage1_loss_fn_data_parallel(
+    model: JointLatentSASAModel,
+    batch: dict[str, jnp.ndarray],
+    rng: jnp.ndarray,
+) -> tuple[jnp.ndarray, dict[str, jnp.ndarray]]:
+    return joint_stage1_loss_fn(model, batch, rng, sigreg_axis_name="data")
+
+
+def joint_stage2_loss_fn_data_parallel(
+    model: JointLatentSASAModel,
+    batch: dict[str, jnp.ndarray],
+    rng: jnp.ndarray,
+) -> tuple[jnp.ndarray, dict[str, jnp.ndarray]]:
+    return joint_stage2_loss_fn(model, batch, rng, sigreg_axis_name="data")
+
+
+_joint_stage1_data_parallel_loss_and_grad = nnx.value_and_grad(
+    joint_stage1_loss_fn_data_parallel,
+    argnums=nnx.DiffState(0, TrainableParam),
+    has_aux=True,
+)
+
+_joint_stage2_data_parallel_loss_and_grad = nnx.value_and_grad(
+    joint_stage2_loss_fn_data_parallel,
+    argnums=nnx.DiffState(0, TrainableParam),
+    has_aux=True,
+)
+
+
+def _train_joint_stage1_step_impl(
+    model: JointLatentSASAModel,
+    optimizer: nnx.Optimizer,
+    batch: dict[str, jnp.ndarray],
+    rng: jnp.ndarray,
+):
+    with jax.named_scope("joint_stage1_loss_and_grad"):
+        (loss, aux), grads = _joint_stage1_loss_and_grad(model, batch, rng)
+    with jax.named_scope("joint_stage1_optimizer_update"):
+        optimizer.update(model, grads)
+    return loss, aux
+
+
+def _train_joint_stage2_step_impl(
+    model: JointLatentSASAModel,
+    optimizer: nnx.Optimizer,
+    batch: dict[str, jnp.ndarray],
+    rng: jnp.ndarray,
+):
+    with jax.named_scope("joint_stage2_loss_and_grad"):
+        (loss, aux), grads = _joint_stage2_loss_and_grad(model, batch, rng)
+    with jax.named_scope("joint_stage2_optimizer_update"):
+        optimizer.update(model, grads)
+    return loss, aux
+
+
+def _pmean_metrics(metrics: dict[str, jnp.ndarray], axis_name: str) -> dict[str, jnp.ndarray]:
+    return jax.tree_util.tree_map(lambda value: jax.lax.pmean(value, axis_name), metrics)
+
+
+def _train_joint_stage1_step_data_parallel_impl(
+    model: JointLatentSASAModel,
+    optimizer: nnx.Optimizer,
+    batch: dict[str, jnp.ndarray],
+    rng: jnp.ndarray,
+):
+    with jax.named_scope("joint_stage1_data_parallel_loss_and_grad"):
+        (loss, aux), grads = _joint_stage1_data_parallel_loss_and_grad(model, batch, rng)
+    with jax.named_scope("joint_stage1_data_parallel_pmean"):
+        grads = jax.lax.pmean(grads, axis_name="data")
+        loss = jax.lax.pmean(loss, axis_name="data")
+        aux = _pmean_metrics(aux, axis_name="data")
+    with jax.named_scope("joint_stage1_data_parallel_optimizer_update"):
+        optimizer.update(model, grads)
+    return loss, aux
+
+
+def _train_joint_stage2_step_data_parallel_impl(
+    model: JointLatentSASAModel,
+    optimizer: nnx.Optimizer,
+    batch: dict[str, jnp.ndarray],
+    rng: jnp.ndarray,
+):
+    with jax.named_scope("joint_stage2_data_parallel_loss_and_grad"):
+        (loss, aux), grads = _joint_stage2_data_parallel_loss_and_grad(model, batch, rng)
+    with jax.named_scope("joint_stage2_data_parallel_pmean"):
+        grads = jax.lax.pmean(grads, axis_name="data")
+        loss = jax.lax.pmean(loss, axis_name="data")
+        aux = _pmean_metrics(aux, axis_name="data")
+    with jax.named_scope("joint_stage2_data_parallel_optimizer_update"):
+        optimizer.update(model, grads)
+    return loss, aux
+
+
+def _eval_joint_stage1_step_data_parallel_impl(
+    model: JointLatentSASAModel,
+    batch: dict[str, jnp.ndarray],
+    rng: jnp.ndarray,
+):
+    loss, aux = joint_stage1_loss_fn(model, batch, rng, sigreg_axis_name="data")
+    return jax.lax.pmean(loss, axis_name="data"), _pmean_metrics(aux, axis_name="data")
+
+
+def _eval_joint_stage2_step_data_parallel_impl(
+    model: JointLatentSASAModel,
+    batch: dict[str, jnp.ndarray],
+    rng: jnp.ndarray,
+):
+    loss, aux = joint_stage2_loss_fn(model, batch, rng, sigreg_axis_name="data")
+    return jax.lax.pmean(loss, axis_name="data"), _pmean_metrics(aux, axis_name="data")
+
+
 def _tree_l2_norm(tree) -> jnp.ndarray:
     leaves = jax.tree.leaves(tree)
     if not leaves:
@@ -795,7 +1332,7 @@ def joint_coupling_gradient_diagnostics(
         key: pure[key]
         for key in (
             "action_embed",
-            "dfm_adapter",
+            "dfm_state_projector",
             "dfm_blocks",
             "dfm_out_norm",
             "out_bias",
@@ -813,15 +1350,15 @@ def joint_coupling_gradient_diagnostics(
         "coupling_jepa_raw_mse": aux["jepa_raw_mse"],
         "coupling_jepa_normalized_mse": aux["jepa_normalized_mse"],
         "coupling_grad_norm_dfm_path": _tree_l2_norm(dfm_path),
-        "coupling_grad_norm_shared_projector": _tree_l2_norm(pure.get("shared_projector", {})),
+        "coupling_grad_norm_state_projector": _tree_l2_norm(pure.get("state_projector", {})),
         "coupling_grad_norm_jepa_path": _tree_l2_norm(
             {
                 key: pure[key]
-                for key in ("jepa_action_adapter", "jepa_action_embed", "jepa_blocks", "jepa_out_norm")
+                for key in ("jepa_hidden_adapter", "jepa_action_embed", "jepa_transition")
                 if key in pure
             }
         ),
-        "coupling_grad_norm_target_projector": _tree_l2_norm(pure.get("target_projector", {})),
+        "coupling_grad_norm_bt4_encoder": _tree_l2_norm(pure.get("encoder", {})),
     }
     return out
 
@@ -833,9 +1370,17 @@ def train_joint_stage1_step(
     batch: dict[str, jnp.ndarray],
     rng: jnp.ndarray,
 ):
-    (loss, aux), grads = _joint_stage1_loss_and_grad(model, batch, rng)
-    optimizer.update(model, grads)
-    return loss, aux
+    return _train_joint_stage1_step_impl(model, optimizer, batch, rng)
+
+
+@nnx.jit(donate_argnums=(0, 1))
+def train_joint_stage1_step_donated(
+    model: JointLatentSASAModel,
+    optimizer: nnx.Optimizer,
+    batch: dict[str, jnp.ndarray],
+    rng: jnp.ndarray,
+):
+    return _train_joint_stage1_step_impl(model, optimizer, batch, rng)
 
 
 @nnx.jit
@@ -854,9 +1399,55 @@ def train_joint_stage2_step(
     batch: dict[str, jnp.ndarray],
     rng: jnp.ndarray,
 ):
-    (loss, aux), grads = _joint_stage2_loss_and_grad(model, batch, rng)
-    optimizer.update(model, grads)
-    return loss, aux
+    return _train_joint_stage2_step_impl(model, optimizer, batch, rng)
+
+
+@nnx.jit(donate_argnums=(0, 1))
+def train_joint_stage2_step_donated(
+    model: JointLatentSASAModel,
+    optimizer: nnx.Optimizer,
+    batch: dict[str, jnp.ndarray],
+    rng: jnp.ndarray,
+):
+    return _train_joint_stage2_step_impl(model, optimizer, batch, rng)
+
+
+@nnx.pmap(axis_name="data", in_axes=(None, None, 0, 0), out_axes=0)
+def train_joint_stage1_step_data_parallel(
+    model: JointLatentSASAModel,
+    optimizer: nnx.Optimizer,
+    batch: dict[str, jnp.ndarray],
+    rng: jnp.ndarray,
+):
+    return _train_joint_stage1_step_data_parallel_impl(model, optimizer, batch, rng)
+
+
+@nnx.pmap(axis_name="data", in_axes=(None, None, 0, 0), out_axes=0)
+def train_joint_stage2_step_data_parallel(
+    model: JointLatentSASAModel,
+    optimizer: nnx.Optimizer,
+    batch: dict[str, jnp.ndarray],
+    rng: jnp.ndarray,
+):
+    return _train_joint_stage2_step_data_parallel_impl(model, optimizer, batch, rng)
+
+
+@nnx.pmap(axis_name="data", in_axes=(None, 0, 0), out_axes=0)
+def eval_joint_stage1_step_data_parallel(
+    model: JointLatentSASAModel,
+    batch: dict[str, jnp.ndarray],
+    rng: jnp.ndarray,
+):
+    return _eval_joint_stage1_step_data_parallel_impl(model, batch, rng)
+
+
+@nnx.pmap(axis_name="data", in_axes=(None, 0, 0), out_axes=0)
+def eval_joint_stage2_step_data_parallel(
+    model: JointLatentSASAModel,
+    batch: dict[str, jnp.ndarray],
+    rng: jnp.ndarray,
+):
+    return _eval_joint_stage2_step_data_parallel_impl(model, batch, rng)
 
 
 @nnx.jit
@@ -875,14 +1466,57 @@ def create_joint_components(
     seed: int = 0,
 ) -> tuple[JointLatentSASAModel, nnx.Optimizer]:
     encoder_dtype = _parse_compute_dtype(config.encoder_dtype)
-    encoder = make_bt4_model(bt4_params, dtype=encoder_dtype)
+    encoder = make_bt4_model(bt4_params, dtype=encoder_dtype, train_encoder=config.unfreeze_bt4_encoder)
     model = JointLatentSASAModel(encoder, config, rngs=nnx.Rngs(seed))
+    learning_rate = config.learning_rate
+    bt4_learning_rate = config.bt4_learning_rate
+    if config.lr_warmup_steps > 0:
+        learning_rate = optax.join_schedules(
+            [
+                optax.linear_schedule(
+                    init_value=0.0,
+                    end_value=config.learning_rate,
+                    transition_steps=config.lr_warmup_steps,
+                ),
+                optax.constant_schedule(config.learning_rate),
+            ],
+            boundaries=[config.lr_warmup_steps],
+        )
+        bt4_learning_rate = optax.join_schedules(
+            [
+                optax.linear_schedule(
+                    init_value=0.0,
+                    end_value=config.bt4_learning_rate,
+                    transition_steps=config.lr_warmup_steps,
+                ),
+                optax.constant_schedule(config.bt4_learning_rate),
+            ],
+            boundaries=[config.lr_warmup_steps],
+        )
     if config.use_muon:
         from chess_dfm_jax.nnx_bt4 import muon_adamw
 
-        tx = muon_adamw(learning_rate=config.learning_rate, weight_decay=config.weight_decay)
+        main_tx = muon_adamw(learning_rate=learning_rate, weight_decay=config.weight_decay)
+        bt4_tx = muon_adamw(learning_rate=bt4_learning_rate, weight_decay=config.weight_decay)
     else:
-        tx = optax.adamw(learning_rate=config.learning_rate, weight_decay=config.weight_decay)
+        main_tx = optax.adamw(learning_rate=learning_rate, weight_decay=config.weight_decay)
+        bt4_tx = optax.adamw(learning_rate=bt4_learning_rate, weight_decay=config.weight_decay)
+
+    def label_one(path, _value):
+        parts = [str(getattr(item, "key", item)) for item in path]
+        name = "/".join(parts)
+        if name.startswith("encoder/embedding") or name.startswith("encoder/layers"):
+            return "bt4"
+        return "main"
+
+    def label_tree(params):
+        return jax.tree_util.tree_map_with_path(label_one, params)
+
+    tx = optax.multi_transform({"main": main_tx, "bt4": bt4_tx}, label_tree)
+    if config.skip_nonfinite_updates:
+        tx = optax.apply_if_finite(tx, max_consecutive_errors=1_000_000_000)
+    if config.grad_clip_norm > 0.0:
+        tx = optax.chain(optax.clip_by_global_norm(config.grad_clip_norm), tx)
     optimizer = nnx.Optimizer(model, tx, wrt=TrainableParam)
     return model, optimizer
 
@@ -892,7 +1526,9 @@ __all__ = [
     "JointLatentSASAModel",
     "create_joint_components",
     "eval_joint_stage1_step",
+    "eval_joint_stage1_step_data_parallel",
     "eval_joint_stage2_step",
+    "eval_joint_stage2_step_data_parallel",
     "joint_contrastive_loss_fn",
     "joint_coupling_gradient_diagnostics",
     "joint_jepa_action_baseline_diagnostics",
@@ -902,5 +1538,9 @@ __all__ = [
     "legal_mass_from_indices",
     "sample_legal_prefix_candidates",
     "train_joint_stage1_step",
+    "train_joint_stage1_step_data_parallel",
+    "train_joint_stage1_step_donated",
     "train_joint_stage2_step",
+    "train_joint_stage2_step_data_parallel",
+    "train_joint_stage2_step_donated",
 ]

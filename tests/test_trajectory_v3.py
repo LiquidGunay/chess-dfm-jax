@@ -3,6 +3,7 @@ import sys
 import tempfile
 
 import numpy as np
+import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
@@ -11,6 +12,11 @@ if str(REPO_ROOT) not in sys.path:
 from chess_dfm_jax.data.trajectory import build_synthetic_trajectory_shard  # noqa: E402
 from chess_dfm_jax.data.trajectory import trajectory_joint_batch_from_npz  # noqa: E402
 from chess_dfm_jax.data.leela import LeelaChunkDataLoader  # noqa: E402
+from chess_dfm_jax.data.grain_loader import (  # noqa: E402
+    GrainUnavailableError,
+    create_grain_trajectory_loader,
+    grain_available,
+)
 from chess_dfm_jax.data.trajectory_v3 import (  # noqa: E402
     legal_indices_to_masks,
     legal_masks_to_indices,
@@ -146,3 +152,15 @@ def test_leela_loader_reads_trajectory_v3_joint_view():
         assert batch["legal_idx"].shape == (2, 2, 128)
         assert batch["legal_count"].shape == (2, 2)
         assert "legal_masks" not in batch
+
+
+def test_grain_loader_reports_clear_error_when_dependency_missing():
+    if grain_available():
+        pytest.skip("Grain is installed in this environment.")
+    with pytest.raises(GrainUnavailableError, match="Grain data loading was requested"):
+        create_grain_trajectory_loader(
+            ["missing.npz"],
+            batch_size=2,
+            horizon=2,
+            batch_view="joint_latent_sasa",
+        )

@@ -10,7 +10,14 @@ import numpy as np
 import optax
 from flax import nnx
 
-from chess_dfm_jax.nnx_bt4 import BT4Model, EncoderLayer, TrainableParam, TrainableLayerNorm, TrainableEmbedding, make_bt4_model
+from chess_dfm_jax.nnx_bt4 import (
+    BT4Model,
+    TrainableEmbedding,
+    TrainableParam,
+    TrainableRMSNorm,
+    TrainableTransformerStack,
+    make_bt4_model,
+)
 from chess_dfm_jax.training.jepa import _parse_compute_dtype
 
 @dataclasses.dataclass
@@ -26,17 +33,18 @@ class DFMConfig:
     action_vocab_size: int = 1858 # Real actions are 0..1857. MASK token is 1858.
     horizon: int = 8
     use_qk_gain: bool = False
+    use_qk_norm: bool = False
     use_xsa: bool = False
     use_muon: bool = False
     loss_horizon: int = 0
     first_legality_loss_weight: float = 2.0
     horizon_legality_loss_weight: float = 0.0
     first_action_loss_weight: float = 0.0
+    remat_blocks: bool = True
+    scan_layers: bool = True
 
 class DFMDenoiser(nnx.Module):
     def __init__(self, encoder: BT4Model, config: DFMConfig, *, rngs: nnx.Rngs):
-        if config.use_xsa:
-            raise NotImplementedError("use_xsa is reserved but not implemented for DFM.")
         self.encoder = encoder
         self.config = config
         compute_dtype = _parse_compute_dtype(config.compute_dtype)
@@ -63,20 +71,24 @@ class DFMDenoiser(nnx.Module):
         self.z_proj = TrainableParam(jax.random.normal(rngs.params(), (encoder.embedding_size, config.token_dim)) / np.sqrt(encoder.embedding_size))
         self.z_bias = TrainableParam(jnp.zeros((config.token_dim,)))
 
-        # Transformer blocks (DFM cannot use XSA because action tokens must attend to their own positional/time embeddings)
-        self.blocks = nnx.List([
-            EncoderLayer(
-                width=config.token_dim,
-                num_heads=config.num_heads,
-                mlp_dim=config.mlp_dim,
-                rngs=rngs,
-                param_dtype=jnp.float32,
-                compute_dtype=compute_dtype,
-                use_qk_gain=config.use_qk_gain,
-            ) for _ in range(config.num_layers)
-        ])
+        # Trainable pre-RMSNorm/SwiGLU blocks. Frozen BT4 still uses its
+        # checkpoint-compatible post-LN Mish blocks.
+        self.blocks = TrainableTransformerStack(
+            num_layers=config.num_layers,
+            width=config.token_dim,
+            num_heads=config.num_heads,
+            mlp_dim=config.mlp_dim,
+            rngs=rngs,
+            param_dtype=jnp.float32,
+            compute_dtype=compute_dtype,
+            use_qk_gain=config.use_qk_gain,
+            use_qk_norm=config.use_qk_norm,
+            use_xsa=config.use_xsa,
+            scan_layers=config.scan_layers,
+            remat_blocks=config.remat_blocks,
+        )
         
-        self.out_norm = TrainableLayerNorm(config.token_dim, compute_dtype=compute_dtype)
+        self.out_norm = TrainableRMSNorm(config.token_dim, compute_dtype=compute_dtype)
         self.out_proj = TrainableParam(jax.random.normal(rngs.params(), (config.token_dim, config.action_vocab_size)) / np.sqrt(config.token_dim))
         self.out_bias = TrainableParam(jnp.zeros((config.action_vocab_size,)))
 
@@ -128,8 +140,7 @@ class DFMDenoiser(nnx.Module):
         # Sequence: [Z_1...Z_64, A_1...A_K]
         seq = jnp.concatenate([z_dfm, a_emb], axis=1) # [B, 64 + K, token_dim]
         
-        for block in self.blocks:
-            seq = block(seq)
+        seq = self.blocks(seq)
 
         state_hidden = seq[:, :64, :]
         action_hidden = seq[:, 64:, :] # [B, K, token_dim]

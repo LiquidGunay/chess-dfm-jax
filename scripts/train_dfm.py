@@ -122,6 +122,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--head-compute-dtype", type=str, default="float32", choices=["float16", "bfloat16", "float32"])
     parser.add_argument("--action-source", type=str, default="best", choices=["best", "played"])
     parser.add_argument("--use-qk-gain", action="store_true", help="Use QK gain scaling.")
+    parser.add_argument("--use-qk-norm", action="store_true", help="RMS-normalize Q and K per head before attention logits.")
     parser.add_argument("--use-xsa", action="store_true", help="Use Exclusive Self-Attention.")
     parser.add_argument("--use-muon", action="store_true", help="Use Muon optimizer.")
     parser.add_argument("--save-dir", type=str, default=None, help="Local path for saves.")
@@ -353,6 +354,7 @@ def main() -> int:
         compute_dtype=args.head_compute_dtype,
         horizon=args.horizon,
         use_qk_gain=args.use_qk_gain,
+        use_qk_norm=args.use_qk_norm,
         use_xsa=args.use_xsa,
         use_muon=args.use_muon,
         loss_horizon=args.loss_horizon,

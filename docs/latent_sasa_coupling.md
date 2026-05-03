@@ -17,26 +17,35 @@ the two systems into loosely related baselines.
 - trajectory-v2 is the source-of-truth data contract. trajectory-v3 compact
   shards are a derived throughput format and currently load through `full`,
   `dfm_action`, `jepa_latent`, and `joint_latent_sasa` views.
-- `JointLatentSASAModel` implements the first shared-projector/shared-action
-  Stage 1 primitive: DFM CE, compact legality loss, and positive JEPA latent
-  loss through DFM action hidden states.
-- Legal-prefix candidate generation exists for Stage 2, but contrastive loss
-  integration and reranking are still pending.
+- `JointLatentSASAModel` implements the active projected-vector Stage 1
+  primitive: DFM CE, first-move legality loss, projected-vector JEPA MSE,
+  SigReg, value/WDL heads, and JEPA conditioning through DFM action hidden
+  states.
+- Legal-prefix candidate generation and Stage 2 contrastive support exist, but
+  contrastive/ranking is no longer in the active training loss. Reintroduce it
+  only after projected JEPA dynamics beat identity/shuffled controls.
 - The queue runner and raw NumPy checkpoint path are the active operational
   path. Async GCS upload is the next checkpointing upgrade; Orbax is not a
   prerequisite for joint training.
+- `--init-checkpoint-uri` initializes a new run from an existing checkpoint
+  without resuming that checkpoint directory. It uses non-strict model-state
+  migration and a fresh optimizer so old Stage 1 checkpoints can branch into
+  the current fused RMSNorm/SwiGLU stack.
 - The first JEPA H2 baseline showed validation degradation after early steps, so
   do not scale JEPA by depth/width before adding better validation metrics,
   lower or scheduled learning rates, and the joint hidden-state path.
 
 ## Coupling Rules
 
-- BT4 remains frozen through DFM baselines, JEPA baselines, and the first joint
-  Latent-SASA stages. Unfreeze only after joint heads beat action-only baselines
-  on held-out action, legality, reranking, and latent-rollout metrics.
-- The joint model uses a compact DFM planning projector, but JEPA consumes raw
-  frozen BT4 current tokens and predicts raw frozen BT4 future tokens. There is
-  no trainable JEPA target projector in the active path.
+- BT4 remains frozen for standalone DFM and legacy standalone JEPA baselines.
+  Active joint Latent-SASA unfreezes BT4 input embedding and encoder layers
+  from the start with `bt4_learning_rate=1e-5`; BT4 heads remain outside the
+  joint objective.
+- The joint model uses a compact DFM planning projector and a separate trainable
+  state-vector projector. JEPA consumes `z_t = P(BT4(s_t)) [B,z_dim]` and
+  predicts `z_{t+h} = P(BT4(s_{t+h})) [B,H,z_dim]`.
+- The JEPA target projector/encoder path is not stopped in the active objective.
+  SigReg must backpropagate into projected states to prevent collapse.
 - The bridge is DFM action-token hidden states, not only action IDs. JEPA losses
   must have a gradient path into the DFM planner/action-token pathway.
 - DFM may predict illegal actions and is trained with legality penalties. JEPA
@@ -73,8 +82,7 @@ Refactor DFM into separable pieces:
 
 ```text
 encode_current(current_planes) -> encoder_tokens
-project_shared(encoder_tokens) -> shared_latents
-dfm_adapter(shared_latents) -> z_dfm
+dfm_state_projector(encoder_tokens) -> z_dfm
 planner_from_latents(z_dfm, actions_or_noisy_actions, t, return_hidden=True)
     -> logits, {"state_tokens": ..., "action_tokens": ...}
 ```
@@ -84,7 +92,8 @@ Guidelines:
 - `__call__` should remain as a compatibility wrapper.
 - `hidden["action_tokens"]` shape must be `[B, H, D]`.
 - Do not put target/future encoding logic into DFM.
-- Keep frozen BT4 out of the `TrainableParam` gradient path.
+- Standalone DFM keeps BT4 frozen. Joint training may unfreeze BT4 through the
+  joint model's encoder path.
 
 Tests:
 
@@ -95,16 +104,17 @@ Tests:
 
 ### W2: Shared Latent Components
 
-Status: initial joint module implemented with a compact DFM projector/adapter,
-raw-BT4 JEPA current/target tokens, and DFM-hidden-state conditioning. The old
-shared/separate target-projector path is deprecated because it made the JEPA
-target space either movable or fixed-random.
+Status: active joint module implemented with a compact DFM projector, a
+projected-vector JEPA state projector, and DFM-hidden-state conditioning. The
+previous raw-frozen-BT4 token path is now legacy; the earlier stopped-projector
+path is deprecated because SigReg could not regularize the moving projected
+state space.
 
 Add reusable joint components:
 
 ```text
 DFMTokenProjector
-DFMAdapter
+StateVectorProjector
 JEPAActionAdapter
 JEPAActionEmbedding
 ```
@@ -113,17 +123,16 @@ Guidelines:
 
 - DFM may use a compact projected BT4 basis because its targets are action
   labels/legal masks.
-- JEPA must not define its target with a trainable projector. Its current input
-  is `stopgrad(BT4(s_t)) [B,64,1024]`; its target is
-  `stopgrad(BT4(s_{t+h})) [B,H,64,1024]`.
-- DFM action hidden states are projected into BT4 width and injected into the
+- JEPA defines its state as `P(BT4(s)) [B,z_dim]`. Both current and future
+  projected states participate in JEPA MSE and SigReg.
+- DFM action hidden states are projected into JEPA condition width and injected into the
   JEPA rollout so JEPA loss still reaches the DFM action pathway.
 
 Tests:
 
-- Shared projector receives gradients from action and JEPA losses.
-- Target branch does not send gradients into BT4.
-- EMA update, once enabled, changes only target-projector state.
+- State projector and BT4 encoder receive gradients from JEPA MSE and SigReg.
+- DFM action-hidden path receives gradients from JEPA MSE.
+- BT4 checkpoint-compatible architecture remains unchanged.
 
 ### W3: JEPA From Latents And Hidden States
 
@@ -149,7 +158,7 @@ Guidelines:
 
 Tests:
 
-- Output shape is `[B, H, 64, D]`.
+- Output shape is `[B, H, z_dim]`.
 - JEPA consumes `hidden["action_tokens"]` without shape polymorphism.
 - `L_jepa` has non-zero gradients into JEPA transition parameters.
 - In joint mode, `L_jepa` has non-zero gradients into DFM action-token pathway.
@@ -226,10 +235,10 @@ Add the first joint objective:
 ```text
 L = 1.0 * L_dfm_ce
   + lambda_first * L_first_legal
-  + lambda_horizon * L_horizon_legal
   + 1.0 * L_jepa_positive
   + lambda_sigreg * L_jepa_sigreg
-  + lambda_action_contrast * L_action_contrast
+  + lambda_value * L_value
+  + lambda_wdl * L_wdl
 ```
 
 Current definitions:
@@ -240,36 +249,38 @@ Current definitions:
   horizon slots only. It is off by default for Stage 1.
 - Legality defaults to masked-token positions only. Validation uses `t=0`, so
   all supervised slots are masked.
-- `L_jepa_positive = mean(2 - 2*cos(pred_norm, target_norm))`, equivalent to
-  squared distance between L2-normalized raw BT4 tokens.
-- `L_jepa_sigreg` matches the standalone JEPA SigReg quantile regularizer and
-  is off unless `--jepa-sigreg-coeff > 0`.
-- `L_action_contrast = max(margin + L_true_actions - L_shuffled_actions, 0)`.
-  It directly targets the observed failure mode where true-action and
-  shuffled-action JEPA rollouts score nearly the same.
-- JEPA diagnostics also log raw MSE, normalized MSE, token norms, per-horizon
+- `L_jepa_positive = mean((z_pred - z_target)^2)` over projected BT4 state
+  vectors.
+- `L_jepa_sigreg` is enabled by default with coefficient `0.1` and applies the
+  LeJEPA/quantile random-projection regularizer to projected current/future
+  state vectors.
+- `L_action_contrast` is disabled in the active plan. Shuffled-action rollouts
+  are diagnostics until projected JEPA beats identity/shuffled controls.
+- JEPA diagnostics also log raw MSE, normalized MSE, vector norms, per-horizon
   losses, identity baseline, and shuffled-action baseline.
 
 Initial config:
 
 ```text
-H = 1 or 2
+H = 4 smoke, then H = 8
 K = 1
 token_dim = 256
+z_dim = 2048
 DFM layers = 4
-JEPA layers = 1 or 2
-value_coeff = 0.0
-wdl_coeff = 0.0
+JEPA layers = 4
+value_coeff = 0.05
+wdl_coeff = 0.05
 ```
 
 Guidelines:
 
 - Use the random-policy-balanced legality coefficient for first-ply legality
   unless a run explicitly tests another value.
-- Do not use trainable JEPA target projectors for Stage 1. The active target
-  space is raw frozen BT4 token space. `--target-projector-mode` is accepted
-  only for compatibility and is ignored by the joint trainer.
-- Use lower or scheduled JEPA learning rates before scaling JEPA depth.
+- The active target space is projected BT4 state vectors.
+  `--target-projector-mode` is accepted only for compatibility and is ignored
+  by the joint trainer.
+- Use `bt4_learning_rate=1e-5`, `learning_rate=6e-4`, and warmup before scaling
+  JEPA depth.
 - Report gradient norms from `L_jepa` into DFM action-token/pathway modules.
 
 Acceptance:
@@ -280,9 +291,9 @@ Acceptance:
 
 ### W7: Stage 2 Contrastive Coupling
 
-Status: Stage 2 contrastive loss and trainer support implemented. Local
-synthetic smoke logs contrastive metrics. Held-out reranking evaluation is
-pending before any distillation work.
+Status: Stage 2 contrastive loss and trainer support exist, but this is no
+longer the active next objective. Keep it as future work after projected JEPA
+state dynamics are stable.
 
 Add legal prefix negatives and contrastive future loss:
 
@@ -305,6 +316,34 @@ Acceptance:
 - Positive similarity separates from legal-negative similarity.
 - Contrastive candidate accuracy exceeds chance.
 - First-action validation metrics do not degrade materially versus action-only.
+
+Latest smoke result:
+
+```text
+run: joint-stage2-h4-k3-b64-v3-smoke-20260502d
+init: Stage 1 checkpoint step 387072, non-strict migrated, fresh optimizer
+data: v3 LC0 H8 minimum-cache smoke, 32 train shards / 32 val shards visible
+steps: 200
+single-chip throughput: about 0.24 s/step, about 26% model-FLOP MFU
+
+validation step 100:
+  val_contrastive_loss = 1.2755
+  val_contrastive_accuracy = 0.3359
+  val_jepa_raw_mse = 1.8177
+  val_dfm_ce_loss = 5.7810
+  val_first_legality_loss = 0.8545
+
+validation step 200:
+  val_contrastive_loss = 0.4978
+  val_contrastive_accuracy = 0.7148
+  val_jepa_raw_mse = 1.5724
+  val_dfm_ce_loss = 5.6433
+  val_first_legality_loss = 0.8115
+```
+
+Interpretation: Stage 2 wiring and legal-prefix contrastive signal are working.
+This is not yet a model-quality result because the smoke used a tiny
+minimum-cache shard window and only 200 steps.
 
 ### W8: Reranking And Rank Head
 

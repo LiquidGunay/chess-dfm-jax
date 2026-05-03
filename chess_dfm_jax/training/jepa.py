@@ -18,10 +18,10 @@ from chess_dfm_jax.data.trajectory import (
 )
 from chess_dfm_jax.nnx_bt4 import (
     BT4Model,
-    EncoderLayer,
     TrainableEmbedding,
-    TrainableLayerNorm,
     TrainableParam,
+    TrainableRMSNorm,
+    TrainableTransformerStack,
     make_bt4_model,
     swish,
 )
@@ -40,12 +40,15 @@ class JEPAConfig:
     action_source: str = "best"
     action_vocab_size: int = 1858
     use_qk_gain: bool = False
+    use_qk_norm: bool = False
     use_xsa: bool = False
     use_muon: bool = False
     terminal_only: bool = False
     sigreg_coeff: float = 0.01
     value_coeff: float = 0.0
     wdl_coeff: float = 0.0
+    remat_blocks: bool = True
+    scan_layers: bool = True
 
 
 class ActionMLP(nnx.Module):
@@ -133,22 +136,21 @@ class TokenTransitionHead(nnx.Module):
             param_dtype=param_dtype,
             compute_dtype=compute_dtype,
         )
-        self.blocks = nnx.List(
-            [
-                EncoderLayer(
-                    width=self.jepa_width,
-                    num_heads=config.num_heads,
-                    mlp_dim=config.mlp_dim,
-                    rngs=rngs,
-                    param_dtype=param_dtype,
-                    compute_dtype=compute_dtype,
-                    use_qk_gain=config.use_qk_gain,
-                    use_xsa=config.use_xsa,
-                )
-                for _ in range(config.num_layers)
-            ]
+        self.blocks = TrainableTransformerStack(
+            num_layers=config.num_layers,
+            width=self.jepa_width,
+            num_heads=config.num_heads,
+            mlp_dim=config.mlp_dim,
+            rngs=rngs,
+            param_dtype=param_dtype,
+            compute_dtype=compute_dtype,
+            use_qk_gain=config.use_qk_gain,
+            use_qk_norm=config.use_qk_norm,
+            use_xsa=config.use_xsa,
+            scan_layers=config.scan_layers,
+            remat_blocks=config.remat_blocks,
         )
-        self.output_norm = TrainableLayerNorm(
+        self.output_norm = TrainableRMSNorm(
             self.jepa_width,
             param_dtype=param_dtype,
             compute_dtype=compute_dtype,
@@ -175,8 +177,7 @@ class TokenTransitionHead(nnx.Module):
         if action_hidden is not None:
             action_token = action_token + jnp.asarray(action_hidden, dtype=self.compute_dtype)
         seq = tokens + action_token[:, None, :]
-        for block in self.blocks:
-            seq = block(seq)
+        seq = self.blocks(seq)
         return self.output_norm(seq)
 
     def rollout_from_latents(
@@ -480,8 +481,6 @@ def create_jepa_components(
     *,
     seed: int = 0,
 ) -> tuple[LC0JEPA, nnx.Optimizer]:
-    if config.use_xsa:
-        raise NotImplementedError("use_xsa is reserved but not implemented in EncoderLayer.")
     encoder_dtype = _parse_compute_dtype(config.encoder_dtype)
     encoder = make_bt4_model(bt4_params, dtype=encoder_dtype)
     model = LC0JEPA(encoder, config, rngs=nnx.Rngs(seed))
@@ -511,12 +510,149 @@ def extract_train_state(model: LC0JEPA, optimizer: nnx.Optimizer) -> dict[str, A
         "optimizer_state": dict(nnx.to_pure_dict(state_opt)),
     }
 
-def restore_train_state(payload: dict[str, Any], model: nnx.Module, optimizer: nnx.Optimizer | None = None) -> int:
+
+def _legacy_layer(tree: dict[str, Any] | dict[int, Any], idx: int) -> dict[str, Any] | None:
+    layer = tree.get(idx) if isinstance(tree, dict) else None
+    if layer is None and isinstance(tree, dict):
+        layer = tree.get(str(idx))
+    return layer if isinstance(layer, dict) else None
+
+
+def _looks_like_legacy_encoder_stack(tree: Any) -> bool:
+    if not isinstance(tree, dict):
+        return False
+    layer = _legacy_layer(tree, 0)
+    return isinstance(layer, dict) and {"wq", "wk", "wv", "wo"}.issubset(layer.keys())
+
+
+def _copy_if_shape_matches(target: dict[str, Any], key: str, value: Any) -> None:
+    if key not in target:
+        return
+    if np.shape(value) == np.shape(target[key]):
+        target[key] = np.asarray(value)
+
+
+def _migrate_legacy_encoder_stack_to_trainable_stack(
+    legacy_stack: dict[str, Any] | dict[int, Any],
+    current_stack: dict[str, Any],
+) -> dict[str, Any]:
+    """Best-effort migration from old per-layer EncoderLayer params.
+
+    The current trainable stack uses fused QKV, pre-RMSNorm, and SwiGLU. Old
+    checkpoints used per-layer Q/K/V matrices, LayerNorm scale+bias, and Mish
+    FFNs. Attention parameters can be mapped exactly. The FFN is not
+    mathematically equivalent, so only the compatible up/down subspace is seeded
+    from the old FFN and the rest remains at the new initializer.
+    """
+    if "w_qkv" not in current_stack:
+        return current_stack
+    migrated = dict(current_stack)
+    num_layers = int(np.shape(current_stack["w_qkv"])[0])
+    layers = [_legacy_layer(legacy_stack, idx) for idx in range(num_layers)]
+    if any(layer is None for layer in layers):
+        return current_stack
+
+    def stack_layer_value(name: str) -> np.ndarray | None:
+        values = [layer[name] for layer in layers if layer is not None and name in layer]
+        if len(values) != num_layers:
+            return None
+        return np.stack(values, axis=0)
+
+    q = stack_layer_value("wq")
+    k = stack_layer_value("wk")
+    v = stack_layer_value("wv")
+    if q is not None and k is not None and v is not None:
+        _copy_if_shape_matches(migrated, "w_qkv", np.concatenate([q, k, v], axis=-1))
+
+    q_b = stack_layer_value("wq_b")
+    k_b = stack_layer_value("wk_b")
+    v_b = stack_layer_value("wv_b")
+    if q_b is not None and k_b is not None and v_b is not None:
+        _copy_if_shape_matches(migrated, "b_qkv", np.concatenate([q_b, k_b, v_b], axis=-1))
+
+    for old_name, new_name in (("wo", "w_o"), ("wo_b", "b_o")):
+        value = stack_layer_value(old_name)
+        if value is not None:
+            _copy_if_shape_matches(migrated, new_name, value)
+
+    for old_norm, new_name in (("ln_attn", "attn_norm_scale"), ("ln_ffn", "mlp_norm_scale")):
+        values = []
+        for layer in layers:
+            norm = layer.get(old_norm, {}) if layer is not None else {}
+            if not isinstance(norm, dict) or "scale" not in norm:
+                break
+            values.append(norm["scale"])
+        if len(values) == num_layers:
+            _copy_if_shape_matches(migrated, new_name, np.stack(values, axis=0))
+
+    if all(key in migrated for key in ("w_gate_up", "b_gate_up", "w_down", "b_down")):
+        w_gate_up = np.array(migrated["w_gate_up"], copy=True)
+        b_gate_up = np.array(migrated["b_gate_up"], copy=True)
+        w_down = np.array(migrated["w_down"], copy=True)
+        b_down = np.array(migrated["b_down"], copy=True)
+        swiglu_dim = int(w_down.shape[1])
+        for idx, layer in enumerate(layers):
+            if layer is None or not {"ffn1", "ffn1_b", "ffn2", "ffn2_b"}.issubset(layer.keys()):
+                continue
+            ffn1 = np.asarray(layer["ffn1"])
+            ffn1_b = np.asarray(layer["ffn1_b"])
+            ffn2 = np.asarray(layer["ffn2"])
+            ffn2_b = np.asarray(layer["ffn2_b"])
+            copy_dim = min(swiglu_dim, ffn1.shape[1], ffn1_b.shape[0], ffn2.shape[0])
+            if copy_dim <= 0:
+                continue
+            # Gate branch: deterministic pass-through-ish gate for copied dims.
+            w_gate_up[idx, :, :copy_dim] = 0.0
+            b_gate_up[idx, :copy_dim] = 1.0
+            # Up/down branch: seed from the old FFN subspace.
+            w_gate_up[idx, :, swiglu_dim : swiglu_dim + copy_dim] = ffn1[:, :copy_dim]
+            b_gate_up[idx, swiglu_dim : swiglu_dim + copy_dim] = ffn1_b[:copy_dim]
+            w_down[idx, :copy_dim, :] = ffn2[:copy_dim, :]
+            if ffn2_b.shape == b_down[idx].shape:
+                b_down[idx] = ffn2_b
+        migrated["w_gate_up"] = w_gate_up
+        migrated["b_gate_up"] = b_gate_up
+        migrated["w_down"] = w_down
+        migrated["b_down"] = b_down
+
+    return migrated
+
+
+def _merge_compatible_state(current: dict[str, Any], incoming: dict[str, Any]) -> dict[str, Any]:
+    merged = dict(current)
+    for key, value in incoming.items():
+        if key not in current:
+            continue
+        current_value = current[key]
+        if isinstance(current_value, dict) and isinstance(value, dict):
+            if _looks_like_legacy_encoder_stack(value):
+                merged[key] = _migrate_legacy_encoder_stack_to_trainable_stack(value, current_value)
+            else:
+                merged[key] = _merge_compatible_state(current_value, value)
+            continue
+        if np.shape(value) == np.shape(current_value):
+            merged[key] = value
+    return merged
+
+
+def restore_train_state(
+    payload: dict[str, Any],
+    model: nnx.Module,
+    optimizer: nnx.Optimizer | None = None,
+    *,
+    strict: bool = True,
+) -> int:
     model_state = nnx.state(model, TrainableParam)
-    nnx.replace_by_pure_dict(model_state, payload["model_trainable"])
+    model_payload = payload["model_trainable"]
+    if not strict:
+        current_model = dict(nnx.to_pure_dict(model_state))
+        model_payload = _merge_compatible_state(current_model, model_payload)
+    nnx.replace_by_pure_dict(model_state, model_payload)
     nnx.update(model, model_state)
 
     if optimizer is not None:
+        if not strict:
+            return int(payload["step"])
         opt_state = nnx.state(optimizer.opt_state)
         nnx.replace_by_pure_dict(opt_state, payload["optimizer_state"])
         nnx.update(optimizer.opt_state, opt_state)

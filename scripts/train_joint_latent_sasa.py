@@ -22,6 +22,11 @@ if str(REPO_ROOT) not in sys.path:
 from chess_dfm_jax.analysis.bt4_theory import estimate_bt4_theory  # noqa: E402
 from chess_dfm_jax.analysis.profile_targets import load_mapped_bt4_params  # noqa: E402
 from chess_dfm_jax.data.gcs_cache import GCSShardCache  # noqa: E402
+from chess_dfm_jax.data.grain_loader import (  # noqa: E402
+    GrainUnavailableError,
+    create_grain_trajectory_batch_loader,
+    create_grain_trajectory_loader,
+)
 from chess_dfm_jax.data.leela import LeelaChunkDataLoader, discover_chunk_files  # noqa: E402
 from chess_dfm_jax.data.trajectory import build_synthetic_trajectory_shard, trajectory_joint_batch_from_npz  # noqa: E402
 from chess_dfm_jax.paths import default_bt4_paths, project_root  # noqa: E402
@@ -30,6 +35,7 @@ from chess_dfm_jax.training.checkpoints import (  # noqa: E402
     latest_checkpoint_step,
     load_training_checkpoint,
     save_training_checkpoint,
+    wait_for_checkpoint_completion,
 )
 from chess_dfm_jax.training.joint_latent_sasa import (  # noqa: E402
     JointLatentSASAConfig,
@@ -38,8 +44,14 @@ from chess_dfm_jax.training.joint_latent_sasa import (  # noqa: E402
     eval_joint_stage2_step,
     joint_coupling_gradient_diagnostics,
     joint_jepa_action_baseline_diagnostics,
+    eval_joint_stage1_step_data_parallel,
+    eval_joint_stage2_step_data_parallel,
     train_joint_stage1_step,
+    train_joint_stage1_step_data_parallel,
+    train_joint_stage1_step_donated,
     train_joint_stage2_step,
+    train_joint_stage2_step_data_parallel,
+    train_joint_stage2_step_donated,
 )
 from chess_dfm_jax.tracking import has_wandb_credentials, init_wandb_run  # noqa: E402
 
@@ -67,6 +79,20 @@ def parse_args() -> argparse.Namespace:
         default=2,
         help="Background host batches to prepare ahead of the TPU step. Set 0 to disable.",
     )
+    parser.add_argument(
+        "--data-loader",
+        type=str,
+        default="leela",
+        choices=["leela", "grain"],
+        help="Data loading backend for trajectory .npz shards. Grain is optional and not used by default.",
+    )
+    parser.add_argument("--grain-workers", type=int, default=0, help="Grain worker count when --data-loader=grain.")
+    parser.add_argument(
+        "--grain-shard-cache-size",
+        type=int,
+        default=2,
+        help="Decoded shard LRU size inside the optional Grain random-access source.",
+    )
     parser.add_argument("--val-fraction", type=float, default=0.0)
     parser.add_argument("--val-batches", type=int, default=0)
     parser.add_argument("--val-every", type=int, default=0)
@@ -78,19 +104,114 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--no-wandb", action="store_true")
     parser.add_argument("--stage", type=str, default="stage1", choices=["stage1", "stage2"])
     parser.add_argument("--token-dim", type=int, default=256)
+    parser.add_argument("--z-dim", type=int, default=2048)
+    parser.add_argument("--projector-layers", type=int, default=2)
+    parser.add_argument("--projector-num-heads", type=int, default=8)
+    parser.add_argument("--projector-mlp-dim", type=int, default=0)
+    parser.add_argument("--jepa-condition-dim", type=int, default=0)
     parser.add_argument("--dfm-layers", type=int, default=4)
-    parser.add_argument("--jepa-layers", type=int, default=2)
-    parser.add_argument("--jepa-num-heads", type=int, default=0, help="JEPA heads for raw BT4 tokens; defaults to --num-heads.")
-    parser.add_argument("--jepa-mlp-dim", type=int, default=0, help="JEPA MLP width for raw BT4 tokens; defaults to 4x BT4 width.")
+    parser.add_argument("--jepa-layers", type=int, default=4)
+    parser.add_argument("--jepa-num-heads", type=int, default=0, help="Deprecated for vector JEPA; kept for checkpoint metadata compatibility.")
+    parser.add_argument("--jepa-mlp-dim", type=int, default=0, help="Vector JEPA MLP width; defaults to 4x --z-dim.")
     parser.add_argument("--num-heads", type=int, default=4)
     parser.add_argument("--mlp-dim", type=int, default=1024)
-    parser.add_argument("--learning-rate", type=float, default=3e-4)
+    parser.add_argument("--learning-rate", type=float, default=6e-4)
+    parser.add_argument("--bt4-learning-rate", type=float, default=1e-5)
     parser.add_argument("--weight-decay", type=float, default=1e-4)
     parser.add_argument("--encoder-dtype", type=str, default="bfloat16", choices=["float16", "bfloat16", "float32"])
     parser.add_argument("--param-dtype", type=str, default="float32", choices=["float16", "bfloat16", "float32"])
     parser.add_argument("--compute-dtype", type=str, default="bfloat16", choices=["float16", "bfloat16", "float32"])
     parser.add_argument("--use-qk-gain", action="store_true")
-    parser.add_argument("--use-muon", action="store_true")
+    parser.add_argument(
+        "--use-qk-norm",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="RMS-normalize Q and K per head before attention logits in trainable DFM/JEPA stacks.",
+    )
+    parser.add_argument(
+        "--use-xsa",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Use Exclusive Self-Attention in trainable DFM/JEPA stacks.",
+    )
+    parser.add_argument(
+        "--use-muon",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Use Muon for square-ish 2D matrices and AdamW fallback for the rest.",
+    )
+    parser.add_argument("--grad-clip-norm", type=float, default=1.0, help="Global gradient clipping norm. 0 disables clipping.")
+    parser.add_argument("--lr-warmup-steps", type=int, default=1000, help="Linearly warm learning rate from 0 to --learning-rate over N steps.")
+    parser.add_argument(
+        "--skip-nonfinite-updates",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Skip optimizer updates whose transformed gradients contain NaN/Inf.",
+    )
+    parser.add_argument(
+        "--unfreeze-bt4-encoder",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Train BT4 input embedding and encoder layers with --bt4-learning-rate.",
+    )
+    parser.add_argument(
+        "--bt4-encode-chunk-size",
+        type=int,
+        default=0,
+        help=(
+            "Chunk size over current+future BT4 target encodes. 0 flattens all horizons into one "
+            "large encoder batch; 1 scans one board state per sample at a time to reduce HBM when "
+            "BT4 is trainable."
+        ),
+    )
+    parser.add_argument(
+        "--jepa-state-rmsnorm",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Apply one learned RMSNorm to the JEPA recurrent input state and every recurrent output state.",
+    )
+    parser.add_argument(
+        "--jepa-state-rms-scale-max",
+        type=float,
+        default=2.0,
+        help="Clip the effective learned JEPA state RMSNorm scale to [1/max, max]. 0 disables clipping.",
+    )
+    parser.add_argument(
+        "--jepa-teacher-forcing-steps",
+        type=int,
+        default=0,
+        help="Use true z(t+h) as the JEPA transition input for this many initial training steps, then free-roll out.",
+    )
+    parser.add_argument(
+        "--jepa-delta-rms-clip",
+        type=float,
+        default=2.0,
+        help=(
+            "Clip each JEPA transition residual delta to this per-sample RMS before adding it to the "
+            "latent state. This stabilizes recurrent rollout without hard-normalizing z itself. 0 disables."
+        ),
+    )
+    parser.add_argument(
+        "--remat-blocks",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Rematerialize trainable DFM/JEPA transformer blocks during backward pass.",
+    )
+    parser.add_argument(
+        "--scan-layers",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help=(
+            "Use pure lax.scan over stacked DFM/JEPA layer parameters. "
+            "Default is off for shallow single-chip speed; enable for larger-depth memory/compile experiments."
+        ),
+    )
+    parser.add_argument(
+        "--donate-train-state",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Donate model and optimizer buffers to the jitted train step.",
+    )
     parser.add_argument("--horizon", type=int, default=2)
     parser.add_argument("--loss-horizon", type=int, default=0)
     parser.add_argument("--dfm-ce-coeff", type=float, default=1.0)
@@ -109,16 +230,16 @@ def parse_args() -> argparse.Namespace:
         type=str,
         default="raw_mse",
         choices=["raw_mse"],
-        help="JEPA term optimized by --jepa-positive-coeff. Cosine/identity comparisons run via diagnostics, not the hot step.",
+        help="JEPA term optimized by --jepa-positive-coeff.",
     )
     parser.add_argument(
         "--jepa-target-mode",
         type=str,
-        default="future_bt4",
-        choices=["future_bt4", "current_repeat"],
+        default="projected_bt4",
+        choices=["projected_bt4", "current_repeat"],
         help=(
-            "JEPA target source. future_bt4 is the real training objective. "
-            "current_repeat is a profiling-only diagnostic that removes future BT4 target encodes."
+            "JEPA target source. projected_bt4 is the real training objective. "
+            "current_repeat is a profiling-only diagnostic."
         ),
     )
     parser.add_argument(
@@ -130,8 +251,30 @@ def parse_args() -> argparse.Namespace:
             "Use 1 for stochastic target-horizon sampling to reduce future BT4 target encodes."
         ),
     )
-    parser.add_argument("--jepa-gamma", type=float, default=0.9)
-    parser.add_argument("--jepa-sigreg-coeff", type=float, default=0.0)
+    parser.add_argument("--jepa-gamma", type=float, default=1.0)
+    parser.add_argument("--jepa-sigreg-coeff", type=float, default=0.1)
+    parser.add_argument(
+        "--jepa-pred-sigreg-coeff",
+        type=float,
+        default=0.0,
+        help="SigReg coefficient on recurrent JEPA predictions, separate from projected-BT4 target SigReg.",
+    )
+    parser.add_argument(
+        "--jepa-sigreg-kind",
+        type=str,
+        default="le_jepa",
+        choices=["le_jepa", "moments", "quantile"],
+        help="SigReg implementation. le_jepa uses fixed random projections and Gaussian quantile matching.",
+    )
+    parser.add_argument("--jepa-sigreg-proj-dim", type=int, default=1024)
+    parser.add_argument("--value-coeff", type=float, default=0.0)
+    parser.add_argument("--wdl-coeff", type=float, default=0.0)
+    parser.add_argument(
+        "--loss-clip-value",
+        type=float,
+        default=0.0,
+        help="If >0, rescale oversized scalar losses to this value while preserving gradient direction.",
+    )
     parser.add_argument("--jepa-action-contrast-coeff", type=float, default=0.0)
     parser.add_argument("--jepa-action-contrast-margin", type=float, default=0.05)
     parser.add_argument(
@@ -139,7 +282,7 @@ def parse_args() -> argparse.Namespace:
         type=str,
         default=None,
         choices=["shared", "separate"],
-        help="Deprecated no-op. Joint JEPA now targets raw frozen BT4 tokens.",
+        help="Deprecated no-op. Joint JEPA now targets projected BT4 state vectors.",
     )
     parser.add_argument("--contrastive-coeff", type=float, default=0.0)
     parser.add_argument("--contrastive-temperature", type=float, default=0.1)
@@ -153,13 +296,55 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--diagnostics-every", type=int, default=0)
     parser.add_argument("--max-to-keep", type=int, default=3)
     parser.add_argument("--resume", action="store_true")
+    parser.add_argument(
+        "--checkpoint-format",
+        type=str,
+        default="raw",
+        choices=["raw", "raw+orbax"],
+        help="Checkpoint backend. raw is existing .npz; raw+orbax also writes an Orbax mirror.",
+    )
+    parser.add_argument(
+        "--async-orbax",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Use Orbax AsyncCheckpointer when --checkpoint-format includes orbax and supported.",
+    )
+    parser.add_argument(
+        "--init-checkpoint-uri",
+        type=str,
+        default="",
+        help=(
+            "Optional checkpoint root to initialize model/optimizer state from while "
+            "writing checkpoints under this run's --checkpoint-uri. This is for "
+            "curriculum branching; use --resume for ordinary same-run continuation."
+        ),
+    )
+    parser.add_argument(
+        "--init-checkpoint-step",
+        type=int,
+        default=0,
+        help="Checkpoint step to load from --init-checkpoint-uri. 0 means latest.",
+    )
     parser.add_argument("--run-id", type=str, default=None)
     parser.add_argument("--checkpoint-uri", type=str, default=None)
     parser.add_argument("--peak-tflops", type=float, default=197.0)
+    parser.add_argument(
+        "--data-parallel",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Shard each global batch over local devices with replicated model/optimizer state and pmean gradients.",
+    )
+    parser.add_argument(
+        "--data-parallel-devices",
+        type=int,
+        default=0,
+        help="Number of local devices to use when --data-parallel is enabled. 0 means all local devices.",
+    )
     parser.add_argument("--profile-dir", type=str, default="", help="Local TensorBoard trace directory.")
     parser.add_argument("--profile-uri", type=str, default="", help="Optional gs:// prefix for uploading trace artifacts.")
     parser.add_argument("--profile-start-step", type=int, default=20, help="1-indexed step at which to start JAX tracing.")
     parser.add_argument("--profile-steps", type=int, default=0, help="Number of train steps to capture in a JAX trace.")
+    parser.add_argument("--disable-final-checkpoint", action="store_true", help="Skip forced final checkpoint; useful for profiling-only runs.")
     return parser.parse_args()
 
 
@@ -282,6 +467,10 @@ def sync_profile_dir(profile_dir: Path, profile_uri: str) -> None:
 
 
 def build_synthetic_joint_batch(batch_size: int, horizon: int, legal_lmax: int) -> dict[str, np.ndarray]:
+    cache_key = (int(batch_size), int(horizon), int(legal_lmax))
+    cached = _SYNTHETIC_JOINT_BATCH_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
     shard = build_synthetic_trajectory_shard(batch_size=batch_size, horizon=horizon)
     payload = {
         "schema_version": np.asarray("trajectory-v2"),
@@ -293,7 +482,12 @@ def build_synthetic_joint_batch(batch_size: int, horizon: int, legal_lmax: int) 
         "value_targets": shard.value_targets,
         "wdl_targets": shard.wdl_targets,
     }
-    return trajectory_joint_batch_from_npz(payload, horizon=horizon, legal_lmax=legal_lmax)
+    batch = trajectory_joint_batch_from_npz(payload, horizon=horizon, legal_lmax=legal_lmax)
+    _SYNTHETIC_JOINT_BATCH_CACHE[cache_key] = batch
+    return batch
+
+
+_SYNTHETIC_JOINT_BATCH_CACHE: dict[tuple[int, int, int], dict[str, np.ndarray]] = {}
 
 
 def estimate_joint_step_flops(
@@ -308,25 +502,47 @@ def estimate_joint_step_flops(
     mlp_dim: int,
     bt4_encoder_forward_flops_per_batch: float = 0.0,
     bt4_encoder_forward_count: int | float | None = None,
+    stage: str = "stage1",
+    candidate_count: int = 1,
 ) -> dict[str, float]:
     seq_len = 64 + horizon
     state_len = 64
-    dfm_layer_forward = batch_size * dfm_layers * (
-        4.0 * seq_len * token_dim * token_dim
-        + 2.0 * seq_len * token_dim * mlp_dim
-        + 2.0 * seq_len * seq_len * token_dim
-    )
-    jepa_layer_forward = batch_size * horizon * jepa_layers * (
-        4.0 * state_len * jepa_width * jepa_width
-        + 2.0 * state_len * jepa_width * jepa_mlp_dim
-        + 2.0 * state_len * state_len * jepa_width
-    )
-    dfm_train = 3.0 * dfm_layer_forward * 2.0
-    jepa_train = 3.0 * jepa_layer_forward
+    dfm_swiglu_dim = max(1, int(round((2.0 / 3.0) * mlp_dim)))
+    jepa_swiglu_dim = max(1, int(round((2.0 / 3.0) * jepa_mlp_dim)))
+
+    def dfm_forward(batch: int) -> float:
+        return batch * dfm_layers * (
+            4.0 * seq_len * token_dim * token_dim
+            + 3.0 * seq_len * token_dim * dfm_swiglu_dim
+            + 2.0 * seq_len * seq_len * token_dim
+        )
+
+    def jepa_forward(batch: int) -> float:
+        return batch * horizon * jepa_layers * (
+            4.0 * state_len * jepa_width * jepa_width
+            + 3.0 * state_len * jepa_width * jepa_swiglu_dim
+            + 2.0 * state_len * state_len * jepa_width
+        )
+
+    # Stage 1 has two DFM passes: noisy-action CE and clean-action hidden state coupling.
+    stage1_dfm_train = 3.0 * dfm_forward(batch_size) * 2.0
+    stage1_jepa_train = 3.0 * jepa_forward(batch_size)
+    contrastive_dfm_train = 0.0
+    contrastive_jepa_train = 0.0
+    if stage == "stage2" and candidate_count > 0:
+        flat_candidate_batch = batch_size * candidate_count
+        contrastive_dfm_train = 3.0 * dfm_forward(flat_candidate_batch)
+        contrastive_jepa_train = 3.0 * jepa_forward(flat_candidate_batch)
+    dfm_train = stage1_dfm_train + contrastive_dfm_train
+    jepa_train = stage1_jepa_train + contrastive_jepa_train
     encoder_forward_count = float(horizon + 1 if bt4_encoder_forward_count is None else bt4_encoder_forward_count)
     bt4_encoder_forward = encoder_forward_count * float(bt4_encoder_forward_flops_per_batch)
     trainable_train = dfm_train + jepa_train
     return {
+        "estimated_stage1_dfm_train_flops_per_step": float(stage1_dfm_train),
+        "estimated_stage1_jepa_train_flops_per_step": float(stage1_jepa_train),
+        "estimated_contrastive_dfm_train_flops_per_step": float(contrastive_dfm_train),
+        "estimated_contrastive_jepa_train_flops_per_step": float(contrastive_jepa_train),
         "estimated_dfm_train_flops_per_step": float(dfm_train),
         "estimated_jepa_train_flops_per_step": float(jepa_train),
         "estimated_trainable_step_flops": float(trainable_train),
@@ -335,7 +551,53 @@ def estimate_joint_step_flops(
         "estimated_total_step_flops": float(trainable_train + bt4_encoder_forward),
         "estimated_jepa_width": float(jepa_width),
         "estimated_jepa_mlp_dim": float(jepa_mlp_dim),
+        "estimated_dfm_swiglu_dim": float(dfm_swiglu_dim),
+        "estimated_jepa_swiglu_dim": float(jepa_swiglu_dim),
     }
+
+
+def shard_batch_for_data_parallel(
+    batch: dict[str, np.ndarray],
+    *,
+    device_count: int,
+    global_batch_size: int,
+) -> dict[str, np.ndarray]:
+    if device_count <= 1:
+        return batch
+    if global_batch_size % device_count != 0:
+        raise ValueError(
+            f"Global batch size {global_batch_size} must be divisible by "
+            f"data_parallel_devices={device_count}."
+        )
+    per_device = global_batch_size // device_count
+    sharded: dict[str, np.ndarray] = {}
+    for key, value in batch.items():
+        array = np.asarray(value)
+        if array.ndim == 0:
+            if key in ("deterministic_t", "jepa_teacher_forcing"):
+                sharded[key] = np.broadcast_to(array, (device_count,))
+                continue
+            raise ValueError(f"Cannot shard scalar batch leaf {key!r} for data parallel training.")
+        if array.shape[0] != global_batch_size:
+            raise ValueError(
+                f"Cannot shard batch leaf {key!r}: leading dim {array.shape[0]} "
+                f"!= global batch size {global_batch_size}."
+            )
+        sharded[key] = array.reshape((device_count, per_device, *array.shape[1:]))
+    return sharded
+
+
+def unreplicate_data_parallel_tree(tree, *, device_count: int):
+    if device_count <= 1:
+        return tree
+
+    def first_replica(value):
+        array = np.asarray(value)
+        if array.ndim > 0 and array.shape[0] == device_count:
+            return array[0]
+        return value
+
+    return jax.tree_util.tree_map(first_replica, tree)
 
 
 def evaluate_validation_batches(
@@ -349,6 +611,7 @@ def evaluate_validation_batches(
     legal_lmax: int,
     deterministic_t: float,
     stage: str,
+    data_parallel_devices: int = 1,
 ) -> tuple[dict[str, float], jax.Array]:
     loader = iter(loader_obj) if loader_obj is not None else None
     totals: dict[str, float] = {}
@@ -371,11 +634,26 @@ def evaluate_validation_batches(
             batch["deterministic_t"] = np.asarray(deterministic_t, dtype=np.float32)
         rng, eval_rng = jax.random.split(rng)
         eval_start = time.perf_counter()
-        if stage == "stage2":
+        if data_parallel_devices > 1:
+            dp_batch = shard_batch_for_data_parallel(
+                batch,
+                device_count=data_parallel_devices,
+                global_batch_size=batch_size,
+            )
+            dp_rng = jax.random.split(eval_rng, data_parallel_devices)
+            if stage == "stage2":
+                loss, aux = eval_joint_stage2_step_data_parallel(model, dp_batch, dp_rng)
+            else:
+                loss, aux = eval_joint_stage1_step_data_parallel(model, dp_batch, dp_rng)
+            jax.block_until_ready((loss, aux))
+            loss = unreplicate_data_parallel_tree(loss, device_count=data_parallel_devices)
+            aux = unreplicate_data_parallel_tree(aux, device_count=data_parallel_devices)
+        elif stage == "stage2":
             loss, aux = eval_joint_stage2_step(model, batch, eval_rng)
         else:
             loss, aux = eval_joint_stage1_step(model, batch, eval_rng)
-        jax.block_until_ready((loss, aux))
+        if data_parallel_devices <= 1:
+            jax.block_until_ready((loss, aux))
         eval_time_total += time.perf_counter() - eval_start
         batch_metrics = {"loss": float(loss)}
         batch_metrics.update(flatten_aux_metrics(aux))
@@ -402,6 +680,24 @@ def main() -> int:
     if args.backend == "tpu":
         jax.distributed.initialize(initialization_timeout=1200)
 
+    data_parallel_devices = 1
+    if args.data_parallel:
+        available_devices = jax.local_device_count()
+        requested_devices = args.data_parallel_devices if args.data_parallel_devices > 0 else available_devices
+        if requested_devices < 1:
+            raise ValueError("--data-parallel-devices must be positive or 0 for all local devices.")
+        if requested_devices > available_devices:
+            raise ValueError(
+                f"Requested {requested_devices} data-parallel devices, but only "
+                f"{available_devices} local devices are available."
+            )
+        if args.batch_size % requested_devices != 0:
+            raise ValueError(
+                f"--batch-size={args.batch_size} must be divisible by "
+                f"data_parallel_devices={requested_devices}."
+            )
+        data_parallel_devices = requested_devices
+
     run_name = args.run_id or resolve_run_name(args)
     save_root = Path(args.save_dir) if args.save_dir else (project_root() / "runs" / "joint")
     output_dir = save_root / run_name
@@ -422,6 +718,11 @@ def main() -> int:
     )
     config = JointLatentSASAConfig(
         token_dim=args.token_dim,
+        z_dim=args.z_dim,
+        projector_layers=args.projector_layers,
+        projector_num_heads=args.projector_num_heads,
+        projector_mlp_dim=args.projector_mlp_dim,
+        jepa_condition_dim=args.jepa_condition_dim,
         dfm_layers=args.dfm_layers,
         jepa_layers=args.jepa_layers,
         jepa_num_heads=args.jepa_num_heads,
@@ -429,6 +730,7 @@ def main() -> int:
         num_heads=args.num_heads,
         mlp_dim=args.mlp_dim,
         learning_rate=args.learning_rate,
+        bt4_learning_rate=args.bt4_learning_rate,
         weight_decay=args.weight_decay,
         encoder_dtype=args.encoder_dtype,
         param_dtype=args.param_dtype,
@@ -445,22 +747,58 @@ def main() -> int:
         jepa_target_sample_count=args.jepa_target_sample_count,
         jepa_gamma=args.jepa_gamma,
         jepa_sigreg_coeff=args.jepa_sigreg_coeff,
+        jepa_pred_sigreg_coeff=args.jepa_pred_sigreg_coeff,
+        jepa_sigreg_kind=args.jepa_sigreg_kind,
+        jepa_sigreg_proj_dim=args.jepa_sigreg_proj_dim,
+        value_coeff=args.value_coeff,
+        wdl_coeff=args.wdl_coeff,
+        loss_clip_value=args.loss_clip_value,
         jepa_action_contrast_coeff=args.jepa_action_contrast_coeff,
         jepa_action_contrast_margin=args.jepa_action_contrast_margin,
         contrastive_coeff=args.contrastive_coeff,
         contrastive_temperature=args.contrastive_temperature,
         candidate_count=args.candidate_count,
         use_qk_gain=args.use_qk_gain,
+        use_qk_norm=args.use_qk_norm,
+        use_xsa=args.use_xsa,
         use_muon=args.use_muon,
+        grad_clip_norm=args.grad_clip_norm,
+        lr_warmup_steps=args.lr_warmup_steps,
+        skip_nonfinite_updates=args.skip_nonfinite_updates,
+        unfreeze_bt4_encoder=args.unfreeze_bt4_encoder,
+        bt4_encode_chunk_size=args.bt4_encode_chunk_size,
+        jepa_state_rmsnorm=args.jepa_state_rmsnorm,
+        jepa_state_rms_scale_max=args.jepa_state_rms_scale_max,
+        jepa_teacher_forcing_steps=args.jepa_teacher_forcing_steps,
+        jepa_delta_rms_clip=args.jepa_delta_rms_clip,
+        remat_blocks=args.remat_blocks,
+        scan_layers=args.scan_layers,
     )
     model, optimizer = create_joint_components(params, config, seed=args.seed)
     checkpoint_manager = create_checkpoint_manager(
         local_checkpoint_root,
         save_interval_steps=args.save_every,
         max_to_keep=args.max_to_keep,
+        checkpoint_format=args.checkpoint_format,
+        async_orbax=args.async_orbax,
     )
 
     start_step = 0
+    if args.resume and args.init_checkpoint_uri:
+        raise SystemExit("--resume and --init-checkpoint-uri are mutually exclusive.")
+    if args.init_checkpoint_uri:
+        init_dir = output_dir / "init_checkpoint"
+        init_step_arg = args.init_checkpoint_step if args.init_checkpoint_step > 0 else None
+        init_source = sync_checkpoint_uri(args.init_checkpoint_uri, init_dir, step=init_step_arg)
+        init_step = init_step_arg if init_step_arg is not None else latest_checkpoint_step(init_source)
+        if init_step is None:
+            raise FileNotFoundError(f"No checkpoint found under --init-checkpoint-uri={args.init_checkpoint_uri!r}.")
+        load_training_checkpoint(init_source, model=model, optimizer=None, step=init_step, strict=False)
+        print(
+            "Initialized model from checkpoint with non-strict migration: "
+            f"source={args.init_checkpoint_uri} step={init_step}; optimizer=fresh"
+        )
+        sys.stdout.flush()
     if args.resume:
         resume_step = latest_checkpoint_step(local_checkpoint_root)
         source_root = local_checkpoint_root
@@ -537,67 +875,118 @@ def main() -> int:
     val_loader_obj = None
     if chunk_paths and (args.chunk_dir != "synthetic" or train_cache is not None):
         data_source = args.gcs_train_prefix or str(chunk_dir)
-        loader_obj = LeelaChunkDataLoader(
-            chunk_paths,
-            batch_size=args.batch_size,
-            seed=args.seed,
-            horizon=args.horizon,
-            batch_view="joint_latent_sasa",
-            legal_lmax=args.legal_lmax,
-            chunk_paths_provider=train_cache.local_paths if train_cache is not None else None,
-            shuffle_files=True if train_cache is not None else False,
-            drop_last=True,
-            prefetch_batches=args.loader_prefetch_batches,
-        )
+        if args.data_loader == "grain":
+            if train_cache is not None:
+                chunk_paths = train_cache.local_paths()
+            try:
+                loader_obj = create_grain_trajectory_batch_loader(
+                    chunk_paths,
+                    batch_size=args.batch_size,
+                    seed=args.seed,
+                    horizon=args.horizon,
+                    batch_view="joint_latent_sasa",
+                    legal_lmax=args.legal_lmax,
+                    shuffle=True,
+                    drop_last=True,
+                    worker_count=args.grain_workers,
+                    prefetch_batches=args.loader_prefetch_batches,
+                    shard_cache_size=args.grain_shard_cache_size,
+                )
+            except GrainUnavailableError as exc:
+                raise SystemExit(str(exc)) from exc
+        else:
+            loader_obj = LeelaChunkDataLoader(
+                chunk_paths,
+                batch_size=args.batch_size,
+                seed=args.seed,
+                horizon=args.horizon,
+                batch_view="joint_latent_sasa",
+                legal_lmax=args.legal_lmax,
+                chunk_paths_provider=train_cache.local_paths if train_cache is not None else None,
+                shuffle_files=True if train_cache is not None else False,
+                drop_last=True,
+                prefetch_batches=args.loader_prefetch_batches,
+            )
         loader = iter(loader_obj)
     if val_chunk_paths:
-        val_loader_obj = LeelaChunkDataLoader(
-            val_chunk_paths,
-            batch_size=args.batch_size,
-            seed=args.val_seed,
-            horizon=args.horizon,
-            batch_view="joint_latent_sasa",
-            legal_lmax=args.legal_lmax,
-            shuffle_files=False,
-            drop_last=False,
-            chunk_paths_provider=val_cache.local_paths if val_cache is not None else None,
-            prefetch_batches=max(0, min(args.loader_prefetch_batches, 2)),
-        )
+        if args.data_loader == "grain":
+            if val_cache is not None:
+                val_chunk_paths = val_cache.local_paths()
+            try:
+                val_loader_obj = create_grain_trajectory_batch_loader(
+                    val_chunk_paths,
+                    batch_size=args.batch_size,
+                    seed=args.val_seed,
+                    horizon=args.horizon,
+                    batch_view="joint_latent_sasa",
+                    legal_lmax=args.legal_lmax,
+                    shuffle=False,
+                    drop_last=False,
+                    worker_count=args.grain_workers,
+                    prefetch_batches=max(0, min(args.loader_prefetch_batches, 2)),
+                    shard_cache_size=args.grain_shard_cache_size,
+                )
+            except GrainUnavailableError as exc:
+                raise SystemExit(str(exc)) from exc
+        else:
+            val_loader_obj = LeelaChunkDataLoader(
+                val_chunk_paths,
+                batch_size=args.batch_size,
+                seed=args.val_seed,
+                horizon=args.horizon,
+                batch_view="joint_latent_sasa",
+                legal_lmax=args.legal_lmax,
+                shuffle_files=False,
+                drop_last=False,
+                chunk_paths_provider=val_cache.local_paths if val_cache is not None else None,
+                prefetch_batches=max(0, min(args.loader_prefetch_batches, 2)),
+            )
 
     run_config = config.__dict__.copy()
     run_config.update(vars(args))
     run_config["first_legality_coeff"] = first_legality_coeff
-    run_config["jepa_target_space"] = "raw_bt4_tokens" if args.jepa_target_mode == "future_bt4" else "current_bt4_tokens_repeated_diagnostic"
+    run_config["jepa_target_space"] = (
+        "projected_bt4_vectors" if args.jepa_target_mode == "projected_bt4" else "current_projected_vector_repeated_diagnostic"
+    )
+    run_config["value_wdl_target_source"] = "trajectory shard value_targets/wdl_targets; LC0 PGN v3 targets are final-game-result derived"
     run_config.update(
         {
             "model_family": "joint_latent_sasa",
             "objective_stage": args.stage,
             "batch_view": "joint_latent_sasa",
+            "data_loader": args.data_loader,
+            "data_parallel": bool(args.data_parallel),
+            "data_parallel_devices": data_parallel_devices,
+            "data_parallel_per_device_batch_size": args.batch_size // data_parallel_devices,
+            "checkpoint_format": args.checkpoint_format,
             "train_chunk_count": len(chunk_paths),
             "val_chunk_count": len(val_chunk_paths),
             "gcs_train_prefix": args.gcs_train_prefix,
             "gcs_val_prefix": args.gcs_val_prefix,
         }
     )
-    target_encoder_count = 0 if args.jepa_target_mode == "current_repeat" else (
-        args.horizon
-        if args.jepa_target_sample_count <= 0
-        else min(args.jepa_target_sample_count, args.horizon)
-    )
+    target_encoder_count = 0 if args.jepa_target_mode == "current_repeat" else args.horizon
+    encoder_forward_count = 1 + target_encoder_count
+    if args.stage == "stage2":
+        # Stage 2 also rolls out contrastive candidates. Current implementation encodes
+        # candidate current boards plus all candidate future boards for valid negatives.
+        encoder_forward_count += args.horizon + 1
     flops = estimate_joint_step_flops(
         batch_size=args.batch_size,
         horizon=args.horizon,
         token_dim=args.token_dim,
         dfm_layers=args.dfm_layers,
         jepa_layers=args.jepa_layers,
-        jepa_width=int(params["embedding_size"]),
-        jepa_mlp_dim=args.jepa_mlp_dim if args.jepa_mlp_dim > 0 else int(params["embedding_size"]) * 4,
+        jepa_width=args.z_dim,
+        jepa_mlp_dim=args.jepa_mlp_dim if args.jepa_mlp_dim > 0 else args.z_dim * 4,
         mlp_dim=args.mlp_dim,
         bt4_encoder_forward_flops_per_batch=estimate_bt4_theory(
             params,
             batch_size=args.batch_size,
-        ).encoder_forward_flops,
-        bt4_encoder_forward_count=1 + target_encoder_count,
+        ).encoder_forward_flops * (3.0 if args.unfreeze_bt4_encoder else 1.0),
+        bt4_encoder_forward_count=encoder_forward_count,
+        stage=args.stage,
+        candidate_count=args.candidate_count,
     )
     run_config.update(flops)
     (output_dir / "run_config.json").write_text(json.dumps(run_config, indent=2, sort_keys=True), encoding="utf-8")
@@ -616,6 +1005,11 @@ def main() -> int:
         )
 
     print(f"backend={jax.default_backend()} process_index={jax.process_index()} process_count={jax.process_count()} device={jax.devices()[0]}")
+    print(
+        "data_parallel="
+        f"{bool(args.data_parallel)} devices={data_parallel_devices} "
+        f"per_device_batch={args.batch_size // data_parallel_devices}"
+    )
     print(f"data_source={data_source}")
     print(f"models_dir={model_paths['models_dir']}")
     print(f"output_dir={output_dir}")
@@ -649,13 +1043,19 @@ def main() -> int:
             else:
                 batch = build_synthetic_joint_batch(args.batch_size, args.horizon, args.legal_lmax)
             data_fetch_time = time.perf_counter() - fetch_start
+            next_step = step + 1
             host_batch_start = time.perf_counter()
             if 0.0 <= args.train_deterministic_t <= 1.0:
                 batch = dict(batch)
                 batch["deterministic_t"] = np.asarray(args.train_deterministic_t, dtype=np.float32)
+            if args.jepa_teacher_forcing_steps > 0:
+                batch = dict(batch)
+                batch["jepa_teacher_forcing"] = np.asarray(
+                    1.0 if next_step <= args.jepa_teacher_forcing_steps else 0.0,
+                    dtype=np.float32,
+                )
             host_batch_time = time.perf_counter() - host_batch_start
 
-            next_step = step + 1
             if (
                 profile_enabled
                 and not profile_started
@@ -663,7 +1063,7 @@ def main() -> int:
                 and jax.process_index() == 0
             ):
                 profile_dir.mkdir(parents=True, exist_ok=True)
-                jax.profiler.start_trace(str(profile_dir))
+                jax.profiler.start_trace(str(profile_dir), create_perfetto_trace=True)
                 profile_started = True
                 profile_active = True
                 print(f"jax_profile_start step={next_step} dir={profile_dir}")
@@ -671,11 +1071,37 @@ def main() -> int:
 
             train_step_start = time.perf_counter()
             with jax.profiler.StepTraceAnnotation("train_joint_latent_sasa", step_num=next_step):
-                if args.stage == "stage2":
-                    loss, aux = train_joint_stage2_step(model, optimizer, batch, step_rng)
+                if data_parallel_devices > 1:
+                    batch_for_step = shard_batch_for_data_parallel(
+                        batch,
+                        device_count=data_parallel_devices,
+                        global_batch_size=args.batch_size,
+                    )
+                    step_rng_for_step = jax.random.split(step_rng, data_parallel_devices)
+                    if args.stage == "stage2":
+                        loss, aux = train_joint_stage2_step_data_parallel(
+                            model,
+                            optimizer,
+                            batch_for_step,
+                            step_rng_for_step,
+                        )
+                    else:
+                        loss, aux = train_joint_stage1_step_data_parallel(
+                            model,
+                            optimizer,
+                            batch_for_step,
+                            step_rng_for_step,
+                        )
+                elif args.stage == "stage2":
+                    train_fn = train_joint_stage2_step_donated if args.donate_train_state else train_joint_stage2_step
+                    loss, aux = train_fn(model, optimizer, batch, step_rng)
                 else:
-                    loss, aux = train_joint_stage1_step(model, optimizer, batch, step_rng)
+                    train_fn = train_joint_stage1_step_donated if args.donate_train_state else train_joint_stage1_step
+                    loss, aux = train_fn(model, optimizer, batch, step_rng)
             jax.block_until_ready((loss, aux))
+            if data_parallel_devices > 1:
+                loss = unreplicate_data_parallel_tree(loss, device_count=data_parallel_devices)
+                aux = unreplicate_data_parallel_tree(aux, device_count=data_parallel_devices)
             step_time = time.perf_counter() - train_step_start
             completed_step = step + 1
 
@@ -687,6 +1113,8 @@ def main() -> int:
                 "data_fetch_time_s": data_fetch_time,
                 "host_batch_time_s": host_batch_time,
                 "loader_prefetch_batches": float(args.loader_prefetch_batches),
+                "data_parallel_devices": float(data_parallel_devices),
+                "data_parallel_per_device_batch_size": float(args.batch_size // data_parallel_devices),
             }
             metrics.update(flatten_aux_metrics(aux))
             if profile_active:
@@ -702,7 +1130,7 @@ def main() -> int:
             if val_cache is not None:
                 metrics.update({f"gcs_val_cache_{key}": value for key, value in val_cache.stats().items()})
 
-            if args.diagnostics_every > 0 and (
+            if args.diagnostics_every > 0 and data_parallel_devices == 1 and (
                 completed_step % args.diagnostics_every == 0 or completed_step == args.steps
             ):
                 diagnostics_start = time.perf_counter()
@@ -732,6 +1160,7 @@ def main() -> int:
                     legal_lmax=args.legal_lmax,
                     deterministic_t=args.val_deterministic_t,
                     stage=args.stage,
+                    data_parallel_devices=data_parallel_devices,
                 )
                 metrics.update(add_validation_prefix(val_metrics))
                 metrics["validation_time_s"] = time.perf_counter() - validation_start
@@ -755,29 +1184,44 @@ def main() -> int:
             metrics_log.flush()
 
             if step % args.log_every == 0 or completed_step == args.steps:
-                print(
-                    " ".join(
+                log_parts = [
+                    f"step={completed_step}",
+                    f"loss={metrics['loss']:.6f}",
+                    f"dfm_ce={metrics.get('dfm_ce_loss', 0.0):.6f}",
+                    f"legal={metrics.get('legality_loss', 0.0):.6f}",
+                    f"first_legal={metrics.get('first_legality_loss', 0.0):.6f}",
+                    f"horizon_legal={metrics.get('horizon_legality_loss', 0.0):.6f}",
+                    f"jepa={metrics.get('jepa_positive_loss', 0.0):.6f}",
+                    f"tf={metrics.get('jepa_teacher_forcing', 0.0):.0f}",
+                    f"sigreg={metrics.get('jepa_sigreg_loss', 0.0):.6f}",
+                    f"pred_sigreg={metrics.get('jepa_pred_sigreg_loss', 0.0):.6f}",
+                    f"value={metrics.get('value_loss', 0.0):.6f}",
+                    f"wdl={metrics.get('wdl_loss', 0.0):.6f}",
+                    f"act_contrast={metrics.get('jepa_action_contrast_loss', 0.0):.6f}",
+                    f"raw_mse={metrics.get('jepa_raw_mse', 0.0):.6f}",
+                    f"z_std={metrics.get('z_state_std', 0.0):.4f}",
+                    f"acc={metrics.get('accuracy', 0.0):.4f}",
+                ]
+                if "contrastive_loss" in metrics:
+                    log_parts.extend(
                         [
-                            f"step={completed_step}",
-                            f"loss={metrics['loss']:.6f}",
-                            f"dfm_ce={metrics.get('dfm_ce_loss', 0.0):.6f}",
-                            f"legal={metrics.get('legality_loss', 0.0):.6f}",
-                            f"first_legal={metrics.get('first_legality_loss', 0.0):.6f}",
-                            f"horizon_legal={metrics.get('horizon_legality_loss', 0.0):.6f}",
-                            f"jepa={metrics.get('jepa_positive_loss', 0.0):.6f}",
-                            f"sigreg={metrics.get('jepa_sigreg_loss', 0.0):.6f}",
-                            f"act_contrast={metrics.get('jepa_action_contrast_loss', 0.0):.6f}",
-                            f"raw_mse={metrics.get('jepa_raw_mse', 0.0):.6f}",
-                            f"acc={metrics.get('accuracy', 0.0):.4f}",
-                            f"step_time_s={metrics['step_time_s']:.3f}",
-                            f"fetch_s={metrics.get('data_fetch_time_s', 0.0):.3f}",
-                            f"host_frac={metrics.get('host_overhead_fraction', 0.0):.2f}",
-                            f"ex_per_s={metrics['examples_per_second']:.1f}",
-                            f"total_mfu={metrics['estimated_total_mfu']:.4f}",
-                            f"iter_mfu={metrics.get('estimated_iteration_mfu', 0.0):.4f}",
+                            f"contrast={metrics.get('contrastive_loss', 0.0):.6f}",
+                            f"contrast_acc={metrics.get('contrastive_accuracy', 0.0):.4f}",
+                            f"contrast_margin={metrics.get('contrastive_similarity_margin', 0.0):.6f}",
+                            f"contrast_valid={metrics.get('contrastive_valid_fraction', 0.0):.4f}",
                         ]
                     )
+                log_parts.extend(
+                    [
+                        f"step_time_s={metrics['step_time_s']:.3f}",
+                        f"fetch_s={metrics.get('data_fetch_time_s', 0.0):.3f}",
+                        f"host_frac={metrics.get('host_overhead_fraction', 0.0):.2f}",
+                        f"ex_per_s={metrics['examples_per_second']:.1f}",
+                        f"total_mfu={metrics['estimated_total_mfu']:.4f}",
+                        f"iter_mfu={metrics.get('estimated_iteration_mfu', 0.0):.4f}",
+                    ]
                 )
+                print(" ".join(log_parts))
                 sys.stdout.flush()
 
             if run is not None and jax.process_index() == 0:
@@ -790,7 +1234,9 @@ def main() -> int:
                 sys.stdout.flush()
                 sync_profile_dir(profile_dir, args.profile_uri)
 
-            should_save = (completed_step % args.save_every == 0) or (completed_step == args.steps)
+            should_save = (not args.disable_final_checkpoint) and (
+                (completed_step % args.save_every == 0) or (completed_step == args.steps)
+            )
             if should_save:
                 save_training_checkpoint(
                     checkpoint_manager,
@@ -803,6 +1249,7 @@ def main() -> int:
                     extra={"last_metrics": metrics, "checkpoint_schema": f"joint_latent_sasa_{args.stage}"},
                 )
                 if jax.process_index() == 0 and gcs_checkpoint_root:
+                    wait_for_checkpoint_completion(checkpoint_manager)
                     subprocess.run(
                         f"/snap/google-cloud-cli/current/bin/gcloud storage cp --recursive {shlex.quote(str(local_checkpoint_root))}/* {shlex.quote(gcs_checkpoint_root)}/",
                         shell=True,
@@ -824,7 +1271,7 @@ def main() -> int:
             val_cache.stop()
         metrics_log.close()
         latest_saved_step = checkpoint_manager.latest_step()
-        if completed_step > start_step and latest_saved_step != completed_step:
+        if not args.disable_final_checkpoint and completed_step > start_step and latest_saved_step != completed_step:
             save_training_checkpoint(
                 checkpoint_manager,
                 model=model,
@@ -836,6 +1283,7 @@ def main() -> int:
                 extra={"last_metrics": last_metrics, "forced": True, "checkpoint_schema": f"joint_latent_sasa_{args.stage}"},
                 force=True,
             )
+        wait_for_checkpoint_completion(checkpoint_manager)
         if jax.process_index() == 0 and gcs_checkpoint_root:
             subprocess.run(
                 f"/snap/google-cloud-cli/current/bin/gcloud storage cp --recursive {shlex.quote(str(local_checkpoint_root))}/* {shlex.quote(gcs_checkpoint_root)}/",

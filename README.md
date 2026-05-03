@@ -121,13 +121,16 @@ Use `docs/training_phases.md` for the exact phase plan and launch guardrails.
 
 The next research target is Latent-SASA joint pretraining:
 
-- BT4 stays frozen initially.
-- A shared online BT4-to-planning-latent base feeds small DFM and JEPA adapters.
+- BT4 embedding/encoder are unfrozen in the active joint path with a small
+  `1e-5` learning rate.
+- A trainable BT4-token-to-state-vector projector maps `64 x 1024` BT4 tokens
+  into one `z_dim` JEPA state vector.
 - DFM denoises explicit action chunks.
-- JEPA predicts BT4-derived future latents for those action chunks.
+- JEPA predicts projected BT4 future state vectors for those action chunks.
 - JEPA consumes DFM action-token hidden states, not only action IDs, so
   future-latent losses shape the DFM planner representation.
-- Later ranking/value heads score real chunks above corrupted legal chunks.
+- Value/WDL heads score predicted projected futures. Candidate ranking is
+  deferred until projected JEPA dynamics are stable.
 
 Standalone DFM and JEPA remain baselines. The detailed design lives in
 `docs/implementation_plan_gold.md`; the repo-grounded implementation checklist
@@ -135,22 +138,25 @@ is `docs/latent_sasa_coupling.md`. The first joint APIs are in place:
 `planner_from_latents(..., return_hidden=True)`,
 `jepa_rollout_from_latents(..., action_hidden=...)`, a `joint_latent_sasa`
 loader view, legal-prefix candidates, a Stage 1 joint loss primitive, and a
-queue-compatible Stage 1 trainer with checkpoint save/resume. The remaining
-work is reranking evals and later distillation; Stage 2 contrastive loss has a
-local smoke-tested trainer path. Grain is deferred until the compact loader schema is stable; the current
+queue-compatible Stage 1 trainer with checkpoint save/resume. The current
+active design is documented in `docs/projected_jepa_unfreeze_plan.md`;
+contrastive/ranking is no longer in the active training loss. Grain is deferred until the compact loader schema is stable; the current
 implementation starts with a custom deterministic, column-selective loader.
 
 ## JEPA architecture
 
-The trainable model keeps BT4 frozen and trains only a small transition head:
+The active joint model trains BT4 encoder layers, a state projector, DFM, and
+JEPA together:
 
 - BT4 encoder produces `64 x 1024` square tokens.
-- JEPA consumes those raw frozen BT4 tokens directly as `z_t`.
-- A learned action embedding conditions the current square tokens at each rollout step.
-- A small transformer unrolls a predicted token sequence over an action chunk.
-- The model predicts future raw BT4 tokens, value targets, and WDL targets for each horizon step.
-- `token_dim` remains the compact DFM/planning width in joint runs; JEPA target
-  space is anchored to BT4 width `1024`, not a trainable projector.
+- The state projector maps those tokens to `z_t [B, z_dim]`.
+- DFM consumes projected square tokens and returns action logits plus
+  `action_hidden [B, H, token_dim]`.
+- JEPA consumes true action embeddings plus DFM action hidden states and predicts
+  future projected vectors `z_{t+1:t+H}`.
+- The model predicts value and WDL from predicted projected future vectors.
+- `token_dim` remains the compact DFM/planning width; `z_dim` is the JEPA state
+  vector width.
 
 `scripts/train_jepa.py` defaults:
 
