@@ -20,7 +20,7 @@ from chess_dfm_jax.nnx_bt4 import (
     make_bt4_model,
     rounded_swiglu_dim,
 )
-from chess_dfm_jax.training.dfm import mask_actions
+from chess_dfm_jax.training.dfm import mask_actions, refine_actions_from_latents
 from chess_dfm_jax.training.jepa import _l2_normalize, _parse_compute_dtype, _sigreg_loss as _quantile_sigreg_loss
 
 
@@ -860,7 +860,7 @@ def joint_stage1_loss_fn(
         target_rms = jax.lax.stop_gradient(
             jnp.sqrt(jnp.mean(jnp.square(jnp.asarray(target_vectors, dtype=jnp.float32)), axis=-1) + 1e-6)
         )
-        sample_norm_loss = jnp.square(pred_rms - target_rms)
+        sample_norm_loss = jnp.abs(jnp.log(pred_rms) - jnp.log(target_rms))
         sample_jepa = sample_raw_mse + sample_norm_loss
     horizon_weights = model.config.jepa_gamma ** selected_horizons.astype(jnp.float32)
     jepa_mask = future_valid_for_loss * valid[:, None] * horizon_weights[None, :]
@@ -1090,7 +1090,7 @@ def joint_jepa_positive_loss_fn(
     )
     pred_rms = jnp.sqrt(jnp.mean(jnp.square(jnp.asarray(pred_z, dtype=jnp.float32)), axis=-1) + 1e-6)
     target_rms = jax.lax.stop_gradient(jnp.sqrt(jnp.mean(jnp.square(jnp.asarray(target, dtype=jnp.float32)), axis=-1) + 1e-6))
-    sample_norm_loss = jnp.square(pred_rms - target_rms)
+    sample_norm_loss = jnp.abs(jnp.log(pred_rms) - jnp.log(target_rms))
     pred_norm = _l2_normalize(jnp.asarray(pred_z, dtype=jnp.float32))
     target_norm = _l2_normalize(jnp.asarray(target, dtype=jnp.float32))
     cosine = jnp.sum(pred_norm * target_norm, axis=-1)
@@ -1505,6 +1505,18 @@ def eval_joint_stage2_step(
     return joint_stage2_loss_fn(model, batch, rng)
 
 
+def refine_joint_dfm_actions_from_current(
+    model: JointLatentSASAModel,
+    current_planes: jnp.ndarray,
+    legal_mask: jnp.ndarray,
+    refinement_steps: int,
+) -> jnp.ndarray:
+    """Run iterative DFM sampling for the joint model with one BT4 encode."""
+    bt4_tokens = model.encode_bt4_tokens(current_planes)
+    z_dfm = model.dfm_latents(bt4_tokens)
+    return refine_actions_from_latents(model, z_dfm, legal_mask, refinement_steps)
+
+
 def create_joint_components(
     bt4_params: dict[str, Any],
     config: JointLatentSASAConfig,
@@ -1582,6 +1594,7 @@ __all__ = [
     "joint_stage1_loss_fn",
     "joint_stage2_loss_fn",
     "legal_mass_from_indices",
+    "refine_joint_dfm_actions_from_current",
     "sample_legal_prefix_candidates",
     "train_joint_stage1_step",
     "train_joint_stage1_step_data_parallel",

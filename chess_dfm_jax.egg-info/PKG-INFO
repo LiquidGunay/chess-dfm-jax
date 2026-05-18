@@ -17,6 +17,7 @@ Requires-Dist: matplotlib>=3.9.0
 Requires-Dist: numpy>=2.0.0
 Requires-Dist: onnxruntime>=1.23.0
 Requires-Dist: optax>=0.2.5
+Requires-Dist: orbax-checkpoint==0.11.36
 Requires-Dist: pandas>=2.2.0
 Requires-Dist: protobuf>=6.0.0
 Requires-Dist: python-chess>=1.11.0
@@ -43,6 +44,8 @@ point for:
 - roofline and step profiling
 - preemption-aware Spot TPU batch training with raw NumPy checkpoints
 - trajectory-v2 DFM training on exact multi-ply chess rollouts
+- queued TPU experiment execution for multiple ablations per provisioned worker
+- Latent-SASA joint DFM+JEPA pretraining
 - dataset QA/deduplication and run monitoring through marimo notebooks
 
 ## Layout
@@ -110,6 +113,7 @@ Expected filenames:
 - `python scripts/train_jepa.py --steps 10 --chunk-dir /path/to/chunks`
 - `python scripts/train_jepa.py --steps 50000 --run-name local-jepa --resume --checkpoint-uri runs/jepa/local-jepa/checkpoints`
 - `python scripts/run_tpu_spot_jepa.py --job-spec docs/tpu_spot_job_spec.example.json`
+- `python scripts/run_experiment_queue.py --queue experiments.jsonl --dry-run`
 - `uvx marimo check notebooks/state_action_training_browser.py`
 - `uv run notebooks/state_action_training_browser.py`
 - `uvx marimo check notebooks/trajectory_dedup_browser.py`
@@ -133,29 +137,63 @@ trajectory-v2 shards:
   datasets. Training blocks until every visible train shard is cached locally,
   preventing the earlier growing-cache replay artifact.
 
-The active LC0-only Phase A run uses:
+The clean LC0-only Phase A baseline uses:
 
 - model: DFM `token_dim=640`, `num_layers=8`, `num_heads=10`, `mlp_dim=2560`
 - optimizer: Muon where configured by the trainer, learning rate `6e-4`
 - data: LC0 H8 train/val trajectory-v2 shards
 - objective: first-ply curriculum with all actions masked at `t=0`
-- loss: `2 * CE(first_move) + 5 * illegal_prob_mass(first_move)`
+- loss: `CE(first_move) + 7.64 * illegal_prob_mass(first_move)` by default,
+  with the legality coefficient recomputed from dataset average legal-move
+  count for major new datasets
 
 Use `docs/training_phases.md` for the exact phase plan and launch guardrails.
 
+## Latent-SASA direction
+
+The next research target is Latent-SASA joint pretraining:
+
+- BT4 embedding/encoder are unfrozen in the active joint path with a small
+  `1e-5` learning rate.
+- A trainable BT4-token-to-state-vector projector maps `64 x 1024` BT4 tokens
+  into one `z_dim` JEPA state vector.
+- DFM denoises explicit action chunks.
+- JEPA predicts projected BT4 future state vectors for those action chunks.
+- JEPA consumes DFM action-token hidden states, not only action IDs, so
+  future-latent losses shape the DFM planner representation.
+- Value/WDL heads score predicted projected futures. Candidate ranking is
+  deferred until projected JEPA dynamics are stable.
+
+Standalone DFM and JEPA remain baselines. The detailed design lives in
+`docs/implementation_plan_gold.md`; the repo-grounded implementation checklist
+is `docs/latent_sasa_coupling.md`. The first joint APIs are in place:
+`planner_from_latents(..., return_hidden=True)`,
+`jepa_rollout_from_latents(..., action_hidden=...)`, a `joint_latent_sasa`
+loader view, legal-prefix candidates, a Stage 1 joint loss primitive, and a
+queue-compatible Stage 1 trainer with checkpoint save/resume. The current
+active design is documented in `docs/projected_jepa_unfreeze_plan.md`;
+contrastive/ranking is no longer in the active training loss. Grain is deferred until the compact loader schema is stable; the current
+implementation starts with a custom deterministic, column-selective loader.
+
 ## JEPA architecture
 
-The trainable model keeps BT4 frozen and trains only a small transition head:
+The active joint model trains BT4 encoder layers, a state projector, DFM, and
+JEPA together:
 
 - BT4 encoder produces `64 x 1024` square tokens.
-- A trainable projector maps those tokens to `64 x token_dim`.
-- A learned action embedding conditions the current square tokens at each rollout step.
-- A small transformer unrolls a predicted token sequence over an action chunk.
-- The model predicts future projected BT4 tokens, value targets, and WDL targets for each horizon step.
+- The state projector maps those tokens to `z_t [B, z_dim]`.
+- DFM consumes projected square tokens and returns action logits plus
+  `action_hidden [B, H, token_dim]`.
+- JEPA consumes true action embeddings plus DFM action hidden states and predicts
+  future projected vectors `z_{t+1:t+H}`.
+- The model predicts value and WDL from predicted projected future vectors.
+- `token_dim` remains the compact DFM/planning width; `z_dim` is the JEPA state
+  vector width.
 
 `scripts/train_jepa.py` defaults:
 
-- `token_dim=512`
+- raw JEPA token width is BT4 width `1024`
+- `token_dim=512` remains a compatibility/hidden-size knob for the action MLP
 - `num_layers=4`
 - `num_heads=8`
 - `mlp_dim=2048`
@@ -164,6 +202,11 @@ The trainable model keeps BT4 frozen and trains only a small transition head:
 - TPU default: encoder `bfloat16`, head params `float32`, head compute `bfloat16`
 
 The Spot TPU example spec uses a smaller `token_dim=256, mlp_dim=1024` configuration for cost-controlled training. Two-ply probes are analysis-only and are not part of the training loss.
+
+The JEPA trainer uses the `jepa_latent` loader view for trajectory shards. That
+view keeps `planes_t`, `actions`, `planes_future`, `future_valid`, and optional
+value/WDL targets, but skips dense legal masks because latent transition
+training does not consume them.
 
 ## Checkpoints and resume
 
@@ -174,19 +217,28 @@ normal resume, optimizer state.
 - Local runs default to `runs/jepa/<run-name>/checkpoints/` or
   `runs/dfm/<run-name>/checkpoints/`.
 - Resume uses `--resume` and restores the latest step from the checkpoint directory.
+- Curriculum branches can use `--init-checkpoint-uri` to initialize model
+  weights from a prior run while writing checkpoints under a new run ID; GCS
+  initialization copies only the selected checkpoint step.
+- GCS resume in both DFM and JEPA syncs only the selected checkpoint step, not
+  the whole checkpoint tree.
 - The trainer handles `SIGTERM` and writes a final checkpoint before exiting.
 - Only trainable head/projector state and optimizer state are checkpointed;
   frozen BT4 weights are reloaded from the pinned model file.
 
 Do not run two trainers against the same checkpoint directory at the same time.
+The next checkpointing upgrade is asynchronous GCS upload of completed local
+checkpoints; local checkpoint writes remain synchronous and raw NumPy.
 
 ## Spot TPU flow
 
-The first cloud path is single-host `v5litepod-8` Spot TPU VMs.
+The first cloud path is single-host TPU VMs.
 
 - Use `docs/tpu_spot_job_spec.example.json` as the controller spec template.
 - The local controller uploads an immutable source snapshot to GCS.
 - The TPU VM startup script installs `jax[tpu]`, installs the repo, downloads models/data, and runs `scripts/train_jepa.py --resume`.
+- For sweeps, run `scripts/run_experiment_queue.py` as the TPU entry command so
+  several experiments execute on one provisioned VM.
 - Raw NumPy checkpoints go to a regional GCS path so a later zone retry can
   resume safely.
 

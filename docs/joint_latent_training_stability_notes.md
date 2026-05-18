@@ -116,7 +116,7 @@ where:
 
 ```text
 jepa_raw_mse = mean((pred_z - target_z) ** 2, axis=-1)
-jepa_norm_loss = (rms(pred_z) - stop_gradient(rms(target_z))) ** 2
+jepa_norm_loss = abs(log(rms(pred_z)) - stop_gradient(log(rms(target_z))))
 ```
 
 It is averaged over valid examples and horizons. `jepa_loss_by_horizon` is this

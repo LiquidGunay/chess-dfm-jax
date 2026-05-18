@@ -33,7 +33,7 @@ from chess_dfm_jax.training.checkpoints import (  # noqa: E402
     load_training_checkpoint,
     read_checkpoint_metadata,
 )
-from chess_dfm_jax.training.dfm import DFMConfig, create_dfm_components, eval_dfm_step  # noqa: E402
+from chess_dfm_jax.training.dfm import DFMConfig, create_dfm_components, eval_dfm_step, refine_actions_from_current  # noqa: E402
 
 
 def parse_args() -> argparse.Namespace:
@@ -139,36 +139,11 @@ def numeric_jax_batch(batch: dict[str, np.ndarray], deterministic_t: float) -> d
     return out
 
 
-def _refine_step_logits(model, planes: jnp.ndarray, actions: jnp.ndarray, t: jnp.ndarray, legal_mask: jnp.ndarray):
-    logits = model(planes, actions, t)
-    masked_first = jnp.where(legal_mask[:, None, :], logits[:, 0:1, :], -1e9)
-    if logits.shape[1] == 1:
-        return masked_first
-    return jnp.concatenate([masked_first, logits[:, 1:, :]], axis=1)
-
-
 def refine_actions(model, planes: np.ndarray, legal_mask: np.ndarray, refinement_steps: int) -> np.ndarray:
-    batch_size = planes.shape[0]
-    horizon = model.config.horizon
-    mask_token = model.config.action_vocab_size
-    x = jnp.full((batch_size, horizon), mask_token, dtype=jnp.int32)
     planes_jnp = jnp.asarray(planes)
     legal_mask_jnp = jnp.asarray(legal_mask, dtype=bool)
-
-    for i in range(refinement_steps):
-        t = jnp.full((batch_size,), i / refinement_steps, dtype=jnp.float32)
-        logits = _refine_step_logits(model, planes_jnp, x, t, legal_mask_jnp)
-        probs = jax.nn.softmax(logits, axis=-1)
-        max_probs = jnp.max(probs, axis=-1)
-        preds = jnp.argmax(logits, axis=-1)
-
-        num_unmasked_target = (horizon * (i + 1)) // refinement_steps
-        max_probs_all = jnp.where(x == mask_token, max_probs, 2.0)
-        kth_idx = max(0, horizon - num_unmasked_target)
-        thresholds = jnp.sort(max_probs_all, axis=-1)[:, kth_idx : kth_idx + 1]
-        x = jnp.where(max_probs_all >= thresholds, preds, x)
-
-    return np.asarray(jax.block_until_ready(x))
+    actions = refine_actions_from_current(model, planes_jnp, legal_mask_jnp, refinement_steps)
+    return np.asarray(jax.block_until_ready(actions))
 
 
 def exact_sequence_legal(actions: np.ndarray, fen: str) -> tuple[bool, int]:
@@ -213,6 +188,7 @@ def evaluate(args: argparse.Namespace, checkpoint_dir: Path) -> dict[str, Any]:
         shuffle_files=False,
         drop_last=False,
         include_metadata=True,
+        batch_view="dfm_action",
     )
 
     rng = jax.random.PRNGKey(args.seed)
@@ -304,6 +280,7 @@ def evaluate(args: argparse.Namespace, checkpoint_dir: Path) -> dict[str, Any]:
         "batch_count": batches_seen,
         "config": config.__dict__,
         "refinement_steps": args.refinement_steps,
+        "refinement_caches_bt4": True,
         "deterministic_t": args.deterministic_t,
     }
     metrics.update({key: value / sample_count for key, value in totals.items()})

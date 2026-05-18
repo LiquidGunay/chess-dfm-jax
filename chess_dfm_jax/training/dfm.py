@@ -157,6 +157,63 @@ class DFMDenoiser(nnx.Module):
         return self.planner_from_latents(z, noisy_actions, t)
 
 
+def mask_first_action_logits(logits: jnp.ndarray, legal_mask: jnp.ndarray) -> jnp.ndarray:
+    """Apply root-position legality masking to the first action token only."""
+    masked_first = jnp.where(legal_mask[:, None, :], logits[:, 0:1, :], -1e9)
+    if logits.shape[1] == 1:
+        return masked_first
+    return jnp.concatenate([masked_first, logits[:, 1:, :]], axis=1)
+
+
+def refine_actions_from_latents(
+    model,
+    z_dfm: jnp.ndarray,
+    legal_mask: jnp.ndarray,
+    refinement_steps: int,
+) -> jnp.ndarray:
+    """Iteratively unmask an action sequence from cached DFM board latents.
+
+    The expensive BT4 board encoder is intentionally outside this loop. This
+    makes test-time refinement scale with the lightweight DFM planner, not with
+    repeated board encodes.
+    """
+    if refinement_steps < 1:
+        raise ValueError(f"refinement_steps must be >= 1, got {refinement_steps}")
+
+    batch_size = z_dfm.shape[0]
+    horizon = model.config.horizon
+    mask_token = model.config.action_vocab_size
+    x = jnp.full((batch_size, horizon), mask_token, dtype=jnp.int32)
+    legal_mask = jnp.asarray(legal_mask, dtype=bool)
+
+    for i in range(refinement_steps):
+        t = jnp.full((batch_size,), i / refinement_steps, dtype=jnp.float32)
+        logits = model.planner_from_latents(z_dfm, x, t)
+        logits = mask_first_action_logits(logits, legal_mask)
+        probs = jax.nn.softmax(logits, axis=-1)
+        max_probs = jnp.max(probs, axis=-1)
+        preds = jnp.argmax(logits, axis=-1)
+
+        num_unmasked_target = (horizon * (i + 1)) // refinement_steps
+        max_probs_all = jnp.where(x == mask_token, max_probs, 2.0)
+        kth_idx = max(0, horizon - num_unmasked_target)
+        thresholds = jnp.sort(max_probs_all, axis=-1)[:, kth_idx : kth_idx + 1]
+        x = jnp.where(max_probs_all >= thresholds, preds, x)
+
+    return x
+
+
+def refine_actions_from_current(
+    model: DFMDenoiser,
+    current_planes: jnp.ndarray,
+    legal_mask: jnp.ndarray,
+    refinement_steps: int,
+) -> jnp.ndarray:
+    """Run cached-BT4 DFM refinement from current board planes."""
+    z_dfm = model.encode_current(current_planes)
+    return refine_actions_from_latents(model, z_dfm, legal_mask, refinement_steps)
+
+
 def mask_actions(actions: jnp.ndarray, mask_prob: jnp.ndarray, mask_token_id: int, rng: jnp.ndarray) -> tuple[jnp.ndarray, jnp.ndarray]:
     """Apply masking for Categorical Diffusion.
     actions: [B, K]

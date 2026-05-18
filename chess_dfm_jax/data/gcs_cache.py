@@ -128,18 +128,36 @@ class GCSShardCache:
     download_workers: int = 2
     shuffle_downloads: bool = True
     seed: int = 0
+    shard_index: int = 0
+    shard_count: int = 1
     _stop_event: threading.Event = field(default_factory=threading.Event, init=False)
     _thread: threading.Thread | None = field(default=None, init=False)
-    _lock: threading.Lock = field(default_factory=threading.Lock, init=False)
+    _lock: threading.RLock = field(default_factory=threading.RLock, init=False)
     _remote_seen: int = field(default=0, init=False)
     _downloaded: int = field(default=0, init=False)
     _promoted: int = field(default=0, init=False)
     _failed: int = field(default=0, init=False)
+    _assigned_local_names: set[str] = field(default_factory=set, init=False)
 
     def __post_init__(self) -> None:
         self.cache_path = Path(self.cache_dir)
         self.cache_path.mkdir(parents=True, exist_ok=True)
         self.rng = random.Random(self.seed)
+        self.shard_index = int(self.shard_index)
+        self.shard_count = max(1, int(self.shard_count))
+        if self.shard_index < 0 or self.shard_index >= self.shard_count:
+            raise ValueError(
+                f"shard_index={self.shard_index} must be in [0, {self.shard_count})."
+            )
+
+    def _process_visible_uris(self, uris: list[str]) -> list[str]:
+        if self.shard_count <= 1:
+            return uris
+        return [
+            uri
+            for index, uri in enumerate(sorted(uris))
+            if index % self.shard_count == self.shard_index
+        ]
 
     def start(self) -> None:
         if self._thread is not None and self._thread.is_alive():
@@ -153,6 +171,15 @@ class GCSShardCache:
             self._thread.join(timeout=5)
 
     def local_paths(self) -> list[str]:
+        if self.shard_count > 1:
+            with self._lock:
+                assigned = set(self._assigned_local_names)
+            if assigned:
+                return sorted(
+                    str(path)
+                    for path in self.cache_path.glob("*.npz")
+                    if path.name in assigned
+                )
         return sorted(str(path) for path in self.cache_path.glob("*.npz"))
 
     def wait_for_minimum(self, min_shards: int, timeout_s: int = 1800) -> None:
@@ -209,9 +236,14 @@ class GCSShardCache:
         Keeping the flat layout preserves compatibility with older trainers and
         avoids duplicate shard paths being returned to callers.
         """
-        remote = list_gcs_npz(self.gcs_prefix)
+        if self.shard_count > 1:
+            # Bulk prefix sync would copy every shard on every host before filtering.
+            # In multi-host mode prefer per-shard downloads for the assigned partition.
+            return False
+        remote = self._process_visible_uris(list_gcs_npz(self.gcs_prefix))
         with self._lock:
             self._remote_seen = len(remote)
+            self._assigned_local_names = {local_name_for_uri(uri) for uri in remote}
         if not remote:
             return False
 
@@ -253,9 +285,10 @@ class GCSShardCache:
         return any_synced
 
     def refresh_once(self) -> None:
-        remote = list_gcs_npz(self.gcs_prefix)
+        remote = self._process_visible_uris(list_gcs_npz(self.gcs_prefix))
         with self._lock:
             self._remote_seen = len(remote)
+            self._assigned_local_names = {local_name_for_uri(uri) for uri in remote}
         if self.shuffle_downloads:
             self.rng.shuffle(remote)
 

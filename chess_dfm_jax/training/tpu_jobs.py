@@ -132,6 +132,11 @@ class TPUJobSpec:
     wandb_group: str = "bt4-token-jepa"
     wandb_run_id: str | None = None
     accelerator_type: str = "v5litepod-8"
+    tpu_type: str | None = None
+    topology: str | None = None
+    use_alpha_queued_resource: bool = False
+    provisioning_model: str | None = None
+    best_effort: bool = False
     runtime_version: str = "tpu-ubuntu2204-base"
     service_account: str | None = None
     network: str | None = None
@@ -382,6 +387,38 @@ df -h "$CACHE_MOUNT"
 """
 
 
+def render_tpu_readiness_script(*, multi_host_jax: bool = False, timeout_s: int = 1200) -> str:
+    init_line = (
+        f"jax.distributed.initialize(initialization_timeout={int(timeout_s)})"
+        if multi_host_jax
+        else ""
+    )
+    return """
+echo "Waiting for JAX TPU backend readiness..."
+TPU_READY=0
+for attempt in $(seq 1 60); do
+  if /tmp/venv/bin/python - <<'PY'; then
+import jax
+""" + init_line + """
+print("jax_backend", jax.default_backend())
+print("jax_process_index", jax.process_index())
+print("jax_process_count", jax.process_count())
+print("jax_local_device_count", jax.local_device_count())
+print("jax_device_count", jax.device_count())
+PY
+    TPU_READY=1
+    break
+  fi
+  echo "JAX TPU backend is not ready yet (attempt ${attempt}/60); sleeping 10s"
+  sleep 10
+done
+if [ "$TPU_READY" -ne 1 ]; then
+  echo "JAX TPU backend did not become ready after 10 minutes." >&2
+  exit 3
+fi
+"""
+
+
 def render_startup_script(spec: TPUJobSpec, zone: str, source_uri: str) -> str:
     env_vars = dict(spec.env)
     if "WANDB_API_KEY" in env_vars:
@@ -417,6 +454,10 @@ def render_startup_script(spec: TPUJobSpec, zone: str, source_uri: str) -> str:
             f'mkdir -p /tmp/lc0jaxhuman\n'
             f'ln -sfn "$WORKDIR/chunks" /tmp/lc0jaxhuman/chunks\n'
         )
+    tpu_readiness = render_tpu_readiness_script(
+        multi_host_jax=env_vars.get("CHESS_DFM_MULTIHOST_JAX", "0") == "1",
+        timeout_s=int(env_vars.get("CHESS_DFM_DISTRIBUTED_INIT_TIMEOUT_S", "1200")),
+    )
     entry_cmd = render_entry_command(spec, zone)
     status_uri = spec.status_uri(zone)
     artifacts_uri = f"{spec.run_root_uri(zone)}/artifacts"
@@ -456,6 +497,7 @@ export PATH="/tmp/venv/bin:$PATH"
 {secret_exports}
 {cache_disk_mount}
 {model_sync}{chunk_sync}
+{tpu_readiness}
 cat <<'JSON' >/tmp/chess_dfm_jax_status.json
 {{"state": "running", "run_id": "{spec.run_id}", "zone": "{zone}"}}
 JSON
@@ -487,8 +529,10 @@ def request_spot_tpu(spec: TPUJobSpec, zone: str, startup_script: str, attempt: 
         handle.write(startup_script)
         startup_path = handle.name
     try:
-        cmd = [
-            "gcloud",
+        cmd = ["gcloud"]
+        if spec.use_alpha_queued_resource or spec.tpu_type or spec.topology:
+            cmd.append("alpha")
+        cmd.extend([
             "compute",
             "tpus",
             "queued-resources",
@@ -496,12 +540,23 @@ def request_spot_tpu(spec: TPUJobSpec, zone: str, startup_script: str, attempt: 
             queued_resource_id,
             f"--project={spec.project_id}",
             f"--zone={zone}",
-            f"--accelerator-type={spec.accelerator_type}",
             f"--runtime-version={spec.runtime_version}",
             f"--node-id={node_id}",
-        ]
+        ])
+        if spec.tpu_type or spec.topology:
+            if not (spec.tpu_type and spec.topology):
+                raise ValueError("Both tpu_type and topology must be set for topology-based TPU launch.")
+            cmd.extend([f"--type={spec.tpu_type}", f"--topology={spec.topology}"])
+        else:
+            cmd.append(f"--accelerator-type={spec.accelerator_type}")
         if spec.spot:
             cmd.append("--spot")
+        if spec.use_alpha_queued_resource and spec.autocheckpoint_enabled:
+            cmd.append("--autocheckpoint-enabled")
+        if spec.best_effort:
+            cmd.append("--best-effort")
+        if spec.provisioning_model:
+            cmd.append(f"--provisioning-model={spec.provisioning_model}")
         cmd.extend([
             f"--metadata-from-file=startup-script={startup_path}",
             f"--labels=run_id={spec.run_id},controller=chess_dfm_jax",
@@ -694,17 +749,24 @@ def run_spot_controller(spec: TPUJobSpec, *, repo_root: str | Path | None = None
                     print(f"Resource {resource_name} failed or suspended (state={state_name}).")
                     if spec.keep_resource_on_failure:
                         print(f"Preserving failed queued resource for debugging: {resource_name}")
+                        return {
+                            "status": "preempted",
+                            "zone": zone,
+                            "resource": resource_name,
+                            "resource_preserved": spec.keep_resource_on_failure,
+                        }
                     else:
                         print("Deleting failed queued resource.")
                         delete_queued_resource(resource_name)
-                    return {
-                        "status": "preempted",
-                        "zone": zone,
-                        "resource": resource_name,
-                        "resource_preserved": spec.keep_resource_on_failure,
-                    }
+                        print("Retrying with a fresh queued resource.")
+                        break
                 if status and status.get("state") == "failed":
                     print(f"Job failed on resource {resource_name} (state={state_name}).")
+                    exit_code = status.get("exit_code")
+                    if exit_code == 137 and not spec.keep_resource_on_failure:
+                        print("Treating exit_code=137 as preemption/OOM-style interruption; deleting and retrying.")
+                        delete_queued_resource(resource_name)
+                        break
                     if spec.keep_resource_on_failure:
                         print(f"Preserving failed queued resource for debugging: {resource_name}")
                     else:
@@ -716,11 +778,11 @@ def run_spot_controller(spec: TPUJobSpec, *, repo_root: str | Path | None = None
                         "resource": resource_name,
                         "resource_preserved": spec.keep_resource_on_failure,
                     }
-                if state_name in {"ACCEPTED", "WAITING_FOR_RESOURCES", "CREATING"}:
-                    if time.monotonic() - started > spec.allocation_timeout_s:
+                if state_name in {"CREATING", "PROVISIONING"}:
+                    if spec.allocation_timeout_s > 0 and time.monotonic() - started > spec.allocation_timeout_s:
                         print(f"Resource {resource_name} timed out in {state_name}. Deleting and retrying...")
                         delete_queued_resource(resource_name)
-                        return {"status": "timeout", "zone": zone}
+                        break
                 time.sleep(spec.poll_interval_s)
         if request_failures:
             return {"status": "request_failed", "failures": request_failures}

@@ -75,6 +75,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--gcs-min-val-shards", type=int, default=1)
     parser.add_argument("--gcs-startup-cache-policy", choices=["all", "minimum"], default="all")
     parser.add_argument(
+        "--gcs-shard-cache-by-process",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help=(
+            "When running JAX multi-process, deterministically partition visible GCS shards by "
+            "process_index so each host trains on a different local shard subset."
+        ),
+    )
+    parser.add_argument(
         "--loader-prefetch-batches",
         type=int,
         default=2,
@@ -99,6 +108,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--val-every", type=int, default=0)
     parser.add_argument("--val-seed", type=int, default=10_000)
     parser.add_argument("--backend", type=str, default="tpu", choices=["tpu", "cpu"])
+    parser.add_argument("--distributed-init-timeout-s", type=int, default=1200)
     parser.add_argument("--wandb-project", type=str, default="chess_dfm_jax-joint")
     parser.add_argument("--wandb-entity", type=str, default=None)
     parser.add_argument("--wandb-group", type=str, default="joint-latent-sasa")
@@ -317,7 +327,8 @@ def parse_args() -> argparse.Namespace:
         help=(
             "Optional checkpoint root to initialize model/optimizer state from while "
             "writing checkpoints under this run's --checkpoint-uri. This is for "
-            "curriculum branching; use --resume for ordinary same-run continuation."
+            "curriculum branching. If --resume is also set, this run's own checkpoint "
+            "is preferred and init is used only when no same-run checkpoint exists."
         ),
     )
     parser.add_argument(
@@ -394,6 +405,8 @@ def make_gcs_cache(
     download_workers: int,
     max_cached_shards: int = 0,
     seed: int = 0,
+    shard_index: int = 0,
+    shard_count: int = 1,
 ) -> GCSShardCache | None:
     if not prefix:
         return None
@@ -404,9 +417,23 @@ def make_gcs_cache(
         download_workers=download_workers,
         max_cached_shards=max_cached_shards,
         seed=seed,
+        shard_index=shard_index,
+        shard_count=shard_count,
     )
     cache.start()
     return cache
+
+
+def per_process_min_shards(global_min_shards: int, *, shard_count: int) -> int:
+    if global_min_shards <= 0:
+        return 0
+    shard_count = max(1, int(shard_count))
+    if shard_count == 1:
+        return int(global_min_shards)
+    # With process-sharded caches, the final ranks can legitimately receive
+    # floor(N / shard_count) shards. Requiring ceil(...) makes startup
+    # impossible whenever the global shard count is not divisible by hosts.
+    return int(global_min_shards) // shard_count
 
 
 def _gcloud_binary() -> str:
@@ -567,8 +594,8 @@ def shard_batch_for_data_parallel(
         return batch
     if global_batch_size % device_count != 0:
         raise ValueError(
-            f"Global batch size {global_batch_size} must be divisible by "
-            f"data_parallel_devices={device_count}."
+            f"Process-local batch size {global_batch_size} must be divisible by "
+            f"local data_parallel_devices={device_count}."
         )
     per_device = global_batch_size // device_count
     sharded: dict[str, np.ndarray] = {}
@@ -589,7 +616,7 @@ def shard_batch_for_data_parallel(
 
 
 def unreplicate_data_parallel_tree(tree, *, device_count: int):
-    if device_count <= 1:
+    if device_count < 1:
         return tree
 
     def first_replica(value):
@@ -613,6 +640,7 @@ def evaluate_validation_batches(
     deterministic_t: float,
     stage: str,
     data_parallel_devices: int = 1,
+    use_data_parallel: bool = False,
 ) -> tuple[dict[str, float], jax.Array]:
     loader = iter(loader_obj) if loader_obj is not None else None
     totals: dict[str, float] = {}
@@ -635,7 +663,7 @@ def evaluate_validation_batches(
             batch["deterministic_t"] = np.asarray(deterministic_t, dtype=np.float32)
         rng, eval_rng = jax.random.split(rng)
         eval_start = time.perf_counter()
-        if data_parallel_devices > 1:
+        if use_data_parallel:
             dp_batch = shard_batch_for_data_parallel(
                 batch,
                 device_count=data_parallel_devices,
@@ -653,8 +681,7 @@ def evaluate_validation_batches(
             loss, aux = eval_joint_stage2_step(model, batch, eval_rng)
         else:
             loss, aux = eval_joint_stage1_step(model, batch, eval_rng)
-        if data_parallel_devices <= 1:
-            jax.block_until_ready((loss, aux))
+        jax.block_until_ready((loss, aux))
         eval_time_total += time.perf_counter() - eval_start
         batch_metrics = {"loss": float(loss)}
         batch_metrics.update(flatten_aux_metrics(aux))
@@ -679,11 +706,18 @@ def main() -> int:
         )
 
     if args.backend == "tpu":
-        jax.distributed.initialize(initialization_timeout=1200)
+        jax.distributed.initialize(initialization_timeout=args.distributed_init_timeout_s)
+
+    process_index = int(jax.process_index())
+    process_count = int(jax.process_count())
+    local_device_count = int(jax.local_device_count())
 
     data_parallel_devices = 1
+    global_data_parallel_devices = 1
+    process_batch_size = args.batch_size
+    per_device_batch_size = args.batch_size
     if args.data_parallel:
-        available_devices = jax.local_device_count()
+        available_devices = local_device_count
         requested_devices = args.data_parallel_devices if args.data_parallel_devices > 0 else available_devices
         if requested_devices < 1:
             raise ValueError("--data-parallel-devices must be positive or 0 for all local devices.")
@@ -692,12 +726,18 @@ def main() -> int:
                 f"Requested {requested_devices} data-parallel devices, but only "
                 f"{available_devices} local devices are available."
             )
-        if args.batch_size % requested_devices != 0:
+        global_data_parallel_devices = requested_devices * process_count
+        if args.batch_size % global_data_parallel_devices != 0:
             raise ValueError(
                 f"--batch-size={args.batch_size} must be divisible by "
-                f"data_parallel_devices={requested_devices}."
+                f"global_data_parallel_devices={global_data_parallel_devices} "
+                f"({requested_devices} local devices x {process_count} processes)."
             )
         data_parallel_devices = requested_devices
+        per_device_batch_size = args.batch_size // global_data_parallel_devices
+        process_batch_size = per_device_batch_size * data_parallel_devices
+    elif process_count > 1:
+        raise ValueError("Multi-process TPU training requires --data-parallel so gradients are synchronized.")
 
     run_name = args.run_id or resolve_run_name(args)
     save_root = Path(args.save_dir) if args.save_dir else (project_root() / "runs" / "joint")
@@ -785,9 +825,24 @@ def main() -> int:
     )
 
     start_step = 0
-    if args.resume and args.init_checkpoint_uri:
-        raise SystemExit("--resume and --init-checkpoint-uri are mutually exclusive.")
-    if args.init_checkpoint_uri:
+    resumed = False
+    if args.resume:
+        resume_step = latest_checkpoint_step(local_checkpoint_root)
+        source_root = local_checkpoint_root
+        if resume_step is None and gcs_checkpoint_root:
+            sync_checkpoint_uri(gcs_checkpoint_root, local_checkpoint_root)
+            resume_step = latest_checkpoint_step(local_checkpoint_root)
+        if resume_step is not None:
+            load_training_checkpoint(source_root, model=model, optimizer=optimizer, step=resume_step)
+            start_step = int(resume_step)
+            resumed = True
+            if process_index == 0:
+                print(f"Resumed from step: {start_step}")
+        elif process_index == 0:
+            print("No checkpoint found for this run.")
+        if process_index == 0:
+            sys.stdout.flush()
+    if not resumed and args.init_checkpoint_uri:
         init_dir = output_dir / "init_checkpoint"
         init_step_arg = args.init_checkpoint_step if args.init_checkpoint_step > 0 else None
         init_source = sync_checkpoint_uri(args.init_checkpoint_uri, init_dir, step=init_step_arg)
@@ -795,24 +850,16 @@ def main() -> int:
         if init_step is None:
             raise FileNotFoundError(f"No checkpoint found under --init-checkpoint-uri={args.init_checkpoint_uri!r}.")
         load_training_checkpoint(init_source, model=model, optimizer=None, step=init_step, strict=False)
-        print(
-            "Initialized model from checkpoint with non-strict migration: "
-            f"source={args.init_checkpoint_uri} step={init_step}; optimizer=fresh"
-        )
-        sys.stdout.flush()
-    if args.resume:
-        resume_step = latest_checkpoint_step(local_checkpoint_root)
-        source_root = local_checkpoint_root
-        if resume_step is None and gcs_checkpoint_root and jax.process_index() == 0:
-            sync_checkpoint_uri(gcs_checkpoint_root, local_checkpoint_root)
-            resume_step = latest_checkpoint_step(local_checkpoint_root)
-        if resume_step is not None:
-            load_training_checkpoint(source_root, model=model, optimizer=optimizer, step=resume_step)
-            start_step = int(resume_step)
-            print(f"Resumed from step: {start_step}")
-        else:
+        if process_index == 0:
+            print(
+                "Initialized model from checkpoint with non-strict migration: "
+                f"source={args.init_checkpoint_uri} step={init_step}; optimizer=fresh"
+            )
+            sys.stdout.flush()
+    if not resumed and not args.init_checkpoint_uri:
+        if process_index == 0:
             print("No checkpoint found. Starting from scratch.")
-        sys.stdout.flush()
+            sys.stdout.flush()
 
     stop_requested = {"flag": False, "signal": None}
 
@@ -831,22 +878,36 @@ def main() -> int:
         poll_interval_s=args.gcs_prefetch_interval_s,
         download_workers=args.gcs_prefetch_workers,
         max_cached_shards=args.gcs_max_cached_train_shards,
-        seed=args.seed,
+        seed=args.seed + process_index,
+        shard_index=process_index if args.gcs_shard_cache_by_process else 0,
+        shard_count=process_count if args.gcs_shard_cache_by_process else 1,
     )
     val_cache = make_gcs_cache(
         prefix=args.gcs_val_prefix,
         cache_dir=Path(args.gcs_cache_dir) / "val",
         poll_interval_s=args.gcs_prefetch_interval_s,
         download_workers=args.gcs_prefetch_workers,
-        seed=args.val_seed,
+        seed=args.val_seed + process_index,
+        shard_index=process_index if args.gcs_shard_cache_by_process else 0,
+        shard_count=process_count if args.gcs_shard_cache_by_process else 1,
     )
     if train_cache is not None:
         if args.gcs_startup_cache_policy == "all":
             train_cache.wait_for_all_visible()
         else:
-            train_cache.wait_for_minimum(args.gcs_min_train_shards)
+            train_cache.wait_for_minimum(
+                per_process_min_shards(
+                    args.gcs_min_train_shards,
+                    shard_count=process_count if args.gcs_shard_cache_by_process else 1,
+                )
+            )
     if val_cache is not None and args.val_batches > 0:
-        val_cache.wait_for_minimum(args.gcs_min_val_shards)
+        val_cache.wait_for_minimum(
+            per_process_min_shards(
+                args.gcs_min_val_shards,
+                shard_count=process_count if args.gcs_shard_cache_by_process else 1,
+            )
+        )
 
     chunk_dir = Path(args.chunk_dir) if args.chunk_dir else None
     chunk_paths = (
@@ -882,8 +943,8 @@ def main() -> int:
             try:
                 loader_obj = create_grain_trajectory_batch_loader(
                     chunk_paths,
-                    batch_size=args.batch_size,
-                    seed=args.seed,
+                    batch_size=process_batch_size,
+                    seed=args.seed + process_index,
                     horizon=args.horizon,
                     batch_view="joint_latent_sasa",
                     legal_lmax=args.legal_lmax,
@@ -898,8 +959,8 @@ def main() -> int:
         else:
             loader_obj = LeelaChunkDataLoader(
                 chunk_paths,
-                batch_size=args.batch_size,
-                seed=args.seed,
+                batch_size=process_batch_size,
+                seed=args.seed + process_index,
                 horizon=args.horizon,
                 batch_view="joint_latent_sasa",
                 legal_lmax=args.legal_lmax,
@@ -916,8 +977,8 @@ def main() -> int:
             try:
                 val_loader_obj = create_grain_trajectory_batch_loader(
                     val_chunk_paths,
-                    batch_size=args.batch_size,
-                    seed=args.val_seed,
+                    batch_size=process_batch_size,
+                    seed=args.val_seed + process_index,
                     horizon=args.horizon,
                     batch_view="joint_latent_sasa",
                     legal_lmax=args.legal_lmax,
@@ -932,8 +993,8 @@ def main() -> int:
         else:
             val_loader_obj = LeelaChunkDataLoader(
                 val_chunk_paths,
-                batch_size=args.batch_size,
-                seed=args.val_seed,
+                batch_size=process_batch_size,
+                seed=args.val_seed + process_index,
                 horizon=args.horizon,
                 batch_view="joint_latent_sasa",
                 legal_lmax=args.legal_lmax,
@@ -957,8 +1018,15 @@ def main() -> int:
             "batch_view": "joint_latent_sasa",
             "data_loader": args.data_loader,
             "data_parallel": bool(args.data_parallel),
-            "data_parallel_devices": data_parallel_devices,
-            "data_parallel_per_device_batch_size": args.batch_size // data_parallel_devices,
+            "data_parallel_devices": global_data_parallel_devices,
+            "data_parallel_local_devices": data_parallel_devices,
+            "data_parallel_global_devices": global_data_parallel_devices,
+            "data_parallel_per_device_batch_size": per_device_batch_size,
+            "global_batch_size": args.batch_size,
+            "process_batch_size": process_batch_size,
+            "process_count": process_count,
+            "process_index": process_index,
+            "gcs_shard_cache_by_process": bool(args.gcs_shard_cache_by_process),
             "checkpoint_format": args.checkpoint_format,
             "train_chunk_count": len(chunk_paths),
             "val_chunk_count": len(val_chunk_paths),
@@ -994,7 +1062,7 @@ def main() -> int:
     sync_run_sidecars(output_dir, gcs_checkpoint_root)
 
     run = None
-    if jax.process_index() == 0 and not args.no_wandb:
+    if process_index == 0 and not args.no_wandb:
         run = init_wandb_run(
             project=args.wandb_project,
             entity=args.wandb_entity,
@@ -1005,11 +1073,12 @@ def main() -> int:
             config=run_config,
         )
 
-    print(f"backend={jax.default_backend()} process_index={jax.process_index()} process_count={jax.process_count()} device={jax.devices()[0]}")
+    print(f"backend={jax.default_backend()} process_index={process_index} process_count={process_count} device={jax.devices()[0]}")
     print(
         "data_parallel="
-        f"{bool(args.data_parallel)} devices={data_parallel_devices} "
-        f"per_device_batch={args.batch_size // data_parallel_devices}"
+        f"{bool(args.data_parallel)} local_devices={data_parallel_devices} "
+        f"global_devices={global_data_parallel_devices} "
+        f"process_batch={process_batch_size} per_device_batch={per_device_batch_size}"
     )
     print(f"data_source={data_source}")
     print(f"models_dir={model_paths['models_dir']}")
@@ -1022,8 +1091,8 @@ def main() -> int:
     metrics_log = (output_dir / "metrics.jsonl").open("a", encoding="utf-8")
     last_metrics: dict[str, float] | None = None
     completed_step = start_step
-    rng = jax.random.PRNGKey(args.seed + jax.process_index())
-    val_rng = jax.random.PRNGKey(args.val_seed + jax.process_index())
+    rng = jax.random.PRNGKey(args.seed + process_index)
+    val_rng = jax.random.PRNGKey(args.val_seed + process_index)
     val_every = args.val_every if args.val_every > 0 else args.save_every
     profile_dir = Path(args.profile_dir) if args.profile_dir else output_dir / "tb_trace"
     profile_enabled = args.profile_steps > 0
@@ -1042,7 +1111,7 @@ def main() -> int:
                     loader = iter(loader_obj)
                     batch = next(loader)
             else:
-                batch = build_synthetic_joint_batch(args.batch_size, args.horizon, args.legal_lmax)
+                batch = build_synthetic_joint_batch(process_batch_size, args.horizon, args.legal_lmax)
             data_fetch_time = time.perf_counter() - fetch_start
             next_step = step + 1
             host_batch_start = time.perf_counter()
@@ -1061,7 +1130,7 @@ def main() -> int:
                 profile_enabled
                 and not profile_started
                 and next_step >= args.profile_start_step
-                and jax.process_index() == 0
+                and process_index == 0
             ):
                 profile_dir.mkdir(parents=True, exist_ok=True)
                 jax.profiler.start_trace(str(profile_dir), create_perfetto_trace=True)
@@ -1072,11 +1141,11 @@ def main() -> int:
 
             train_step_start = time.perf_counter()
             with jax.profiler.StepTraceAnnotation("train_joint_latent_sasa", step_num=next_step):
-                if data_parallel_devices > 1:
+                if args.data_parallel:
                     batch_for_step = shard_batch_for_data_parallel(
                         batch,
                         device_count=data_parallel_devices,
-                        global_batch_size=args.batch_size,
+                        global_batch_size=process_batch_size,
                     )
                     step_rng_for_step = jax.random.split(step_rng, data_parallel_devices)
                     if args.stage == "stage2":
@@ -1100,7 +1169,7 @@ def main() -> int:
                     train_fn = train_joint_stage1_step_donated if args.donate_train_state else train_joint_stage1_step
                     loss, aux = train_fn(model, optimizer, batch, step_rng)
             jax.block_until_ready((loss, aux))
-            if data_parallel_devices > 1:
+            if args.data_parallel:
                 loss = unreplicate_data_parallel_tree(loss, device_count=data_parallel_devices)
                 aux = unreplicate_data_parallel_tree(aux, device_count=data_parallel_devices)
             step_time = time.perf_counter() - train_step_start
@@ -1114,8 +1183,12 @@ def main() -> int:
                 "data_fetch_time_s": data_fetch_time,
                 "host_batch_time_s": host_batch_time,
                 "loader_prefetch_batches": float(args.loader_prefetch_batches),
-                "data_parallel_devices": float(data_parallel_devices),
-                "data_parallel_per_device_batch_size": float(args.batch_size // data_parallel_devices),
+                "data_parallel_devices": float(global_data_parallel_devices),
+                "data_parallel_local_devices": float(data_parallel_devices),
+                "data_parallel_per_device_batch_size": float(per_device_batch_size),
+                "process_batch_size": float(process_batch_size),
+                "process_count": float(process_count),
+                "process_index": float(process_index),
             }
             metrics.update(flatten_aux_metrics(aux))
             if profile_active:
@@ -1131,7 +1204,7 @@ def main() -> int:
             if val_cache is not None:
                 metrics.update({f"gcs_val_cache_{key}": value for key, value in val_cache.stats().items()})
 
-            if args.diagnostics_every > 0 and data_parallel_devices == 1 and (
+            if args.diagnostics_every > 0 and not args.data_parallel and (
                 completed_step % args.diagnostics_every == 0 or completed_step == args.steps
             ):
                 diagnostics_start = time.perf_counter()
@@ -1156,12 +1229,13 @@ def main() -> int:
                     loader_obj=val_loader_obj,
                     val_batches=args.val_batches,
                     rng=val_rng,
-                    batch_size=args.batch_size,
+                    batch_size=process_batch_size,
                     horizon=args.horizon,
                     legal_lmax=args.legal_lmax,
                     deterministic_t=args.val_deterministic_t,
                     stage=args.stage,
                     data_parallel_devices=data_parallel_devices,
+                    use_data_parallel=bool(args.data_parallel),
                 )
                 metrics.update(add_validation_prefix(val_metrics))
                 metrics["validation_time_s"] = time.perf_counter() - validation_start
@@ -1226,7 +1300,7 @@ def main() -> int:
                 print(" ".join(log_parts))
                 sys.stdout.flush()
 
-            if run is not None and jax.process_index() == 0:
+            if run is not None and process_index == 0:
                 run.log(metrics, step=completed_step)
 
             if profile_active and completed_step >= args.profile_start_step + args.profile_steps - 1:
@@ -1250,7 +1324,7 @@ def main() -> int:
                     config=run_config,
                     extra={"last_metrics": metrics, "checkpoint_schema": f"joint_latent_sasa_{args.stage}"},
                 )
-                if jax.process_index() == 0 and gcs_checkpoint_root:
+                if process_index == 0 and gcs_checkpoint_root:
                     wait_for_checkpoint_completion(checkpoint_manager)
                     subprocess.run(
                         f"/snap/google-cloud-cli/current/bin/gcloud storage cp --recursive {shlex.quote(str(local_checkpoint_root))}/* {shlex.quote(gcs_checkpoint_root)}/",
@@ -1286,7 +1360,7 @@ def main() -> int:
                 force=True,
             )
         wait_for_checkpoint_completion(checkpoint_manager)
-        if jax.process_index() == 0 and gcs_checkpoint_root:
+        if process_index == 0 and gcs_checkpoint_root:
             subprocess.run(
                 f"/snap/google-cloud-cli/current/bin/gcloud storage cp --recursive {shlex.quote(str(local_checkpoint_root))}/* {shlex.quote(gcs_checkpoint_root)}/",
                 shell=True,

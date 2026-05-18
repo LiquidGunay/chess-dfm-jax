@@ -9,6 +9,7 @@ matplotlib>=3.9.0
 numpy>=2.0.0
 onnxruntime>=1.23.0
 optax>=0.2.5
+orbax-checkpoint==0.11.36
 pandas>=2.2.0
 protobuf>=6.0.0
 python-chess>=1.11.0

@@ -16,52 +16,12 @@ if str(REPO_ROOT) not in sys.path:
 from chess_dfm_jax.encoding import encode_board
 from chess_dfm_jax.policy import legal_move_mask, policy_index_to_move
 from chess_dfm_jax.analysis.profile_targets import load_mapped_bt4_params
-from chess_dfm_jax.training.dfm import create_dfm_components, DFMConfig
+from chess_dfm_jax.training.dfm import create_dfm_components, DFMConfig, refine_actions_from_current
 from chess_dfm_jax.training.checkpoints import load_training_checkpoint
 
 @functools.partial(jax.jit, static_argnames=['refinement_steps'])
 def dfm_infer(model, planes, legal_mask, refinement_steps: int):
-    batch_size = planes.shape[0]
-    K = model.config.horizon
-    MASK = model.config.action_vocab_size
-    
-    x = jnp.full((batch_size, K), MASK, dtype=jnp.int32)
-    
-    def step_fn(i, val):
-        x_curr = val
-        t = jnp.full((batch_size,), i / refinement_steps, dtype=jnp.float32)
-        logits = model(planes, x_curr, t) # [B, K, V]
-        
-        # Masked Diffusion: constrain first action to legal moves
-        # We only have the legal mask for k=0
-        mask_expanded = legal_mask[:, None, :] # [B, 1, V]
-        
-        # Apply mask to k=0 logits
-        logits_0 = logits[:, 0:1, :]
-        logits_0 = jnp.where(mask_expanded, logits_0, -1e9)
-        
-        # Concatenate with rest of the horizon (unconstrained)
-        if K > 1:
-            logits = jnp.concatenate([logits_0, logits[:, 1:, :]], axis=1)
-        else:
-            logits = logits_0
-            
-        probs = jax.nn.softmax(logits, axis=-1)
-        max_probs = jnp.max(probs, axis=-1) # [B, K]
-        preds = jnp.argmax(logits, axis=-1) # [B, K]
-        
-        num_unmasked_target = (K * (i + 1)) // refinement_steps
-        max_probs_all = jnp.where(x_curr == MASK, max_probs, 2.0)
-        kth_idx = jnp.maximum(0, K - num_unmasked_target)
-        sorted_probs = jnp.sort(max_probs_all, axis=-1)
-        thresholds = jax.lax.dynamic_slice_in_dim(sorted_probs, kth_idx, 1, axis=-1)
-        
-        unmask_now = max_probs_all >= thresholds
-        x_next = jnp.where(unmask_now, preds, x_curr)
-        return x_next
-
-    x_final = jax.lax.fori_loop(0, refinement_steps, step_fn, x)
-    return x_final
+    return refine_actions_from_current(model, planes, legal_mask, refinement_steps)
 
 def main():
     parser = argparse.ArgumentParser()
