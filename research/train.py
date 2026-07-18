@@ -58,6 +58,15 @@ DEFAULT_CHECKPOINT_DIR = DEFAULT_RUN_ROOT / "checkpoints"
 DEFAULT_MODELS_DIR = REPO_ROOT / "models" / "source" / "extracted"
 DEFAULT_DATA_ROOT = REPO_ROOT / "data" / "trajectory_v3"
 
+GRADIENT_COMPONENT_NAMES = (
+    "dfm_ce",
+    "jepa_positive",
+    "target_sigreg",
+    "pred_sigreg",
+    "fp32_legality",
+)
+GRADIENT_GROUP_NAMES = ("backbone", "dfm", "jepa", "other", "all")
+
 
 class SigRegResult(NamedTuple):
     normalized: jax.Array
@@ -376,6 +385,32 @@ def normalized_stage1_loss_fn(
     return loss, aux
 
 
+def gradient_component_vector(
+    model,
+    batch: dict[str, jax.Array],
+    rng: jax.Array,
+    sigreg_reference_count: float,
+) -> jax.Array:
+    """Return unweighted scalars whose gradients define objective calibration."""
+
+    _, aux = normalized_stage1_loss_fn(
+        model,
+        batch,
+        rng,
+        sigreg_reference_count,
+        sigreg_reference_count,
+    )
+    return jnp.stack(
+        [
+            jnp.asarray(aux["dfm_ce_loss"], dtype=jnp.float32),
+            jnp.asarray(aux["jepa_positive_loss"], dtype=jnp.float32),
+            jnp.asarray(aux["jepa_sigreg_loss"], dtype=jnp.float32),
+            jnp.asarray(aux["jepa_pred_sigreg_loss"], dtype=jnp.float32),
+            jnp.asarray(aux["first_legality_loss"], dtype=jnp.float32),
+        ]
+    )
+
+
 _normalized_loss_and_grad = nnx.value_and_grad(
     normalized_stage1_loss_fn,
     argnums=nnx.DiffState(0, TrainableParam),
@@ -515,6 +550,11 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=0,
         help="Sample nvidia-smi during steady training; 100 ms is useful for profile runs.",
+    )
+    parser.add_argument(
+        "--gradient-audit",
+        action="store_true",
+        help="Measure unweighted component gradients instead of training.",
     )
     parser.add_argument("--run-id", default="")
     parser.add_argument("--output-dir", type=Path)
@@ -760,6 +800,268 @@ def compiler_performance(
     }
 
 
+def state_path_parts(path: tuple[Any, ...]) -> tuple[str, ...]:
+    parts = []
+    for item in path:
+        if hasattr(item, "key"):
+            value = item.key
+        elif hasattr(item, "name"):
+            value = item.name
+        elif hasattr(item, "idx"):
+            value = item.idx
+        else:
+            value = item
+        parts.append(str(value))
+    return tuple(parts)
+
+
+def gradient_group_for_path(path: tuple[Any, ...]) -> str:
+    parts = state_path_parts(path)
+    root = parts[0] if parts else ""
+    if root == "encoder":
+        return "backbone"
+    if root in {
+        "action_embed",
+        "dfm_blocks",
+        "dfm_out_norm",
+        "dfm_state_projector",
+        "out_bias",
+        "out_proj",
+        "pos_embed",
+        "time_bias",
+        "time_embed1",
+        "time_embed2",
+    }:
+        return "dfm"
+    if root in {
+        "jepa_action_embed",
+        "jepa_hidden_adapter",
+        "jepa_state_norm",
+        "jepa_transition",
+        "state_projector",
+    }:
+        return "jepa"
+    return "other"
+
+
+def run_gradient_audit(
+    model,
+    batch: dict[str, jax.Array],
+    rng: jax.Array,
+    *,
+    sigreg_reference_count: float,
+) -> dict[str, Any]:
+    """Measure exact component-gradient Gram matrices from one fixed batch."""
+
+    graphdef, trainable_state, nondiff_state = nnx.split(model, TrainableParam, ...)
+    path_leaves, _ = jax.tree_util.tree_flatten_with_path(trainable_state)
+    leaf_groups = [gradient_group_for_path(path) for path, _ in path_leaves]
+    parameter_counts = {name: 0 for name in GRADIENT_GROUP_NAMES}
+    for (_, leaf), group in zip(path_leaves, leaf_groups, strict=True):
+        count = int(np.prod(leaf.shape, dtype=np.int64))
+        parameter_counts[group] += count
+        parameter_counts["all"] += count
+
+    def selected_vjp(
+        params,
+        nondiff,
+        audit_batch,
+        audit_rng,
+        cotangent,
+    ):
+        def components_for_params(candidate_params):
+            candidate_model = nnx.merge(graphdef, candidate_params, nondiff)
+            return gradient_component_vector(
+                candidate_model,
+                audit_batch,
+                audit_rng,
+                sigreg_reference_count,
+            )
+
+        components, pullback = jax.vjp(components_for_params, params)
+        return components, pullback(cotangent)[0]
+
+    component_count = len(GRADIENT_COMPONENT_NAMES)
+    basis = np.eye(component_count, dtype=np.float32)
+    compile_started = time.perf_counter()
+    compiled_vjp = (
+        jax.jit(selected_vjp)
+        .lower(
+            trainable_state,
+            nondiff_state,
+            batch,
+            rng,
+            basis[0],
+        )
+        .compile()
+    )
+    compile_seconds = time.perf_counter() - compile_started
+
+    compiler_cost = (
+        compiler_cost_summary(normalize_cost_analysis(compiled_vjp.cost_analysis()))
+        if hasattr(compiled_vjp, "cost_analysis")
+        else {}
+    )
+    compiler_memory = (
+        normalize_memory_analysis(compiled_vjp.memory_analysis())
+        if hasattr(compiled_vjp, "memory_analysis")
+        else {}
+    )
+
+    gradients = []
+    component_values: np.ndarray | None = None
+    backward_seconds = []
+    for component_index in range(component_count):
+        started = time.perf_counter()
+        values, gradient = compiled_vjp(
+            trainable_state,
+            nondiff_state,
+            batch,
+            rng,
+            basis[component_index],
+        )
+        jax.block_until_ready((values, gradient))
+        backward_seconds.append(time.perf_counter() - started)
+        observed_values = np.asarray(values, dtype=np.float64)
+        if component_values is None:
+            component_values = observed_values
+        else:
+            np.testing.assert_allclose(
+                component_values,
+                observed_values,
+                rtol=0.0,
+                atol=0.0,
+            )
+        gradients.append(gradient)
+
+    def gradient_grams(*component_gradients):
+        leaves_by_component = [
+            jax.tree_util.tree_leaves(gradient)
+            for gradient in component_gradients
+        ]
+        group_grams = {
+            name: jnp.zeros((component_count, component_count), dtype=jnp.float32)
+            for name in GRADIENT_GROUP_NAMES[:-1]
+        }
+        for leaf_index, group in enumerate(leaf_groups):
+            stacked = jnp.stack(
+                [
+                    jnp.ravel(
+                        jnp.asarray(leaves[leaf_index], dtype=jnp.float32)
+                    )
+                    for leaves in leaves_by_component
+                ],
+                axis=0,
+            )
+            group_grams[group] = group_grams[group] + stacked @ stacked.T
+        all_gram = sum(
+            group_grams.values(),
+            jnp.zeros((component_count, component_count), dtype=jnp.float32),
+        )
+        return jnp.stack(
+            [group_grams[name] for name in GRADIENT_GROUP_NAMES[:-1]]
+            + [all_gram],
+            axis=0,
+        )
+
+    gram_compile_started = time.perf_counter()
+    compiled_grams = jax.jit(gradient_grams).lower(*gradients).compile()
+    gram_compile_seconds = time.perf_counter() - gram_compile_started
+    gram_started = time.perf_counter()
+    gram_array = compiled_grams(*gradients)
+    jax.block_until_ready(gram_array)
+    gram_seconds = time.perf_counter() - gram_started
+    grams = np.asarray(gram_array, dtype=np.float64)
+
+    gradient_norms: dict[str, dict[str, float]] = {}
+    gradient_cosines: dict[str, dict[str, float | None]] = {}
+    for group_index, group_name in enumerate(GRADIENT_GROUP_NAMES):
+        gram = grams[group_index]
+        diagonal = np.maximum(np.diag(gram), 0.0)
+        norms = np.sqrt(diagonal)
+        gradient_norms[group_name] = {
+            component: float(norm)
+            for component, norm in zip(GRADIENT_COMPONENT_NAMES, norms, strict=True)
+        }
+        cosines: dict[str, float | None] = {}
+        for left in range(component_count):
+            for right in range(left + 1, component_count):
+                denom = norms[left] * norms[right]
+                key = (
+                    f"{GRADIENT_COMPONENT_NAMES[left]}"
+                    f"__{GRADIENT_COMPONENT_NAMES[right]}"
+                )
+                cosines[key] = (
+                    None if denom == 0.0 else float(gram[left, right] / denom)
+                )
+        gradient_cosines[group_name] = cosines
+
+    primary_coefficients = np.asarray(
+        [1.0, 1.0, 0.0, 0.0, model.config.first_legality_coeff],
+        dtype=np.float64,
+    )
+    fractions = (0.01, 0.03, 0.10, 0.30)
+    suggested_coefficients: dict[str, dict[str, dict[str, float]]] = {}
+    for component_index, component_name in (
+        (2, "target_sigreg"),
+        (3, "pred_sigreg"),
+    ):
+        per_group: dict[str, dict[str, float]] = {}
+        for group_index, group_name in enumerate(GRADIENT_GROUP_NAMES):
+            gram = grams[group_index]
+            primary_norm = float(
+                np.sqrt(
+                    max(
+                        float(primary_coefficients @ gram @ primary_coefficients),
+                        0.0,
+                    )
+                )
+            )
+            auxiliary_norm = float(
+                np.sqrt(max(float(gram[component_index, component_index]), 0.0))
+            )
+            if primary_norm == 0.0 or auxiliary_norm == 0.0:
+                continue
+            per_group[group_name] = {
+                f"{fraction:.2f}": fraction * primary_norm / auxiliary_norm
+                for fraction in fractions
+            }
+        suggested_coefficients[component_name] = per_group
+
+    assert component_values is not None
+    return {
+        "component_names": list(GRADIENT_COMPONENT_NAMES),
+        "component_values": {
+            name: float(value)
+            for name, value in zip(
+                GRADIENT_COMPONENT_NAMES,
+                component_values,
+                strict=True,
+            )
+        },
+        "parameter_counts": parameter_counts,
+        "gradient_norms": gradient_norms,
+        "gradient_cosines": gradient_cosines,
+        "primary_gradient_coefficients": {
+            name: float(value)
+            for name, value in zip(
+                GRADIENT_COMPONENT_NAMES,
+                primary_coefficients,
+                strict=True,
+            )
+        },
+        "suggested_sigreg_coefficients_by_gradient_fraction": suggested_coefficients,
+        "sigreg_reference_count": sigreg_reference_count,
+        "vjp_compile_seconds": compile_seconds,
+        "component_backward_seconds": backward_seconds,
+        "gram_compile_seconds": gram_compile_seconds,
+        "gram_seconds": gram_seconds,
+        "compiler_cost_analysis": compiler_cost,
+        "compiler_memory_analysis": compiler_memory,
+        "gpu_memory": gpu_memory_stats(),
+    }
+
+
 def main() -> int:
     args = parse_args()
     validate_environment()
@@ -767,7 +1069,12 @@ def main() -> int:
         raise RuntimeError(f"research/train.py requires GPU, found {jax.default_backend()!r}")
     if args.steps < 0:
         raise ValueError("--steps must be non-negative")
-    if not args.eval_only and args.steps == 0 and args.train_seconds <= 0:
+    if (
+        not args.eval_only
+        and not args.gradient_audit
+        and args.steps == 0
+        and args.train_seconds <= 0
+    ):
         raise ValueError("Set --steps > 0 or --train-seconds > 0")
     if args.train_seconds < 0:
         raise ValueError("--train-seconds must be non-negative")
@@ -777,6 +1084,10 @@ def main() -> int:
         raise ValueError("--gpu-monitor-interval-ms must be non-negative")
     if 0 < args.gpu_monitor_interval_ms < 50:
         raise ValueError("--gpu-monitor-interval-ms must be 0 or at least 50")
+    if args.gradient_audit and args.eval_only:
+        raise ValueError("--gradient-audit and --eval-only are mutually exclusive")
+    if args.gradient_audit and args.objective != "normalized":
+        raise ValueError("--gradient-audit requires --objective normalized")
     if not 0.0 <= args.val_deterministic_t <= 1.0:
         raise ValueError("--val-deterministic-t must be in [0, 1]")
 
@@ -835,6 +1146,60 @@ def main() -> int:
     restore_seconds = time.perf_counter() - restore_started
     checkpoint_step = int(payload["step"])
     del payload
+
+    if args.gradient_audit:
+        if config.jepa_sigreg_coeff == 0.0 or config.jepa_pred_sigreg_coeff == 0.0:
+            raise ValueError(
+                "--gradient-audit requires nonzero --target-sigreg-coeff and "
+                "--pred-sigreg-coeff so both statistics are present in the graph"
+            )
+        audit_batch = train_batches.batch_at(0)
+        audit_rng = jax.random.fold_in(jax.random.PRNGKey(args.seed), 0)
+        audit_started = time.perf_counter()
+        audit = run_gradient_audit(
+            model,
+            audit_batch,
+            audit_rng,
+            sigreg_reference_count=args.sigreg_reference_count,
+        )
+        audit["wall_seconds"] = time.perf_counter() - audit_started
+        audit_config = {
+            "autoresearch_ready": AUTORESEARCH_READY,
+            "architecture_source": ARCHITECTURE_SOURCE,
+            "git_commit": commit,
+            "run_id": run_id,
+            "timestamp_utc": timestamp,
+            "args": {
+                key: str(value) if isinstance(value, Path) else value
+                for key, value in (
+                    vars(args) | {"output_dir": str(output_dir)}
+                ).items()
+            },
+            "model_config": dataclasses.asdict(config),
+            "checkpoint_step": checkpoint_step,
+            "restore_seconds": restore_seconds,
+            "train_data": train_batches.provenance(),
+            "audit": audit,
+        }
+        write_json(output_dir / "run_config.json", audit_config)
+        write_json(output_dir / "gradient_audit.json", audit_config)
+        print(
+            json.dumps(
+                {
+                    "run_id": run_id,
+                    "output_dir": str(output_dir),
+                    "component_values": audit["component_values"],
+                    "gradient_norms": audit["gradient_norms"],
+                    "suggested_sigreg_coefficients": audit[
+                        "suggested_sigreg_coefficients_by_gradient_fraction"
+                    ],
+                    "wall_seconds": audit["wall_seconds"],
+                },
+                indent=2,
+                sort_keys=True,
+            )
+        )
+        return 0
 
     initial_val, initial_val_seconds = evaluate(
         model,

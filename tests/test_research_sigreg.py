@@ -6,6 +6,7 @@ import numpy as np
 
 from research.train import (
     compiler_performance,
+    gradient_group_for_path,
     latent_collapse_diagnostics,
     legal_mass_fp32,
     normalize_memory_analysis,
@@ -123,6 +124,26 @@ def test_gpu_monitor_summary_ignores_malformed_rows(tmp_path) -> None:
     assert summary["gpu_utilization_percent_mean"] == 50.0
     assert summary["memory_used_mib_max"] == 2000.0
     assert summary["power_watts_p50"] == 100.0
+
+
+def test_gradient_parameter_groups_follow_model_roots() -> None:
+    value = jax.tree_util.GetAttrKey("value")
+    assert (
+        gradient_group_for_path((jax.tree_util.DictKey("encoder"), value))
+        == "backbone"
+    )
+    assert (
+        gradient_group_for_path((jax.tree_util.DictKey("dfm_blocks"), value))
+        == "dfm"
+    )
+    assert (
+        gradient_group_for_path((jax.tree_util.DictKey("jepa_transition"), value))
+        == "jepa"
+    )
+    assert (
+        gradient_group_for_path((jax.tree_util.DictKey("value_wdl_head"), value))
+        == "other"
+    )
 
 
 def test_per_horizon_diagnostics_expose_one_collapsed_horizon() -> None:
