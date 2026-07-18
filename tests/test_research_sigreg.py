@@ -11,6 +11,7 @@ from research.train import (
     legal_mass_fp32,
     normalize_memory_analysis,
     normalized_le_jepa_sigreg,
+    reconstruct_polarized_grams,
     should_continue,
     summarize_gpu_samples,
 )
@@ -143,6 +144,43 @@ def test_gradient_parameter_groups_follow_model_roots() -> None:
     assert (
         gradient_group_for_path((jax.tree_util.DictKey("value_wdl_head"), value))
         == "other"
+    )
+
+
+def test_polarization_reconstructs_group_gradient_grams() -> None:
+    rng = np.random.default_rng(9)
+    gradients = rng.normal(size=(3, 4, 7))
+    expected_groups = np.einsum("gik,gjk->gij", gradients, gradients)
+    diagonal_q = np.stack(
+        [np.diag(expected_groups[group]) for group in range(3)],
+        axis=1,
+    )
+    scales = 1.0 / np.sqrt(np.sum(diagonal_q, axis=1))
+    pair_q = []
+    for left in range(4):
+        for right in range(left + 1, 4):
+            weights = np.zeros((4,))
+            weights[left] = scales[left]
+            weights[right] = scales[right]
+            pair_q.append(
+                np.einsum(
+                    "i,gij,j->g",
+                    weights,
+                    expected_groups,
+                    weights,
+                )
+            )
+    observed = reconstruct_polarized_grams(
+        diagonal_q,
+        np.asarray(pair_q),
+        scales,
+    )
+    np.testing.assert_allclose(observed[:-1], expected_groups, rtol=1e-12, atol=1e-12)
+    np.testing.assert_allclose(
+        observed[-1],
+        np.sum(expected_groups, axis=0),
+        rtol=1e-12,
+        atol=1e-12,
     )
 
 

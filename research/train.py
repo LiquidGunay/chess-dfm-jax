@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import csv
 import dataclasses
+import gc
 import json
 import subprocess
 import sys
@@ -844,6 +845,53 @@ def gradient_group_for_path(path: tuple[Any, ...]) -> str:
     return "other"
 
 
+def reconstruct_polarized_grams(
+    diagonal_q: np.ndarray,
+    pair_q: np.ndarray,
+    scales: np.ndarray,
+) -> np.ndarray:
+    """Reconstruct per-group component-gradient Grams in host FP64."""
+
+    diagonal_q = np.asarray(diagonal_q, dtype=np.float64)
+    pair_q = np.asarray(pair_q, dtype=np.float64)
+    scales = np.asarray(scales, dtype=np.float64)
+    component_count, group_count = diagonal_q.shape
+    expected_pairs = component_count * (component_count - 1) // 2
+    if pair_q.shape != (expected_pairs, group_count):
+        raise ValueError(
+            f"pair_q must have shape {(expected_pairs, group_count)}, "
+            f"got {pair_q.shape}"
+        )
+    if scales.shape != (component_count,):
+        raise ValueError(
+            f"scales must have shape {(component_count,)}, got {scales.shape}"
+        )
+
+    explicit_grams = np.zeros(
+        (group_count, component_count, component_count),
+        dtype=np.float64,
+    )
+    for component_index in range(component_count):
+        explicit_grams[
+            :,
+            component_index,
+            component_index,
+        ] = diagonal_q[component_index]
+    pair_index = 0
+    for left in range(component_count):
+        for right in range(left + 1, component_count):
+            cross = (
+                pair_q[pair_index]
+                - np.square(scales[left]) * diagonal_q[left]
+                - np.square(scales[right]) * diagonal_q[right]
+            ) / (2.0 * scales[left] * scales[right])
+            explicit_grams[:, left, right] = cross
+            explicit_grams[:, right, left] = cross
+            pair_index += 1
+    all_gram = np.sum(explicit_grams, axis=0, keepdims=True)
+    return np.concatenate([explicit_grams, all_gram], axis=0)
+
+
 def run_gradient_audit(
     model,
     batch: dict[str, jax.Array],
@@ -862,12 +910,15 @@ def run_gradient_audit(
         parameter_counts[group] += count
         parameter_counts["all"] += count
 
-    def selected_vjp(
+    group_name_to_index = {
+        name: index for index, name in enumerate(GRADIENT_GROUP_NAMES[:-1])
+    }
+
+    def audit_kernel(
         params,
         nondiff,
         audit_batch,
         audit_rng,
-        cotangent,
     ):
         def components_for_params(candidate_params):
             candidate_model = nnx.merge(graphdef, candidate_params, nondiff)
@@ -879,106 +930,92 @@ def run_gradient_audit(
             )
 
         components, pullback = jax.vjp(components_for_params, params)
-        return components, pullback(cotangent)[0]
+        component_count = len(GRADIENT_COMPONENT_NAMES)
 
-    component_count = len(GRADIENT_COMPONENT_NAMES)
-    basis = np.eye(component_count, dtype=np.float32)
+        def squared_group_norms(cotangent):
+            gradient = pullback(cotangent)[0]
+            leaves = jax.tree_util.tree_leaves(gradient)
+            group_squares = [
+                jnp.asarray(0.0, dtype=jnp.float32)
+                for _ in GRADIENT_GROUP_NAMES[:-1]
+            ]
+            for leaf, group in zip(leaves, leaf_groups, strict=True):
+                group_index = group_name_to_index[group]
+                array = jnp.asarray(leaf, dtype=jnp.float32)
+                group_squares[group_index] = (
+                    group_squares[group_index] + jnp.sum(jnp.square(array))
+                )
+            return jnp.stack(group_squares)
+
+        basis = jnp.eye(component_count, dtype=jnp.float32)
+        diagonal_q = jax.lax.map(squared_group_norms, basis)
+        total_diagonal_q = jnp.sum(diagonal_q, axis=1)
+        scales = jnp.where(
+            total_diagonal_q > 0.0,
+            jax.lax.rsqrt(jnp.maximum(total_diagonal_q, 1e-30)),
+            1.0,
+        )
+        pair_weights = jnp.stack(
+            [
+                scales[left] * basis[left] + scales[right] * basis[right]
+                for left in range(component_count)
+                for right in range(left + 1, component_count)
+            ]
+        )
+        pair_q = jax.lax.map(squared_group_norms, pair_weights)
+        return components, diagonal_q, pair_q, scales
+
     compile_started = time.perf_counter()
-    compiled_vjp = (
-        jax.jit(selected_vjp)
+    compiled_audit = (
+        jax.jit(audit_kernel)
         .lower(
             trainable_state,
             nondiff_state,
             batch,
             rng,
-            basis[0],
         )
         .compile()
     )
     compile_seconds = time.perf_counter() - compile_started
 
     compiler_cost = (
-        compiler_cost_summary(normalize_cost_analysis(compiled_vjp.cost_analysis()))
-        if hasattr(compiled_vjp, "cost_analysis")
+        compiler_cost_summary(normalize_cost_analysis(compiled_audit.cost_analysis()))
+        if hasattr(compiled_audit, "cost_analysis")
         else {}
     )
     compiler_memory = (
-        normalize_memory_analysis(compiled_vjp.memory_analysis())
-        if hasattr(compiled_vjp, "memory_analysis")
+        normalize_memory_analysis(compiled_audit.memory_analysis())
+        if hasattr(compiled_audit, "memory_analysis")
         else {}
     )
 
-    gradients = []
-    component_values: np.ndarray | None = None
-    backward_seconds = []
-    for component_index in range(component_count):
-        started = time.perf_counter()
-        values, gradient = compiled_vjp(
-            trainable_state,
-            nondiff_state,
-            batch,
-            rng,
-            basis[component_index],
-        )
-        jax.block_until_ready((values, gradient))
-        backward_seconds.append(time.perf_counter() - started)
-        observed_values = np.asarray(values, dtype=np.float64)
-        if component_values is None:
-            component_values = observed_values
-        else:
-            np.testing.assert_allclose(
-                component_values,
-                observed_values,
-                rtol=0.0,
-                atol=0.0,
-            )
-        gradients.append(gradient)
+    execute_started = time.perf_counter()
+    component_values_raw, diagonal_q_raw, pair_q_raw, scales_raw = compiled_audit(
+        trainable_state,
+        nondiff_state,
+        batch,
+        rng,
+    )
+    jax.block_until_ready(
+        (component_values_raw, diagonal_q_raw, pair_q_raw, scales_raw)
+    )
+    execute_seconds = time.perf_counter() - execute_started
+    component_values = np.asarray(component_values_raw, dtype=np.float64)
+    diagonal_q = np.asarray(diagonal_q_raw, dtype=np.float64)
+    pair_q = np.asarray(pair_q_raw, dtype=np.float64)
+    scales = np.asarray(scales_raw, dtype=np.float64)
 
-    def gradient_grams(*component_gradients):
-        leaves_by_component = [
-            jax.tree_util.tree_leaves(gradient)
-            for gradient in component_gradients
-        ]
-        group_grams = {
-            name: jnp.zeros((component_count, component_count), dtype=jnp.float32)
-            for name in GRADIENT_GROUP_NAMES[:-1]
-        }
-        for leaf_index, group in enumerate(leaf_groups):
-            stacked = jnp.stack(
-                [
-                    jnp.ravel(
-                        jnp.asarray(leaves[leaf_index], dtype=jnp.float32)
-                    )
-                    for leaves in leaves_by_component
-                ],
-                axis=0,
-            )
-            group_grams[group] = group_grams[group] + stacked @ stacked.T
-        all_gram = sum(
-            group_grams.values(),
-            jnp.zeros((component_count, component_count), dtype=jnp.float32),
-        )
-        return jnp.stack(
-            [group_grams[name] for name in GRADIENT_GROUP_NAMES[:-1]]
-            + [all_gram],
-            axis=0,
-        )
-
-    gram_compile_started = time.perf_counter()
-    compiled_grams = jax.jit(gradient_grams).lower(*gradients).compile()
-    gram_compile_seconds = time.perf_counter() - gram_compile_started
-    gram_started = time.perf_counter()
-    gram_array = compiled_grams(*gradients)
-    jax.block_until_ready(gram_array)
-    gram_seconds = time.perf_counter() - gram_started
-    grams = np.asarray(gram_array, dtype=np.float64)
+    component_count = len(GRADIENT_COMPONENT_NAMES)
+    grams = reconstruct_polarized_grams(diagonal_q, pair_q, scales)
 
     gradient_norms: dict[str, dict[str, float]] = {}
     gradient_cosines: dict[str, dict[str, float | None]] = {}
+    gram_diagnostics: dict[str, dict[str, float]] = {}
     for group_index, group_name in enumerate(GRADIENT_GROUP_NAMES):
         gram = grams[group_index]
         diagonal = np.maximum(np.diag(gram), 0.0)
         norms = np.sqrt(diagonal)
+        norm_floor = float(np.max(norms)) * 1e-8
         gradient_norms[group_name] = {
             component: float(norm)
             for component, norm in zip(GRADIENT_COMPONENT_NAMES, norms, strict=True)
@@ -992,9 +1029,17 @@ def run_gradient_audit(
                     f"__{GRADIENT_COMPONENT_NAMES[right]}"
                 )
                 cosines[key] = (
-                    None if denom == 0.0 else float(gram[left, right] / denom)
+                    None
+                    if norms[left] <= norm_floor or norms[right] <= norm_floor
+                    else float(gram[left, right] / denom)
                 )
         gradient_cosines[group_name] = cosines
+        eigenvalues = np.linalg.eigvalsh(0.5 * (gram + gram.T))
+        gram_diagnostics[group_name] = {
+            "minimum_eigenvalue": float(np.min(eigenvalues)),
+            "maximum_eigenvalue": float(np.max(eigenvalues)),
+            "maximum_asymmetry": float(np.max(np.abs(gram - gram.T))),
+        }
 
     primary_coefficients = np.asarray(
         [1.0, 1.0, 0.0, 0.0, model.config.first_legality_coeff],
@@ -1028,7 +1073,6 @@ def run_gradient_audit(
             }
         suggested_coefficients[component_name] = per_group
 
-    assert component_values is not None
     return {
         "component_names": list(GRADIENT_COMPONENT_NAMES),
         "component_values": {
@@ -1042,6 +1086,11 @@ def run_gradient_audit(
         "parameter_counts": parameter_counts,
         "gradient_norms": gradient_norms,
         "gradient_cosines": gradient_cosines,
+        "gradient_gram_matrices": {
+            group_name: grams[group_index].tolist()
+            for group_index, group_name in enumerate(GRADIENT_GROUP_NAMES)
+        },
+        "gradient_gram_diagnostics": gram_diagnostics,
         "primary_gradient_coefficients": {
             name: float(value)
             for name, value in zip(
@@ -1053,9 +1102,17 @@ def run_gradient_audit(
         "suggested_sigreg_coefficients_by_gradient_fraction": suggested_coefficients,
         "sigreg_reference_count": sigreg_reference_count,
         "vjp_compile_seconds": compile_seconds,
-        "component_backward_seconds": backward_seconds,
-        "gram_compile_seconds": gram_compile_seconds,
-        "gram_seconds": gram_seconds,
+        "vjp_execute_seconds": execute_seconds,
+        "polarization_scales": {
+            name: float(scale)
+            for name, scale in zip(
+                GRADIENT_COMPONENT_NAMES,
+                scales,
+                strict=True,
+            )
+        },
+        "polarization_diagonal_q": diagonal_q.tolist(),
+        "polarization_pair_q": pair_q.tolist(),
         "compiler_cost_analysis": compiler_cost,
         "compiler_memory_analysis": compiler_memory,
         "gpu_memory": gpu_memory_stats(),
@@ -1139,7 +1196,11 @@ def main() -> int:
     payload = load_training_checkpoint(
         checkpoint_dir,
         model=model,
-        optimizer=optimizer if args.init == "exact" else None,
+        optimizer=(
+            optimizer
+            if args.init == "exact" and not args.gradient_audit
+            else None
+        ),
         step=int(metadata["latest_step"]),
         strict=True,
     )
@@ -1155,6 +1216,8 @@ def main() -> int:
             )
         audit_batch = train_batches.batch_at(0)
         audit_rng = jax.random.fold_in(jax.random.PRNGKey(args.seed), 0)
+        del optimizer
+        gc.collect()
         audit_started = time.perf_counter()
         audit = run_gradient_audit(
             model,
