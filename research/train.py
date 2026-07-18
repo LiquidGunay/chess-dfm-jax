@@ -111,6 +111,7 @@ class JointLatentSASAConfig:
     jepa_positive_coeff: float = 1.0
     jepa_loss_type: str = "raw_mse"
     jepa_target_mode: str = "projected_bt4"
+    jepa_target_stop_gradient: bool = False
     jepa_target_sample_count: int = 0
     jepa_gamma: float = 1.0
     jepa_sigreg_coeff: float = 0.1
@@ -351,6 +352,30 @@ def legal_mass_from_indices(
         dtype=jnp.int32,
     ) < jnp.asarray(legal_count, dtype=jnp.int32)[..., None]
     return jnp.sum(jnp.where(slot_valid, legal_probs, 0.0), axis=-1)
+
+
+def _jepa_positive_target_vectors(
+    z_jepa: jax.Array,
+    target_z: jax.Array,
+    pred_z: jax.Array,
+    *,
+    target_mode: str,
+    stop_gradient: bool,
+) -> jax.Array:
+    """Select the positive JEPA target and optionally detach only that path."""
+    if target_mode == "current_repeat":
+        with jax.named_scope("joint_jepa_current_repeat_target"):
+            target_vectors = jnp.broadcast_to(
+                z_jepa[:, None, :],
+                pred_z.shape,
+            )
+    elif target_mode == "projected_bt4":
+        target_vectors = target_z
+    else:
+        raise ValueError(f"Unsupported jepa_target_mode: {target_mode!r}.")
+    if stop_gradient:
+        return jax.lax.stop_gradient(target_vectors)
+    return target_vectors
 
 
 class LinearAdapter(nnx.Module):
@@ -1137,13 +1162,13 @@ def joint_stage1_loss_fn(
     selected_horizons = jnp.arange(horizon, dtype=jnp.int32)
     pred_for_loss = pred_z
     future_valid_for_loss = future_valid
-    if model.config.jepa_target_mode == "current_repeat":
-        # Profiling-only target: removes future-state information from JEPA.
-        # This is not a meaningful training objective.
-        with jax.named_scope("joint_jepa_current_repeat_target"):
-            target_vectors = jnp.broadcast_to(z_jepa[:, None, :], pred_for_loss.shape)
-    else:
-        target_vectors = target_z
+    target_vectors = _jepa_positive_target_vectors(
+        z_jepa,
+        target_z,
+        pred_for_loss,
+        target_mode=model.config.jepa_target_mode,
+        stop_gradient=model.config.jepa_target_stop_gradient,
+    )
     with jax.named_scope("joint_jepa_raw_mse_loss"):
         sample_raw_mse = jnp.mean(
             (jnp.asarray(pred_for_loss, dtype=jnp.float32) - jnp.asarray(target_vectors, dtype=jnp.float32)) ** 2,
@@ -1995,6 +2020,9 @@ def build_research_resume_contract(
         "model_config": dataclasses.asdict(config),
         "objective": {
             "name": objective,
+            "jepa_target_stop_gradient": bool(
+                config.jepa_target_stop_gradient
+            ),
             "target_sigreg_coeff": float(config.jepa_sigreg_coeff),
             "pred_sigreg_coeff": float(config.jepa_pred_sigreg_coeff),
             "target_sigreg_reference_count": float(sigreg_reference_count),
@@ -2509,7 +2537,9 @@ def train_normalized_stage1_step_donated(
     )
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args(
+    argv: list[str] | None = None,
+) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run-root", type=Path, default=DEFAULT_RUN_ROOT)
     parser.add_argument("--checkpoint-dir", type=Path, default=DEFAULT_CHECKPOINT_DIR)
@@ -2534,6 +2564,15 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--target-sigreg-coeff", type=float)
     parser.add_argument("--pred-sigreg-coeff", type=float)
+    parser.add_argument(
+        "--jepa-target-stop-gradient",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help=(
+            "Detach the projected/current-repeat target from the positive JEPA "
+            "loss; omit to preserve the checkpoint config."
+        ),
+    )
     parser.add_argument("--sigreg-reference-count", type=float, default=1.0)
     parser.add_argument("--batch-size", type=int, default=1)
     parser.add_argument(
@@ -2596,7 +2635,32 @@ def parse_args() -> argparse.Namespace:
         default=2,
         help="Maximum completed checkpoints retained in this run segment; zero keeps all.",
     )
-    return parser.parse_args()
+    return parser.parse_args(argv)
+
+
+def apply_config_overrides(
+    config: JointLatentSASAConfig,
+    args: argparse.Namespace,
+) -> JointLatentSASAConfig:
+    """Apply explicit CLI objective overrides while preserving metadata defaults."""
+    return dataclasses.replace(
+        config,
+        jepa_sigreg_coeff=(
+            config.jepa_sigreg_coeff
+            if args.target_sigreg_coeff is None
+            else args.target_sigreg_coeff
+        ),
+        jepa_pred_sigreg_coeff=(
+            config.jepa_pred_sigreg_coeff
+            if args.pred_sigreg_coeff is None
+            else args.pred_sigreg_coeff
+        ),
+        jepa_target_stop_gradient=(
+            config.jepa_target_stop_gradient
+            if args.jepa_target_stop_gradient is None
+            else args.jepa_target_stop_gradient
+        ),
+    )
 
 
 def git_commit() -> str:
@@ -3213,19 +3277,7 @@ def main() -> int:
     metrics_path = output_dir / "metrics.jsonl"
 
     config, metadata = resolve_config(run_root)
-    config = dataclasses.replace(
-        config,
-        jepa_sigreg_coeff=(
-            config.jepa_sigreg_coeff
-            if args.target_sigreg_coeff is None
-            else args.target_sigreg_coeff
-        ),
-        jepa_pred_sigreg_coeff=(
-            config.jepa_pred_sigreg_coeff
-            if args.pred_sigreg_coeff is None
-            else args.pred_sigreg_coeff
-        ),
-    )
+    config = apply_config_overrides(config, args)
     validate_objective_config(
         objective=args.objective,
         config=config,

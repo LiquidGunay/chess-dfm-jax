@@ -199,16 +199,105 @@ def test_normalized_objective_requires_le_jepa_sigreg():
         )
 
 
+def test_cli_config_override_and_resume_contract_record_target_detach(
+    monkeypatch,
+):
+    metadata_config = local.JointLatentSASAConfig(
+        **(
+            _config_kwargs()
+            | {
+                "jepa_target_stop_gradient": True,
+            }
+        )
+    )
+    default_args = local.parse_args([])
+    assert default_args.jepa_target_stop_gradient is None
+    assert local.apply_config_overrides(
+        metadata_config,
+        default_args,
+    ).jepa_target_stop_gradient
+
+    disabled_args = local.parse_args(
+        ["--no-jepa-target-stop-gradient"]
+    )
+    disabled_config = local.apply_config_overrides(
+        metadata_config,
+        disabled_args,
+    )
+    assert disabled_config.jepa_target_stop_gradient is False
+
+    enabled_args = local.parse_args(["--jepa-target-stop-gradient"])
+    enabled_config = local.apply_config_overrides(
+        dataclasses.replace(
+            metadata_config,
+            jepa_target_stop_gradient=False,
+        ),
+        enabled_args,
+    )
+    assert enabled_config.jepa_target_stop_gradient is True
+    assert (
+        dataclasses.asdict(enabled_config)["jepa_target_stop_gradient"]
+        is True
+    )
+
+    monkeypatch.setattr(
+        local,
+        "require_within_workspace",
+        lambda path: Path(path),
+    )
+    monkeypatch.setattr(
+        local,
+        "load_asset_manifest",
+        lambda: {
+            "trajectory_v3": {
+                "archive": {
+                    "sha256": "trajectory-digest",
+                    "size_bytes": 123,
+                }
+            }
+        },
+    )
+    monkeypatch.setattr(
+        local,
+        "sha256_file",
+        lambda _path: "test-digest",
+    )
+    contract = local.build_research_resume_contract(
+        config=enabled_config,
+        objective="legacy",
+        sigreg_reference_count=1.0,
+        batch_size=2,
+        train_seed=7,
+        train_provenance={"kind": "test"},
+        models_dir=REPO_ROOT / "models",
+    )
+    assert (
+        contract["model_config"]["jepa_target_stop_gradient"]
+        is True
+    )
+    assert (
+        contract["objective"]["jepa_target_stop_gradient"]
+        is True
+    )
+
+
 def test_local_config_and_initialized_model_match_legacy_exactly():
     local_fields = [
         (field.name, field.default)
         for field in dataclasses.fields(local.JointLatentSASAConfig)
+        if field.name != "jepa_target_stop_gradient"
     ]
     legacy_fields = [
         (field.name, field.default)
         for field in dataclasses.fields(legacy.JointLatentSASAConfig)
     ]
     assert local_fields == legacy_fields
+    assert (
+        local.JointLatentSASAConfig.__dataclass_fields__[
+            "jepa_target_stop_gradient"
+        ].default
+        is False
+    )
 
     kwargs = _config_kwargs()
     local_model = local.JointLatentSASAModel(
@@ -228,6 +317,71 @@ def test_local_config_and_initialized_model_match_legacy_exactly():
         legacy_state
     )
     _assert_trees_exact(local_state, legacy_state)
+
+
+def test_jepa_positive_target_helper_detaches_only_selected_target_path():
+    z_jepa = jnp.arange(6, dtype=jnp.float32).reshape((2, 3))
+    target_z = jnp.arange(12, dtype=jnp.float32).reshape((2, 2, 3))
+    pred_z = jnp.zeros_like(target_z)
+
+    for target_mode in ("projected_bt4", "current_repeat"):
+        attached = local._jepa_positive_target_vectors(
+            z_jepa,
+            target_z,
+            pred_z,
+            target_mode=target_mode,
+            stop_gradient=False,
+        )
+        detached = local._jepa_positive_target_vectors(
+            z_jepa,
+            target_z,
+            pred_z,
+            target_mode=target_mode,
+            stop_gradient=True,
+        )
+        np.testing.assert_array_equal(
+            np.asarray(attached),
+            np.asarray(detached),
+        )
+
+        def target_sum(current, future, *, stop_gradient):
+            return jnp.sum(
+                local._jepa_positive_target_vectors(
+                    current,
+                    future,
+                    pred_z,
+                    target_mode=target_mode,
+                    stop_gradient=stop_gradient,
+                )
+            )
+
+        attached_grads = jax.grad(
+            lambda current, future: target_sum(
+                current,
+                future,
+                stop_gradient=False,
+            ),
+            argnums=(0, 1),
+        )(z_jepa, target_z)
+        detached_grads = jax.grad(
+            lambda current, future: target_sum(
+                current,
+                future,
+                stop_gradient=True,
+            ),
+            argnums=(0, 1),
+        )(z_jepa, target_z)
+
+        assert all(
+            float(jnp.linalg.norm(gradient)) == 0.0
+            for gradient in detached_grads
+        )
+        if target_mode == "projected_bt4":
+            assert float(jnp.linalg.norm(attached_grads[0])) == 0.0
+            assert float(jnp.linalg.norm(attached_grads[1])) > 0.0
+        else:
+            assert float(jnp.linalg.norm(attached_grads[0])) > 0.0
+            assert float(jnp.linalg.norm(attached_grads[1])) == 0.0
 
 
 def test_local_model_outputs_loss_aux_and_gradients_match_legacy_exactly():
@@ -413,6 +567,82 @@ def test_local_loss_oracle_covers_teacher_forcing_moments_and_heads():
     assert float(aux["wdl_loss"]) > 0.0
     assert jnp.isfinite(aux["jepa_sigreg_loss"])
     assert jnp.isfinite(aux["jepa_pred_sigreg_loss"])
+
+
+def test_target_detach_changes_positive_gradient_but_not_target_sigreg():
+    batch = _batch()
+    rng = jax.random.PRNGKey(113)
+
+    def loss_and_grad(*, stop_gradient):
+        model = local.JointLatentSASAModel(
+            DummyEncoder(),
+            local.JointLatentSASAConfig(
+                **(
+                    _config_kwargs()
+                    | {
+                        "jepa_target_stop_gradient": stop_gradient,
+                    }
+                )
+            ),
+            rngs=nnx.Rngs(43),
+        )
+        value_and_grad = nnx.value_and_grad(
+            local.joint_stage1_loss_fn,
+            argnums=nnx.DiffState(0, TrainableParam),
+            has_aux=True,
+        )
+        value, gradients = value_and_grad(model, batch, rng)
+        return model, value, nnx.to_pure_dict(gradients)
+
+    _, attached_value, attached_gradients = loss_and_grad(
+        stop_gradient=False
+    )
+    detached_model, detached_value, detached_gradients = loss_and_grad(
+        stop_gradient=True
+    )
+
+    _assert_trees_exact(attached_value, detached_value)
+    _assert_trees_exact(
+        attached_gradients["jepa_transition"],
+        detached_gradients["jepa_transition"],
+    )
+    assert any(
+        not np.array_equal(np.asarray(attached), np.asarray(detached))
+        for attached, detached in zip(
+            jax.tree.leaves(attached_gradients["state_projector"]),
+            jax.tree.leaves(detached_gradients["state_projector"]),
+            strict=True,
+        )
+    )
+
+    def target_sigreg_only(candidate):
+        _, aux = local.joint_stage1_loss_fn(
+            candidate,
+            batch,
+            rng,
+        )
+        return aux["jepa_sigreg_loss"]
+
+    target_sigreg_value, target_sigreg_gradients = nnx.value_and_grad(
+        target_sigreg_only,
+        argnums=nnx.DiffState(0, TrainableParam),
+    )(detached_model)
+    assert jnp.isfinite(target_sigreg_value)
+    projector_gradient_norm = sum(
+        float(
+            jnp.sum(
+                jnp.square(
+                    jnp.asarray(gradient, dtype=jnp.float32)
+                )
+            )
+        )
+        for gradient in jax.tree.leaves(
+            nnx.to_pure_dict(target_sigreg_gradients)[
+                "state_projector"
+            ]
+        )
+    )
+    assert projector_gradient_norm > 0.0
 
 
 def test_local_component_builder_matches_legacy_model_and_optimizer(monkeypatch):
