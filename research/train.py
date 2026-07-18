@@ -32,6 +32,7 @@ from typing import IO, Any, NamedTuple
 import jax
 import jax.numpy as jnp
 import numpy as np
+import optax
 from flax import nnx
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -39,16 +40,19 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 from chess_dfm_jax.analysis.profile_targets import load_mapped_bt4_params  # noqa: E402
+from chess_dfm_jax.nnx_bt4 import (  # noqa: E402
+    BT4Model,
+    TrainableEmbedding,
+    TrainableParam,
+    TrainableRMSNorm,
+    TrainableTransformerStack,
+    make_bt4_model,
+    rounded_swiglu_dim,
+)
 from chess_dfm_jax.training.checkpoints import load_training_checkpoint  # noqa: E402
 from chess_dfm_jax.training.joint_latent_sasa import (  # noqa: E402
-    create_joint_components,
-    eval_joint_stage1_step,
-    joint_stage1_loss_fn,
-    train_joint_stage1_step,
-    train_joint_stage1_step_donated,
+    joint_stage1_loss_fn as _legacy_joint_stage1_loss_fn,
 )
-from chess_dfm_jax.nnx_bt4 import TrainableParam  # noqa: E402
-from research.legacy_baseline import flatten_metrics, resolve_config  # noqa: E402
 from research.prepare import (  # noqa: E402
     REPO_ROOT,
     FixedTrajectoryBatches,
@@ -61,7 +65,7 @@ from research.prepare import (  # noqa: E402
 
 
 AUTORESEARCH_READY = False
-ARCHITECTURE_SOURCE = "legacy_joint_latent_sasa_import"
+ARCHITECTURE_SOURCE = "research_train_local_model_legacy_loss"
 
 DEFAULT_RUN_ROOT = REPO_ROOT / "checkpoints" / "source" / "step0265000"
 DEFAULT_CHECKPOINT_DIR = DEFAULT_RUN_ROOT / "checkpoints"
@@ -79,6 +83,898 @@ GRADIENT_COMPONENT_NAMES = (
     "fp32_legality",
 )
 GRADIENT_GROUP_NAMES = ("backbone", "dfm", "jepa", "other", "all")
+
+
+@dataclasses.dataclass
+class JointLatentSASAConfig:
+    token_dim: int = 256
+    z_dim: int = 2048
+    projector_layers: int = 2
+    projector_num_heads: int = 8
+    projector_mlp_dim: int = 0
+    jepa_condition_dim: int = 0
+    dfm_layers: int = 4
+    jepa_layers: int = 4
+    jepa_num_heads: int = 0
+    jepa_mlp_dim: int = 0
+    num_heads: int = 4
+    mlp_dim: int = 1024
+    learning_rate: float = 6e-4
+    bt4_learning_rate: float = 1e-5
+    weight_decay: float = 1e-4
+    encoder_dtype: str = "bfloat16"
+    param_dtype: str = "float32"
+    compute_dtype: str = "bfloat16"
+    action_vocab_size: int = 1858
+    horizon: int = 2
+    loss_horizon: int = 0
+    dfm_ce_coeff: float = 1.0
+    first_legality_coeff: float = 7.64
+    horizon_legality_coeff: float = 0.0
+    legality_on_masked_only: bool = True
+    jepa_positive_coeff: float = 1.0
+    jepa_loss_type: str = "raw_mse"
+    jepa_target_mode: str = "projected_bt4"
+    jepa_target_sample_count: int = 0
+    jepa_gamma: float = 1.0
+    jepa_sigreg_coeff: float = 0.1
+    jepa_pred_sigreg_coeff: float = 0.0
+    jepa_sigreg_kind: str = "le_jepa"
+    jepa_sigreg_proj_dim: int = 1024
+    value_coeff: float = 0.0
+    wdl_coeff: float = 0.0
+    loss_clip_value: float = 0.0
+    jepa_action_contrast_coeff: float = 0.0
+    jepa_action_contrast_margin: float = 0.05
+    contrastive_coeff: float = 0.0
+    contrastive_temperature: float = 0.1
+    candidate_count: int = 1
+    use_qk_gain: bool = False
+    use_qk_norm: bool = True
+    use_xsa: bool = True
+    use_muon: bool = True
+    grad_clip_norm: float = 1.0
+    lr_warmup_steps: int = 1000
+    skip_nonfinite_updates: bool = True
+    unfreeze_bt4_encoder: bool = True
+    bt4_encode_chunk_size: int = 0
+    jepa_state_rmsnorm: bool = False
+    jepa_state_rms_scale_max: float = 2.0
+    jepa_teacher_forcing_steps: int = 0
+    jepa_delta_rms_clip: float = 0.5
+    remat_blocks: bool = True
+    scan_layers: bool = False
+
+
+def _parse_compute_dtype(dtype_str: str) -> jnp.dtype:
+    dtype = dtype_str.lower()
+    mapping = {
+        "float16": jnp.float16,
+        "fp16": jnp.float16,
+        "bfloat16": jnp.bfloat16,
+        "bf16": jnp.bfloat16,
+        "float32": jnp.float32,
+        "fp32": jnp.float32,
+    }
+    if dtype not in mapping:
+        raise ValueError(f"Unsupported compute dtype: {dtype_str}")
+    return mapping[dtype]
+
+
+class LinearAdapter(nnx.Module):
+    def __init__(
+        self,
+        input_dim: int,
+        output_dim: int | None = None,
+        *,
+        rngs: nnx.Rngs,
+        param_dtype: jnp.dtype = jnp.float32,
+        compute_dtype: jnp.dtype = jnp.float32,
+    ):
+        output_dim = input_dim if output_dim is None else output_dim
+        self.w = TrainableParam(
+            jax.random.normal(rngs.params(), (input_dim, output_dim), dtype=param_dtype)
+            / np.sqrt(max(input_dim, 1))
+        )
+        self.b = TrainableParam(jnp.zeros((output_dim,), dtype=param_dtype))
+        self.compute_dtype = jnp.dtype(compute_dtype)
+
+    def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
+        return (
+            x @ jnp.asarray(self.w[...], dtype=self.compute_dtype)
+            + jnp.asarray(self.b[...], dtype=self.compute_dtype)
+        )
+
+
+class StateVectorProjector(nnx.Module):
+    """Project BT4 square tokens to one global JEPA state vector."""
+
+    def __init__(
+        self,
+        input_dim: int,
+        z_dim: int,
+        *,
+        num_layers: int,
+        num_heads: int,
+        mlp_dim: int,
+        rngs: nnx.Rngs,
+        param_dtype: jnp.dtype = jnp.float32,
+        compute_dtype: jnp.dtype = jnp.float32,
+        use_qk_gain: bool = False,
+        use_qk_norm: bool = False,
+        use_xsa: bool = False,
+        scan_layers: bool = False,
+        remat_blocks: bool = True,
+    ):
+        self.input_dim = int(input_dim)
+        self.z_dim = int(z_dim)
+        self.compute_dtype = jnp.dtype(compute_dtype)
+        mlp_dim = int(mlp_dim) if mlp_dim > 0 else int(4 * z_dim)
+        self.in_proj = TrainableParam(
+            jax.random.normal(rngs.params(), (input_dim, z_dim), dtype=param_dtype)
+            / np.sqrt(max(input_dim, 1))
+        )
+        self.in_bias = TrainableParam(jnp.zeros((z_dim,), dtype=param_dtype))
+        self.cls = TrainableParam(jnp.zeros((1, z_dim), dtype=param_dtype))
+        self.pos_embed = TrainableParam(
+            jax.random.normal(rngs.params(), (65, z_dim), dtype=param_dtype)
+            * (0.02 / np.sqrt(max(z_dim, 1)))
+        )
+        self.blocks = TrainableTransformerStack(
+            num_layers=num_layers,
+            width=z_dim,
+            num_heads=num_heads,
+            mlp_dim=mlp_dim,
+            rngs=rngs,
+            param_dtype=param_dtype,
+            compute_dtype=compute_dtype,
+            use_qk_gain=use_qk_gain,
+            use_qk_norm=use_qk_norm,
+            use_xsa=use_xsa,
+            scan_layers=scan_layers,
+            remat_blocks=remat_blocks,
+        )
+
+    def __call__(self, tokens: jnp.ndarray) -> jnp.ndarray:
+        tokens = jnp.asarray(tokens, dtype=self.compute_dtype)
+        batch = tokens.shape[0]
+        square_tokens = (
+            tokens.reshape((batch * 64, self.input_dim))
+            @ jnp.asarray(self.in_proj[...], dtype=self.compute_dtype)
+            + jnp.asarray(self.in_bias[...], dtype=self.compute_dtype)
+        ).reshape((batch, 64, self.z_dim))
+        cls = jnp.broadcast_to(
+            jnp.asarray(self.cls[...], dtype=self.compute_dtype),
+            (batch, 1, self.z_dim),
+        )
+        seq = jnp.concatenate([cls, square_tokens], axis=1)
+        seq = seq + jnp.asarray(self.pos_embed[...], dtype=self.compute_dtype)[None, :, :]
+        seq = self.blocks(seq)
+        return jnp.asarray(seq[:, 0, :], dtype=self.compute_dtype)
+
+
+class VectorValueWDLHead(nnx.Module):
+    def __init__(
+        self,
+        input_dim: int,
+        hidden_dim: int,
+        *,
+        rngs: nnx.Rngs,
+        param_dtype: jnp.dtype = jnp.float32,
+        compute_dtype: jnp.dtype = jnp.float32,
+    ):
+        self.compute_dtype = jnp.dtype(compute_dtype)
+        self.w1 = TrainableParam(
+            jax.random.normal(rngs.params(), (input_dim, hidden_dim), dtype=param_dtype)
+            / np.sqrt(max(input_dim, 1))
+        )
+        self.b1 = TrainableParam(jnp.zeros((hidden_dim,), dtype=param_dtype))
+        self.value_w = TrainableParam(
+            jax.random.normal(rngs.params(), (hidden_dim, 1), dtype=param_dtype)
+            / np.sqrt(max(hidden_dim, 1))
+        )
+        self.value_b = TrainableParam(jnp.zeros((1,), dtype=param_dtype))
+        self.wdl_w = TrainableParam(
+            jax.random.normal(rngs.params(), (hidden_dim, 3), dtype=param_dtype)
+            / np.sqrt(max(hidden_dim, 1))
+        )
+        self.wdl_b = TrainableParam(jnp.zeros((3,), dtype=param_dtype))
+
+    def __call__(self, z: jnp.ndarray) -> tuple[jnp.ndarray, jnp.ndarray]:
+        z = jnp.asarray(z, dtype=self.compute_dtype)
+        hidden = (
+            z @ jnp.asarray(self.w1[...], dtype=self.compute_dtype)
+            + jnp.asarray(self.b1[...], dtype=self.compute_dtype)
+        )
+        hidden = jax.nn.silu(hidden)
+        value = (
+            hidden @ jnp.asarray(self.value_w[...], dtype=self.compute_dtype)
+            + jnp.asarray(self.value_b[...], dtype=self.compute_dtype)
+        )
+        wdl = (
+            hidden @ jnp.asarray(self.wdl_w[...], dtype=self.compute_dtype)
+            + jnp.asarray(self.wdl_b[...], dtype=self.compute_dtype)
+        )
+        return value.squeeze(-1), wdl
+
+
+class ConditionedVectorTransition(nnx.Module):
+    """AdaLN-style recurrent JEPA transition over projected state vectors."""
+
+    def __init__(
+        self,
+        z_dim: int,
+        condition_dim: int,
+        *,
+        num_layers: int,
+        mlp_dim: int,
+        rngs: nnx.Rngs,
+        param_dtype: jnp.dtype = jnp.float32,
+        compute_dtype: jnp.dtype = jnp.float32,
+        init_scale: float = 1e-3,
+        rms_eps: float = 1e-6,
+        delta_rms_clip: float = 0.0,
+    ):
+        self.z_dim = int(z_dim)
+        self.condition_dim = int(condition_dim)
+        self.num_layers = int(num_layers)
+        self.swiglu_dim = rounded_swiglu_dim(mlp_dim)
+        self.compute_dtype = jnp.dtype(compute_dtype)
+        self.rms_eps = float(rms_eps)
+        self.delta_rms_clip = float(delta_rms_clip)
+
+        def normal(shape, scale):
+            return jax.random.normal(rngs.params(), shape, dtype=param_dtype) * scale
+
+        self.norm_scale = TrainableParam(jnp.ones((num_layers, z_dim), dtype=param_dtype))
+        self.cond_w = TrainableParam(
+            jnp.zeros((num_layers, condition_dim, 2 * z_dim), dtype=param_dtype)
+        )
+        self.cond_b = TrainableParam(
+            jnp.zeros((num_layers, 2 * z_dim), dtype=param_dtype)
+        )
+        self.w_gate_up = TrainableParam(
+            normal(
+                (num_layers, z_dim, 2 * self.swiglu_dim),
+                1.0 / np.sqrt(max(z_dim, 1)),
+            )
+        )
+        self.b_gate_up = TrainableParam(
+            jnp.zeros((num_layers, 2 * self.swiglu_dim), dtype=param_dtype)
+        )
+        self.w_down = TrainableParam(
+            normal(
+                (num_layers, self.swiglu_dim, z_dim),
+                init_scale / np.sqrt(max(self.swiglu_dim, 1)),
+            )
+        )
+        self.b_down = TrainableParam(
+            jnp.zeros((num_layers, z_dim), dtype=param_dtype)
+        )
+
+    def _rms_norm(self, x: jnp.ndarray, scale: jnp.ndarray) -> jnp.ndarray:
+        stats_x = jnp.asarray(x, dtype=jnp.float32)
+        inv_rms = jax.lax.rsqrt(
+            jnp.mean(jnp.square(stats_x), axis=-1, keepdims=True) + self.rms_eps
+        )
+        out = stats_x * inv_rms * jnp.asarray(scale, dtype=jnp.float32)
+        return jnp.asarray(out, dtype=self.compute_dtype)
+
+    def _layer(
+        self,
+        z: jnp.ndarray,
+        condition: jnp.ndarray,
+        params: tuple[jnp.ndarray, ...],
+    ) -> jnp.ndarray:
+        norm_scale, cond_w, cond_b, w_gate_up, b_gate_up, w_down, b_down = params
+        z = jnp.asarray(z, dtype=self.compute_dtype)
+        condition = jnp.asarray(condition, dtype=self.compute_dtype)
+        shift_scale = condition @ cond_w + cond_b
+        shift, scale = jnp.split(shift_scale, 2, axis=-1)
+        hidden = self._rms_norm(z, norm_scale)
+        hidden = hidden * (1.0 + scale) + shift
+        gate_up = hidden @ w_gate_up + b_gate_up
+        gate, up = jnp.split(gate_up, 2, axis=-1)
+        delta = (jax.nn.silu(gate) * up) @ w_down + b_down
+        if self.delta_rms_clip > 0.0:
+            delta_f32 = jnp.asarray(delta, dtype=jnp.float32)
+            delta_rms = jnp.sqrt(
+                jnp.mean(jnp.square(delta_f32), axis=-1, keepdims=True)
+                + self.rms_eps
+            )
+            delta_scale = jnp.minimum(
+                1.0,
+                jnp.asarray(self.delta_rms_clip, dtype=jnp.float32) / delta_rms,
+            )
+            delta = delta_f32 * delta_scale
+        return jnp.asarray(z + delta, dtype=self.compute_dtype)
+
+    def __call__(self, z: jnp.ndarray, condition: jnp.ndarray) -> jnp.ndarray:
+        params = (
+            jnp.asarray(self.norm_scale[...], dtype=self.compute_dtype),
+            jnp.asarray(self.cond_w[...], dtype=self.compute_dtype),
+            jnp.asarray(self.cond_b[...], dtype=self.compute_dtype),
+            jnp.asarray(self.w_gate_up[...], dtype=self.compute_dtype),
+            jnp.asarray(self.b_gate_up[...], dtype=self.compute_dtype),
+            jnp.asarray(self.w_down[...], dtype=self.compute_dtype),
+            jnp.asarray(self.b_down[...], dtype=self.compute_dtype),
+        )
+
+        def body(carry, layer_params):
+            return self._layer(carry, condition, layer_params), None
+
+        z, _ = jax.lax.scan(
+            body,
+            jnp.asarray(z, dtype=self.compute_dtype),
+            params,
+        )
+        return z
+
+
+class JointLatentSASAModel(nnx.Module):
+    """Joint DFM and recurrent projected-state JEPA model."""
+
+    def __init__(
+        self,
+        encoder: BT4Model,
+        config: JointLatentSASAConfig,
+        *,
+        rngs: nnx.Rngs,
+    ):
+        self.encoder = encoder
+        self.config = config
+        param_dtype = _parse_compute_dtype(config.param_dtype)
+        compute_dtype = _parse_compute_dtype(config.compute_dtype)
+        self.compute_dtype = jnp.dtype(compute_dtype)
+        self.encoder_dim = int(encoder.embedding_size)
+        self.z_dim = int(config.z_dim)
+        if config.jepa_loss_type != "raw_mse":
+            raise ValueError(
+                "Joint projected-vector training supports raw_mse JEPA loss only."
+            )
+        if config.jepa_target_mode not in ("projected_bt4", "current_repeat"):
+            raise ValueError(
+                f"Unsupported jepa_target_mode: {config.jepa_target_mode!r}."
+            )
+        if config.jepa_target_sample_count not in (0, config.horizon):
+            raise ValueError(
+                "Projected-vector JEPA currently uses full-horizon targets; "
+                "set jepa_target_sample_count=0."
+            )
+        projector_heads = config.projector_num_heads
+        if config.z_dim % projector_heads != 0:
+            raise ValueError(
+                f"z_dim={config.z_dim} must be divisible by "
+                f"projector_num_heads={projector_heads}."
+            )
+        condition_dim = (
+            config.jepa_condition_dim
+            if config.jepa_condition_dim > 0
+            else config.z_dim
+        )
+        jepa_mlp_dim = (
+            config.jepa_mlp_dim if config.jepa_mlp_dim > 0 else config.z_dim * 4
+        )
+        projector_mlp_dim = (
+            config.projector_mlp_dim
+            if config.projector_mlp_dim > 0
+            else config.z_dim * 4
+        )
+
+        self.state_projector = StateVectorProjector(
+            self.encoder_dim,
+            config.z_dim,
+            num_layers=config.projector_layers,
+            num_heads=projector_heads,
+            mlp_dim=projector_mlp_dim,
+            rngs=rngs,
+            param_dtype=param_dtype,
+            compute_dtype=compute_dtype,
+            use_qk_gain=config.use_qk_gain,
+            use_qk_norm=config.use_qk_norm,
+            use_xsa=config.use_xsa,
+            scan_layers=config.scan_layers,
+            remat_blocks=config.remat_blocks,
+        )
+        self.dfm_state_projector = LinearAdapter(
+            self.encoder_dim,
+            config.token_dim,
+            rngs=rngs,
+            param_dtype=param_dtype,
+            compute_dtype=compute_dtype,
+        )
+        self.jepa_action_embed = TrainableEmbedding(
+            config.action_vocab_size + 1,
+            condition_dim,
+            rngs=rngs,
+            param_dtype=param_dtype,
+            compute_dtype=compute_dtype,
+        )
+        self.jepa_hidden_adapter = LinearAdapter(
+            config.token_dim,
+            condition_dim,
+            rngs=rngs,
+            param_dtype=param_dtype,
+            compute_dtype=compute_dtype,
+        )
+        self.jepa_transition = ConditionedVectorTransition(
+            config.z_dim,
+            condition_dim,
+            num_layers=config.jepa_layers,
+            mlp_dim=jepa_mlp_dim,
+            rngs=rngs,
+            param_dtype=param_dtype,
+            compute_dtype=compute_dtype,
+            delta_rms_clip=config.jepa_delta_rms_clip,
+        )
+        self.jepa_state_norm = TrainableRMSNorm(
+            config.z_dim,
+            param_dtype=param_dtype,
+            compute_dtype=compute_dtype,
+        )
+        self.value_wdl_head = VectorValueWDLHead(
+            config.z_dim,
+            max(config.z_dim, jepa_mlp_dim // 2),
+            rngs=rngs,
+            param_dtype=param_dtype,
+            compute_dtype=compute_dtype,
+        )
+
+        self.action_embed = TrainableEmbedding(
+            config.action_vocab_size + 1,
+            config.token_dim,
+            rngs=rngs,
+            param_dtype=param_dtype,
+            compute_dtype=compute_dtype,
+        )
+        self.time_embed1 = TrainableParam(
+            jax.random.normal(rngs.params(), (1, config.token_dim)) / np.sqrt(1)
+        )
+        self.time_embed2 = TrainableParam(
+            jax.random.normal(
+                rngs.params(),
+                (config.token_dim, config.token_dim),
+            )
+            / np.sqrt(config.token_dim)
+        )
+        self.time_bias = TrainableParam(jnp.zeros((config.token_dim,)))
+        self.pos_embed = TrainableParam(
+            jax.random.normal(
+                rngs.params(),
+                (config.horizon, config.token_dim),
+            )
+            / np.sqrt(config.token_dim)
+        )
+
+        self.dfm_blocks = TrainableTransformerStack(
+            num_layers=config.dfm_layers,
+            width=config.token_dim,
+            num_heads=config.num_heads,
+            mlp_dim=config.mlp_dim,
+            rngs=rngs,
+            param_dtype=param_dtype,
+            compute_dtype=compute_dtype,
+            use_qk_gain=config.use_qk_gain,
+            use_qk_norm=config.use_qk_norm,
+            use_xsa=config.use_xsa,
+            scan_layers=config.scan_layers,
+            remat_blocks=config.remat_blocks,
+        )
+        self.dfm_out_norm = TrainableRMSNorm(
+            config.token_dim,
+            param_dtype=param_dtype,
+            compute_dtype=compute_dtype,
+        )
+        self.out_proj = TrainableParam(
+            jax.random.normal(
+                rngs.params(),
+                (config.token_dim, config.action_vocab_size),
+                dtype=param_dtype,
+            )
+            / np.sqrt(config.token_dim)
+        )
+        self.out_bias = TrainableParam(
+            jnp.zeros((config.action_vocab_size,), dtype=param_dtype)
+        )
+
+    def encode_bt4_tokens(self, planes: jnp.ndarray) -> jnp.ndarray:
+        return jnp.asarray(
+            self.encoder.encode_tokens(planes),
+            dtype=self.compute_dtype,
+        )
+
+    def encode_current_jepa(self, current_planes: jnp.ndarray) -> jnp.ndarray:
+        """Return projected current-state JEPA vectors."""
+
+        return self.normalize_jepa_state(
+            self.state_projector(self.encode_bt4_tokens(current_planes))
+        )
+
+    def encode_current_targets(self, current_planes: jnp.ndarray) -> jnp.ndarray:
+        return self.encode_current_jepa(current_planes)
+
+    def encode_future_targets(self, future_planes: jnp.ndarray) -> jnp.ndarray:
+        batch_size, horizon, channels, height, width = future_planes.shape
+        flat_planes = future_planes.reshape(
+            (batch_size * horizon, channels, height, width)
+        )
+        target_vectors = self.state_projector(
+            self.encode_bt4_tokens(flat_planes)
+        )
+        target_vectors = target_vectors.reshape(
+            (batch_size, horizon, self.z_dim)
+        )
+        return self.normalize_jepa_state(target_vectors)
+
+    def encode_current_and_future_targets(
+        self,
+        current_planes: jnp.ndarray,
+        future_planes: jnp.ndarray,
+    ) -> tuple[jnp.ndarray, jnp.ndarray]:
+        _, z_all = self.encode_current_and_future_tokens_and_vectors(
+            current_planes,
+            future_planes,
+        )
+        return z_all[:, 0], z_all[:, 1:]
+
+    def encode_current_and_future_tokens_and_vectors(
+        self,
+        current_planes: jnp.ndarray,
+        future_planes: jnp.ndarray,
+    ) -> tuple[jnp.ndarray, jnp.ndarray]:
+        batch_size, horizon, channels, height, width = future_planes.shape
+        all_planes = jnp.concatenate(
+            (current_planes[:, None, :, :, :], future_planes),
+            axis=1,
+        )
+        chunk_size = int(self.config.bt4_encode_chunk_size)
+        if chunk_size == 1:
+            time_major_planes = jnp.swapaxes(all_planes, 0, 1)
+
+            def encode_one(planes_t):
+                tokens_t = self.encode_bt4_tokens(planes_t)
+                vectors_t = self.normalize_jepa_state(
+                    self.state_projector(tokens_t)
+                )
+                return tokens_t, vectors_t
+
+            encode_one_fn = jax.checkpoint(encode_one, prevent_cse=False)
+
+            def scan_body(_, planes_t):
+                tokens_t, vectors_t = encode_one_fn(planes_t)
+                return None, (tokens_t, vectors_t)
+
+            _, (tokens_t, vectors_t) = jax.lax.scan(
+                scan_body,
+                None,
+                time_major_planes,
+                unroll=1,
+            )
+            return (
+                jnp.swapaxes(tokens_t, 0, 1),
+                jnp.swapaxes(vectors_t, 0, 1),
+            )
+
+        flat_planes = all_planes.reshape(
+            (batch_size * (horizon + 1), channels, height, width)
+        )
+        encoder_tokens = self.encode_bt4_tokens(flat_planes)
+        tokens = encoder_tokens.reshape(
+            (batch_size, horizon + 1, 64, self.encoder_dim)
+        )
+        vectors = self.state_projector(
+            tokens.reshape(
+                (batch_size * (horizon + 1), 64, self.encoder_dim)
+            )
+        )
+        vectors = vectors.reshape(
+            (batch_size, horizon + 1, self.z_dim)
+        )
+        return tokens, self.normalize_jepa_state(vectors)
+
+    def normalize_jepa_state(self, z: jnp.ndarray) -> jnp.ndarray:
+        """Shared bounded RMSNorm for the JEPA state manifold."""
+
+        z = jnp.asarray(z, dtype=self.compute_dtype)
+        if not self.config.jepa_state_rmsnorm:
+            return z
+        stats_z = jnp.asarray(z, dtype=jnp.float32)
+        inv_rms = jax.lax.rsqrt(
+            jnp.mean(jnp.square(stats_z), axis=-1, keepdims=True)
+            + self.jepa_state_norm.eps
+        )
+        scale = jnp.asarray(
+            self.jepa_state_norm.scale[...],
+            dtype=jnp.float32,
+        )
+        if self.config.jepa_state_rms_scale_max > 0.0:
+            max_scale = jnp.asarray(
+                self.config.jepa_state_rms_scale_max,
+                dtype=jnp.float32,
+            )
+            scale = jnp.clip(scale, 1.0 / max_scale, max_scale)
+        out = stats_z * inv_rms * scale
+        return jnp.asarray(out, dtype=self.compute_dtype)
+
+    def dfm_latents(self, bt4_tokens: jnp.ndarray) -> jnp.ndarray:
+        return self.dfm_state_projector(
+            jnp.asarray(bt4_tokens, dtype=self.compute_dtype)
+        )
+
+    def get_time_embedding(self, t: jnp.ndarray) -> jnp.ndarray:
+        t = t[:, None]
+        t_emb = t @ self.time_embed1[...]
+        t_emb = jax.nn.relu(t_emb)
+        return t_emb @ self.time_embed2[...] + self.time_bias[...]
+
+    def planner_from_latents(
+        self,
+        z_dfm: jnp.ndarray,
+        action_tokens: jnp.ndarray,
+        t: jnp.ndarray,
+        *,
+        return_hidden: bool = False,
+    ):
+        horizon = action_tokens.shape[1]
+        action_emb = self.action_embed(action_tokens)
+        action_emb = (
+            action_emb
+            + jnp.asarray(self.pos_embed[...], dtype=self.compute_dtype)[
+                None, :horizon, :
+            ]
+        )
+        action_emb = action_emb + self.get_time_embedding(t)[:, None, :]
+        seq = jnp.concatenate([z_dfm, action_emb], axis=1)
+        seq = self.dfm_blocks(seq)
+        state_hidden = seq[:, :64, :]
+        action_hidden = seq[:, 64:, :]
+        logits = self.logits_from_action_hidden(action_hidden)
+        if return_hidden:
+            return logits, {
+                "state_tokens": state_hidden,
+                "action_tokens": action_hidden,
+            }
+        return logits
+
+    def logits_from_action_hidden(
+        self,
+        action_hidden: jnp.ndarray,
+    ) -> jnp.ndarray:
+        action_out = self.dfm_out_norm(action_hidden)
+        return (
+            action_out
+            @ jnp.asarray(self.out_proj[...], dtype=self.compute_dtype)
+            + jnp.asarray(self.out_bias[...], dtype=self.compute_dtype)
+        )
+
+    def jepa_rollout_from_latents(
+        self,
+        z0_jepa: jnp.ndarray,
+        actions: jnp.ndarray,
+        action_hidden: jnp.ndarray,
+        *,
+        z0_normalized: bool = False,
+    ) -> jnp.ndarray:
+        action_hidden_seq = jnp.transpose(
+            jnp.asarray(action_hidden, dtype=self.compute_dtype),
+            (1, 0, 2),
+        )
+        actions_seq = jnp.transpose(actions, (1, 0))
+
+        def loop_body(z, inputs):
+            action_idx, hidden = inputs
+            condition = (
+                self.jepa_action_embed(action_idx)
+                + self.jepa_hidden_adapter(hidden)
+            )
+            next_z = self.jepa_transition(z, condition)
+            next_z = self.normalize_jepa_state(next_z)
+            return next_z, next_z
+
+        z0 = (
+            jnp.asarray(z0_jepa, dtype=self.compute_dtype)
+            if z0_normalized
+            else self.normalize_jepa_state(z0_jepa)
+        )
+        _, pred_seq = jax.lax.scan(
+            loop_body,
+            z0,
+            (actions_seq, action_hidden_seq),
+        )
+        return jnp.transpose(pred_seq, (1, 0, 2))
+
+    def jepa_teacher_forced_from_latents(
+        self,
+        z_context: jnp.ndarray,
+        actions: jnp.ndarray,
+        action_hidden: jnp.ndarray,
+    ) -> jnp.ndarray:
+        """One-step JEPA predictions using true previous latents as inputs."""
+
+        z_context_seq = jnp.transpose(
+            jnp.asarray(z_context, dtype=self.compute_dtype),
+            (1, 0, 2),
+        )
+        action_hidden_seq = jnp.transpose(
+            jnp.asarray(action_hidden, dtype=self.compute_dtype),
+            (1, 0, 2),
+        )
+        actions_seq = jnp.transpose(actions, (1, 0))
+
+        def loop_body(_, inputs):
+            z_in, action_idx, hidden = inputs
+            condition = (
+                self.jepa_action_embed(action_idx)
+                + self.jepa_hidden_adapter(hidden)
+            )
+            next_z = self.jepa_transition(z_in, condition)
+            next_z = self.normalize_jepa_state(next_z)
+            return None, next_z
+
+        _, pred_seq = jax.lax.scan(
+            loop_body,
+            None,
+            (z_context_seq, actions_seq, action_hidden_seq),
+        )
+        return jnp.transpose(pred_seq, (1, 0, 2))
+
+    def value_wdl_from_pred(
+        self,
+        pred_z: jnp.ndarray,
+    ) -> tuple[jnp.ndarray, jnp.ndarray]:
+        batch_size, horizon, z_dim = pred_z.shape
+        value, wdl = self.value_wdl_head(
+            pred_z.reshape((batch_size * horizon, z_dim))
+        )
+        return (
+            value.reshape((batch_size, horizon)),
+            wdl.reshape((batch_size, horizon, 3)),
+        )
+
+
+def create_joint_components(
+    bt4_params: dict[str, Any],
+    config: JointLatentSASAConfig,
+    *,
+    seed: int = 0,
+) -> tuple[JointLatentSASAModel, nnx.Optimizer]:
+    """Build the local checkpoint-compatible model and optimizer."""
+
+    encoder_dtype = _parse_compute_dtype(config.encoder_dtype)
+    encoder = make_bt4_model(
+        bt4_params,
+        dtype=encoder_dtype,
+        train_encoder=config.unfreeze_bt4_encoder,
+    )
+    model = JointLatentSASAModel(
+        encoder,
+        config,
+        rngs=nnx.Rngs(seed),
+    )
+    learning_rate = config.learning_rate
+    bt4_learning_rate = config.bt4_learning_rate
+    if config.lr_warmup_steps > 0:
+        learning_rate = optax.join_schedules(
+            [
+                optax.linear_schedule(
+                    init_value=0.0,
+                    end_value=config.learning_rate,
+                    transition_steps=config.lr_warmup_steps,
+                ),
+                optax.constant_schedule(config.learning_rate),
+            ],
+            boundaries=[config.lr_warmup_steps],
+        )
+        bt4_learning_rate = optax.join_schedules(
+            [
+                optax.linear_schedule(
+                    init_value=0.0,
+                    end_value=config.bt4_learning_rate,
+                    transition_steps=config.lr_warmup_steps,
+                ),
+                optax.constant_schedule(config.bt4_learning_rate),
+            ],
+            boundaries=[config.lr_warmup_steps],
+        )
+    if config.use_muon:
+        from chess_dfm_jax.nnx_bt4 import muon_adamw
+
+        main_tx = muon_adamw(
+            learning_rate=learning_rate,
+            weight_decay=config.weight_decay,
+        )
+        bt4_tx = muon_adamw(
+            learning_rate=bt4_learning_rate,
+            weight_decay=config.weight_decay,
+        )
+    else:
+        main_tx = optax.adamw(
+            learning_rate=learning_rate,
+            weight_decay=config.weight_decay,
+        )
+        bt4_tx = optax.adamw(
+            learning_rate=bt4_learning_rate,
+            weight_decay=config.weight_decay,
+        )
+
+    def label_one(path, _value):
+        parts = [str(getattr(item, "key", item)) for item in path]
+        name = "/".join(parts)
+        if name.startswith("encoder/embedding") or name.startswith(
+            "encoder/layers"
+        ):
+            return "bt4"
+        return "main"
+
+    def label_tree(params):
+        return jax.tree_util.tree_map_with_path(label_one, params)
+
+    tx = optax.multi_transform(
+        {"main": main_tx, "bt4": bt4_tx},
+        label_tree,
+    )
+    if config.skip_nonfinite_updates:
+        tx = optax.apply_if_finite(
+            tx,
+            max_consecutive_errors=1_000_000_000,
+        )
+    if config.grad_clip_norm > 0.0:
+        tx = optax.chain(
+            optax.clip_by_global_norm(config.grad_clip_norm),
+            tx,
+        )
+    optimizer = nnx.Optimizer(model, tx, wrt=TrainableParam)
+    return model, optimizer
+
+
+def resolve_config(
+    run_root: Path,
+) -> tuple[JointLatentSASAConfig, dict[str, Any]]:
+    """Read the legacy metadata while selecting only local model fields."""
+
+    metadata_path = require_within_workspace(run_root / "checkpoint_state.json")
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    raw_config = metadata.get("config")
+    if not isinstance(raw_config, dict):
+        raise TypeError(f"Missing config object in {metadata_path}")
+    field_names = {
+        field.name for field in dataclasses.fields(JointLatentSASAConfig)
+    }
+    config = JointLatentSASAConfig(
+        **{
+            key: value
+            for key, value in raw_config.items()
+            if key in field_names
+        }
+    )
+    return config, metadata
+
+
+def flatten_metrics(metrics: dict[str, Any]) -> dict[str, float]:
+    """Flatten scalar and per-horizon arrays for JSON metric records."""
+
+    flattened: dict[str, float] = {}
+    for key, value in metrics.items():
+        array = np.asarray(value)
+        if array.ndim == 0:
+            flattened[key] = float(array)
+            continue
+        flat = array.reshape(-1)
+        if key.endswith("_by_horizon") or key in {
+            "dfm_ce_loss_by_horizon",
+            "dfm_mask_fraction_by_horizon",
+            "jepa_loss_by_horizon",
+            "jepa_raw_mse_by_horizon",
+            "jepa_norm_loss_by_horizon",
+            "mean_token_cosine_by_horizon",
+            "jepa_target_horizon_mask",
+        }:
+            for index, item in enumerate(flat):
+                flattened[f"{key}_h{index + 1}"] = float(item)
+            continue
+        for index, item in enumerate(flat):
+            flattened[f"{key}_{index}"] = float(item)
+    return flattened
 
 
 class SigRegResult(NamedTuple):
@@ -835,6 +1731,59 @@ def _clip_loss_preserve_gradient(
     return loss * scale, scale
 
 
+_legacy_stage1_loss_and_grad = nnx.value_and_grad(
+    _legacy_joint_stage1_loss_fn,
+    argnums=nnx.DiffState(0, TrainableParam),
+    has_aux=True,
+)
+
+
+def _legacy_train_step_impl(
+    model: JointLatentSASAModel,
+    optimizer: nnx.Optimizer,
+    batch: dict[str, jax.Array],
+    rng: jax.Array,
+):
+    with jax.named_scope("joint_stage1_loss_and_grad"):
+        (loss, aux), grads = _legacy_stage1_loss_and_grad(
+            model,
+            batch,
+            rng,
+        )
+    with jax.named_scope("joint_stage1_optimizer_update"):
+        optimizer.update(model, grads)
+    return loss, aux
+
+
+@nnx.jit
+def eval_joint_stage1_step(
+    model: JointLatentSASAModel,
+    batch: dict[str, jax.Array],
+    rng: jax.Array,
+):
+    return _legacy_joint_stage1_loss_fn(model, batch, rng)
+
+
+@nnx.jit
+def train_joint_stage1_step(
+    model: JointLatentSASAModel,
+    optimizer: nnx.Optimizer,
+    batch: dict[str, jax.Array],
+    rng: jax.Array,
+):
+    return _legacy_train_step_impl(model, optimizer, batch, rng)
+
+
+@nnx.jit(donate_argnums=(0, 1))
+def train_joint_stage1_step_donated(
+    model: JointLatentSASAModel,
+    optimizer: nnx.Optimizer,
+    batch: dict[str, jax.Array],
+    rng: jax.Array,
+):
+    return _legacy_train_step_impl(model, optimizer, batch, rng)
+
+
 def normalized_stage1_loss_fn(
     model,
     batch: dict[str, jax.Array],
@@ -849,7 +1798,7 @@ def normalized_stage1_loss_fn(
     preserving their exact gradients while removing valid-count scaling.
     """
 
-    _, legacy_aux = joint_stage1_loss_fn(
+    _, legacy_aux = _legacy_joint_stage1_loss_fn(
         model,
         batch,
         rng,
