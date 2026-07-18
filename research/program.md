@@ -44,6 +44,11 @@ Optimize fixed validation DFM cross-entropy. Also report:
 
 The weighted training loss is not by itself a promotion metric.
 
+The strength gate consumes complete color-reversed pairs from the frozen
+promotion pool. Only the normalized-Elo GSPRT may promote a checkpoint:
+`H0=0`, `H1=+20`, `alpha=beta=0.05`, checked after complete pairs and capped at
+2,048 pairs. Descriptive logistic Elo never authorizes promotion.
+
 Reject a run if:
 
 - any metric is non-finite;

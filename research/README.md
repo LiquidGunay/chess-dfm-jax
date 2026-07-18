@@ -22,6 +22,8 @@ import_legacy.py  checksummed, restricted source-checkpoint boundary
 train.py          single editable model/objective/training surface
 inference.py      checked cached-BT4 multi-pass inference and profiling
 arena.py          frozen pools, paired outcomes, and arena statistics
+local_policy.py   strict current-only localized DFM arena adapter
+play_arena.py     bounded batched gameplay with exact history replay
 program.md        rules for automated research
 results.tsv       compact append-only experiment ledger
 ```
@@ -60,6 +62,8 @@ The final effective configuration is written to the report and bound into the
 resume contract. Unknown keys, wrong types, and non-default legacy knobs that
 the local graph cannot honor fail before training.
 
-The harness remains intentionally marked `autoresearch_ready=false` while the
-normalized objective and paired arena promotion gate are being frozen. See the
-plan and baseline report for the measured A10G results and remaining gates.
+The paired evaluator now has a real 16-pair source-vs-source A10G correctness
+artifact, bounded model batches, and an official-formulation normalized-Elo
+promotion GSPRT. The harness remains intentionally marked
+`autoresearch_ready=false` only while the target-scale-stable objective is
+being selected. See the plan and baseline report for the measured results.

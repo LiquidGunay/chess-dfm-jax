@@ -623,7 +623,7 @@ future implementation cannot silently inherit the old reporting semantics.
 Authoritative free-rollout collapse and action-dependence diagnostics remain
 separately computed and reported.
 
-## Frozen arena foundation
+## Frozen arena and promotion foundation
 
 Commit `c65f77f` adds the engine-agnostic persistent arena layer:
 
@@ -638,10 +638,22 @@ Commit `c65f77f` adds the engine-agnostic persistent arena layer:
   after complete pairs.
 
 The logistic likelihood matches the official Fishtest construction, but is
-explicitly descriptive and `promotion_eligible=false`. Normalized-Elo GSPRT,
-the in-process engine adapter, and actual gameplay are still absent; the
-foundation contract records those omissions so it cannot be mistaken for a
-working promotion gate.
+explicitly descriptive and `promotion_eligible=false`.
+
+Commits `8d6f805`, `4dff39a`, `5a14994`, and `b60f176` complete the in-process
+path:
+
+- fail-closed batched gameplay with exact history replay and color reversal;
+- a strict localized DFM policy adapter with no fallback or codec remapping;
+- stable policy chunks capped at 64 positions by default, so promotion-scale
+  pools cannot turn into one unbounded GPU allocation; and
+- the official constrained-multinomial normalized-Elo GSPRT with fixed
+  `H0=0`, `H1=20`, `alpha=beta=0.05`, and a hard cap of 2,048 complete pairs.
+
+The normalized implementation includes Fishtest's pentanomial `sqrt(2)`
+conversion and matched the official implementation across 100 random count
+vectors with maximum absolute LLR error `1.11e-12`. This state, unlike the
+logistic diagnostic, is eligible to make a promotion decision.
 
 The real frozen artifacts are:
 
@@ -650,16 +662,59 @@ The real frozen artifacts are:
   ordered-FEN digest
   `f86f0fa9de93a8753d2d3b508af4f2479bf9d36f007cd45a378607603b9fb52b`;
   and
-- promotion: 2,048 test FENs, pool digest
-  `2d4b67e0d4c181e57e5cb88d95eaa5a79f8d911d51c70dd6348d385687e4954a`,
+- history-hardened promotion: 2,048 test FENs, pool digest
+  `8653033334e79c57f321dcdb0b5fd965ed10e4e4586b2826ec670876530ca80f`,
   ordered-FEN digest
-  `34da392d80ada4e7b87500f7060589b05c5d31a03b1c966adf3570da38a3a04b`.
+  `81d8e0e158ded335899934d3f385b0b065702f469f520175e2fdb0f94e7aa60b`.
 
-The promotion pool excludes all 12,297 valid unique validation candidates,
-committed by digest
-`30927f0f322fa5305352bd7f1e05ea6c3762a18d734087c2ee12536ff6f5a202`;
-the selected development/promotion overlap is zero. The local JSON artifacts
-are under `artifacts/arena/`.
+The promotion pool excludes all 12,297 valid unique validation candidates plus
+36 test roots whose root FEN looked standard but whose reconstructed history
+was nonstandard. The combined 12,333-FEN exclusion digest is
+`f897aec77466188c29e1dba9734e61481093eebced4777c6c3f320c047c4e450`,
+leaving 10,787 candidates; selected development/promotion overlap is zero.
+
+Full standard histories are pinned by manifest digest
+`496eace967e101fea28c9c26d6f9517c311d9e7f82a127510d9852397578a36c`
+for development and
+`35e9cb69c1ed8c263bc05e61faf99ec95319112b91872f5a2063f0f9c27dd168`
+for promotion. The corresponding sidecar file SHA-256 values are
+`aaa038fc169b686ce1027e9e8773bf859767609acc875b2d6830423a4b5b9717`
+and
+`e72e62d85571476fccd69e2381ad96043b43ec52234547fec1b48404a78dc0d7`.
+The local JSON artifacts are under `artifacts/arena/`.
+
+### Plane-history compatibility audit
+
+The trajectory source explicitly calls `encode_board(board, [])` for both
+current and future planes. A direct audit confirmed that current-only encoding
+exactly matches every stored root plane among all 128 development and 2,048
+history-hardened promotion positions. Conversely, adding reconstructed history
+mismatched all 224 rows in the history-aware comparison slice.
+
+Arena histories are still mandatory for legal replay, repetition, and claim
+state. The local policy adapter validates them but records and uses
+`plane_history_mode=current_only_as_preprocessed`. Feeding history planes to
+this checkpoint would be a new input-distribution experiment.
+
+### Real source selfcheck
+
+The first end-to-end A10G run played the source step-265,000 checkpoint against
+itself on the 16-pair correctness tier with eight DFM passes, a 16-ply
+additional cap, and batch size 16. Compilation was warmed before match timing.
+
+- all 32 games completed without a fault;
+- each color-reversed pair had identical move traces and split exactly 1–1;
+- pentanomial counts were `[0, 0, 16, 0, 0]`;
+- normalized Elo was numerically zero (`-2.18e-12`);
+- all games reached the symmetric cap;
+- match time was `20.24 s`, or `1.58 games/s` and `25.30 plies/s`;
+- compile plus warmup was `28.06 s`; and
+- peak JAX live memory was `1,894,688,768` bytes.
+
+The complete artifact is
+`artifacts/arena/source-selfcheck-16pairs-pass8-cap16-v1.json`, file SHA-256
+`5f54887ec99661af5339994670062a9d0ca746229f649453fc75fe64c7d11cf4`.
+This is an evaluator correctness result, not a strength estimate.
 
 ## Local inference profile
 
@@ -700,6 +755,4 @@ knobs that the local graph cannot honor fail closed.
 The remaining acceptance work is to:
 
 - freeze a target-scale-stable normalized objective after the EMA-target and
-  per-horizon variance-hinge comparisons; and
-- connect the checked inference kernel to persistent paired gameplay and add
-  the normalized-Elo promotion GSPRT.
+  per-horizon variance-hinge comparisons.

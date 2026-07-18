@@ -457,14 +457,29 @@ remainder. The real inventory is:
   unique FENs;
 - test: 15,040 ply-12 rows, 14,484 valid standard positions, and 12,227 unique
   FENs; and
-- 1,404 FENs overlap the two splits, leaving 10,823 promotion candidates after
-  excluding the entire valid validation universe.
+- 1,404 FENs overlap the two splits, leaving 10,823 root-FEN candidates after
+  excluding the entire valid validation universe but before history validation.
 
 About 3.6% of the ply-12 rows have Chess960-like castling metadata invalid
 under standard-chess rules and are excluded rather than repaired. The
-development pool is 128 validation FENs; its first 16 form the correctness
-tier. The promotion pool contains 2,048 test FENs after excluding every valid
-validation candidate, not merely the selected development subset.
+full-history reconstruction audit found another 36 test roots whose preceding
+game was nonstandard even though the ply-12 root itself parsed as standard.
+Those complete histories are excluded too, leaving 10,787 promotion candidates.
+The development pool is 128 validation FENs; its first 16 form the correctness
+tier. The history-hardened promotion pool contains 2,048 test FENs after
+excluding every valid validation candidate and all 36 nonstandard histories,
+not merely the selected development subset.
+
+Every arena root has a full standard-initial-position-to-root history sidecar.
+The gameplay runner replays it exactly so repetition and draw-claim state are
+real rather than inferred from a root FEN. This history is deliberately not fed
+to the recovered model: the source trajectory preprocessor encoded current and
+future positions with `encode_board(board, [])`. Current-only encoding exactly
+matches the stored planes for all 2,176 selected development and promotion
+roots; a 224-row audit found that history-aware encoding mismatched every stored
+example. The model adapter therefore records
+`plane_history_mode=current_only_as_preprocessed`. History-aware BT4 inputs are
+a future distribution-changing experiment, not a silent evaluator correction.
 
 Report model-pool relative logistic and normalized Elo with pair-aware 95%
 uncertainty, game count, score breakdown, FEN set digest, refinement count,
@@ -476,6 +491,11 @@ Arena tiers:
 2. 128 pairs / 256 games as a quick large-effect gate; and
 3. a promotion GSPRT on the fresh pool with `H0=0`, `H1=+20 normalized Elo`,
    `alpha=beta=0.05`, checked after complete pairs and capped at 4,096 games.
+
+The promotion implementation uses the official Fishtest
+constrained-multinomial normalized-Elo likelihood, including the pentanomial
+pair-to-game `sqrt(2)` conversion. It is distinct from descriptive logistic Elo
+and is the only state allowed to report `promotion_eligible=true`.
 
 Inconclusive is not evidence of equality. Small improvements should be combined
 through validation and repeated training runs before paying for a promotion
@@ -588,7 +608,8 @@ sweeps, held-out data, and repeated seeds.
 - [RankMe](https://arxiv.org/abs/2210.02885) for entropy-based effective rank
 - [JAX benchmarking guidance](https://docs.jax.dev/en/latest/benchmarking.html)
 - [Fishtest mathematics](https://official-stockfish.github.io/docs/fishtest-wiki/Fishtest-Mathematics.html)
-  and the [official opening books](https://github.com/official-stockfish/books)
+  and the
+  [official normalized-LLR implementation](https://github.com/official-stockfish/fishtest/blob/master/server/fishtest/stats/LLRcalc.py)
 
 ## Immediate implementation checklist
 
@@ -638,4 +659,9 @@ sweeps, held-out data, and repeated seeds.
 - [x] Implement deterministic paired-arena foundations, audit the real
   held-out FEN universe, and freeze disjoint development/promotion pools.
 - [x] Implement and profile cached-BT4 batched multi-pass DFM inference.
-- [ ] Implement the persistent batched paired-opening arena.
+- [x] Implement the fail-closed persistent batched paired-opening arena, strict
+  localized checkpoint policy adapter, and bounded GPU policy batches.
+- [x] Implement the normalized-Elo promotion GSPRT and match the official
+  Fishtest likelihood numerically.
+- [x] Run the 16-pair source-vs-source A10G correctness tier with identical
+  move traces, zero faults, and exact 50/50 paired scoring.
