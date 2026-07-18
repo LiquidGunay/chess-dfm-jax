@@ -199,46 +199,53 @@ def test_normalized_objective_requires_le_jepa_sigreg():
         )
 
 
-def test_cli_config_override_and_resume_contract_record_target_detach(
+def test_experiment_then_cli_override_precedence_and_resume_contract(
     monkeypatch,
 ):
     metadata_config = local.JointLatentSASAConfig(
         **(
             _config_kwargs()
             | {
-                "jepa_target_stop_gradient": True,
+                "jepa_target_stop_gradient": False,
             }
         )
     )
+    monkeypatch.setattr(
+        local,
+        "EXPERIMENT_OVERRIDES",
+        {
+            "jepa_target_stop_gradient": True,
+            "jepa_sigreg_coeff": 0.25,
+        },
+    )
+    experiment_config = local.apply_experiment_overrides(
+        metadata_config
+    )
+    assert experiment_config.jepa_target_stop_gradient is True
+    assert experiment_config.jepa_sigreg_coeff == 0.25
+
     default_args = local.parse_args([])
     assert default_args.jepa_target_stop_gradient is None
-    assert local.apply_config_overrides(
-        metadata_config,
+    default_config = local.apply_config_overrides(
+        experiment_config,
         default_args,
-    ).jepa_target_stop_gradient
+    )
+    assert default_config.jepa_target_stop_gradient is True
+    assert default_config.jepa_sigreg_coeff == 0.25
 
     disabled_args = local.parse_args(
-        ["--no-jepa-target-stop-gradient"]
+        [
+            "--no-jepa-target-stop-gradient",
+            "--target-sigreg-coeff",
+            "0.5",
+        ]
     )
     disabled_config = local.apply_config_overrides(
-        metadata_config,
+        experiment_config,
         disabled_args,
     )
     assert disabled_config.jepa_target_stop_gradient is False
-
-    enabled_args = local.parse_args(["--jepa-target-stop-gradient"])
-    enabled_config = local.apply_config_overrides(
-        dataclasses.replace(
-            metadata_config,
-            jepa_target_stop_gradient=False,
-        ),
-        enabled_args,
-    )
-    assert enabled_config.jepa_target_stop_gradient is True
-    assert (
-        dataclasses.asdict(enabled_config)["jepa_target_stop_gradient"]
-        is True
-    )
+    assert disabled_config.jepa_sigreg_coeff == 0.5
 
     monkeypatch.setattr(
         local,
@@ -263,7 +270,7 @@ def test_cli_config_override_and_resume_contract_record_target_detach(
         lambda _path: "test-digest",
     )
     contract = local.build_research_resume_contract(
-        config=enabled_config,
+        config=default_config,
         objective="legacy",
         sigreg_reference_count=1.0,
         batch_size=2,
@@ -275,10 +282,64 @@ def test_cli_config_override_and_resume_contract_record_target_detach(
         contract["model_config"]["jepa_target_stop_gradient"]
         is True
     )
+    assert contract["model_config"]["jepa_sigreg_coeff"] == 0.25
     assert (
         contract["objective"]["jepa_target_stop_gradient"]
         is True
     )
+    assert contract["objective"]["target_sigreg_coeff"] == 0.25
+
+
+def test_experiment_overrides_reject_unknown_keys_and_wrong_types():
+    config = local.JointLatentSASAConfig()
+
+    with pytest.raises(
+        ValueError,
+        match="Unknown EXPERIMENT_OVERRIDES.*not_a_config_field",
+    ):
+        local.apply_experiment_overrides(
+            config,
+            {"not_a_config_field": 1},
+        )
+    with pytest.raises(
+        TypeError,
+        match=r"EXPERIMENT_OVERRIDES\['horizon'\] must be int",
+    ):
+        local.apply_experiment_overrides(
+            config,
+            {"horizon": "8"},
+        )
+
+    numeric = local.apply_experiment_overrides(
+        config,
+        {"learning_rate": 1},
+    )
+    assert numeric.learning_rate == 1.0
+    assert type(numeric.learning_rate) is float
+
+
+def test_inert_nondefault_experiment_knobs_fail_closed():
+    config = local.JointLatentSASAConfig()
+    local.validate_no_inert_config_overrides(config)
+    non_defaults = {
+        "jepa_num_heads": 4,
+        "horizon_legality_coeff": 0.25,
+        "jepa_target_sample_count": config.horizon,
+        "jepa_action_contrast_coeff": 0.1,
+        "jepa_action_contrast_margin": 0.1,
+        "contrastive_coeff": 0.1,
+        "contrastive_temperature": 0.2,
+        "candidate_count": 2,
+        "jepa_teacher_forcing_steps": 1,
+    }
+
+    for name, value in non_defaults.items():
+        candidate = local.apply_experiment_overrides(
+            config,
+            {name: value},
+        )
+        with pytest.raises(ValueError, match=name):
+            local.validate_no_inert_config_overrides(candidate)
 
 
 def test_local_config_and_initialized_model_match_legacy_exactly():

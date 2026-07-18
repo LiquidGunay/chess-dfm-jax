@@ -63,6 +63,12 @@ from research.prepare import (  # noqa: E402
 AUTORESEARCH_READY = False
 ARCHITECTURE_SOURCE = "research_train_local_model_and_loss"
 
+# AUTORESEARCH EDIT SURFACE: change model/objective knobs here. Checkpoint
+# metadata is loaded first, then these values, then explicit CLI overrides.
+EXPERIMENT_OVERRIDES: dict[str, Any] = {
+    # "jepa_target_stop_gradient": True,
+}
+
 DEFAULT_RUN_ROOT = REPO_ROOT / "checkpoints" / "source" / "step0265000"
 DEFAULT_CHECKPOINT_DIR = DEFAULT_RUN_ROOT / "checkpoints"
 DEFAULT_MODELS_DIR = REPO_ROOT / "models" / "source" / "extracted"
@@ -141,6 +147,19 @@ class JointLatentSASAConfig:
     jepa_delta_rms_clip: float = 0.5
     remat_blocks: bool = True
     scan_layers: bool = False
+
+
+_INERT_OR_DEPRECATED_CONFIG_FIELDS = (
+    "jepa_num_heads",
+    "horizon_legality_coeff",
+    "jepa_target_sample_count",
+    "jepa_action_contrast_coeff",
+    "jepa_action_contrast_margin",
+    "contrastive_coeff",
+    "contrastive_temperature",
+    "candidate_count",
+    "jepa_teacher_forcing_steps",
+)
 
 
 def _parse_compute_dtype(dtype_str: str) -> jnp.dtype:
@@ -2663,6 +2682,78 @@ def apply_config_overrides(
     )
 
 
+def apply_experiment_overrides(
+    config: JointLatentSASAConfig,
+    overrides: Mapping[str, Any] | None = None,
+) -> JointLatentSASAConfig:
+    """Apply the checked-in autoresearch edit surface to restored metadata."""
+
+    selected = EXPERIMENT_OVERRIDES if overrides is None else overrides
+    if not isinstance(selected, Mapping):
+        raise TypeError(
+            "EXPERIMENT_OVERRIDES must be a mapping of config field names "
+            f"to values, got {type(selected).__name__}"
+        )
+
+    config_fields = {
+        field.name: field
+        for field in dataclasses.fields(JointLatentSASAConfig)
+    }
+    unknown = sorted(set(selected) - set(config_fields))
+    if unknown:
+        raise ValueError(
+            "Unknown EXPERIMENT_OVERRIDES config field(s): "
+            + ", ".join(unknown)
+        )
+
+    checked: dict[str, Any] = {}
+    for name, value in selected.items():
+        default = config_fields[name].default
+        expected_type = type(default)
+        if expected_type is float:
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                raise TypeError(
+                    f"EXPERIMENT_OVERRIDES[{name!r}] must be float, "
+                    f"got {type(value).__name__}"
+                )
+            checked[name] = float(value)
+            continue
+        if type(value) is not expected_type:
+            raise TypeError(
+                f"EXPERIMENT_OVERRIDES[{name!r}] must be "
+                f"{expected_type.__name__}, got {type(value).__name__}"
+            )
+        checked[name] = value
+
+    return dataclasses.replace(config, **checked)
+
+
+def validate_no_inert_config_overrides(
+    config: JointLatentSASAConfig,
+) -> None:
+    """Reject legacy knobs that the local stage-1 graph cannot honor."""
+
+    fields = JointLatentSASAConfig.__dataclass_fields__
+    non_default = [
+        (
+            name,
+            getattr(config, name),
+            fields[name].default,
+        )
+        for name in _INERT_OR_DEPRECATED_CONFIG_FIELDS
+        if getattr(config, name) != fields[name].default
+    ]
+    if non_default:
+        details = ", ".join(
+            f"{name}={value!r} (required default {default!r})"
+            for name, value, default in non_default
+        )
+        raise ValueError(
+            "Inert/deprecated research config fields cannot be set: "
+            + details
+        )
+
+
 def git_commit() -> str:
     result = subprocess.run(
         ["git", "rev-parse", "HEAD"],
@@ -3277,7 +3368,9 @@ def main() -> int:
     metrics_path = output_dir / "metrics.jsonl"
 
     config, metadata = resolve_config(run_root)
+    config = apply_experiment_overrides(config)
     config = apply_config_overrides(config, args)
+    validate_no_inert_config_overrides(config)
     validate_objective_config(
         objective=args.objective,
         config=config,
