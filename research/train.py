@@ -11,6 +11,7 @@ directly in this file while continuing to use immutable support from
 from __future__ import annotations
 
 import argparse
+import csv
 import dataclasses
 import json
 import subprocess
@@ -18,11 +19,12 @@ import sys
 import time
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import NamedTuple
+from typing import IO, Any, NamedTuple
 
 import jax
 import jax.numpy as jnp
 import numpy as np
+from flax import nnx
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(_REPO_ROOT) not in sys.path:
@@ -33,9 +35,11 @@ from chess_dfm_jax.training.checkpoints import load_training_checkpoint  # noqa:
 from chess_dfm_jax.training.joint_latent_sasa import (  # noqa: E402
     create_joint_components,
     eval_joint_stage1_step,
+    joint_stage1_loss_fn,
     train_joint_stage1_step,
     train_joint_stage1_step_donated,
 )
+from chess_dfm_jax.nnx_bt4 import TrainableParam  # noqa: E402
 from research.legacy_baseline import flatten_metrics, resolve_config  # noqa: E402
 from research.prepare import (  # noqa: E402
     REPO_ROOT,
@@ -192,6 +196,7 @@ def latent_collapse_diagnostics(
     effective_rank = jnp.where(eigenvalue_sum[:, 0] > 1e-12, jnp.exp(entropy), 0.0)
 
     sample_mse = jnp.mean(jnp.square(pred - target), axis=-1)
+    zero_mse = jnp.mean(jnp.square(target), axis=-1)
     identity_mse = jnp.mean(jnp.square(current[:, None, :] - target), axis=-1)
     permutation = jax.random.permutation(rng, pred.shape[0])
     shuffled_target = target[permutation]
@@ -206,6 +211,7 @@ def latent_collapse_diagnostics(
 
     return {
         "jepa_mse_by_horizon": horizon_mean(sample_mse),
+        "zero_mse_by_horizon": horizon_mean(zero_mse),
         "identity_mse_by_horizon": horizon_mean(identity_mse),
         "shuffled_mse_by_horizon": horizon_mean(shuffled_mse),
         "pred_target_cosine_by_horizon": horizon_mean(cosine),
@@ -223,6 +229,236 @@ def latent_collapse_diagnostics(
     }
 
 
+@nnx.jit
+def diagnose_joint_latents(
+    model,
+    batch: dict[str, jax.Array],
+    rng: jax.Array,
+) -> dict[str, jax.Array]:
+    """Authoritative free-rollout collapse and action-dependence diagnostics."""
+
+    actions = batch["action_indices"][:, : model.config.horizon]
+    future_planes = batch["future_planes"][:, : model.config.horizon]
+    all_tokens, z_all = model.encode_current_and_future_tokens_and_vectors(
+        batch["current_planes"],
+        future_planes,
+    )
+    z_dfm = model.dfm_latents(all_tokens[:, 0])
+    clean_t = jnp.ones((actions.shape[0],), dtype=jnp.float32)
+    _, clean_hidden = model.planner_from_latents(
+        z_dfm,
+        actions,
+        clean_t,
+        return_hidden=True,
+    )
+    pred_z = model.jepa_rollout_from_latents(
+        z_all[:, 0],
+        actions,
+        clean_hidden["action_tokens"],
+        z0_normalized=True,
+    )
+    valid = (
+        jnp.asarray(batch["future_valid"], dtype=jnp.float32)[:, : model.config.horizon]
+        * jnp.asarray(batch["valid"], dtype=jnp.float32)[:, None]
+    )
+    rng_baseline, rng_action = jax.random.split(rng)
+    metrics = latent_collapse_diagnostics(
+        pred_z,
+        z_all[:, 1:],
+        z_all[:, 0],
+        valid,
+        rng=rng_baseline,
+    )
+
+    permutation = jax.random.permutation(rng_action, actions.shape[0])
+    action_shuffled_pred = model.jepa_rollout_from_latents(
+        z_all[:, 0],
+        actions[permutation],
+        clean_hidden["action_tokens"][permutation],
+        z0_normalized=True,
+    )
+    action_shuffled_mse = jnp.mean(
+        jnp.square(jnp.asarray(action_shuffled_pred, dtype=jnp.float32) - z_all[:, 1:]),
+        axis=-1,
+    )
+    denom = jnp.maximum(jnp.sum(valid, axis=0), 1.0)
+    metrics["action_shuffled_mse_by_horizon"] = (
+        jnp.sum(action_shuffled_mse * valid, axis=0) / denom
+    )
+    return metrics
+
+
+def _clip_loss_preserve_gradient(
+    loss: jax.Array,
+    clip_value: float,
+) -> tuple[jax.Array, jax.Array]:
+    loss = jnp.asarray(loss, dtype=jnp.float32)
+    if clip_value <= 0.0:
+        return loss, jnp.asarray(1.0, dtype=jnp.float32)
+    clip = jnp.asarray(clip_value, dtype=jnp.float32)
+    scale = jnp.minimum(1.0, clip / jax.lax.stop_gradient(jnp.maximum(loss, 1e-6)))
+    return loss * scale, scale
+
+
+def normalized_stage1_loss_fn(
+    model,
+    batch: dict[str, jax.Array],
+    rng: jax.Array,
+    target_reference_count: float,
+    pred_reference_count: float,
+) -> tuple[jax.Array, dict[str, jax.Array]]:
+    """Compatibility loss with corrected count scaling and legal bounds.
+
+    The legacy forward graph remains the oracle in this milestone. Its official
+    EP statistics are converted to fixed-reference discrepancies algebraically,
+    preserving their exact gradients while removing valid-count scaling.
+    """
+
+    _, legacy_aux = joint_stage1_loss_fn(
+        model,
+        batch,
+        rng,
+        compute_fp32_legality=True,
+    )
+    target_official = jnp.asarray(legacy_aux["jepa_sigreg_loss"], dtype=jnp.float32)
+    pred_official = jnp.asarray(legacy_aux["jepa_pred_sigreg_loss"], dtype=jnp.float32)
+    target_count = jnp.asarray(legacy_aux["jepa_sigreg_valid_count"], dtype=jnp.float32)
+    pred_count = jnp.asarray(legacy_aux["jepa_pred_sigreg_valid_count"], dtype=jnp.float32)
+
+    target_normalized = target_official * (
+        jnp.asarray(target_reference_count, dtype=jnp.float32) / jnp.maximum(target_count, 1.0)
+    )
+    pred_normalized = pred_official * (
+        jnp.asarray(pred_reference_count, dtype=jnp.float32) / jnp.maximum(pred_count, 1.0)
+    )
+
+    corrected_first_legality = jnp.asarray(
+        legacy_aux["first_legality_loss_fp32"],
+        dtype=jnp.float32,
+    )
+    corrected_legal_mass = 1.0 - corrected_first_legality
+    corrected_weighted_legality = model.config.first_legality_coeff * corrected_first_legality
+
+    unclipped = jnp.asarray(legacy_aux["unclipped_loss"], dtype=jnp.float32)
+    unclipped = (
+        unclipped
+        - jnp.asarray(legacy_aux["weighted_legality_loss"], dtype=jnp.float32)
+        - model.config.jepa_sigreg_coeff * target_official
+        - model.config.jepa_pred_sigreg_coeff * pred_official
+        + corrected_weighted_legality
+        + model.config.jepa_sigreg_coeff * target_normalized
+        + model.config.jepa_pred_sigreg_coeff * pred_normalized
+    )
+    loss, clip_scale = _clip_loss_preserve_gradient(unclipped, model.config.loss_clip_value)
+
+    aux = dict(legacy_aux)
+    aux.update(
+        {
+            "loss": loss,
+            "unclipped_loss": unclipped,
+            "loss_clip_scale": clip_scale,
+            "first_legal_mass": corrected_legal_mass,
+            "first_legality_loss": corrected_first_legality,
+            "legality_loss": corrected_first_legality,
+            "weighted_legality_loss": corrected_weighted_legality,
+            "jepa_sigreg_official_loss": target_official,
+            "jepa_pred_sigreg_official_loss": pred_official,
+            "jepa_sigreg_loss": target_normalized,
+            "jepa_pred_sigreg_loss": pred_normalized,
+            "jepa_sigreg_reference_count": jnp.asarray(
+                target_reference_count, dtype=jnp.float32
+            ),
+            "jepa_pred_sigreg_reference_count": jnp.asarray(
+                pred_reference_count, dtype=jnp.float32
+            ),
+        }
+    )
+    return loss, aux
+
+
+_normalized_loss_and_grad = nnx.value_and_grad(
+    normalized_stage1_loss_fn,
+    argnums=nnx.DiffState(0, TrainableParam),
+    has_aux=True,
+)
+
+
+def _normalized_train_step_impl(
+    model,
+    optimizer: nnx.Optimizer,
+    batch: dict[str, jax.Array],
+    rng: jax.Array,
+    target_reference_count: float,
+    pred_reference_count: float,
+):
+    with jax.named_scope("research_normalized_loss_and_grad"):
+        (loss, aux), grads = _normalized_loss_and_grad(
+            model,
+            batch,
+            rng,
+            target_reference_count,
+            pred_reference_count,
+        )
+    with jax.named_scope("research_normalized_optimizer_update"):
+        optimizer.update(model, grads)
+    return loss, aux
+
+
+@nnx.jit
+def eval_normalized_stage1_step(
+    model,
+    batch: dict[str, jax.Array],
+    rng: jax.Array,
+    target_reference_count: float,
+    pred_reference_count: float,
+):
+    return normalized_stage1_loss_fn(
+        model,
+        batch,
+        rng,
+        target_reference_count,
+        pred_reference_count,
+    )
+
+
+@nnx.jit
+def train_normalized_stage1_step(
+    model,
+    optimizer: nnx.Optimizer,
+    batch: dict[str, jax.Array],
+    rng: jax.Array,
+    target_reference_count: float,
+    pred_reference_count: float,
+):
+    return _normalized_train_step_impl(
+        model,
+        optimizer,
+        batch,
+        rng,
+        target_reference_count,
+        pred_reference_count,
+    )
+
+
+@nnx.jit(donate_argnums=(0, 1))
+def train_normalized_stage1_step_donated(
+    model,
+    optimizer: nnx.Optimizer,
+    batch: dict[str, jax.Array],
+    rng: jax.Array,
+    target_reference_count: float,
+    pred_reference_count: float,
+):
+    return _normalized_train_step_impl(
+        model,
+        optimizer,
+        batch,
+        rng,
+        target_reference_count,
+        pred_reference_count,
+    )
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run-root", type=Path, default=DEFAULT_RUN_ROOT)
@@ -235,6 +471,15 @@ def parse_args() -> argparse.Namespace:
         default="exact",
         help="Restore legacy optimizer state exactly or start a fresh optimizer from restored weights.",
     )
+    parser.add_argument(
+        "--objective",
+        choices=("legacy", "normalized"),
+        default="legacy",
+        help="Exact legacy loss or fixed-reference SIGReg plus bounded legality.",
+    )
+    parser.add_argument("--target-sigreg-coeff", type=float)
+    parser.add_argument("--pred-sigreg-coeff", type=float)
+    parser.add_argument("--sigreg-reference-count", type=float, default=1.0)
     parser.add_argument("--batch-size", type=int, default=1)
     parser.add_argument(
         "--steps",
@@ -248,11 +493,29 @@ def parse_args() -> argparse.Namespace:
         default=0.0,
         help="Steady-state training budget after the first compile/update.",
     )
+    parser.add_argument("--eval-only", action="store_true")
     parser.add_argument("--eval-batches", type=int, default=1)
+    parser.add_argument(
+        "--collapse-diagnostics",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+    )
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--val-seed", type=int, default=10_000)
     parser.add_argument("--val-deterministic-t", type=float, default=0.0)
     parser.add_argument("--donate", action=argparse.BooleanOptionalAction, default=True)
+    parser.add_argument(
+        "--compile-ahead",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Lower/compile the training step explicitly and record compiler cost analysis.",
+    )
+    parser.add_argument(
+        "--gpu-monitor-interval-ms",
+        type=int,
+        default=0,
+        help="Sample nvidia-smi during steady training; 100 ms is useful for profile runs.",
+    )
     parser.add_argument("--run-id", default="")
     parser.add_argument("--output-dir", type=Path)
     return parser.parse_args()
@@ -285,6 +548,9 @@ def evaluate(
     count: int,
     seed: int,
     deterministic_t: float,
+    objective: str,
+    sigreg_reference_count: float,
+    collapse_diagnostics: bool,
 ) -> tuple[dict[str, float], float]:
     if count < 1:
         return {}, 0.0
@@ -294,9 +560,23 @@ def evaluate(
         batch = batches.batch_at(index)
         batch["deterministic_t"] = np.asarray(deterministic_t, dtype=np.float32)
         rng = jax.random.fold_in(jax.random.PRNGKey(seed), index)
-        loss, aux = eval_joint_stage1_step(model, batch, rng)
+        if objective == "normalized":
+            loss, aux = eval_normalized_stage1_step(
+                model,
+                batch,
+                rng,
+                sigreg_reference_count,
+                sigreg_reference_count,
+            )
+        else:
+            loss, aux = eval_joint_stage1_step(model, batch, rng)
         jax.block_until_ready((loss, aux))
         metrics = {"loss": float(loss), **flatten_metrics(aux)}
+        if collapse_diagnostics:
+            diagnostic_rng = jax.random.fold_in(rng, 0xC011A95E)
+            diagnostics = diagnose_joint_latents(model, batch, diagnostic_rng)
+            jax.block_until_ready(diagnostics)
+            metrics.update(flatten_metrics(diagnostics))
         for key, value in metrics.items():
             totals[key] = totals.get(key, 0.0) + value
     return {key: value / count for key, value in totals.items()}, time.perf_counter() - started
@@ -310,6 +590,176 @@ def should_continue(*, updates: int, steps: int, deadline: float | None) -> bool
     return steps > 0 or deadline is not None
 
 
+def normalize_cost_analysis(raw: Any) -> dict[str, float]:
+    if raw is None:
+        return {}
+    if isinstance(raw, list):
+        merged: dict[str, float] = {}
+        for entry in raw:
+            for key, value in entry.items():
+                merged[key] = merged.get(key, 0.0) + float(value)
+        return merged
+    return {key: float(value) for key, value in raw.items()}
+
+
+def compiler_cost_summary(raw: dict[str, float]) -> dict[str, float]:
+    keys = ("flops", "transcendentals", "bytes accessed", "optimal_seconds")
+    return {key: raw[key] for key in keys if key in raw}
+
+
+def normalize_memory_analysis(raw: Any) -> dict[str, int]:
+    if raw is None:
+        return {}
+    if dataclasses.is_dataclass(raw):
+        values = dataclasses.asdict(raw)
+    elif hasattr(raw, "_asdict"):
+        values = raw._asdict()
+    else:
+        values = {
+            key: getattr(raw, key)
+            for key in dir(raw)
+            if key.endswith("_in_bytes") and not key.startswith("_")
+        }
+    return {
+        key: int(value)
+        for key, value in values.items()
+        if value is not None and key.endswith("_in_bytes")
+    }
+
+
+def start_gpu_monitor(
+    output_dir: Path,
+    *,
+    interval_ms: int,
+) -> tuple[subprocess.Popen[str], IO[str], IO[str]]:
+    samples_handle = (output_dir / "gpu_samples.csv").open("w", encoding="utf-8")
+    stderr_handle = (output_dir / "gpu_monitor.stderr.log").open("w", encoding="utf-8")
+    fields = (
+        "timestamp,utilization.gpu,utilization.memory,memory.used,memory.total,"
+        "power.draw,clocks.sm,clocks.mem"
+    )
+    process = subprocess.Popen(
+        [
+            "nvidia-smi",
+            f"--query-gpu={fields}",
+            "--format=csv,noheader,nounits",
+            f"--loop-ms={interval_ms}",
+        ],
+        stdout=samples_handle,
+        stderr=stderr_handle,
+        text=True,
+    )
+    return process, samples_handle, stderr_handle
+
+
+def stop_gpu_monitor(
+    process: subprocess.Popen[str],
+    samples_handle: IO[str],
+    stderr_handle: IO[str],
+) -> None:
+    process.terminate()
+    try:
+        process.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait(timeout=5)
+    samples_handle.close()
+    stderr_handle.close()
+
+
+def summarize_gpu_samples(path: Path) -> dict[str, float | int]:
+    columns = {
+        "gpu_utilization_percent": 1,
+        "memory_utilization_percent": 2,
+        "memory_used_mib": 3,
+        "memory_total_mib": 4,
+        "power_watts": 5,
+        "sm_clock_mhz": 6,
+        "memory_clock_mhz": 7,
+    }
+    values = {name: [] for name in columns}
+    if not path.is_file():
+        return {"sample_count": 0}
+    with path.open(encoding="utf-8", newline="") as handle:
+        for row in csv.reader(handle):
+            if len(row) != 8:
+                continue
+            try:
+                for name, index in columns.items():
+                    values[name].append(float(row[index].strip()))
+            except ValueError:
+                continue
+    sample_count = len(values["gpu_utilization_percent"])
+    summary: dict[str, float | int] = {"sample_count": sample_count}
+    if sample_count == 0:
+        return summary
+    for name, series in values.items():
+        array = np.asarray(series, dtype=np.float64)
+        summary[f"{name}_mean"] = float(np.mean(array))
+        summary[f"{name}_p50"] = float(np.quantile(array, 0.50))
+        summary[f"{name}_p95"] = float(np.quantile(array, 0.95))
+        summary[f"{name}_max"] = float(np.max(array))
+    return summary
+
+
+def training_function(*, objective: str, donate: bool):
+    if objective == "normalized":
+        return (
+            train_normalized_stage1_step_donated
+            if donate
+            else train_normalized_stage1_step
+        )
+    return train_joint_stage1_step_donated if donate else train_joint_stage1_step
+
+
+def training_call_args(
+    *,
+    objective: str,
+    model,
+    optimizer: nnx.Optimizer,
+    batch: dict[str, jax.Array],
+    rng: jax.Array,
+    sigreg_reference_count: float,
+) -> tuple[Any, ...]:
+    common = (model, optimizer, batch, rng)
+    if objective == "normalized":
+        return common + (sigreg_reference_count, sigreg_reference_count)
+    return common
+
+
+def compiler_performance(
+    cost_analysis: dict[str, float],
+    seconds_per_update: float | None,
+) -> dict[str, float | None]:
+    """Convert XLA's static cost estimate into explicitly labelled rates."""
+
+    flops = cost_analysis.get("flops")
+    bytes_accessed = cost_analysis.get("bytes accessed")
+    if seconds_per_update is None or seconds_per_update <= 0.0:
+        return {
+            "compiler_estimated_flops_per_update": flops,
+            "compiler_estimated_bytes_per_update": bytes_accessed,
+            "compiler_estimated_arithmetic_intensity": None,
+            "compiler_estimated_achieved_tflops": None,
+            "compiler_estimated_achieved_gbps": None,
+        }
+    return {
+        "compiler_estimated_flops_per_update": flops,
+        "compiler_estimated_bytes_per_update": bytes_accessed,
+        "compiler_estimated_arithmetic_intensity": (
+            None
+            if flops is None or bytes_accessed in (None, 0.0)
+            else flops / bytes_accessed
+        ),
+        "compiler_estimated_achieved_tflops": (
+            None if flops is None else flops / seconds_per_update / 1e12
+        ),
+        "compiler_estimated_achieved_gbps": (
+            None if bytes_accessed is None else bytes_accessed / seconds_per_update / 1e9
+        ),
+    }
+
+
 def main() -> int:
     args = parse_args()
     validate_environment()
@@ -317,10 +767,16 @@ def main() -> int:
         raise RuntimeError(f"research/train.py requires GPU, found {jax.default_backend()!r}")
     if args.steps < 0:
         raise ValueError("--steps must be non-negative")
-    if args.steps == 0 and args.train_seconds <= 0:
+    if not args.eval_only and args.steps == 0 and args.train_seconds <= 0:
         raise ValueError("Set --steps > 0 or --train-seconds > 0")
     if args.train_seconds < 0:
         raise ValueError("--train-seconds must be non-negative")
+    if args.sigreg_reference_count <= 0:
+        raise ValueError("--sigreg-reference-count must be positive")
+    if args.gpu_monitor_interval_ms < 0:
+        raise ValueError("--gpu-monitor-interval-ms must be non-negative")
+    if 0 < args.gpu_monitor_interval_ms < 50:
+        raise ValueError("--gpu-monitor-interval-ms must be 0 or at least 50")
     if not 0.0 <= args.val_deterministic_t <= 1.0:
         raise ValueError("--val-deterministic-t must be in [0, 1]")
 
@@ -338,6 +794,19 @@ def main() -> int:
     metrics_path = output_dir / "metrics.jsonl"
 
     config, metadata = resolve_config(run_root)
+    config = dataclasses.replace(
+        config,
+        jepa_sigreg_coeff=(
+            config.jepa_sigreg_coeff
+            if args.target_sigreg_coeff is None
+            else args.target_sigreg_coeff
+        ),
+        jepa_pred_sigreg_coeff=(
+            config.jepa_pred_sigreg_coeff
+            if args.pred_sigreg_coeff is None
+            else args.pred_sigreg_coeff
+        ),
+    )
     train_batches = FixedTrajectoryBatches(
         data_root / "train",
         batch_size=args.batch_size,
@@ -373,6 +842,9 @@ def main() -> int:
         count=args.eval_batches,
         seed=args.val_seed,
         deterministic_t=args.val_deterministic_t,
+        objective=args.objective,
+        sigreg_reference_count=args.sigreg_reference_count,
+        collapse_diagnostics=args.collapse_diagnostics,
     )
 
     run_config = {
@@ -393,52 +865,102 @@ def main() -> int:
     }
     write_json(output_dir / "run_config.json", run_config)
 
+    train_fn = training_function(objective=args.objective, donate=args.donate)
+    executable = train_fn
+    explicit_compile_seconds: float | None = None
+    compiler_cost_analysis_raw: dict[str, float] = {}
+    compiler_memory_analysis: dict[str, int] = {}
+    if args.compile_ahead and not args.eval_only:
+        compile_batch = train_batches.batch_at(0)
+        compile_rng = jax.random.fold_in(jax.random.PRNGKey(args.seed), 0)
+        compile_args = training_call_args(
+            objective=args.objective,
+            model=model,
+            optimizer=optimizer,
+            batch=compile_batch,
+            rng=compile_rng,
+            sigreg_reference_count=args.sigreg_reference_count,
+        )
+        compile_started = time.perf_counter()
+        executable = train_fn.lower(*compile_args).compile()
+        explicit_compile_seconds = time.perf_counter() - compile_started
+        if hasattr(executable, "cost_analysis"):
+            compiler_cost_analysis_raw = normalize_cost_analysis(executable.cost_analysis())
+            write_json(
+                output_dir / "compiler_cost_analysis.json",
+                compiler_cost_analysis_raw,
+            )
+        if hasattr(executable, "memory_analysis"):
+            compiler_memory_analysis = normalize_memory_analysis(
+                executable.memory_analysis()
+            )
+
     updates = 0
     examples = 0
-    compile_update_seconds: float | None = None
+    first_update_seconds: float | None = None
     steady_update_seconds: list[float] = []
     final_train_metrics: dict[str, float] = {}
     deadline: float | None = float("inf") if args.train_seconds > 0 else None
     training_wall_started = time.perf_counter()
+    gpu_monitor: tuple[subprocess.Popen[str], IO[str], IO[str]] | None = None
 
-    with metrics_path.open("w", encoding="utf-8") as metrics_log:
-        while should_continue(
-            updates=updates,
-            steps=args.steps,
-            deadline=deadline,
-        ):
-            data_step = updates
-            fetch_started = time.perf_counter()
-            batch = train_batches.batch_at(data_step)
-            fetch_seconds = time.perf_counter() - fetch_started
-            step_rng = jax.random.fold_in(jax.random.PRNGKey(args.seed), data_step)
-            update_started = time.perf_counter()
-            train_fn = train_joint_stage1_step_donated if args.donate else train_joint_stage1_step
-            loss, aux = train_fn(model, optimizer, batch, step_rng)
-            jax.block_until_ready((loss, aux))
-            update_seconds = time.perf_counter() - update_started
+    try:
+        with metrics_path.open("w", encoding="utf-8") as metrics_log:
+            while not args.eval_only and should_continue(
+                updates=updates, steps=args.steps, deadline=deadline
+            ):
+                if (
+                    args.gpu_monitor_interval_ms > 0
+                    and updates == 1
+                    and gpu_monitor is None
+                ):
+                    gpu_monitor = start_gpu_monitor(
+                        output_dir,
+                        interval_ms=args.gpu_monitor_interval_ms,
+                    )
 
-            updates += 1
-            examples += args.batch_size
-            if compile_update_seconds is None:
-                compile_update_seconds = update_seconds
-                if args.train_seconds > 0:
-                    deadline = time.perf_counter() + args.train_seconds
-            else:
-                steady_update_seconds.append(update_seconds)
+                data_step = updates
+                fetch_started = time.perf_counter()
+                batch = train_batches.batch_at(data_step)
+                fetch_seconds = time.perf_counter() - fetch_started
+                step_rng = jax.random.fold_in(jax.random.PRNGKey(args.seed), data_step)
+                update_started = time.perf_counter()
+                call_args = training_call_args(
+                    objective=args.objective,
+                    model=model,
+                    optimizer=optimizer,
+                    batch=batch,
+                    rng=step_rng,
+                    sigreg_reference_count=args.sigreg_reference_count,
+                )
+                loss, aux = executable(*call_args)
+                jax.block_until_ready((loss, aux))
+                update_seconds = time.perf_counter() - update_started
 
-            final_train_metrics = {"loss": float(loss), **flatten_metrics(aux)}
-            record = {
-                "update": updates,
-                "optimizer_step": int(optimizer.step[...]),
-                "data_step": data_step,
-                "fetch_seconds": fetch_seconds,
-                "update_seconds": update_seconds,
-                "examples_per_second": args.batch_size / max(update_seconds, 1e-12),
-                **final_train_metrics,
-            }
-            metrics_log.write(json.dumps(record, sort_keys=True) + "\n")
-            metrics_log.flush()
+                updates += 1
+                examples += args.batch_size
+                if first_update_seconds is None:
+                    first_update_seconds = update_seconds
+                    if args.train_seconds > 0:
+                        deadline = time.perf_counter() + args.train_seconds
+                else:
+                    steady_update_seconds.append(update_seconds)
+
+                final_train_metrics = {"loss": float(loss), **flatten_metrics(aux)}
+                record = {
+                    "update": updates,
+                    "optimizer_step": int(optimizer.step[...]),
+                    "data_step": data_step,
+                    "fetch_seconds": fetch_seconds,
+                    "update_seconds": update_seconds,
+                    "examples_per_second": args.batch_size / max(update_seconds, 1e-12),
+                    **final_train_metrics,
+                }
+                metrics_log.write(json.dumps(record, sort_keys=True) + "\n")
+                metrics_log.flush()
+    finally:
+        if gpu_monitor is not None:
+            stop_gpu_monitor(*gpu_monitor)
 
     training_wall_seconds = time.perf_counter() - training_wall_started
     final_val, final_val_seconds = evaluate(
@@ -447,7 +969,40 @@ def main() -> int:
         count=args.eval_batches,
         seed=args.val_seed,
         deterministic_t=args.val_deterministic_t,
+        objective=args.objective,
+        sigreg_reference_count=args.sigreg_reference_count,
+        collapse_diagnostics=args.collapse_diagnostics,
     )
+    steady_update_seconds_mean = (
+        float(np.mean(steady_update_seconds)) if steady_update_seconds else None
+    )
+    steady_update_seconds_p50 = (
+        float(np.quantile(steady_update_seconds, 0.50))
+        if steady_update_seconds
+        else None
+    )
+    steady_update_seconds_p95 = (
+        float(np.quantile(steady_update_seconds, 0.95))
+        if steady_update_seconds
+        else None
+    )
+    performance_seconds = steady_update_seconds_mean or first_update_seconds
+    compiler_cost_analysis = compiler_cost_summary(compiler_cost_analysis_raw)
+    performance = compiler_performance(compiler_cost_analysis, performance_seconds)
+    throughput = {
+        "steady_examples_per_second": (
+            None
+            if steady_update_seconds_mean is None
+            else args.batch_size / steady_update_seconds_mean
+        ),
+        "steady_encoded_boards_per_second": (
+            None
+            if steady_update_seconds_mean is None
+            else args.batch_size * (config.horizon + 1) / steady_update_seconds_mean
+        ),
+    }
+    gpu_samples_path = output_dir / "gpu_samples.csv"
+    gpu_monitor_summary = summarize_gpu_samples(gpu_samples_path)
 
     report = {
         **run_config,
@@ -455,10 +1010,22 @@ def main() -> int:
         "initial_validation_seconds": initial_val_seconds,
         "final_validation_seconds": final_val_seconds,
         "training_wall_seconds": training_wall_seconds,
-        "compile_and_first_update_seconds": compile_update_seconds,
-        "steady_update_seconds_mean": (
-            float(np.mean(steady_update_seconds)) if steady_update_seconds else None
+        "explicit_compile_seconds": explicit_compile_seconds,
+        "first_update_seconds": first_update_seconds,
+        "compile_and_first_update_seconds": (
+            None
+            if first_update_seconds is None
+            else first_update_seconds + (explicit_compile_seconds or 0.0)
         ),
+        "steady_update_seconds_mean": steady_update_seconds_mean,
+        "steady_update_seconds_p50": steady_update_seconds_p50,
+        "steady_update_seconds_p95": steady_update_seconds_p95,
+        "compiler_cost_analysis": compiler_cost_analysis,
+        "compiler_memory_analysis": compiler_memory_analysis,
+        "gpu_monitor": gpu_monitor_summary,
+        "gpu_samples_path": str(gpu_samples_path) if gpu_samples_path.is_file() else None,
+        **performance,
+        **throughput,
         "updates": updates,
         "examples": examples,
         "initial_validation": initial_val,
@@ -477,8 +1044,13 @@ def main() -> int:
                 "examples": examples,
                 "initial_val_dfm_ce": initial_val.get("dfm_ce_loss"),
                 "final_val_dfm_ce": final_val.get("dfm_ce_loss"),
-                "compile_and_first_update_seconds": compile_update_seconds,
+                "explicit_compile_seconds": explicit_compile_seconds,
+                "first_update_seconds": first_update_seconds,
                 "steady_update_seconds_mean": report["steady_update_seconds_mean"],
+                "steady_examples_per_second": report["steady_examples_per_second"],
+                "compiler_estimated_achieved_tflops": report[
+                    "compiler_estimated_achieved_tflops"
+                ],
                 "gpu_memory": report["gpu_memory"],
             },
             indent=2,

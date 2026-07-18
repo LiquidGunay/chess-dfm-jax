@@ -230,12 +230,23 @@ numbers of vectors in this model.
 Keep the official statistic as a diagnostic, but train with:
 
 ```text
-normalized_sigreg = official_ep * reference_count / valid_count
+unscaled_sigreg = official_ep / valid_count
 ```
 
-The fixed `reference_count` preserves the familiar coefficient scale at a
-documented reference batch while making it independent of batch size, horizon
-masking, microbatching, and device layout.
+This is the empirical-characteristic-function discrepancy used in LeJEPA's
+finite-sample analysis and in the later world-model formulation, rather than
+the sample-count-scaled goodness-of-fit test statistic. An optional fixed
+`reference_count` is only a coefficient-translation convenience:
+
+```text
+training_sigreg = unscaled_sigreg * reference_count
+```
+
+It makes exact duplication and padding invariant. It does not remove the
+finite-sample bias and variance of the V-statistic for independently sampled
+batches. Measure that effect across physical batch sizes before freezing the
+loss; if material, compare the unbiased U-statistic correction as a controlled
+follow-up.
 
 Required tests:
 
@@ -255,14 +266,23 @@ correct implementation either:
 Only the second implementation may claim invariance to microbatch partitioning,
 and it requires a dedicated loss-and-gradient parity test.
 
+Before selecting a coefficient, measure unweighted gradient norms and pairwise
+gradient cosines for DFM CE, JEPA prediction, target SIGReg, prediction SIGReg,
+and legality on the backbone, DFM, and JEPA parameter groups. Sweep coefficients
+that make the auxiliary gradient roughly 1%, 3%, 10%, and 30% of the main
+gradient. The legacy coefficient is not transferred blindly after removing the
+sample-count multiplier.
+
 ### Prediction-collapse ablations
 
-Run in this order:
-
-1. normalized target SIGReg only;
-2. add normalized prediction SIGReg with a small coefficient;
-3. add a per-horizon VICReg-style standard-deviation hinge if necessary; and
-4. investigate scale/shape regularization only after the simpler baselines.
+Run a paired 2×2 target-SIGReg off/on × prediction-SIGReg off/on ablation.
+Prediction SIGReg is not the new default: the recovered checkpoint currently
+has healthy prediction variance/rank and a strong action-shuffle gap. Accept it
+only if it improves prediction stability or quality without weakening action
+sensitivity, policy metrics, or relative Elo. If Gaussian marginal shape is
+not the failure mode, prefer a targeted action-coupling loss. A per-horizon
+VICReg-style standard-deviation hinge is the first fallback for actual
+collapse.
 
 Collapse measurements are computed per horizon before aggregation:
 
@@ -316,6 +336,12 @@ Report:
 - host and device idle time; and
 - batch-one and batched inference latency.
 
+The local CUPTI/JAX trace path currently faults with
+`CUDA_ERROR_ILLEGAL_ADDRESS` on this driver combination. Until that is resolved,
+use XLA cost/memory analysis plus 100 ms `nvidia-smi` utilization, memory,
+power, and clock samples. Do not let an unavailable profiler block
+wall-clock/throughput optimization or silently omit the limitation.
+
 Optimization sequence:
 
 1. batch and microbatch size;
@@ -366,9 +392,29 @@ colors swapped. Initial anchors are:
 The frequent arena is an in-process, batched GPU evaluator rather than a serial
 UCI tournament. UCI remains a correctness and interoperability path.
 
-Report model-pool relative Elo with uncertainty, game count, score breakdown,
-FEN set digest, refinement count, latency, and games/s. Never label it as human
-or Lichess Elo.
+Each opening is played as a color-reversed pair. The pair is the sampling unit;
+record pentanomial `LL/LD/DD-or-LW/WD/WW` outcomes. An illegal move, timeout,
+exception, or non-finite result is a loss—never a silent fallback to raw BT4.
+Use normal chess outcomes and a symmetric ply-cap draw; report the cap rate.
+
+Use a frozen, hash-selected development pool and a separate promotion pool from
+held-out trajectory game/FEN groups. No external Stockfish opening or puzzle
+dataset is needed. Store pool checksums and selection seeds.
+
+Report model-pool relative logistic and normalized Elo with pair-aware 95%
+uncertainty, game count, score breakdown, FEN set digest, refinement count,
+candidate count, latency, and games/s. Never label it as human or Lichess Elo.
+
+Arena tiers:
+
+1. 16 opening pairs for correctness only;
+2. 128 pairs / 256 games as a quick large-effect gate; and
+3. a promotion GSPRT on the fresh pool with `H0=0`, `H1=+20 normalized Elo`,
+   `alpha=beta=0.05`, checked after complete pairs and capped at 4,096 games.
+
+Inconclusive is not evidence of equality. Small improvements should be combined
+through validation and repeated training runs before paying for a promotion
+arena.
 
 The first implementation benchmark determines how many games fit in the
 promotion budget. No fixed game count is assumed before measuring it.
@@ -466,16 +512,32 @@ Only after the baseline and promotion harness are stable:
 Claims of grokking, phase transitions, or double descent require predefined
 sweeps, held-out data, and repeated seeds.
 
+## Primary references
+
+- [LeJEPA paper](https://arxiv.org/abs/2511.08544) and
+  [official Epps-Pulley implementation](https://github.com/galilai-group/lejepa/blob/main/lejepa/univariate/epps_pulley.py)
+- [LeWorldModel](https://arxiv.org/abs/2603.19312), the closest published
+  predictive-world-model use of unscaled SIGReg
+- [VICReg](https://arxiv.org/abs/2105.04906) and its
+  [official implementation](https://github.com/facebookresearch/vicreg)
+- [RankMe](https://arxiv.org/abs/2210.02885) for entropy-based effective rank
+- [JAX benchmarking guidance](https://docs.jax.dev/en/latest/benchmarking.html)
+- [Fishtest mathematics](https://official-stockfish.github.io/docs/fishtest-wiki/Fishtest-Mathematics.html)
+  and the [official opening books](https://github.com/official-stockfish/books)
+
 ## Immediate implementation checklist
 
 - [x] Preserve the historical commit on `legacy/tpu-joint-latent-sasa`.
 - [x] Create `research/local-gpu-autoresearch`.
-- [ ] Establish and test the workspace-local environment contract.
+- [x] Establish and test the workspace-local environment contract.
 - [x] Ground and download the approved Drive assets.
 - [x] Verify archive and checkpoint digests.
 - [x] Recover the original checkpoint metadata and sidecars.
 - [x] Produce the first strict local-GPU baseline fingerprint.
 - [x] Create the one-editable-file compatibility scaffold.
 - [ ] Move the experimental model/loss into `research/train.py` and pass parity.
-- [ ] Add loss-invariance and collapse tests.
-- [ ] Capture the first active-model GPU profile.
+- [x] Add initial duplication/padding invariance and collapse tests.
+- [x] Capture the first active-model GPU profile.
+- [x] Recompute legality from the original logits in FP32 with correct gradients.
+- [ ] Calibrate normalized SIGReg coefficients by per-module gradient norms.
+- [ ] Implement the persistent batched paired-opening arena.

@@ -5,10 +5,13 @@ import jax.numpy as jnp
 import numpy as np
 
 from research.train import (
+    compiler_performance,
     latent_collapse_diagnostics,
     legal_mass_fp32,
+    normalize_memory_analysis,
     normalized_le_jepa_sigreg,
     should_continue,
+    summarize_gpu_samples,
 )
 
 
@@ -80,6 +83,46 @@ def test_legal_mass_is_fp32_and_bounded() -> None:
 def test_time_budget_runs_a_compile_step_before_deadline_is_set() -> None:
     assert should_continue(updates=0, steps=0, deadline=float("inf"))
     assert not should_continue(updates=1, steps=0, deadline=0.0)
+
+
+def test_slot_based_compiler_memory_stats_are_normalized() -> None:
+    class MemoryStats:
+        __slots__ = ("argument_size_in_bytes", "temp_size_in_bytes", "ignored")
+
+        def __init__(self) -> None:
+            self.argument_size_in_bytes = 12
+            self.temp_size_in_bytes = 34
+            self.ignored = 56
+
+    assert normalize_memory_analysis(MemoryStats()) == {
+        "argument_size_in_bytes": 12,
+        "temp_size_in_bytes": 34,
+    }
+
+
+def test_compiler_rates_are_explicit_estimates() -> None:
+    metrics = compiler_performance(
+        {"flops": 4.0e12, "bytes accessed": 2.0e9},
+        0.5,
+    )
+    assert metrics["compiler_estimated_achieved_tflops"] == 8.0
+    assert metrics["compiler_estimated_achieved_gbps"] == 4.0
+    assert metrics["compiler_estimated_arithmetic_intensity"] == 2000.0
+
+
+def test_gpu_monitor_summary_ignores_malformed_rows(tmp_path) -> None:
+    samples = tmp_path / "gpu_samples.csv"
+    samples.write_text(
+        "2026/07/18 00:00:00.000, 25, 10, 1000, 23028, 75, 1500, 6251\n"
+        "malformed\n"
+        "2026/07/18 00:00:00.100, 75, 20, 2000, 23028, 125, 1700, 6251\n",
+        encoding="utf-8",
+    )
+    summary = summarize_gpu_samples(samples)
+    assert summary["sample_count"] == 2
+    assert summary["gpu_utilization_percent_mean"] == 50.0
+    assert summary["memory_used_mib_max"] == 2000.0
+    assert summary["power_watts_p50"] == 100.0
 
 
 def test_per_horizon_diagnostics_expose_one_collapsed_horizon() -> None:

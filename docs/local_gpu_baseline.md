@@ -165,6 +165,96 @@ active vector JEPA.
 8. The legacy loader silently catches corrupt NPZ errors. The research loader
    now fails closed and maps `batch_at(global_step)` deterministically.
 
+## First per-horizon collapse audit
+
+A batch of 16 held-out examples was evaluated with free JEPA rollout and real
+zero, identity, target-shuffle, and action-shuffle baselines.
+
+Across horizons 1–8:
+
+- prediction RMS was approximately `0.976–1.005`;
+- target RMS was approximately `1.037–1.074`;
+- mean prediction feature standard deviation was `0.888–0.916`;
+- fifth-percentile prediction feature standard deviation was `0.558–0.603`;
+- effective rank was `11.56–12.96`, with a batch-limited maximum of 15;
+- prediction-target cosine was `0.740–0.800`;
+- prediction MSE was `0.415–0.537`;
+- zero MSE was `1.076–1.153`;
+- identity MSE was `1.726–2.193`;
+- shuffled-target MSE was `1.787–2.000`; and
+- action-shuffled MSE was `1.426–2.024`.
+
+This slice does not show current prediction collapse. The strong
+action-shuffled gap also confirms that the JEPA transition uses the
+action/DFM-hidden conditioning. Prediction SIGReg should therefore be evaluated
+as a controlled stability/quality ablation, not assumed to be an unconditional
+improvement.
+
+The complete report is
+`research/runs/normalized-collapse-eval-step265k-b16/report.json`.
+
+## Corrected objective fingerprint
+
+The research objective now trains against the unscaled ECF discrepancy while
+retaining the official count-scaled Epps-Pulley statistic as a diagnostic. The
+first-token policy softmax, compact legal gather, and probability sum are
+recomputed from the original logits in FP32, so the correction is
+gradient-connected and does not require another model forward.
+
+On the same deterministic batch-four validation slice:
+
+| Metric | Value |
+|---|---:|
+| DFM CE | 3.2872314 |
+| FP32 first legal mass | 0.9995466 |
+| FP32 legality loss | 0.0004534 |
+| Target unscaled discrepancy | 0.1506310 |
+| Target official statistic | 5.4227142 |
+| Prediction unscaled discrepancy | 0.1407625 |
+| Prediction official statistic | 4.5043998 |
+| Corrected total loss | 3.9873407 |
+
+The previous BF16 aggregate on this slice exceeded one and was clipped only
+after its gradient had already been formed. The new value is computed correctly
+inside the forward graph. The complete report is
+`research/runs/normalized-fp32-eval-step265k-b4/report.json`.
+
+The hook is inert in legacy mode. A strict rerun retained the exact original
+total loss `4.0333166122` and every original component; its report is
+`artifacts/baselines/legacy_step265000_loss_after_fp32_hook.json`.
+
+## First active-graph batch sweep
+
+The compatibility trainer strictly restored the step-265,000 model and
+optimizer, explicitly compiled the real backward/update executable, and sampled
+the GPU every 100 ms after its first update. All rows use the normalized target
+plus prediction SIGReg graph with reference count one; these coefficients are
+for profiling only and are not the frozen research objective.
+
+Each example encodes nine boards: the current state plus eight future states.
+
+| Physical batch | Mean update (s) | Examples/s | Encoded boards/s | Mean GPU util. | Mean power | Peak live HBM |
+|---:|---:|---:|---:|---:|---:|---:|
+| 1 | 0.316 | 3.16 | 28.5 | 73.9% | 128 W | 4.49 GB |
+| 4 | 0.381 | 10.49 | 94.4 | 76.3% | 142 W | 4.50 GB |
+| 8 | 0.453 | 17.65 | 158.9 | 73.3% | 163 W | 4.51 GB |
+| 16 | 0.660 | 24.25 | 218.2 | 77.6% | 186 W | 4.50 GB |
+| 32 | 1.003 | 31.90 | 287.1 | 85.2% | 221 W | 4.51 GB |
+| 64 | 1.641 | 39.01 | 351.1 | 90.3% | 248 W | 5.93 GB |
+
+Batch 64 is 12.3 times faster than batch one in examples/s. Its update-time
+median/p95 were 1.587/1.867 s and its power p95 was 277 W. Cold explicit
+compilation grew from 115 s at batch one to 278 s at batch 64.
+
+XLA reports aggregate FLOPs, traffic, compiled memory, and transcendental
+counts. Those static FLOP estimates barely scale with batch because constant
+optimizer work and loop accounting dominate, so they are retained as compiler
+diagnostics and are not presented as a reliable MFU numerator.
+
+JAX/CUPTI tracing failed on this driver combination with
+`CUDA_ERROR_ILLEGAL_ADDRESS`. The trainer therefore uses safe `nvidia-smi`
+sampling plus XLA analysis until that compatibility issue is resolved.
+
 ## Next acceptance point
 
 The compatibility harness is not yet open to autoresearch. The next milestone
