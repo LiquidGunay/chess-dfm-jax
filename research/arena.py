@@ -73,8 +73,15 @@ GSPRT_DECISIONS = frozenset(
 def arena_foundation_contract() -> dict[str, Any]:
     """Describe what this support layer does and explicitly does not provide."""
     return {
-        "engine_adapter": "absent",
-        "gpu_model_loading": "absent",
+        "engine_adapter": (
+            "supported_by_research.local_policy.LocalDFMPolicy"
+        ),
+        "gameplay_runner": (
+            "supported_by_research.play_arena.play_arena_pairs"
+        ),
+        "gpu_model_loading": (
+            "caller_owned_via_strict_checkpoint_boundaries"
+        ),
         "uci_adapter": "absent",
         "sequential_stopping_unit": "completed_color_reversed_pair",
         "promotion_stopping": {

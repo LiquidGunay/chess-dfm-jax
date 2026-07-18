@@ -518,10 +518,17 @@ def test_normalized_promotion_gate_fails_closed_on_bad_or_incomplete_pairs():
         GSPRTState.from_dict(tampered)
 
 
-def test_foundation_contract_records_missing_adapters_and_codec_handicap():
+def test_foundation_contract_records_adapters_promotion_and_codec_handicap():
     contract = arena_foundation_contract()
-    assert contract["engine_adapter"] == "absent"
-    assert contract["gpu_model_loading"] == "absent"
+    assert contract["engine_adapter"] == (
+        "supported_by_research.local_policy.LocalDFMPolicy"
+    )
+    assert contract["gameplay_runner"] == (
+        "supported_by_research.play_arena.play_arena_pairs"
+    )
+    assert contract["gpu_model_loading"] == (
+        "caller_owned_via_strict_checkpoint_boundaries"
+    )
     assert contract["uci_adapter"] == "absent"
     promotion = contract["promotion_stopping"]
     assert promotion["status"] == "supported"
