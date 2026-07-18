@@ -86,6 +86,29 @@ GRADIENT_COMPONENT_NAMES = (
 )
 GRADIENT_GROUP_NAMES = ("backbone", "dfm", "jepa", "other", "all")
 
+UNEVALUATED_LEGACY_AUX_METRICS = frozenset(
+    {
+        "horizon_legality_loss",
+        "horizon_legal_mass",
+        "horizon_legality_evaluated",
+        "jepa_cosine_loss",
+        "jepa_normalized_mse",
+        "mean_token_cosine",
+        "mean_token_cosine_by_horizon",
+        "pred_token_norm",
+        "target_token_norm",
+        "identity_jepa_loss",
+        "identity_jepa_cosine_loss",
+        "identity_mean_token_cosine",
+        "jepa_shuffled_loss",
+        "jepa_shuffled_cosine_loss",
+        "jepa_shuffled_mean_token_cosine",
+        "jepa_action_contrast_loss",
+        "jepa_true_minus_shuffled",
+        "jepa_loss_minus_identity",
+    }
+)
+
 
 @dataclasses.dataclass
 class JointLatentSASAConfig:
@@ -1556,6 +1579,35 @@ def flatten_metrics(metrics: dict[str, Any]) -> dict[str, float]:
     return flattened
 
 
+def reportable_stage1_aux(
+    aux: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Remove known unevaluated compatibility placeholders from reports."""
+
+    missing = sorted(UNEVALUATED_LEGACY_AUX_METRICS - set(aux))
+    if missing:
+        raise KeyError(
+            "Stage-1 aux is missing expected legacy placeholder key(s): "
+            + ", ".join(missing)
+        )
+    unexpectedly_evaluated = [
+        key
+        for key in sorted(UNEVALUATED_LEGACY_AUX_METRICS)
+        if not np.all(np.asarray(aux[key]) == 0)
+    ]
+    if unexpectedly_evaluated:
+        raise ValueError(
+            "Legacy aux metric(s) marked unevaluated became nonzero; "
+            "define their reporting semantics before emitting them: "
+            + ", ".join(unexpectedly_evaluated)
+        )
+    return {
+        key: value
+        for key, value in aux.items()
+        if key not in UNEVALUATED_LEGACY_AUX_METRICS
+    }
+
+
 class SigRegResult(NamedTuple):
     normalized: jax.Array
     official: jax.Array
@@ -2804,7 +2856,10 @@ def evaluate(
         else:
             loss, aux = eval_joint_stage1_step(model, batch, rng)
         jax.block_until_ready((loss, aux))
-        metrics = {"loss": float(loss), **flatten_metrics(aux)}
+        metrics = {
+            "loss": float(loss),
+            **flatten_metrics(reportable_stage1_aux(aux)),
+        }
         if collapse_diagnostics:
             diagnostic_rng = jax.random.fold_in(rng, 0xC011A95E)
             diagnostics = diagnose_joint_latents(model, batch, diagnostic_rng)
@@ -3493,6 +3548,9 @@ def main() -> int:
         audit_config = {
             "autoresearch_ready": AUTORESEARCH_READY,
             "architecture_source": ARCHITECTURE_SOURCE,
+            "unevaluated_legacy_aux_metrics": sorted(
+                UNEVALUATED_LEGACY_AUX_METRICS
+            ),
             "git_commit": commit,
             "run_id": run_id,
             "timestamp_utc": timestamp,
@@ -3548,6 +3606,9 @@ def main() -> int:
     run_config = {
         "autoresearch_ready": AUTORESEARCH_READY,
         "architecture_source": ARCHITECTURE_SOURCE,
+        "unevaluated_legacy_aux_metrics": sorted(
+            UNEVALUATED_LEGACY_AUX_METRICS
+        ),
         "git_commit": commit,
         "run_id": run_id,
         "timestamp_utc": timestamp,
@@ -3677,7 +3738,10 @@ def main() -> int:
                 else:
                     steady_update_seconds.append(update_seconds)
 
-                final_train_metrics = {"loss": float(loss), **flatten_metrics(aux)}
+                final_train_metrics = {
+                    "loss": float(loss),
+                    **flatten_metrics(reportable_stage1_aux(aux)),
+                }
                 record = {
                     "update": updates,
                     "research_update": research_update,

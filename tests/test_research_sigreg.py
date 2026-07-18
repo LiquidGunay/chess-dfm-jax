@@ -3,14 +3,18 @@ from __future__ import annotations
 import jax
 import jax.numpy as jnp
 import numpy as np
+import pytest
 
 from research.train import (
+    UNEVALUATED_LEGACY_AUX_METRICS,
     compiler_performance,
+    flatten_metrics,
     gradient_group_for_path,
     latent_collapse_diagnostics,
     legal_mass_fp32,
     normalize_memory_analysis,
     normalized_le_jepa_sigreg,
+    reportable_stage1_aux,
     reconstruct_polarized_grams,
     should_continue,
     summarize_gpu_samples,
@@ -80,6 +84,67 @@ def test_legal_mass_is_fp32_and_bounded() -> None:
     mass = legal_mass_fp32(probs, legal_idx, legal_count)
     assert mass.dtype == jnp.float32
     np.testing.assert_array_equal(np.asarray(mass), np.asarray([1.0], dtype=np.float32))
+
+
+def test_unevaluated_legacy_aux_metrics_are_explicitly_filtered() -> None:
+    expected = frozenset(
+        {
+            "horizon_legality_loss",
+            "horizon_legal_mass",
+            "horizon_legality_evaluated",
+            "jepa_cosine_loss",
+            "jepa_normalized_mse",
+            "mean_token_cosine",
+            "mean_token_cosine_by_horizon",
+            "pred_token_norm",
+            "target_token_norm",
+            "identity_jepa_loss",
+            "identity_jepa_cosine_loss",
+            "identity_mean_token_cosine",
+            "jepa_shuffled_loss",
+            "jepa_shuffled_cosine_loss",
+            "jepa_shuffled_mean_token_cosine",
+            "jepa_action_contrast_loss",
+            "jepa_true_minus_shuffled",
+            "jepa_loss_minus_identity",
+        }
+    )
+    assert UNEVALUATED_LEGACY_AUX_METRICS == expected
+
+    aux = {
+        key: (
+            jnp.zeros((2,), dtype=jnp.float32)
+            if key.endswith("_by_horizon")
+            else jnp.asarray(0.0, dtype=jnp.float32)
+        )
+        for key in expected
+    }
+    aux["dfm_ce_loss"] = jnp.asarray(1.25, dtype=jnp.float32)
+    reportable = reportable_stage1_aux(aux)
+    assert reportable == {"dfm_ce_loss": aux["dfm_ce_loss"]}
+    assert flatten_metrics(reportable) == {"dfm_ce_loss": 1.25}
+
+
+def test_unevaluated_aux_filter_fails_closed_if_contract_drifts() -> None:
+    aux = {
+        key: jnp.asarray(0.0, dtype=jnp.float32)
+        for key in UNEVALUATED_LEGACY_AUX_METRICS
+    }
+    missing = dict(aux)
+    del missing["identity_jepa_loss"]
+    with pytest.raises(KeyError, match="identity_jepa_loss"):
+        reportable_stage1_aux(missing)
+
+    nonzero = dict(aux)
+    nonzero["jepa_action_contrast_loss"] = jnp.asarray(
+        0.5,
+        dtype=jnp.float32,
+    )
+    with pytest.raises(
+        ValueError,
+        match="jepa_action_contrast_loss",
+    ):
+        reportable_stage1_aux(nonzero)
 
 
 def test_time_budget_runs_a_compile_step_before_deadline_is_set() -> None:
