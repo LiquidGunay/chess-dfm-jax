@@ -346,7 +346,12 @@ def test_local_config_and_initialized_model_match_legacy_exactly():
     local_fields = [
         (field.name, field.default)
         for field in dataclasses.fields(local.JointLatentSASAConfig)
-        if field.name != "jepa_target_stop_gradient"
+        if field.name
+        not in {
+            "jepa_target_stop_gradient",
+            "jepa_target_semantics",
+            "jepa_target_ema_decay",
+        }
     ]
     legacy_fields = [
         (field.name, field.default)
@@ -358,6 +363,18 @@ def test_local_config_and_initialized_model_match_legacy_exactly():
             "jepa_target_stop_gradient"
         ].default
         is False
+    )
+    assert (
+        local.JointLatentSASAConfig.__dataclass_fields__[
+            "jepa_target_semantics"
+        ].default
+        == "online"
+    )
+    assert (
+        local.JointLatentSASAConfig.__dataclass_fields__[
+            "jepa_target_ema_decay"
+        ].default
+        == 0.99
     )
 
     kwargs = _config_kwargs()

@@ -16,6 +16,7 @@ import gc
 import hashlib
 import importlib.metadata
 import json
+import math
 import os
 import re
 import shutil
@@ -67,6 +68,8 @@ ARCHITECTURE_SOURCE = "research_train_local_model_and_loss"
 # metadata is loaded first, then these values, then explicit CLI overrides.
 EXPERIMENT_OVERRIDES: dict[str, Any] = {
     # "jepa_target_stop_gradient": True,
+    # "jepa_target_semantics": "ema",
+    # "jepa_target_ema_decay": 0.99,
 }
 
 DEFAULT_RUN_ROOT = REPO_ROOT / "checkpoints" / "source" / "step0265000"
@@ -141,6 +144,8 @@ class JointLatentSASAConfig:
     jepa_loss_type: str = "raw_mse"
     jepa_target_mode: str = "projected_bt4"
     jepa_target_stop_gradient: bool = False
+    jepa_target_semantics: str = "online"
+    jepa_target_ema_decay: float = 0.99
     jepa_target_sample_count: int = 0
     jepa_gamma: float = 1.0
     jepa_sigreg_coeff: float = 0.1
@@ -1091,12 +1096,203 @@ class JointLatentSASAModel(nnx.Module):
         )
 
 
+class EmaBt4Encoder(nnx.Module):
+    """Headless clone of the BT4 token-producing trunk."""
+
+    def __init__(self, online_encoder: BT4Model):
+        self.embedding = nnx.clone(online_encoder.embedding)
+        self.layers = nnx.clone(online_encoder.layers)
+        self.embedding_size = int(online_encoder.embedding_size)
+
+    def encode_tokens(
+        self,
+        planes: jnp.ndarray,
+        alpha: float | None = None,
+    ) -> jnp.ndarray:
+        if alpha is None:
+            alpha = (
+                float(math.pow(2.0 * len(self.layers), -0.25))
+                if len(self.layers) > 0
+                else 1.0
+            )
+        x, batch_size = self.embedding(planes, alpha)
+        x = x.reshape((batch_size, 64, self.embedding_size))
+        for layer in self.layers:
+            x = layer(x, alpha)
+        return x
+
+
+class EmaTargetModel(nnx.Module):
+    """Non-optimized FP32 shadow of the JEPA target-producing parameters.
+
+    The shadow contains exactly the headless BT4 token encoder, state
+    projector, and optional JEPA state RMSNorm path. All floating runtime
+    variables use physically independent FP32 buffers; only trainable shadow
+    variables need checkpointing.
+    """
+
+    def __init__(self, online_model: JointLatentSASAModel):
+        self.encoder = EmaBt4Encoder(online_model.encoder)
+        self.state_projector = nnx.clone(online_model.state_projector)
+        self.jepa_state_norm = nnx.clone(online_model.jepa_state_norm)
+        self.config = online_model.config
+        self.compute_dtype = online_model.compute_dtype
+        self.z_dim = online_model.z_dim
+
+        shadow_state = nnx.state(self)
+        fp32_shadow_state = jax.tree.map(
+            lambda value: jnp.array(
+                value,
+                dtype=(
+                    jnp.float32
+                    if jnp.issubdtype(
+                        jnp.asarray(value).dtype,
+                        jnp.inexact,
+                    )
+                    else jnp.asarray(value).dtype
+                ),
+                copy=True,
+            ),
+            shadow_state,
+        )
+        nnx.update(self, fp32_shadow_state)
+
+    def encode_bt4_tokens(self, planes: jnp.ndarray) -> jnp.ndarray:
+        return jnp.asarray(
+            self.encoder.encode_tokens(planes),
+            dtype=self.compute_dtype,
+        )
+
+    def normalize_jepa_state(self, z: jnp.ndarray) -> jnp.ndarray:
+        z = jnp.asarray(z, dtype=self.compute_dtype)
+        if not self.config.jepa_state_rmsnorm:
+            return z
+        stats_z = jnp.asarray(z, dtype=jnp.float32)
+        inv_rms = jax.lax.rsqrt(
+            jnp.mean(jnp.square(stats_z), axis=-1, keepdims=True)
+            + self.jepa_state_norm.eps
+        )
+        scale = jnp.asarray(
+            self.jepa_state_norm.scale[...],
+            dtype=jnp.float32,
+        )
+        if self.config.jepa_state_rms_scale_max > 0.0:
+            max_scale = jnp.asarray(
+                self.config.jepa_state_rms_scale_max,
+                dtype=jnp.float32,
+            )
+            scale = jnp.clip(scale, 1.0 / max_scale, max_scale)
+        return jnp.asarray(stats_z * inv_rms * scale, dtype=self.compute_dtype)
+
+    def encode_future_targets(self, future_planes: jnp.ndarray) -> jnp.ndarray:
+        batch_size, horizon, channels, height, width = future_planes.shape
+        if int(self.config.bt4_encode_chunk_size) == 1:
+            time_major_planes = jnp.swapaxes(future_planes, 0, 1)
+
+            def encode_one(planes_t):
+                vectors_t = self.state_projector(
+                    self.encode_bt4_tokens(planes_t)
+                )
+                return self.normalize_jepa_state(vectors_t)
+
+            encode_one_fn = jax.checkpoint(
+                encode_one,
+                prevent_cse=False,
+            )
+
+            def scan_body(_, planes_t):
+                return None, encode_one_fn(planes_t)
+
+            _, vectors_t = jax.lax.scan(
+                scan_body,
+                None,
+                time_major_planes,
+                unroll=1,
+            )
+            return jnp.swapaxes(vectors_t, 0, 1)
+
+        flat_planes = future_planes.reshape(
+            (batch_size * horizon, channels, height, width)
+        )
+        vectors = self.state_projector(
+            self.encode_bt4_tokens(flat_planes)
+        )
+        vectors = vectors.reshape((batch_size, horizon, self.z_dim))
+        return self.normalize_jepa_state(vectors)
+
+
+def _ema_target_component_pairs(
+    target: EmaTargetModel,
+    online: JointLatentSASAModel,
+) -> tuple[tuple[nnx.Module, nnx.Module], ...]:
+    return (
+        (target.encoder, online.encoder),
+        (target.state_projector, online.state_projector),
+        (target.jepa_state_norm, online.jepa_state_norm),
+    )
+
+
+def sync_ema_target_from_online(
+    target: EmaTargetModel,
+    online: JointLatentSASAModel,
+) -> None:
+    """Copy a restored online target path into the FP32 EMA shadow exactly."""
+
+    for target_component, online_component in _ema_target_component_pairs(
+        target,
+        online,
+    ):
+        target_state = nnx.state(target_component, TrainableParam)
+        online_state = nnx.state(online_component, TrainableParam)
+        target_structure = jax.tree.structure(target_state)
+        if target_structure != jax.tree.structure(online_state):
+            raise ValueError("EMA target/online parameter structures differ")
+        copied = jax.tree.map(
+            lambda target_value, online_value: jnp.array(
+                online_value,
+                dtype=jnp.asarray(target_value).dtype,
+                copy=True,
+            ),
+            target_state,
+            online_state,
+        )
+        nnx.update(target_component, copied)
+
+
+def update_ema_target_after_optimizer(
+    target: EmaTargetModel,
+    online: JointLatentSASAModel,
+    decay: float,
+) -> None:
+    """Apply ``target = decay*target + (1-decay)*online`` in FP32."""
+
+    decay_array = jnp.asarray(decay, dtype=jnp.float32)
+    one_minus_decay = jnp.asarray(1.0, dtype=jnp.float32) - decay_array
+    for target_component, online_component in _ema_target_component_pairs(
+        target,
+        online,
+    ):
+        target_state = nnx.state(target_component, TrainableParam)
+        online_state = nnx.state(online_component, TrainableParam)
+        updated = jax.tree.map(
+            lambda target_value, online_value: (
+                decay_array * jnp.asarray(target_value, dtype=jnp.float32)
+                + one_minus_decay
+                * jnp.asarray(online_value, dtype=jnp.float32)
+            ),
+            target_state,
+            online_state,
+        )
+        nnx.update(target_component, updated)
+
+
 def joint_stage1_loss_fn(
     model: JointLatentSASAModel,
     batch: dict[str, jnp.ndarray],
     rng: jnp.ndarray,
     sigreg_axis_name: str | None = None,
     compute_fp32_legality: bool = False,
+    positive_target_override: jax.Array | None = None,
 ) -> tuple[jnp.ndarray, dict[str, jnp.ndarray]]:
     actions = batch["action_indices"][:, : model.config.horizon]
     batch_size, horizon = actions.shape
@@ -1204,13 +1400,30 @@ def joint_stage1_loss_fn(
     selected_horizons = jnp.arange(horizon, dtype=jnp.int32)
     pred_for_loss = pred_z
     future_valid_for_loss = future_valid
-    target_vectors = _jepa_positive_target_vectors(
-        z_jepa,
-        target_z,
-        pred_for_loss,
-        target_mode=model.config.jepa_target_mode,
-        stop_gradient=model.config.jepa_target_stop_gradient,
-    )
+    if positive_target_override is None:
+        target_vectors = _jepa_positive_target_vectors(
+            z_jepa,
+            target_z,
+            pred_for_loss,
+            target_mode=model.config.jepa_target_mode,
+            stop_gradient=model.config.jepa_target_stop_gradient,
+        )
+    else:
+        if model.config.jepa_target_mode != "projected_bt4":
+            raise ValueError(
+                "EMA positive targets require jepa_target_mode='projected_bt4'."
+            )
+        if positive_target_override.shape != pred_for_loss.shape:
+            raise ValueError(
+                "EMA positive target shape differs from prediction shape: "
+                f"{positive_target_override.shape} != {pred_for_loss.shape}"
+            )
+        target_vectors = jax.lax.stop_gradient(
+            jnp.asarray(
+                positive_target_override,
+                dtype=pred_for_loss.dtype,
+            )
+        )
     with jax.named_scope("joint_jepa_raw_mse_loss"):
         sample_raw_mse = jnp.mean(
             (jnp.asarray(pred_for_loss, dtype=jnp.float32) - jnp.asarray(target_vectors, dtype=jnp.float32)) ** 2,
@@ -1228,6 +1441,69 @@ def joint_stage1_loss_fn(
     jepa_positive_loss = _weighted_horizon_mean(sample_jepa, jepa_mask)
     jepa_raw_mse = _weighted_horizon_mean(sample_raw_mse, jepa_mask)
     jepa_norm_loss = _weighted_horizon_mean(sample_norm_loss, jepa_mask)
+    if positive_target_override is not None:
+        positive_target_rms = jnp.sqrt(
+            _weighted_horizon_mean(
+                jnp.mean(
+                    jnp.square(
+                        jnp.asarray(target_vectors, dtype=jnp.float32)
+                    ),
+                    axis=-1,
+                ),
+                jepa_mask,
+            )
+        )
+        positive_pred_rms = jnp.sqrt(
+            _weighted_horizon_mean(
+                jnp.mean(
+                    jnp.square(
+                        jnp.asarray(pred_for_loss, dtype=jnp.float32)
+                    ),
+                    axis=-1,
+                ),
+                jepa_mask,
+            )
+        )
+        pred_target_cosine_by_sample = jnp.sum(
+            jnp.asarray(pred_for_loss, dtype=jnp.float32)
+            * jnp.asarray(target_vectors, dtype=jnp.float32),
+            axis=-1,
+        ) / jnp.maximum(
+            jnp.linalg.norm(
+                jnp.asarray(pred_for_loss, dtype=jnp.float32),
+                axis=-1,
+            )
+            * jnp.linalg.norm(
+                jnp.asarray(target_vectors, dtype=jnp.float32),
+                axis=-1,
+            ),
+            1e-12,
+        )
+        positive_pred_target_cosine = _weighted_horizon_mean(
+            pred_target_cosine_by_sample,
+            jepa_mask,
+        )
+        online_target_rms = jnp.sqrt(
+            _weighted_horizon_mean(
+                jnp.mean(
+                    jnp.square(
+                        jnp.asarray(target_z, dtype=jnp.float32)
+                    ),
+                    axis=-1,
+                ),
+                jepa_mask,
+            )
+        )
+        online_positive_target_mse = _weighted_horizon_mean(
+            jnp.mean(
+                jnp.square(
+                    jnp.asarray(target_z, dtype=jnp.float32)
+                    - jnp.asarray(target_vectors, dtype=jnp.float32)
+                ),
+                axis=-1,
+            ),
+            jepa_mask,
+        )
     jepa_sigreg_loss = jnp.asarray(0.0, dtype=jnp.float32)
     valid_all = jnp.concatenate([valid[:, None], valid[:, None] * future_valid], axis=1)
     sigreg_weight = valid_all.reshape((-1,))
@@ -1418,6 +1694,24 @@ def joint_stage1_loss_fn(
         "mask_prob": jnp.mean(1.0 - t),
         "loss_horizon": jnp.asarray(loss_horizon, dtype=jnp.float32),
     }
+    if positive_target_override is not None:
+        aux.update(
+            {
+                "jepa_target_semantics_ema": jnp.asarray(
+                    1.0,
+                    dtype=jnp.float32,
+                ),
+                "jepa_positive_ema_target_rms": positive_target_rms,
+                "jepa_online_future_target_rms": online_target_rms,
+                "jepa_positive_pred_rms": positive_pred_rms,
+                "jepa_pred_positive_ema_target_cosine": (
+                    positive_pred_target_cosine
+                ),
+                "jepa_online_future_vs_ema_target_mse": (
+                    online_positive_target_mse
+                ),
+            }
+        )
     return loss, aux
 
 
@@ -1550,6 +1844,40 @@ def validate_objective_config(
             "--objective normalized requires jepa_sigreg_kind='le_jepa'; "
             f"found {config.jepa_sigreg_kind!r}"
         )
+    if config.jepa_target_semantics not in ("online", "ema"):
+        raise ValueError(
+            "jepa_target_semantics must be 'online' or 'ema', found "
+            f"{config.jepa_target_semantics!r}"
+        )
+    if not 0.0 <= config.jepa_target_ema_decay < 1.0:
+        raise ValueError(
+            "jepa_target_ema_decay must be in [0, 1), found "
+            f"{config.jepa_target_ema_decay}"
+        )
+    if (
+        config.jepa_target_semantics == "online"
+        and config.jepa_target_ema_decay
+        != JointLatentSASAConfig.jepa_target_ema_decay
+    ):
+        raise ValueError(
+            "jepa_target_ema_decay is inert unless "
+            "jepa_target_semantics='ema'; keep its default in online mode."
+        )
+    if config.jepa_target_semantics == "ema":
+        if objective != "normalized":
+            raise ValueError(
+                "EMA targets require --objective normalized."
+            )
+        if config.jepa_target_mode != "projected_bt4":
+            raise ValueError(
+                "EMA targets require jepa_target_mode='projected_bt4'."
+            )
+        if config.jepa_target_stop_gradient:
+            raise ValueError(
+                "EMA targets are intrinsically detached; keep "
+                "jepa_target_stop_gradient=False to avoid conflating "
+                "target semantics."
+            )
 
 
 def flatten_metrics(metrics: dict[str, Any]) -> dict[str, float]:
@@ -1775,7 +2103,11 @@ def assert_research_state_compatible(
     )
 
 
-def extract_research_train_state(model: nnx.Module, optimizer: nnx.Optimizer) -> dict[str, Any]:
+def extract_research_train_state(
+    model: nnx.Module,
+    optimizer: nnx.Optimizer,
+    ema_target: nnx.Module | None = None,
+) -> dict[str, Any]:
     """Copy trainable model and optimizer state to a raw NumPy payload."""
 
     def to_host(value: Any) -> Any:
@@ -1785,21 +2117,31 @@ def extract_research_train_state(model: nnx.Module, optimizer: nnx.Optimizer) ->
 
     model_state = jax.tree.map(to_host, nnx.state(model, TrainableParam))
     optimizer_state = jax.tree.map(to_host, nnx.state(optimizer.opt_state))
-    return {
+    payload = {
         "step": np.asarray(int(optimizer.step[...]), dtype=np.int64),
         "model_trainable": dict(nnx.to_pure_dict(model_state)),
         "optimizer_state": dict(nnx.to_pure_dict(optimizer_state)),
     }
+    if ema_target is not None:
+        ema_state = jax.tree.map(
+            to_host,
+            nnx.state(ema_target, TrainableParam),
+        )
+        payload["ema_target"] = dict(nnx.to_pure_dict(ema_state))
+    return payload
 
 
 def strict_restore_research_payload(
     payload: dict[str, Any],
     model: nnx.Module,
     optimizer: nnx.Optimizer,
+    ema_target: nnx.Module | None = None,
 ) -> int:
     """Preflight both state trees, then restore them without partial fallback."""
 
     required = {"step", "model_trainable", "optimizer_state"}
+    if ema_target is not None:
+        required.add("ema_target")
     if set(payload) != required:
         missing = sorted(required - set(payload))
         extra = sorted(set(payload) - required)
@@ -1829,11 +2171,24 @@ def strict_restore_research_payload(
         payload["optimizer_state"],
         label="optimizer",
     )
+    ema_state = None
+    if ema_target is not None:
+        ema_state = nnx.state(ema_target, TrainableParam)
+        ema_current = dict(nnx.to_pure_dict(ema_state))
+        assert_research_state_compatible(
+            ema_current,
+            payload["ema_target"],
+            label="EMA target",
+        )
 
     nnx.replace_by_pure_dict(model_state, payload["model_trainable"])
     nnx.replace_by_pure_dict(optimizer_state, payload["optimizer_state"])
+    if ema_state is not None:
+        nnx.replace_by_pure_dict(ema_state, payload["ema_target"])
     nnx.update(model, model_state)
     nnx.update(optimizer.opt_state, optimizer_state)
+    if ema_state is not None:
+        nnx.update(ema_target, ema_state)
     optimizer.step[...] = jnp.asarray(optimizer_step, dtype=optimizer.step[...].dtype)
     return int(optimizer.step[...])
 
@@ -1951,6 +2306,7 @@ def save_research_checkpoint(
     lineage: dict[str, Any],
     max_to_keep: int = 2,
     extra: dict[str, Any] | None = None,
+    ema_target: nnx.Module | None = None,
 ) -> Path:
     """Atomically publish a checksummed local research checkpoint."""
 
@@ -1971,7 +2327,11 @@ def save_research_checkpoint(
         )
     )
     try:
-        payload = extract_research_train_state(model, optimizer)
+        payload = extract_research_train_state(
+            model,
+            optimizer,
+            ema_target,
+        )
         state_path = temporary_dir / "state.npz"
         np.savez(state_path, **payload)
         _fsync_path(state_path)
@@ -1998,6 +2358,10 @@ def save_research_checkpoint(
             },
             "extra": _json_normalize(extra or {}),
         }
+        if ema_target is not None:
+            manifest["ema_target_abi"] = research_state_abi(
+                payload["ema_target"]
+            )
         write_json(temporary_dir / "manifest.json", manifest)
         _fsync_path(temporary_dir / "manifest.json")
         _fsync_path(temporary_dir)
@@ -2017,6 +2381,7 @@ def load_research_checkpoint(
     model: nnx.Module,
     optimizer: nnx.Optimizer,
     expected_resume_contract: dict[str, Any] | None = None,
+    ema_target: nnx.Module | None = None,
 ) -> dict[str, Any]:
     """Verify and strictly restore a completed local research checkpoint."""
 
@@ -2057,8 +2422,30 @@ def load_research_checkpoint(
         raise ValueError(f"Research checkpoint model ABI manifest mismatch: {checkpoint_dir}")
     if payload_optimizer_abi != manifest.get("optimizer_abi"):
         raise ValueError(f"Research checkpoint optimizer ABI manifest mismatch: {checkpoint_dir}")
+    if ema_target is None:
+        if "ema_target" in payload or "ema_target_abi" in manifest:
+            raise ValueError(
+                "Research checkpoint contains EMA target state but no EMA "
+                "target model was supplied."
+            )
+    else:
+        if "ema_target" not in payload:
+            raise ValueError(
+                "Research checkpoint is missing required EMA target state."
+            )
+        payload_ema_abi = research_state_abi(payload["ema_target"])
+        if payload_ema_abi != manifest.get("ema_target_abi"):
+            raise ValueError(
+                f"Research checkpoint EMA target ABI manifest mismatch: "
+                f"{checkpoint_dir}"
+            )
 
-    strict_restore_research_payload(payload, model, optimizer)
+    strict_restore_research_payload(
+        payload,
+        model,
+        optimizer,
+        ema_target,
+    )
     restored = dict(manifest)
     restored["checkpoint_dir"] = str(checkpoint_dir)
     return restored
@@ -2086,19 +2473,38 @@ def build_research_resume_contract(
         REPO_ROOT / "chess_dfm_jax" / "nnx_bt4.py",
         REPO_ROOT / "chess_dfm_jax" / "data" / "trajectory_v3.py",
     )
+    objective_contract = {
+        "name": objective,
+        "jepa_target_semantics": config.jepa_target_semantics,
+        "jepa_target_stop_gradient": bool(
+            config.jepa_target_stop_gradient
+        ),
+        "target_sigreg_coeff": float(config.jepa_sigreg_coeff),
+        "pred_sigreg_coeff": float(config.jepa_pred_sigreg_coeff),
+        "target_sigreg_reference_count": float(sigreg_reference_count),
+        "pred_sigreg_reference_count": float(sigreg_reference_count),
+    }
+    if config.jepa_target_semantics == "ema":
+        objective_contract["jepa_target_ema"] = {
+            "decay": float(config.jepa_target_ema_decay),
+            "initialization": "exact_copy_after_source_restore",
+            "parameter_scope": [
+                "encoder",
+                "state_projector",
+                "jepa_state_norm",
+            ],
+            "floating_shadow_storage_dtype": "float32",
+            "positive_target_gradient": "always_stopped",
+            "online_target_sigreg_gradient": "attached",
+            "update_order": "after_online_optimizer",
+            "update_equation": (
+                "target=decay*target+(1-decay)*online_updated"
+            ),
+        }
     return {
         "architecture_source": ARCHITECTURE_SOURCE,
         "model_config": dataclasses.asdict(config),
-        "objective": {
-            "name": objective,
-            "jepa_target_stop_gradient": bool(
-                config.jepa_target_stop_gradient
-            ),
-            "target_sigreg_coeff": float(config.jepa_sigreg_coeff),
-            "pred_sigreg_coeff": float(config.jepa_pred_sigreg_coeff),
-            "target_sigreg_reference_count": float(sigreg_reference_count),
-            "pred_sigreg_reference_count": float(sigreg_reference_count),
-        },
+        "objective": objective_contract,
         "data": {
             "batch_size": int(batch_size),
             "horizon": int(config.horizon),
@@ -2298,6 +2704,7 @@ def diagnose_joint_latents(
     model,
     batch: dict[str, jax.Array],
     rng: jax.Array,
+    ema_target: EmaTargetModel | None = None,
 ) -> dict[str, jax.Array]:
     """Authoritative free-rollout collapse and action-dependence diagnostics."""
 
@@ -2306,6 +2713,13 @@ def diagnose_joint_latents(
     all_tokens, z_all = model.encode_current_and_future_tokens_and_vectors(
         batch["current_planes"],
         future_planes,
+    )
+    positive_target_z = (
+        z_all[:, 1:]
+        if ema_target is None
+        else jax.lax.stop_gradient(
+            ema_target.encode_future_targets(future_planes)
+        )
     )
     z_dfm = model.dfm_latents(all_tokens[:, 0])
     clean_t = jnp.ones((actions.shape[0],), dtype=jnp.float32)
@@ -2328,7 +2742,7 @@ def diagnose_joint_latents(
     rng_baseline, rng_action = jax.random.split(rng)
     metrics = latent_collapse_diagnostics(
         pred_z,
-        z_all[:, 1:],
+        positive_target_z,
         z_all[:, 0],
         valid,
         rng=rng_baseline,
@@ -2342,13 +2756,27 @@ def diagnose_joint_latents(
         z0_normalized=True,
     )
     action_shuffled_mse = jnp.mean(
-        jnp.square(jnp.asarray(action_shuffled_pred, dtype=jnp.float32) - z_all[:, 1:]),
+        jnp.square(
+            jnp.asarray(action_shuffled_pred, dtype=jnp.float32)
+            - jnp.asarray(positive_target_z, dtype=jnp.float32)
+        ),
         axis=-1,
     )
     denom = jnp.maximum(jnp.sum(valid, axis=0), 1.0)
     metrics["action_shuffled_mse_by_horizon"] = (
         jnp.sum(action_shuffled_mse * valid, axis=0) / denom
     )
+    if ema_target is not None:
+        online_ema_mse = jnp.mean(
+            jnp.square(
+                jnp.asarray(z_all[:, 1:], dtype=jnp.float32)
+                - jnp.asarray(positive_target_z, dtype=jnp.float32)
+            ),
+            axis=-1,
+        )
+        metrics["online_ema_target_mse_by_horizon"] = (
+            jnp.sum(online_ema_mse * valid, axis=0) / denom
+        )
     return metrics
 
 
@@ -2411,6 +2839,7 @@ def normalized_stage1_loss_fn(
     rng: jax.Array,
     target_reference_count: float,
     pred_reference_count: float,
+    positive_target_override: jax.Array | None = None,
 ) -> tuple[jax.Array, dict[str, jax.Array]]:
     """Compatibility loss with corrected count scaling and legal bounds.
 
@@ -2424,6 +2853,7 @@ def normalized_stage1_loss_fn(
         batch,
         rng,
         compute_fp32_legality=True,
+        positive_target_override=positive_target_override,
     )
     target_official = jnp.asarray(
         compatibility_aux["jepa_sigreg_loss"],
@@ -2608,6 +3038,128 @@ def train_normalized_stage1_step_donated(
     )
 
 
+def ema_normalized_stage1_loss_fn(
+    model: JointLatentSASAModel,
+    ema_target: EmaTargetModel,
+    batch: dict[str, jax.Array],
+    rng: jax.Array,
+    target_reference_count: float,
+    pred_reference_count: float,
+) -> tuple[jax.Array, dict[str, jax.Array]]:
+    """Normalized objective against a detached pre-update EMA future target."""
+
+    ema_future_target = jax.lax.stop_gradient(
+        ema_target.encode_future_targets(
+            batch["future_planes"][:, : model.config.horizon]
+        )
+    )
+    return normalized_stage1_loss_fn(
+        model,
+        batch,
+        rng,
+        target_reference_count,
+        pred_reference_count,
+        positive_target_override=ema_future_target,
+    )
+
+
+_ema_normalized_loss_and_grad = nnx.value_and_grad(
+    ema_normalized_stage1_loss_fn,
+    argnums=nnx.DiffState(0, TrainableParam),
+    has_aux=True,
+)
+
+
+def _ema_normalized_train_step_impl(
+    model: JointLatentSASAModel,
+    ema_target: EmaTargetModel,
+    optimizer: nnx.Optimizer,
+    batch: dict[str, jax.Array],
+    rng: jax.Array,
+    target_reference_count: float,
+    pred_reference_count: float,
+):
+    with jax.named_scope("research_ema_target_loss_and_grad"):
+        (loss, aux), grads = _ema_normalized_loss_and_grad(
+            model,
+            ema_target,
+            batch,
+            rng,
+            target_reference_count,
+            pred_reference_count,
+        )
+    with jax.named_scope("research_ema_online_optimizer_update"):
+        optimizer.update(model, grads)
+    with jax.named_scope("research_ema_target_post_optimizer_update"):
+        update_ema_target_after_optimizer(
+            ema_target,
+            model,
+            model.config.jepa_target_ema_decay,
+        )
+    return loss, aux
+
+
+@nnx.jit
+def eval_ema_normalized_stage1_step(
+    model: JointLatentSASAModel,
+    ema_target: EmaTargetModel,
+    batch: dict[str, jax.Array],
+    rng: jax.Array,
+    target_reference_count: float,
+    pred_reference_count: float,
+):
+    return ema_normalized_stage1_loss_fn(
+        model,
+        ema_target,
+        batch,
+        rng,
+        target_reference_count,
+        pred_reference_count,
+    )
+
+
+@nnx.jit
+def train_ema_normalized_stage1_step(
+    model: JointLatentSASAModel,
+    ema_target: EmaTargetModel,
+    optimizer: nnx.Optimizer,
+    batch: dict[str, jax.Array],
+    rng: jax.Array,
+    target_reference_count: float,
+    pred_reference_count: float,
+):
+    return _ema_normalized_train_step_impl(
+        model,
+        ema_target,
+        optimizer,
+        batch,
+        rng,
+        target_reference_count,
+        pred_reference_count,
+    )
+
+
+@nnx.jit(donate_argnums=(0, 1, 2))
+def train_ema_normalized_stage1_step_donated(
+    model: JointLatentSASAModel,
+    ema_target: EmaTargetModel,
+    optimizer: nnx.Optimizer,
+    batch: dict[str, jax.Array],
+    rng: jax.Array,
+    target_reference_count: float,
+    pred_reference_count: float,
+):
+    return _ema_normalized_train_step_impl(
+        model,
+        ema_target,
+        optimizer,
+        batch,
+        rng,
+        target_reference_count,
+        pred_reference_count,
+    )
+
+
 def parse_args(
     argv: list[str] | None = None,
 ) -> argparse.Namespace:
@@ -2642,6 +3194,22 @@ def parse_args(
         help=(
             "Detach the projected/current-repeat target from the positive JEPA "
             "loss; omit to preserve the checkpoint config."
+        ),
+    )
+    parser.add_argument(
+        "--jepa-target-semantics",
+        choices=("online", "ema"),
+        help=(
+            "Use the online projected future vector or a detached EMA teacher; "
+            "omit to preserve the checked experiment config."
+        ),
+    )
+    parser.add_argument(
+        "--jepa-target-ema-decay",
+        type=float,
+        help=(
+            "Post-optimizer EMA decay. This is active only with "
+            "--jepa-target-semantics ema."
         ),
     )
     parser.add_argument("--sigreg-reference-count", type=float, default=1.0)
@@ -2730,6 +3298,16 @@ def apply_config_overrides(
             config.jepa_target_stop_gradient
             if args.jepa_target_stop_gradient is None
             else args.jepa_target_stop_gradient
+        ),
+        jepa_target_semantics=(
+            config.jepa_target_semantics
+            if args.jepa_target_semantics is None
+            else args.jepa_target_semantics
+        ),
+        jepa_target_ema_decay=(
+            config.jepa_target_ema_decay
+            if args.jepa_target_ema_decay is None
+            else args.jepa_target_ema_decay
         ),
     )
 
@@ -2836,6 +3414,7 @@ def evaluate(
     objective: str,
     sigreg_reference_count: float,
     collapse_diagnostics: bool,
+    ema_target: EmaTargetModel | None = None,
 ) -> tuple[dict[str, float], float]:
     if count < 1:
         return {}, 0.0
@@ -2845,7 +3424,18 @@ def evaluate(
         batch = batches.batch_at(index)
         batch["deterministic_t"] = np.asarray(deterministic_t, dtype=np.float32)
         rng = jax.random.fold_in(jax.random.PRNGKey(seed), index)
-        if objective == "normalized":
+        if ema_target is not None:
+            if objective != "normalized":
+                raise ValueError("EMA target evaluation requires normalized objective")
+            loss, aux = eval_ema_normalized_stage1_step(
+                model,
+                ema_target,
+                batch,
+                rng,
+                sigreg_reference_count,
+                sigreg_reference_count,
+            )
+        elif objective == "normalized":
             loss, aux = eval_normalized_stage1_step(
                 model,
                 batch,
@@ -2862,7 +3452,12 @@ def evaluate(
         }
         if collapse_diagnostics:
             diagnostic_rng = jax.random.fold_in(rng, 0xC011A95E)
-            diagnostics = diagnose_joint_latents(model, batch, diagnostic_rng)
+            diagnostics = diagnose_joint_latents(
+                model,
+                batch,
+                diagnostic_rng,
+                ema_target,
+            )
             jax.block_until_ready(diagnostics)
             metrics.update(flatten_metrics(diagnostics))
         for key, value in metrics.items():
@@ -2990,7 +3585,24 @@ def summarize_gpu_samples(path: Path) -> dict[str, float | int]:
     return summary
 
 
-def training_function(*, objective: str, donate: bool):
+def training_function(
+    *,
+    objective: str,
+    donate: bool,
+    target_semantics: str = "online",
+):
+    if target_semantics == "ema":
+        if objective != "normalized":
+            raise ValueError("EMA targets require normalized objective")
+        return (
+            train_ema_normalized_stage1_step_donated
+            if donate
+            else train_ema_normalized_stage1_step
+        )
+    if target_semantics != "online":
+        raise ValueError(
+            f"Unsupported JEPA target semantics {target_semantics!r}"
+        )
     if objective == "normalized":
         return (
             train_normalized_stage1_step_donated
@@ -3008,7 +3620,20 @@ def training_call_args(
     batch: dict[str, jax.Array],
     rng: jax.Array,
     sigreg_reference_count: float,
+    ema_target: EmaTargetModel | None = None,
 ) -> tuple[Any, ...]:
+    if ema_target is not None:
+        if objective != "normalized":
+            raise ValueError("EMA targets require normalized objective")
+        return (
+            model,
+            ema_target,
+            optimizer,
+            batch,
+            rng,
+            sigreg_reference_count,
+            sigreg_reference_count,
+        )
     common = (model, optimizer, batch, rng)
     if objective == "normalized":
         return common + (sigreg_reference_count, sigreg_reference_count)
@@ -3430,6 +4055,14 @@ def main() -> int:
         objective=args.objective,
         config=config,
     )
+    if (
+        args.gradient_audit
+        and config.jepa_target_semantics == "ema"
+    ):
+        raise ValueError(
+            "--gradient-audit currently measures online objective components "
+            "and cannot be combined with EMA targets."
+        )
     train_batches = FixedTrajectoryBatches(
         data_root / "train",
         batch_size=args.batch_size,
@@ -3456,6 +4089,11 @@ def main() -> int:
 
     model_params = load_mapped_bt4_params(models_dir=models_dir)
     model, optimizer = create_joint_components(model_params, config, seed=args.seed)
+    ema_target = (
+        EmaTargetModel(model)
+        if config.jepa_target_semantics == "ema"
+        else None
+    )
     restore_started = time.perf_counter()
     research_update = 0
     next_data_cursor = 0
@@ -3466,6 +4104,7 @@ def main() -> int:
             model=model,
             optimizer=optimizer,
             expected_resume_contract=resume_contract,
+            ema_target=ema_target,
         )
         checkpoint_step = int(resume_manifest["optimizer_step"])
         research_update = int(resume_manifest["research_update"])
@@ -3509,6 +4148,8 @@ def main() -> int:
             expected_step=checkpoint_step,
             init_mode=source_init_mode,
         )
+        if ema_target is not None:
+            sync_ema_target_from_online(ema_target, model)
         lineage = {
             "kind": "legacy_import",
             "source_checkpoint": str(source_checkpoint_path),
@@ -3601,6 +4242,7 @@ def main() -> int:
         objective=args.objective,
         sigreg_reference_count=args.sigreg_reference_count,
         collapse_diagnostics=args.collapse_diagnostics,
+        ema_target=ema_target,
     )
 
     run_config = {
@@ -3614,6 +4256,54 @@ def main() -> int:
         "timestamp_utc": timestamp,
         "args": vars(args) | {"output_dir": str(output_dir)},
         "model_config": dataclasses.asdict(config),
+        "ema_target": (
+            None
+            if ema_target is None
+            else {
+                "checkpointed_trainable_state_abi": research_state_abi(
+                    dict(
+                        nnx.to_pure_dict(
+                            nnx.state(ema_target, TrainableParam)
+                        )
+                    )
+                ),
+                "runtime_variable_state_abi": research_state_abi(
+                    dict(
+                        nnx.to_pure_dict(
+                            nnx.state(ema_target)
+                        )
+                    )
+                ),
+                "parameter_scope": [
+                    "encoder",
+                    "state_projector",
+                    "jepa_state_norm",
+                ],
+                "floating_shadow_storage_dtype": "float32",
+                "extra_forward": {
+                    "scope": "future_planes_only",
+                    "modules": ["bt4_encoder", "state_projector"],
+                    "encoded_boards_per_example": int(config.horizon),
+                    "compilation_static": True,
+                },
+                "positive_loss_target_source": "ema_future_vectors",
+                "target_sigreg_source": (
+                    "online_z_all_current_and_future"
+                ),
+                "initialization": (
+                    "restored_checkpoint"
+                    if resumed_from is not None
+                    else "exact_copy_after_source_restore"
+                ),
+                "update_order": "after_online_optimizer",
+                "hard_acceptance_metrics": [
+                    "steady_examples_per_second",
+                    "steady_encoded_boards_per_second",
+                    "gpu_memory.peak_bytes_in_use",
+                    "gpu_monitor.memory_used_mib_max",
+                ],
+            }
+        ),
         "checkpoint_step": checkpoint_step,
         "initial_optimizer_step": initial_optimizer_step,
         "initial_research_update": initial_research_update,
@@ -3630,7 +4320,11 @@ def main() -> int:
     }
     write_json(output_dir / "run_config.json", run_config)
 
-    train_fn = training_function(objective=args.objective, donate=args.donate)
+    train_fn = training_function(
+        objective=args.objective,
+        donate=args.donate,
+        target_semantics=config.jepa_target_semantics,
+    )
     executable = train_fn
     explicit_compile_seconds: float | None = None
     compiler_cost_analysis_raw: dict[str, float] = {}
@@ -3648,6 +4342,7 @@ def main() -> int:
             batch=compile_batch,
             rng=compile_rng,
             sigreg_reference_count=args.sigreg_reference_count,
+            ema_target=ema_target,
         )
         compile_started = time.perf_counter()
         executable = train_fn.lower(*compile_args).compile()
@@ -3688,6 +4383,7 @@ def main() -> int:
             lineage=lineage,
             max_to_keep=args.max_checkpoints,
             extra={"last_train_metrics": final_train_metrics},
+            ema_target=ema_target,
         )
         checkpoint_save_seconds += time.perf_counter() - save_started
         last_checkpoint_path = saved
@@ -3722,6 +4418,7 @@ def main() -> int:
                     batch=batch,
                     rng=step_rng,
                     sigreg_reference_count=args.sigreg_reference_count,
+                    ema_target=ema_target,
                 )
                 loss, aux = executable(*call_args)
                 jax.block_until_ready((loss, aux))
@@ -3778,6 +4475,7 @@ def main() -> int:
         objective=args.objective,
         sigreg_reference_count=args.sigreg_reference_count,
         collapse_diagnostics=args.collapse_diagnostics,
+        ema_target=ema_target,
     )
     steady_update_seconds_mean = (
         float(np.mean(steady_update_seconds)) if steady_update_seconds else None
@@ -3795,6 +4493,14 @@ def main() -> int:
     performance_seconds = steady_update_seconds_mean or first_update_seconds
     compiler_cost_analysis = compiler_cost_summary(compiler_cost_analysis_raw)
     performance = compiler_performance(compiler_cost_analysis, performance_seconds)
+    encoded_boards_per_example = (
+        config.horizon + 1
+        + (
+            config.horizon
+            if config.jepa_target_semantics == "ema"
+            else 0
+        )
+    )
     throughput = {
         "steady_examples_per_second": (
             None
@@ -3804,7 +4510,16 @@ def main() -> int:
         "steady_encoded_boards_per_second": (
             None
             if steady_update_seconds_mean is None
-            else args.batch_size * (config.horizon + 1) / steady_update_seconds_mean
+            else args.batch_size
+            * encoded_boards_per_example
+            / steady_update_seconds_mean
+        ),
+        "encoded_boards_per_example": encoded_boards_per_example,
+        "online_encoded_boards_per_example": config.horizon + 1,
+        "ema_teacher_encoded_boards_per_example": (
+            config.horizon
+            if config.jepa_target_semantics == "ema"
+            else 0
         ),
     }
     gpu_samples_path = output_dir / "gpu_samples.csv"
