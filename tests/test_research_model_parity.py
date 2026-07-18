@@ -8,6 +8,7 @@ from typing import Any
 import jax
 import jax.numpy as jnp
 import numpy as np
+import pytest
 from flax import nnx
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -122,6 +123,80 @@ def _batch() -> dict[str, jax.Array]:
         "legal_masks_valid": jnp.ones((2, 2), dtype=jnp.float32),
         "deterministic_t": jnp.asarray(0.25, dtype=jnp.float32),
     }
+
+
+def _assert_loss_and_gradient_parity(
+    *,
+    config_kwargs: dict[str, Any],
+    batch: dict[str, jax.Array],
+    model_seed: int,
+    loss_seed: int,
+) -> tuple[tuple[Any, Any], Any]:
+    local_model = local.JointLatentSASAModel(
+        DummyEncoder(),
+        local.JointLatentSASAConfig(**config_kwargs),
+        rngs=nnx.Rngs(model_seed),
+    )
+    legacy_model = legacy.JointLatentSASAModel(
+        DummyEncoder(),
+        legacy.JointLatentSASAConfig(**config_kwargs),
+        rngs=nnx.Rngs(model_seed),
+    )
+    local_loss_and_grad = nnx.value_and_grad(
+        local.joint_stage1_loss_fn,
+        argnums=nnx.DiffState(0, TrainableParam),
+        has_aux=True,
+    )
+    legacy_loss_and_grad = nnx.value_and_grad(
+        legacy.joint_stage1_loss_fn,
+        argnums=nnx.DiffState(0, TrainableParam),
+        has_aux=True,
+    )
+    rng = jax.random.PRNGKey(loss_seed)
+    local_value, local_gradients = local_loss_and_grad(
+        local_model,
+        batch,
+        rng,
+        compute_fp32_legality=True,
+    )
+    legacy_value, legacy_gradients = legacy_loss_and_grad(
+        legacy_model,
+        batch,
+        rng,
+        compute_fp32_legality=True,
+    )
+    _assert_trees_exact(local_value, legacy_value)
+    _assert_trees_exact(
+        nnx.to_pure_dict(local_gradients),
+        nnx.to_pure_dict(legacy_gradients),
+    )
+    return local_value, local_gradients
+
+
+def test_normalized_objective_requires_le_jepa_sigreg():
+    le_jepa = local.JointLatentSASAConfig(
+        **(_config_kwargs() | {"jepa_sigreg_kind": "le_jepa"})
+    )
+    moments = local.JointLatentSASAConfig(
+        **(_config_kwargs() | {"jepa_sigreg_kind": "moments"})
+    )
+
+    local.validate_objective_config(
+        objective="normalized",
+        config=le_jepa,
+    )
+    local.validate_objective_config(
+        objective="legacy",
+        config=moments,
+    )
+    with pytest.raises(
+        ValueError,
+        match="normalized requires jepa_sigreg_kind='le_jepa'",
+    ):
+        local.validate_objective_config(
+            objective="normalized",
+            config=moments,
+        )
 
 
 def test_local_config_and_initialized_model_match_legacy_exactly():
@@ -265,6 +340,81 @@ def test_local_model_outputs_loss_aux_and_gradients_match_legacy_exactly():
     )
 
 
+def test_local_loss_oracle_covers_ragged_masks_and_loss_horizon():
+    kwargs = _config_kwargs() | {
+        "loss_horizon": 1,
+        "legality_on_masked_only": True,
+    }
+    batch = _batch() | {
+        "valid": jnp.asarray([1.0, 0.0], dtype=jnp.float32),
+        "future_valid": jnp.asarray(
+            [[1.0, 0.0], [1.0, 1.0]],
+            dtype=jnp.float32,
+        ),
+        "legal_masks_valid": jnp.asarray(
+            [[1.0, 0.0], [0.0, 1.0]],
+            dtype=jnp.float32,
+        ),
+        "deterministic_t": jnp.asarray(0.0, dtype=jnp.float32),
+    }
+
+    (loss, aux), _ = _assert_loss_and_gradient_parity(
+        config_kwargs=kwargs,
+        batch=batch,
+        model_seed=31,
+        loss_seed=103,
+    )
+
+    assert jnp.isfinite(loss)
+    np.testing.assert_array_equal(
+        np.asarray(aux["dfm_mask_fraction_by_horizon"]),
+        np.asarray([1.0, 0.0], dtype=np.float32),
+    )
+    assert float(aux["loss_horizon"]) == 1.0
+    assert float(aux["jepa_sigreg_valid_count"]) == 2.0
+    assert float(aux["jepa_pred_sigreg_valid_count"]) == 1.0
+
+
+def test_local_loss_oracle_covers_teacher_forcing_moments_and_heads():
+    kwargs = _config_kwargs() | {
+        "jepa_target_mode": "current_repeat",
+        "jepa_sigreg_kind": "moments",
+        "value_coeff": 0.25,
+        "wdl_coeff": 0.5,
+        "loss_clip_value": 0.01,
+    }
+    batch = _batch() | {
+        "jepa_teacher_forcing": jnp.asarray(1.0, dtype=jnp.float32),
+        "value_targets": jnp.asarray(
+            [[0.75, -0.25], [0.5, 0.0]],
+            dtype=jnp.float32,
+        ),
+        "wdl_targets": jnp.asarray(
+            [
+                [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]],
+                [[0.0, 0.0, 1.0], [0.0, 0.0, 0.0]],
+            ],
+            dtype=jnp.float32,
+        ),
+        "deterministic_t": jnp.asarray(0.0, dtype=jnp.float32),
+    }
+
+    (loss, aux), _ = _assert_loss_and_gradient_parity(
+        config_kwargs=kwargs,
+        batch=batch,
+        model_seed=37,
+        loss_seed=107,
+    )
+
+    assert float(aux["jepa_teacher_forcing"]) == 1.0
+    assert float(aux["loss_clip_scale"]) < 1.0
+    assert float(loss) <= kwargs["loss_clip_value"] + 1e-6
+    assert float(aux["value_loss"]) > 0.0
+    assert float(aux["wdl_loss"]) > 0.0
+    assert jnp.isfinite(aux["jepa_sigreg_loss"])
+    assert jnp.isfinite(aux["jepa_pred_sigreg_loss"])
+
+
 def test_local_component_builder_matches_legacy_model_and_optimizer(monkeypatch):
     def make_dummy_encoder(*_args, **_kwargs):
         return DummyEncoder()
@@ -296,3 +446,83 @@ def test_local_component_builder_matches_legacy_model_and_optimizer(monkeypatch)
         local_optimizer_state
     ) == local.research_state_abi(legacy_optimizer_state)
     _assert_trees_exact(local_optimizer_state, legacy_optimizer_state)
+
+
+def test_local_optimizer_updates_match_legacy_exactly(monkeypatch):
+    def make_dummy_encoder(*_args, **_kwargs):
+        return DummyEncoder()
+
+    monkeypatch.setattr(local, "make_bt4_model", make_dummy_encoder)
+    monkeypatch.setattr(legacy, "make_bt4_model", make_dummy_encoder)
+    kwargs = _config_kwargs() | {
+        "grad_clip_norm": 0.05,
+        "loss_clip_value": 0.01,
+    }
+    local_model, local_optimizer = local.create_joint_components(
+        {},
+        local.JointLatentSASAConfig(**kwargs),
+        seed=41,
+    )
+    legacy_model, legacy_optimizer = legacy.create_joint_components(
+        {},
+        legacy.JointLatentSASAConfig(**kwargs),
+        seed=41,
+    )
+    before = _pure_trainable(local_model)
+    batch = _batch() | {
+        "deterministic_t": jnp.asarray(0.0, dtype=jnp.float32),
+    }
+    local_loss_and_grad = nnx.value_and_grad(
+        local.joint_stage1_loss_fn,
+        argnums=nnx.DiffState(0, TrainableParam),
+        has_aux=True,
+    )
+    legacy_loss_and_grad = nnx.value_and_grad(
+        legacy.joint_stage1_loss_fn,
+        argnums=nnx.DiffState(0, TrainableParam),
+        has_aux=True,
+    )
+    rng = jax.random.PRNGKey(109)
+    local_value, local_gradients = local_loss_and_grad(
+        local_model,
+        batch,
+        rng,
+    )
+    legacy_value, legacy_gradients = legacy_loss_and_grad(
+        legacy_model,
+        batch,
+        rng,
+    )
+    _assert_trees_exact(local_value, legacy_value)
+    _assert_trees_exact(
+        nnx.to_pure_dict(local_gradients),
+        nnx.to_pure_dict(legacy_gradients),
+    )
+
+    # The first warmup update has zero learning rate; the second proves both
+    # schedule state and the parameter mutation remain exactly compatible.
+    for _ in range(2):
+        local_optimizer.update(local_model, local_gradients)
+        legacy_optimizer.update(legacy_model, legacy_gradients)
+        _assert_trees_exact(
+            _pure_trainable(local_model),
+            _pure_trainable(legacy_model),
+        )
+        _assert_trees_exact(
+            _pure_optimizer(local_optimizer),
+            _pure_optimizer(legacy_optimizer),
+        )
+        assert int(local_optimizer.step[...]) == int(
+            legacy_optimizer.step[...]
+        )
+
+    assert int(local_optimizer.step[...]) == 2
+    after = _pure_trainable(local_model)
+    assert any(
+        not np.array_equal(np.asarray(left), np.asarray(right))
+        for left, right in zip(
+            jax.tree.leaves(before),
+            jax.tree.leaves(after),
+            strict=True,
+        )
+    )

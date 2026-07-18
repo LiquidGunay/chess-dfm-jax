@@ -1473,6 +1473,18 @@ def resolve_config(
     return config, metadata
 
 
+def validate_objective_config(
+    *,
+    objective: str,
+    config: JointLatentSASAConfig,
+) -> None:
+    if objective == "normalized" and config.jepa_sigreg_kind != "le_jepa":
+        raise ValueError(
+            "--objective normalized requires jepa_sigreg_kind='le_jepa'; "
+            f"found {config.jepa_sigreg_kind!r}"
+        )
+
+
 def flatten_metrics(metrics: dict[str, Any]) -> dict[str, float]:
     """Flatten scalar and per-horizon arrays for JSON metric records."""
 
@@ -3213,6 +3225,10 @@ def main() -> int:
             if args.pred_sigreg_coeff is None
             else args.pred_sigreg_coeff
         ),
+    )
+    validate_objective_config(
+        objective=args.objective,
+        config=config,
     )
     train_batches = FixedTrajectoryBatches(
         data_root / "train",
