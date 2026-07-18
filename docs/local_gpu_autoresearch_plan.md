@@ -1,0 +1,460 @@
+# Local GPU Autoresearch Plan
+
+Status: approved for implementation on 2026-07-18.
+
+This document is the implementation contract for turning the existing
+TPU/cloud-oriented BT4 + DFM + JEPA experiment into a fast, measurable,
+single-A10G research loop.
+
+The historical implementation is preserved by the local branch
+`legacy/tpu-joint-latent-sasa`. New work happens on
+`research/local-gpu-autoresearch`.
+
+## Research goals
+
+1. Measure how strong a fixed-compute, searchless chess policy can become when
+   DFM action refinement is trained jointly with a JEPA state predictor.
+2. Compare the representations learned by the resulting BT4 backbone with the
+   original BT4 representations and the published BT4 transcoders/Lorsa
+   dictionaries from
+   [Leela-SAEs](https://github.com/JacklE0niden/Leela-SAEs).
+3. Make architecture and optimization experiments cheap enough to run in a
+   Karpathy-style autoresearch loop.
+4. Record enough intermediate state to study collapse, feature emergence,
+   phase transitions, grokking-like behavior, and double descent without
+   relying on post-hoc anecdotes.
+
+## Definitions
+
+### Searchless
+
+The model may use a fixed number of DFM denoising/refinement passes and a fixed
+number of sampled candidate trajectories. It may not expand a game tree.
+
+Every strength result must therefore include:
+
+- DFM refinement count;
+- number of sampled trajectories, if greater than one;
+- batch-one move latency;
+- batched throughput; and
+- peak GPU memory.
+
+### Current coupling
+
+The current implementation is coupled during training, but not closed-loop at
+inference:
+
+```text
+current state -> DFM action logits/hidden -> JEPA predicted future states
+                                      \---- JEPA gradients update DFM
+```
+
+The JEPA prediction is not fed back into DFM logits. The clean DFM hidden states
+used by JEPA are produced with the ground-truth action trajectory. At inference,
+only DFM is used.
+
+This is the first baseline and must be described as:
+
+> DFM policy trained with a JEPA auxiliary objective.
+
+A later experiment will explicitly close the loop:
+
+```text
+DFM refinement k -> proposed action trajectory
+                 -> JEPA predicted latent trajectory
+                 -> DFM refinement k+1 conditioned on predicted latents
+```
+
+This experiment does not require new labels.
+
+## Workspace boundary
+
+All mutable state must live under `/mountpoint/.exp`.
+
+The research path will set and verify at least:
+
+- `TMPDIR`
+- `TEMP`
+- `TMP`
+- `XDG_CACHE_HOME`
+- `UV_CACHE_DIR`
+- `PIP_CACHE_DIR`
+- `HF_HOME`
+- `JAX_COMPILATION_CACHE_DIR`
+- `WANDB_DIR`
+- `WANDB_CACHE_DIR`
+- `WANDB_CONFIG_DIR`
+- `MPLCONFIGDIR`
+
+The default local layout is:
+
+```text
+/mountpoint/.exp/chess-dfm-jax/
+  .venv/
+  .local/
+    cache/
+    tmp/
+  data/
+    trajectory_v3/
+  checkpoints/
+    source/
+    recovered/
+  artifacts/
+    baselines/
+    profiles/
+    arena/
+  research/
+```
+
+Downloaded source archives and source checkpoints are immutable. Recovery and
+conversion always write a new copy.
+
+## Known baseline assets
+
+The approved local baseline uses only the existing Drive assets:
+
+- trajectory-v3 LC0 H8 archive: about 11.53 GB;
+- joint checkpoint at step 265,000: about 2.12 GB of state data; and
+- base model archive only if the joint checkpoint is insufficient for the raw
+  BT4 comparison.
+
+The trajectory manifest contains approximately:
+
+- 28,343,296 training samples;
+- 1,560,576 validation samples;
+- 1,559,552 test samples; and
+- 31,463,424 samples total.
+
+Each sample contains current and future board planes, eight actions, future
+validity, legal-move indices, FEN, ply, game result, and WDL/value labels. The
+LC0 PGN WDL/value labels are final-game-result labels, not engine evaluations.
+They are available for later ablation but remain disabled in the reproduction
+baseline.
+
+The step-265,000 source state is missing its normal checkpoint metadata. Its
+matching sweep configuration has been identified. Recovery must verify model
+structure and outputs instead of trusting reconstructed metadata alone.
+
+## Phase 0: reproduce before simplifying
+
+### Deliverables
+
+- Workspace-local Python environment and cache contract.
+- Verified archive checksums and manifests.
+- Recovered checkpoint metadata written beside, not into, the source state.
+- Evaluation of the legacy checkpoint on a fixed validation subset.
+- A machine-readable baseline report.
+
+### Baseline report
+
+The report must include:
+
+- exact git commit and checkpoint digest;
+- JAX, CUDA, driver, and GPU details;
+- effective model configuration;
+- each scalar loss component;
+- DFM action accuracy by horizon;
+- first-move legal mass;
+- prediction and target latent RMS;
+- per-horizon JEPA MSE;
+- compile time, step time, samples/s, boards/s, and peak HBM; and
+- any missing or reconstructed metadata.
+
+### Gate
+
+Do not alter architecture or loss behavior until the recovered checkpoint can
+be evaluated reproducibly and the reference output is saved.
+
+## Phase 1: one editable research file
+
+The clean path follows the separation used by
+[autoresearch](https://github.com/karpathy/autoresearch):
+
+```text
+research/
+  prepare.py      # fixed data/checkpoint/evaluation support
+  train.py        # the one editable experimental surface
+  program.md      # rules for an autoresearch agent
+  results.tsv     # append-only result ledger
+```
+
+`research/train.py` owns:
+
+- experiment configuration;
+- projector, DFM, and vector-JEPA definitions;
+- loss construction;
+- optimizer construction;
+- train and validation steps;
+- the fixed-duration loop; and
+- the final result record.
+
+Stable board encoding, policy-index conversion, archive reading, checkpoint
+adaptation, GPU profiling helpers, and arena rules remain outside the editable
+surface.
+
+The clean path initially excludes:
+
+- TPU and multi-host initialization;
+- GCS streaming;
+- cloud job queues;
+- deprecated stage-2 contrastive paths;
+- placeholder metrics;
+- legacy token-JEPA implementations; and
+- implicit `/tmp` writes.
+
+### Parity gate
+
+- Load or explicitly convert the recovered checkpoint.
+- Match reference outputs within documented BF16 tolerance.
+- Complete a 100-step GPU smoke train.
+- Resume deterministically.
+- Avoid recompilation during steady-state static-shape training.
+- Leave no files outside the workspace boundary.
+
+## Phase 2: fix the objective and collapse measurements
+
+### Batch-invariant SIGReg
+
+The official LeJEPA Epps-Pulley statistic multiplies its empirical discrepancy
+by the valid sample count. Target and prediction SIGReg also see different
+numbers of vectors in this model.
+
+Keep the official statistic as a diagnostic, but train with:
+
+```text
+normalized_sigreg = official_ep * reference_count / valid_count
+```
+
+The fixed `reference_count` preserves the familiar coefficient scale at a
+documented reference batch while making it independent of batch size, horizon
+masking, microbatching, and device layout.
+
+Required tests:
+
+- duplicating every example leaves normalized loss and gradient unchanged;
+- splitting the same global batch into microbatches leaves the result unchanged;
+- invalid horizons do not affect the statistic;
+- target and prediction reference scales are explicit; and
+- the raw official statistic remains available for comparison.
+
+### Prediction-collapse ablations
+
+Run in this order:
+
+1. normalized target SIGReg only;
+2. add normalized prediction SIGReg with a small coefficient;
+3. add a per-horizon VICReg-style standard-deviation hinge if necessary; and
+4. investigate scale/shape regularization only after the simpler baselines.
+
+Collapse measurements are computed per horizon before aggregation:
+
+- target and prediction RMS;
+- mean, minimum-quantile, and median feature standard deviation;
+- covariance spectrum, effective rank, and participation ratio;
+- delta RMS and cosine similarity;
+- raw MSE and norm loss;
+- zero, identity, shuffled-target, and action-shuffled baselines;
+- teacher-forced versus free-state-rollout gap; and
+- gradient norms by loss and module.
+
+### Gate
+
+- Loss and gradients are invariant to batch layout within numerical tolerance.
+- Predicted latents retain nontrivial variance and effective rank.
+- JEPA beats trivial baselines at useful horizons.
+- Loss clipping is not permanently active.
+- Validation metrics contain no zero placeholders.
+
+Once this gate passes, the loss definition is frozen for the initial
+architecture search.
+
+## Phase 3: profile and optimize the A10G path
+
+The first profile must measure the active compiled graph. Handwritten estimates
+for the older token-JEPA are not accepted.
+
+Annotate:
+
+- shard reading and decompression;
+- host-to-device transfer;
+- current/future BT4 encoding;
+- DFM noisy pass;
+- DFM clean hidden pass;
+- JEPA rollout;
+- target and prediction regularization;
+- backward pass; and
+- optimizer update.
+
+Report:
+
+- compile/startup time separately;
+- p50 and p95 steady-state step time;
+- examples/s and encoded boards/s;
+- peak and reserved HBM;
+- compiler-reported FLOPs;
+- achieved dense-BF16 TFLOP/s relative to the A10G reference peak;
+- host and device idle time; and
+- batch-one and batched inference latency.
+
+Optimization sequence:
+
+1. batch and microbatch size;
+2. real gradient accumulation;
+3. input prefetch and pinned-transfer behavior;
+4. future-encoder chunking/rematerialization;
+5. sampled future targets with `K=1,2,8`;
+6. BF16/FP32 boundaries;
+7. scan/unroll choices; and
+8. only then architecture changes.
+
+The main expected lever is avoiding nine trainable BT4 encodes per sample on
+every step. Future-horizon sampling must be unbiased and compared at fixed
+wall-clock and fixed-example budgets.
+
+## Phase 4: inference and relative Elo
+
+External Stockfish, puzzle, and opening datasets are not required.
+
+### Frequent offline evaluation
+
+- fixed validation DFM cross-entropy;
+- first-move and per-horizon top-1/top-k accuracy;
+- legal mass;
+- JEPA positive and collapse metrics;
+- compilation, throughput, and memory; and
+- the full DFM refinement trajectory.
+
+The refinement trace records:
+
+- entropy and legal mass at every pass;
+- KL/JS divergence between consecutive passes;
+- rank and probability path of the final selected move;
+- top-k turnover;
+- action-sequence edit distance; and
+- the first pass at which the final move appears.
+
+### Batched arena
+
+Use fixed early-game FENs from a held-out trajectory split. Play every FEN with
+colors swapped. Initial anchors are:
+
+- raw BT4, when its policy checkpoint is available;
+- recovered step-265,000 model;
+- previous promoted model; and
+- current candidate.
+
+The frequent arena is an in-process, batched GPU evaluator rather than a serial
+UCI tournament. UCI remains a correctness and interoperability path.
+
+Report model-pool relative Elo with uncertainty, game count, score breakdown,
+FEN set digest, refinement count, latency, and games/s. Never label it as human
+or Lichess Elo.
+
+The first implementation benchmark determines how many games fit in the
+promotion budget. No fixed game count is assumed before measuring it.
+
+## Phase 5: 30-minute autoresearch loop
+
+Compilation and setup are measured separately. Each quick experiment receives
+30 minutes of steady-state training on the A10G.
+
+Every result records:
+
+- git commit;
+- complete configuration;
+- seed and data-order digest;
+- start and end checkpoints;
+- validation DFM CE;
+- action accuracy and legality;
+- JEPA/collapse gate metrics;
+- examples processed;
+- examples/s;
+- compile time;
+- peak HBM; and
+- keep/reject/confirm disposition.
+
+Promotion policy:
+
+1. smoke compile and short correctness run;
+2. one 30-minute run;
+3. repeat or extend ideas exceeding baseline noise without failing a gate;
+4. batched relative-Elo evaluation; and
+5. full-data run only for confirmed candidates.
+
+Primary optimization signal is held-out DFM CE, with action metrics and hard
+JEPA-collapse gates. The mutable weighted training loss is not by itself a
+promotion metric.
+
+Initial experiment order:
+
+1. loss normalization and prediction collapse;
+2. future-target sampling;
+3. teacher-forced versus free-state rollout schedules;
+4. projector width, depth, and latent dimension;
+5. DFM width, depth, and refinement training;
+6. recurrent versus direct multi-horizon JEPA;
+7. optimizer and BT4 learning-rate/freeze schedules; and
+8. closed-loop latent-conditioned DFM refinement.
+
+## Phase 6: representation and SAE study
+
+Use an identical fixed board/trajectory corpus and consistent hook semantics for:
+
+- original self-play BT4;
+- recovered step-265,000 model;
+- intermediate promoted checkpoints;
+- final JEPA-trained model; and
+- scratch or alternative-pretraining controls.
+
+First compare:
+
+- linear CKA;
+- SVCCA/Procrustes alignment;
+- layer correspondence;
+- covariance spectra and effective rank; and
+- policy behavior.
+
+Then apply the published BT4 transcoders/Lorsa dictionaries:
+
+- reconstruction fidelity and explained variance;
+- activation sparsity and dead features;
+- decoder/feature alignment across checkpoints;
+- concept selectivity;
+- causal effects on policy logits; and
+- features gained, lost, split, or merged.
+
+Published dictionaries are transfer probes. A degradation in reconstruction
+after backbone training is itself a result, but a fair final comparison also
+requires matched dictionaries trained separately for each backbone.
+
+Save checkpoints on a log-spaced schedule so representation changes can be
+aligned with validation loss, relative Elo, collapse recovery, and feature
+emergence.
+
+## Later work
+
+Only after the baseline and promotion harness are stable:
+
+- compare self-play BT4 initialization against scratch or matched alternative
+  pretraining;
+- run controlled size/data/time/regularization grids with repeated seeds;
+- train a WDL/value head from the available final-result targets;
+- rank fixed-count DFM candidates using predicted value;
+- investigate stronger action/latent contrastive coupling; and
+- add self-play RL with replay, opponents, and checkpoint promotion.
+
+Claims of grokking, phase transitions, or double descent require predefined
+sweeps, held-out data, and repeated seeds.
+
+## Immediate implementation checklist
+
+- [x] Preserve the historical commit on `legacy/tpu-joint-latent-sasa`.
+- [x] Create `research/local-gpu-autoresearch`.
+- [ ] Establish and test the workspace-local environment contract.
+- [ ] Ground and download the approved Drive assets.
+- [ ] Verify archive and checkpoint digests.
+- [ ] Recover checkpoint metadata.
+- [ ] Produce the first local-GPU baseline report.
+- [ ] Create the one-editable-file research scaffold.
+- [ ] Add loss-invariance and collapse tests.
+- [ ] Capture the first active-model GPU profile.

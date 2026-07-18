@@ -5,6 +5,7 @@ uv.lock
 __pycache__/
 *.pyc
 node_modules/
+.local/
 
 # Logs
 *.log
@@ -16,6 +17,9 @@ docs/*.local.json
 # Artifacts
 models/
 artifacts/
+checkpoints/
+data/
+research/runs/
 *.pb.gz
 *.npz
 *.csv
