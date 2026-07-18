@@ -6,6 +6,10 @@ source "${_research_dir}/env.sh"
 
 export JAX_PLATFORMS="${JAX_PLATFORMS:-cuda}"
 
+"${CHESS_DFM_REPO_ROOT}/.venv/bin/python" \
+  "${CHESS_DFM_REPO_ROOT}/research/prepare.py" \
+  runtime-check >/dev/null
+
 if [[ "$#" -eq 0 ]]; then
   set -- "${CHESS_DFM_REPO_ROOT}/.venv/bin/python" \
     "${CHESS_DFM_REPO_ROOT}/research/prepare.py" \

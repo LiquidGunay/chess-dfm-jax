@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.metadata
 import json
 import os
 import platform
@@ -53,6 +54,18 @@ PATH_ENV_VARS = (
     "CHESS_DFM_CHECKPOINT_ROOT",
     "CHESS_DFM_ARTIFACT_ROOT",
 )
+
+EXPECTED_RUNTIME_PACKAGES = {
+    "flax": "0.12.7",
+    "jax": "0.10.1",
+    "jax-cuda12-pjrt": "0.10.1",
+    "jax-cuda12-plugin": "0.10.1",
+    "jaxlib": "0.10.1",
+    "numpy": "2.4.6",
+    "optax": "0.2.8",
+    "protobuf": "7.35.1",
+    "python-chess": "1.999",
+}
 
 
 def require_within_workspace(path: str | os.PathLike[str]) -> Path:
@@ -254,6 +267,24 @@ def validate_environment(*, require_all: bool = True) -> dict[str, str]:
     return checked
 
 
+def validate_runtime_packages() -> dict[str, str]:
+    """Fail closed if the pinned local-GPU software stack has drifted."""
+
+    observed: dict[str, str] = {}
+    mismatches: list[str] = []
+    for package, expected in EXPECTED_RUNTIME_PACKAGES.items():
+        try:
+            actual = importlib.metadata.version(package)
+        except importlib.metadata.PackageNotFoundError:
+            actual = "<missing>"
+        observed[package] = actual
+        if actual != expected:
+            mismatches.append(f"{package}: expected {expected}, found {actual}")
+    if mismatches:
+        raise RuntimeError("Research runtime package drift: " + "; ".join(mismatches))
+    return observed
+
+
 def load_asset_manifest(path: Path = ASSET_MANIFEST_PATH) -> dict[str, Any]:
     path = require_within_workspace(path)
     with path.open("r", encoding="utf-8") as handle:
@@ -408,6 +439,11 @@ def build_parser() -> argparse.ArgumentParser:
     system_parser.add_argument("--require-gpu", action="store_true")
     system_parser.add_argument("--output", type=Path)
 
+    subparsers.add_parser(
+        "runtime-check",
+        help="Verify the exact pinned local-GPU package versions.",
+    )
+
     subparsers.add_parser("assets", help="Print the immutable Drive asset manifest.")
     return parser
 
@@ -449,6 +485,10 @@ def main(argv: list[str] | None = None) -> int:
         if args.output:
             write_json(args.output, payload)
         _print_json(payload)
+        return 0
+
+    if args.command == "runtime-check":
+        _print_json(validate_runtime_packages())
         return 0
 
     if args.command == "assets":

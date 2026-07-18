@@ -48,7 +48,7 @@ from chess_dfm_jax.nnx_bt4 import (  # noqa: E402
     make_bt4_model,
     rounded_swiglu_dim,
 )
-from chess_dfm_jax.training.checkpoints import load_training_checkpoint  # noqa: E402
+from research.import_legacy import import_legacy_checkpoint  # noqa: E402
 from research.prepare import (  # noqa: E402
     REPO_ROOT,
     FixedTrajectoryBatches,
@@ -3282,37 +3282,42 @@ def main() -> int:
             "git_commit": commit,
         }
     else:
-        payload = load_training_checkpoint(
-            checkpoint_dir,
-            model=model,
-            optimizer=(
-                optimizer
-                if args.init == "exact" and not args.gradient_audit
-                else None
-            ),
-            step=int(metadata["latest_step"]),
-            strict=True,
-        )
-        checkpoint_step = int(payload["step"])
-        del payload
+        checkpoint_step = int(metadata["latest_step"])
         source_checkpoint_path = require_within_workspace(
             checkpoint_dir / f"step{checkpoint_step:07d}" / "state.npz"
         )
+        expected_source_path = require_within_workspace(
+            DEFAULT_CHECKPOINT_DIR / "step0265000" / "state.npz"
+        )
+        if checkpoint_step != 265_000 or source_checkpoint_path != expected_source_path:
+            raise ValueError(
+                "The clean trainer imports only the checksum-pinned step-265,000 "
+                "legacy source. Convert any other legacy state explicitly before use."
+            )
         checkpoint_asset = load_asset_manifest()["checkpoint_step_265000"]
-        if (
-            checkpoint_step == 265_000
-            and source_checkpoint_path
-            == DEFAULT_CHECKPOINT_DIR / "step0265000" / "state.npz"
-        ):
-            source_checkpoint_sha256 = checkpoint_asset["state_npz_sha256"]
-        else:
-            source_checkpoint_sha256 = sha256_file(source_checkpoint_path)
+        source_init_mode = (
+            "exact"
+            if args.init == "exact" and not args.gradient_audit
+            else "model-only"
+        )
+        import_result = import_legacy_checkpoint(
+            source_checkpoint_path,
+            model=model,
+            optimizer=optimizer,
+            expected_size_bytes=int(checkpoint_asset["state_npz_size_bytes"]),
+            expected_sha256=str(checkpoint_asset["state_npz_sha256"]),
+            expected_step=checkpoint_step,
+            init_mode=source_init_mode,
+        )
         lineage = {
             "kind": "legacy_import",
             "source_checkpoint": str(source_checkpoint_path),
             "source_checkpoint_step": checkpoint_step,
-            "source_checkpoint_sha256": source_checkpoint_sha256,
-            "init_mode": args.init,
+            "source_checkpoint_size_bytes": import_result.source_size_bytes,
+            "source_checkpoint_sha256": import_result.source_sha256,
+            "source_model_abi_sha256": import_result.model_abi_sha256,
+            "source_optimizer_abi_sha256": import_result.optimizer_abi_sha256,
+            "init_mode": source_init_mode,
             "run_id": run_id,
             "git_commit": commit,
         }

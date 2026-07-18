@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib.metadata
 import json
 from pathlib import Path
 
@@ -10,6 +11,7 @@ from research.prepare import (
     REPO_ROOT,
     WORKSPACE_ROOT,
     WorkspacePaths,
+    validate_runtime_packages,
     load_asset_manifest,
     require_within_workspace,
 )
@@ -50,3 +52,16 @@ def test_asset_manifest_has_immutable_digests() -> None:
 
     parsed_directly = json.loads(ASSET_MANIFEST_PATH.read_text(encoding="utf-8"))
     assert parsed_directly == manifest
+
+
+def test_runtime_package_guard_fails_closed(monkeypatch) -> None:
+    real_version = importlib.metadata.version
+
+    def drifted_version(package: str) -> str:
+        if package == "jax":
+            return "999.0.0"
+        return real_version(package)
+
+    monkeypatch.setattr(importlib.metadata, "version", drifted_version)
+    with pytest.raises(RuntimeError, match="jax: expected 0.10.1, found 999.0.0"):
+        validate_runtime_packages()
