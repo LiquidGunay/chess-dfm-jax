@@ -255,6 +255,52 @@ JAX/CUPTI tracing failed on this driver combination with
 `CUDA_ERROR_ILLEGAL_ADDRESS`. The trainer therefore uses safe `nvidia-smi`
 sampling plus XLA analysis until that compatibility issue is resolved.
 
+## Objective-gradient calibration
+
+A fixed stochastic batch of 64 training examples at the recovered checkpoint
+was audited with one forward and 25 sequential reverse sweeps. Symmetric
+plus/minus polarization reconstructed exact per-group component-gradient Gram
+matrices while keeping only one gradient tree resident. Every Gram was positive
+semidefinite to numerical tolerance.
+
+The model has 274,149,702 trainable parameters:
+
+- 195,305,728 in the BT4 backbone;
+- 4,705,346 in the DFM/planner;
+- 72,031,232 in the projector/JEPA path; and
+- 2,107,396 in the currently inactive value/WDL head.
+
+Unweighted scalar values and global gradient norms were:
+
+| Component | Scalar | Global gradient norm | JEPA-group norm |
+|---|---:|---:|---:|
+| DFM CE | 3.39674 | 74.735 | 0 |
+| JEPA positive | 0.45812 | 12.356 | 8.472 |
+| Target unscaled SIGReg | 0.04390 | 0.987 | 0.642 |
+| Prediction unscaled SIGReg | 0.05213 | 1.541 | 0.450 |
+| FP32 legality | 0.12016 | 14.275 | 0 |
+
+With reference count one, coefficient `0.01` is effectively inert. On the JEPA
+parameter group, coefficients `0.132/0.396/1.320` make target SIGReg
+approximately `1%/3%/10%` of the primary gradient. Prediction SIGReg uses
+`0.188/0.565/1.885` for the same ratios.
+
+The first controlled grid therefore rounds the 3% values to:
+
+```text
+target_sigreg_coeff in {0.00, 0.40}
+pred_sigreg_coeff   in {0.00, 0.57}
+sigreg_reference_count = 1
+```
+
+These remain a 2×2 ablation, not an assumption that prediction SIGReg helps.
+On the JEPA group, target and prediction SIGReg have gradient cosine `-0.460`
+and `-0.194` with the positive prediction loss, respectively. Their modest
+starting scale is intentional.
+
+The complete audit is
+`research/runs/gradient-audit-step265k-b64-v3/gradient_audit.json`.
+
 ## Next acceptance point
 
 The compatibility harness is not yet open to autoresearch. The next milestone

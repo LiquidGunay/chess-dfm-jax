@@ -539,5 +539,5 @@ sweeps, held-out data, and repeated seeds.
 - [x] Add initial duplication/padding invariance and collapse tests.
 - [x] Capture the first active-model GPU profile.
 - [x] Recompute legality from the original logits in FP32 with correct gradients.
-- [ ] Calibrate normalized SIGReg coefficients by per-module gradient norms.
+- [x] Calibrate normalized SIGReg coefficients by per-module gradient norms.
 - [ ] Implement the persistent batched paired-opening arena.
