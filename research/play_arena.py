@@ -48,6 +48,7 @@ from research.arena import (
 
 
 GAMEPLAY_SCHEMA = "chess-dfm-batched-arena-gameplay-v1"
+DEFAULT_POLICY_BATCH_SIZE_CAP = 64
 
 FAULT_NO_REPRESENTABLE_MOVE = "no_representable_move"
 FAULT_ILLEGAL_ACTION = "illegal_action"
@@ -252,6 +253,7 @@ class ArenaGameplayResult:
 
     additional_ply_cap: int
     policy_timeout_seconds: float
+    policy_batch_size_cap: int
     opening_histories: tuple[ArenaOpeningHistory, ...]
     records: tuple[ArenaGameRecord, ...]
     model_stats: tuple[ModelGameplayStats, ...]
@@ -263,10 +265,18 @@ class ArenaGameplayResult:
             raise ValueError("additional_ply_cap must be positive.")
         if not math.isfinite(self.policy_timeout_seconds) or self.policy_timeout_seconds <= 0.0:
             raise ValueError("policy_timeout_seconds must be positive and finite.")
+        if (
+            isinstance(self.policy_batch_size_cap, bool)
+            or not isinstance(self.policy_batch_size_cap, int)
+            or self.policy_batch_size_cap < 1
+        ):
+            raise ValueError("policy_batch_size_cap must be positive.")
         if len(self.records) == 0 or len(self.records) % 2:
             raise ValueError("A gameplay result must contain complete pairs.")
         if self.total_policy_calls < 0 or self.max_policy_batch_size < 0:
             raise ValueError("Policy-call counters must be non-negative.")
+        if self.max_policy_batch_size > self.policy_batch_size_cap:
+            raise ValueError("Observed policy batch size exceeds its configured cap.")
         history_pair_ids = [history.pair_id for history in self.opening_histories]
         if len(history_pair_ids) != len(set(history_pair_ids)):
             raise ValueError("Gameplay opening histories contain duplicate pair IDs.")
@@ -290,6 +300,7 @@ class ArenaGameplayResult:
             "config": {
                 "additional_ply_cap": self.additional_ply_cap,
                 "policy_timeout_seconds": self.policy_timeout_seconds,
+                "policy_batch_size_cap": self.policy_batch_size_cap,
                 "terminal_precedes_exact_cap": True,
                 "fault_policy": "acting_model_loses_no_fallback",
                 "opening_history": "full_standard_game_fen_sequence_required",
@@ -664,14 +675,15 @@ def play_arena_pairs(
     policies: Mapping[str, BatchedArenaPolicy],
     additional_ply_cap: int,
     policy_timeout_seconds: float = 30.0,
+    policy_batch_size_cap: int = DEFAULT_POLICY_BATCH_SIZE_CAP,
     _clock: Callable[[], float] = time.monotonic,
 ) -> ArenaGameplayResult:
     """Play complete color-reversed pairs in deterministic in-process batches.
 
-    Active positions are grouped by acting model ID once per arena round.  A
-    failed batch call charges every position in that batch to the acting model;
-    per-row invalid actions charge only their own game.  There is no random or
-    legal-move fallback.
+    Active positions are grouped by acting model ID once per arena round and
+    then split into stable bounded chunks.  A failed chunk charges only the
+    positions in that chunk to the acting model; per-row invalid actions charge
+    only their own game.  There is no random or legal-move fallback.
 
     The timeout covers adapter execution plus host materialization of returned
     action indices.  The runner detects an overrun after control returns; an
@@ -688,6 +700,13 @@ def play_arena_pairs(
         raise TypeError("policy_timeout_seconds must be numeric.") from exc
     if not math.isfinite(policy_timeout_seconds) or policy_timeout_seconds <= 0.0:
         raise ValueError("policy_timeout_seconds must be positive and finite.")
+    if isinstance(policy_batch_size_cap, bool) or not isinstance(
+        policy_batch_size_cap,
+        int,
+    ):
+        raise TypeError("policy_batch_size_cap must be an integer.")
+    if policy_batch_size_cap < 1:
+        raise ValueError("policy_batch_size_cap must be positive.")
 
     validated_pairs = _validate_pair_specs(pairs)
     validated_histories = _validate_opening_histories(
@@ -782,105 +801,28 @@ def play_arena_pairs(
             grouped[model_id].append((state, mask))
 
         for model_id in sorted(grouped):
-            pending = grouped[model_id]
-            batch_states = [state for state, _mask in pending]
-            batch_size = len(batch_states)
-            max_policy_batch_size = max(max_policy_batch_size, batch_size)
-            policy_calls[model_id] += 1
-            positions_evaluated[model_id] += batch_size
-            boards, histories = _policy_inputs(batch_states)
-
-            started = _clock()
-            call_error: Exception | None = None
-            actions: np.ndarray | None = None
-            try:
-                selection = validated_policies[model_id].select_actions(
-                    boards,
-                    histories,
-                )
-                actions = _materialize_action_indices(
-                    selection,
-                    batch_size=batch_size,
-                )
-            except Exception as exc:  # Model/adaptor faults are match results.
-                call_error = exc
-            finished = _clock()
-            if not (math.isfinite(started) and math.isfinite(finished) and finished >= started):
-                raise RuntimeError("Arena monotonic clock returned invalid values.")
-
-            if isinstance(call_error, TimeoutError) or finished - started > policy_timeout_seconds:
-                batch_fault = FAULT_TIMEOUT
-            elif call_error is not None:
-                batch_fault = FAULT_EXCEPTION
-            else:
-                batch_fault = None
-
-            if batch_fault is not None:
-                for state in batch_states:
-                    game_key = (state.spec.pair_id, state.spec.game_in_pair)
-                    completed[game_key] = _fault_record(
-                        state,
-                        fault_kind=batch_fault,
-                        fault_model=model_id,
-                        ply_cap=additional_ply_cap,
-                    )
-                progress = True
-                continue
-
-            if actions is None:
-                raise RuntimeError("Successful policy call did not return actions.")
-            codec_id = str(validated_policies[model_id].action_codec_id)
-            for row, (state, mask) in enumerate(pending):
-                game_key = (state.spec.pair_id, state.spec.game_in_pair)
-                selected_index, row_fault = _selected_index_or_fault(actions[row])
-                if row_fault is not None:
-                    completed[game_key] = _fault_record(
-                        state,
-                        fault_kind=row_fault,
-                        fault_model=model_id,
-                        ply_cap=additional_ply_cap,
-                    )
-                    progress = True
-                    continue
-                if selected_index is None:
-                    raise RuntimeError("Validated action index is unexpectedly missing.")
-                try:
-                    move = _decode_unique_legal_action(
-                        state.board,
-                        index=selected_index,
-                        codec_id=codec_id,
-                        legal_mask=mask,
-                    )
-                except (ActionCodecError, KeyError, IndexError, ValueError):
-                    completed[game_key] = _fault_record(
-                        state,
-                        fault_kind=FAULT_ILLEGAL_ACTION,
-                        fault_model=model_id,
-                        ply_cap=additional_ply_cap,
-                    )
-                    progress = True
-                    continue
-                except Exception:
-                    completed[game_key] = _fault_record(
-                        state,
-                        fault_kind=FAULT_EXCEPTION,
-                        fault_model=model_id,
-                        ply_cap=additional_ply_cap,
-                    )
-                    progress = True
-                    continue
-
-                state.board.push(move)
-                state.history.append(state.board.copy(stack=False))
-                state.moves_uci.append(move.uci())
-                state.additional_plies += 1
-                progress = True
-                boundary_record = _normal_or_cap_record(
-                    state,
+            model_pending = grouped[model_id]
+            chunks = (
+                model_pending[start : start + policy_batch_size_cap]
+                for start in range(0, len(model_pending), policy_batch_size_cap)
+            )
+            for pending in chunks:
+                _play_policy_batch(
+                    pending,
+                    model_id=model_id,
+                    policies=validated_policies,
+                    completed=completed,
+                    policy_calls=policy_calls,
+                    positions_evaluated=positions_evaluated,
                     ply_cap=additional_ply_cap,
+                    policy_timeout_seconds=policy_timeout_seconds,
+                    clock=_clock,
                 )
-                if boundary_record is not None:
-                    completed[game_key] = boundary_record
+                max_policy_batch_size = max(
+                    max_policy_batch_size,
+                    len(pending),
+                )
+                progress = True
 
         if not progress:
             raise RuntimeError("Arena gameplay made no progress.")
@@ -897,6 +839,7 @@ def play_arena_pairs(
     return ArenaGameplayResult(
         additional_ply_cap=additional_ply_cap,
         policy_timeout_seconds=policy_timeout_seconds,
+        policy_batch_size_cap=policy_batch_size_cap,
         opening_histories=tuple(opening_histories[pair[0].pair_id] for pair in validated_pairs),
         records=ordered_records,
         model_stats=model_stats,
@@ -905,7 +848,118 @@ def play_arena_pairs(
     )
 
 
+def _play_policy_batch(
+    pending: Sequence[tuple[_GameState, np.ndarray]],
+    *,
+    model_id: str,
+    policies: Mapping[str, BatchedArenaPolicy],
+    completed: dict[tuple[str, int], ArenaGameRecord],
+    policy_calls: Counter[str],
+    positions_evaluated: Counter[str],
+    ply_cap: int,
+    policy_timeout_seconds: float,
+    clock: Callable[[], float],
+) -> None:
+    """Evaluate one bounded, stable policy batch and update its game states."""
+
+    if not pending:
+        raise RuntimeError("Internal arena policy batch must not be empty.")
+    batch_states = [state for state, _mask in pending]
+    batch_size = len(batch_states)
+    policy_calls[model_id] += 1
+    positions_evaluated[model_id] += batch_size
+    boards, histories = _policy_inputs(batch_states)
+
+    started = clock()
+    call_error: Exception | None = None
+    actions: np.ndarray | None = None
+    try:
+        selection = policies[model_id].select_actions(
+            boards,
+            histories,
+        )
+        actions = _materialize_action_indices(
+            selection,
+            batch_size=batch_size,
+        )
+    except Exception as exc:  # Model/adaptor faults are match results.
+        call_error = exc
+    finished = clock()
+    if not (math.isfinite(started) and math.isfinite(finished) and finished >= started):
+        raise RuntimeError("Arena monotonic clock returned invalid values.")
+
+    if isinstance(call_error, TimeoutError) or finished - started > policy_timeout_seconds:
+        batch_fault = FAULT_TIMEOUT
+    elif call_error is not None:
+        batch_fault = FAULT_EXCEPTION
+    else:
+        batch_fault = None
+
+    if batch_fault is not None:
+        for state in batch_states:
+            game_key = (state.spec.pair_id, state.spec.game_in_pair)
+            completed[game_key] = _fault_record(
+                state,
+                fault_kind=batch_fault,
+                fault_model=model_id,
+                ply_cap=ply_cap,
+            )
+        return
+
+    if actions is None:
+        raise RuntimeError("Successful policy call did not return actions.")
+    codec_id = str(policies[model_id].action_codec_id)
+    for row, (state, mask) in enumerate(pending):
+        game_key = (state.spec.pair_id, state.spec.game_in_pair)
+        selected_index, row_fault = _selected_index_or_fault(actions[row])
+        if row_fault is not None:
+            completed[game_key] = _fault_record(
+                state,
+                fault_kind=row_fault,
+                fault_model=model_id,
+                ply_cap=ply_cap,
+            )
+            continue
+        if selected_index is None:
+            raise RuntimeError("Validated action index is unexpectedly missing.")
+        try:
+            move = _decode_unique_legal_action(
+                state.board,
+                index=selected_index,
+                codec_id=codec_id,
+                legal_mask=mask,
+            )
+        except (ActionCodecError, KeyError, IndexError, ValueError):
+            completed[game_key] = _fault_record(
+                state,
+                fault_kind=FAULT_ILLEGAL_ACTION,
+                fault_model=model_id,
+                ply_cap=ply_cap,
+            )
+            continue
+        except Exception:
+            completed[game_key] = _fault_record(
+                state,
+                fault_kind=FAULT_EXCEPTION,
+                fault_model=model_id,
+                ply_cap=ply_cap,
+            )
+            continue
+
+        state.board.push(move)
+        state.history.append(state.board.copy(stack=False))
+        state.moves_uci.append(move.uci())
+        state.additional_plies += 1
+        boundary_record = _normal_or_cap_record(
+            state,
+            ply_cap=ply_cap,
+        )
+        if boundary_record is not None:
+            completed[game_key] = boundary_record
+
+
 __all__ = [
+    "DEFAULT_POLICY_BATCH_SIZE_CAP",
     "FAULT_EXCEPTION",
     "FAULT_ILLEGAL_ACTION",
     "FAULT_KINDS",

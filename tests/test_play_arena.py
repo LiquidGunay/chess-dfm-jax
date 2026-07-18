@@ -109,6 +109,26 @@ class _FaultPolicy(_DeterministicPolicy):
         raise AssertionError(f"Unsupported synthetic fault: {self.fault_kind}")
 
 
+class _FailOnCallPolicy(_DeterministicPolicy):
+    def __init__(self, model_id: str, *, fail_call: int):
+        super().__init__(model_id)
+        self.fail_call = fail_call
+
+    def select_actions(
+        self,
+        boards: Sequence[chess.Board],
+        histories: Sequence[Sequence[chess.Board]],
+    ) -> _Selection:
+        call_number = len(self.batch_sizes) + 1
+        if call_number == self.fail_call:
+            self.batch_sizes.append(len(boards))
+            self.history_lengths.append(
+                tuple(len(history) for history in histories)
+            )
+            raise RuntimeError("synthetic chunk-local failure")
+        return super().select_actions(boards, histories)
+
+
 def _history_from_moves(moves_uci: Sequence[str]) -> tuple[str, ...]:
     board = chess.Board()
     fens = [board.fen(en_passant="legal")]
@@ -204,6 +224,64 @@ def test_active_positions_are_grouped_by_model_in_stable_batches():
         pairs[1][0].pair_id,
         pairs[1][0].pair_id,
     ]
+
+
+def test_policy_batches_are_stably_bounded_and_chunk_faults_are_isolated():
+    pairs, histories = _pairs_and_histories(("e2e4", "e7e5"), count=3)
+    candidate = _FailOnCallPolicy("candidate", fail_call=2)
+    reference = _DeterministicPolicy("reference")
+    result = play_arena_pairs(
+        pairs,
+        opening_histories=histories,
+        policies={"candidate": candidate, "reference": reference},
+        additional_ply_cap=1,
+        policy_batch_size_cap=2,
+    )
+
+    assert candidate.batch_sizes == [2, 1]
+    assert reference.batch_sizes == [2, 1]
+    assert result.policy_batch_size_cap == 2
+    assert result.max_policy_batch_size == 2
+    assert result.total_policy_calls == 4
+    assert result.as_dict()["config"]["policy_batch_size_cap"] == 2
+    faults = [record for record in result.records if record.fault_kind is not None]
+    assert len(faults) == 1
+    assert faults[0].outcome.pair_id == pairs[2][0].pair_id
+    assert faults[0].fault_model == "candidate"
+    by_model = {stats.model_id: stats for stats in result.model_stats}
+    assert by_model["candidate"].fault_losses == 1
+    assert by_model["candidate"].points == 2.5
+    assert by_model["reference"].points == 3.5
+
+
+@pytest.mark.parametrize(
+    ("batch_size_cap", "error_type"),
+    [
+        (0, ValueError),
+        (-1, ValueError),
+        (True, TypeError),
+        (1.5, TypeError),
+    ],
+)
+def test_policy_batch_size_cap_must_be_a_positive_integer(
+    batch_size_cap: Any,
+    error_type: type[Exception],
+):
+    pairs, histories = _pairs_and_histories(("e2e4", "e7e5"))
+    policies = {
+        "candidate": _DeterministicPolicy("candidate"),
+        "reference": _DeterministicPolicy("reference"),
+    }
+    with pytest.raises(error_type, match="policy_batch_size_cap"):
+        play_arena_pairs(
+            pairs,
+            opening_histories=histories,
+            policies=policies,
+            additional_ply_cap=1,
+            policy_batch_size_cap=batch_size_cap,
+        )
+    assert policies["candidate"].batch_sizes == []
+    assert policies["reference"].batch_sizes == []
 
 
 def test_stats_filter_games_for_each_model_in_a_multi_opponent_pool():
