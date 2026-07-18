@@ -475,6 +475,7 @@ sweeps, held-out data, and repeated seeds.
 - [x] Verify archive and checkpoint digests.
 - [x] Recover the original checkpoint metadata and sidecars.
 - [x] Produce the first strict local-GPU baseline fingerprint.
-- [ ] Create the one-editable-file research scaffold.
+- [x] Create the one-editable-file compatibility scaffold.
+- [ ] Move the experimental model/loss into `research/train.py` and pass parity.
 - [ ] Add loss-invariance and collapse tests.
 - [ ] Capture the first active-model GPU profile.

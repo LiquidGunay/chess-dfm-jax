@@ -13,6 +13,7 @@ import hashlib
 import json
 import os
 import platform
+import random
 import subprocess
 import sys
 from dataclasses import asdict, dataclass
@@ -101,6 +102,139 @@ class WorkspacePaths:
             self.runs,
         ):
             require_within_workspace(path).mkdir(parents=True, exist_ok=True)
+
+
+class FixedTrajectoryBatches:
+    """Strict, restartable trajectory-v3 batch schedule.
+
+    File order is a deterministic permutation for each epoch and row order
+    inside a shard is unchanged. ``batch_at(step)`` is stateless with respect to
+    earlier calls, so resuming at a global data step yields the same examples.
+    One decoded shard is cached to avoid re-reading it for every small GPU
+    batch.
+    """
+
+    def __init__(
+        self,
+        split_dir: Path,
+        *,
+        batch_size: int,
+        horizon: int,
+        seed: int,
+        shuffle_files: bool,
+        view: str = "joint_latent_sasa",
+    ):
+        self.split_dir = require_within_workspace(split_dir)
+        self.paths = sorted(self.split_dir.glob("*.npz"))
+        if not self.paths:
+            raise FileNotFoundError(f"No trajectory shards under {self.split_dir}")
+        if batch_size < 1:
+            raise ValueError(f"batch_size must be positive, got {batch_size}")
+        self.batch_size = int(batch_size)
+        self.horizon = int(horizon)
+        self.seed = int(seed)
+        self.shuffle_files = bool(shuffle_files)
+        self.view = view
+
+        self.samples_per_shard = self._read_sample_count(self.paths[0])
+        if self.batch_size > self.samples_per_shard:
+            raise ValueError(
+                f"batch_size={self.batch_size} exceeds shard size {self.samples_per_shard}"
+            )
+        self.batches_per_shard = self.samples_per_shard // self.batch_size
+        if self.batches_per_shard < 1:
+            raise ValueError("No full batches fit in a shard.")
+        self.steps_per_epoch = len(self.paths) * self.batches_per_shard
+        self._cached_path: Path | None = None
+        self._cached_batch: dict[str, Any] | None = None
+
+    @staticmethod
+    def _read_sample_count(path: Path) -> int:
+        import numpy as np
+
+        with np.load(require_within_workspace(path), allow_pickle=False) as payload:
+            if "batch_size" in payload:
+                return int(np.asarray(payload["batch_size"]).item())
+            return int(payload["actions_u16"].shape[0])
+
+    def _order_for_epoch(self, epoch: int) -> list[int]:
+        order = list(range(len(self.paths)))
+        if self.shuffle_files:
+            random.Random(self.seed + int(epoch)).shuffle(order)
+        return order
+
+    def _load_shard(self, path: Path) -> dict[str, Any]:
+        if self._cached_path == path and self._cached_batch is not None:
+            return self._cached_batch
+
+        import numpy as np
+
+        from chess_dfm_jax.data.trajectory_v3 import trajectory_v3_to_batch
+
+        try:
+            with np.load(require_within_workspace(path), allow_pickle=False) as payload:
+                observed_count = (
+                    int(np.asarray(payload["batch_size"]).item())
+                    if "batch_size" in payload
+                    else int(payload["actions_u16"].shape[0])
+                )
+                if observed_count != self.samples_per_shard:
+                    raise ValueError(
+                        f"Shard size changed: expected {self.samples_per_shard}, "
+                        f"found {observed_count} in {path}"
+                    )
+                batch = trajectory_v3_to_batch(
+                    payload,
+                    view=self.view,
+                    horizon=self.horizon,
+                    include_metadata=False,
+                )
+        except Exception as exc:
+            raise RuntimeError(f"Failed to decode required trajectory shard {path}") from exc
+
+        self._cached_path = path
+        self._cached_batch = batch
+        return batch
+
+    def batch_at(self, step: int) -> dict[str, Any]:
+        import numpy as np
+
+        if step < 0:
+            raise ValueError(f"step must be non-negative, got {step}")
+        epoch, step_in_epoch = divmod(int(step), self.steps_per_epoch)
+        file_position, batch_in_file = divmod(step_in_epoch, self.batches_per_shard)
+        shard_index = self._order_for_epoch(epoch)[file_position]
+        shard_batch = self._load_shard(self.paths[shard_index])
+        start = batch_in_file * self.batch_size
+        end = start + self.batch_size
+        sliced: dict[str, Any] = {}
+        for key, value in shard_batch.items():
+            array = np.asarray(value)
+            if array.ndim == 0 or array.shape[0] != self.samples_per_shard:
+                raise ValueError(
+                    f"Unexpected batch leaf {key!r} with shape {array.shape} in "
+                    f"{self.paths[shard_index]}"
+                )
+            sliced[key] = array[start:end]
+        return sliced
+
+    def provenance(self) -> dict[str, Any]:
+        entries = [
+            f"{path.relative_to(self.split_dir)}\t{path.stat().st_size}"
+            for path in self.paths
+        ]
+        digest = hashlib.sha256("\n".join(entries).encode("utf-8")).hexdigest()
+        return {
+            "split_dir": str(self.split_dir),
+            "shard_count": len(self.paths),
+            "samples_per_shard": self.samples_per_shard,
+            "batch_size": self.batch_size,
+            "batches_per_shard": self.batches_per_shard,
+            "steps_per_epoch": self.steps_per_epoch,
+            "seed": self.seed,
+            "shuffle_files": self.shuffle_files,
+            "file_manifest_sha256": digest,
+        }
 
 
 def validate_environment(*, require_all: bool = True) -> dict[str, str]:

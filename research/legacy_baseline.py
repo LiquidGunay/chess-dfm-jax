@@ -23,15 +23,20 @@ _REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from chess_dfm_jax.analysis.profile_targets import load_mapped_bt4_params
-from chess_dfm_jax.data.leela import LeelaChunkDataLoader
-from chess_dfm_jax.training.checkpoints import load_training_checkpoint
-from chess_dfm_jax.training.joint_latent_sasa import (
+from chess_dfm_jax.analysis.profile_targets import load_mapped_bt4_params  # noqa: E402
+from chess_dfm_jax.data.leela import LeelaChunkDataLoader  # noqa: E402
+from chess_dfm_jax.training.checkpoints import load_training_checkpoint  # noqa: E402
+from chess_dfm_jax.training.joint_latent_sasa import (  # noqa: E402
     JointLatentSASAConfig,
     create_joint_components,
     eval_joint_stage1_step,
 )
-from research.prepare import REPO_ROOT, require_within_workspace, sha256_file, write_json
+from research.prepare import (  # noqa: E402
+    REPO_ROOT,
+    require_within_workspace,
+    sha256_file,
+    write_json,
+)
 
 
 DEFAULT_RUN_ROOT = REPO_ROOT / "checkpoints" / "source" / "step0265000"

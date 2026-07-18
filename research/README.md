@@ -34,3 +34,14 @@ research/run_gpu.sh .venv/bin/python research/legacy_baseline.py
 
 It uses strict model-state restoration and writes a deterministic loss
 fingerprint under `artifacts/baselines/`.
+
+The first compatibility trainer is:
+
+```bash
+research/run_gpu.sh .venv/bin/python research/train.py --steps 1 --batch-size 1
+```
+
+It is intentionally marked `autoresearch_ready=false`: it provides a strict
+single-GPU training and validation harness while still importing the legacy
+model/loss. Architecture search does not begin until that implementation is
+moved into `train.py` and passes parity.
