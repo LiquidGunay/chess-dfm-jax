@@ -857,9 +857,9 @@ def reconstruct_polarized_grams(
     scales = np.asarray(scales, dtype=np.float64)
     component_count, group_count = diagonal_q.shape
     expected_pairs = component_count * (component_count - 1) // 2
-    if pair_q.shape != (expected_pairs, group_count):
+    if pair_q.shape != (expected_pairs, 2, group_count):
         raise ValueError(
-            f"pair_q must have shape {(expected_pairs, group_count)}, "
+            f"pair_q must have shape {(expected_pairs, 2, group_count)}, "
             f"got {pair_q.shape}"
         )
     if scales.shape != (component_count,):
@@ -880,11 +880,9 @@ def reconstruct_polarized_grams(
     pair_index = 0
     for left in range(component_count):
         for right in range(left + 1, component_count):
-            cross = (
-                pair_q[pair_index]
-                - np.square(scales[left]) * diagonal_q[left]
-                - np.square(scales[right]) * diagonal_q[right]
-            ) / (2.0 * scales[left] * scales[right])
+            cross = (pair_q[pair_index, 0] - pair_q[pair_index, 1]) / (
+                4.0 * scales[left] * scales[right]
+            )
             explicit_grams[:, left, right] = cross
             explicit_grams[:, right, left] = cross
             pair_index += 1
@@ -957,12 +955,18 @@ def run_gradient_audit(
         )
         pair_weights = jnp.stack(
             [
-                scales[left] * basis[left] + scales[right] * basis[right]
+                direction
                 for left in range(component_count)
                 for right in range(left + 1, component_count)
+                for direction in (
+                    scales[left] * basis[left] + scales[right] * basis[right],
+                    scales[left] * basis[left] - scales[right] * basis[right],
+                )
             ]
         )
-        pair_q = jax.lax.map(squared_group_norms, pair_weights)
+        pair_q = jax.lax.map(squared_group_norms, pair_weights).reshape(
+            (-1, 2, len(GRADIENT_GROUP_NAMES) - 1)
+        )
         return components, diagonal_q, pair_q, scales
 
     compile_started = time.perf_counter()

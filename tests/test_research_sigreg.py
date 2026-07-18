@@ -159,17 +159,20 @@ def test_polarization_reconstructs_group_gradient_grams() -> None:
     pair_q = []
     for left in range(4):
         for right in range(left + 1, 4):
-            weights = np.zeros((4,))
-            weights[left] = scales[left]
-            weights[right] = scales[right]
-            pair_q.append(
-                np.einsum(
-                    "i,gij,j->g",
-                    weights,
-                    expected_groups,
-                    weights,
+            pair_directions = []
+            for sign in (1.0, -1.0):
+                weights = np.zeros((4,))
+                weights[left] = scales[left]
+                weights[right] = sign * scales[right]
+                pair_directions.append(
+                    np.einsum(
+                        "i,gij,j->g",
+                        weights,
+                        expected_groups,
+                        weights,
+                    )
                 )
-            )
+            pair_q.append(pair_directions)
     observed = reconstruct_polarized_grams(
         diagonal_q,
         np.asarray(pair_q),
