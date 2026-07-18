@@ -601,8 +601,12 @@ sweeps, held-out data, and repeated seeds.
 - [x] Replace the unsafe initial legacy loader with a checksummed, restricted,
   exact-ABI pinned-source import boundary.
 - [x] Pin and preflight the complete local-GPU runtime before every run.
-- [ ] Run the explicit positive-target stop-gradient stability ablation while
-  retaining target-SIGReg gradients.
+- [x] Run and reject the simple positive-target stop-gradient ablation: it
+  preserves scale but weakens prediction/action/policy quality.
+- [x] Run and reject calibrated 10%-gradient prediction SIGReg: prediction
+  rank was already healthy and policy quality regressed.
+- [ ] Compare an EMA target and a per-horizon variance hinge before deciding
+  whether target-scale stability warrants a semantic change.
 - [ ] Make effective experiment overrides explicit and reject silent no-op
   configuration before enabling unattended autoresearch.
 - [ ] Freeze a corrected baseline objective after a stronger target-SIGReg

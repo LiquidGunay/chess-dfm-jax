@@ -424,6 +424,50 @@ utilization was `86.4%`, mean power was `242.5 W`, peak JAX live memory was
 `6.04 GB`, and scalar loss clipping was never active. Its report is
 `research/runs/target576-smoke-b64-100/report.json`.
 
+### Target detachment and prediction-SIGReg ablations
+
+Commit `c30a69e` adds a default-off, explicitly recorded positive-target
+stop-gradient option. It detaches only the target used by JEPA positive
+MSE/norm loss; target SIGReg remains attached to `z_all`. Tests prove exact
+legacy parity when disabled, unchanged forward values when enabled, a changed
+full trainable gradient, and nonzero target-SIGReg projector gradients under
+detachment.
+
+Two paired 100-update detach runs show a clear tradeoff:
+
+| Endpoint | Attached 5.76 | Detached 5.76 | Detached 1.32 |
+|---|---:|---:|---:|
+| Mean target RMS | 0.9078 | 0.9531 | 0.9667 |
+| Mean prediction RMS | 0.9186 | 0.9370 | 0.9520 |
+| DFM CE | 4.8106 | 5.0034 | 4.9922 |
+| Accuracy | 0.0732 | 0.0674 | 0.0605 |
+| Mean cosine | 0.7854 | 0.7538 | 0.7656 |
+| Positive-MSE / zero-MSE | 0.4285 | 0.4786 | 0.4554 |
+| Action-shuffled / positive-MSE | 4.00 | 3.54 | 3.71 |
+
+Detachment substantially preserves scale, and `5.76` detached improves target
+SIGReg itself to `0.0449`, but both points weaken prediction quality, action
+sensitivity, and policy loss over 100 updates. Simple detachment is therefore
+not promoted. A slower EMA target is the next target-semantics candidate.
+Reports:
+
+- `research/runs/target576-stopgrad-smoke-b64-100/report.json`
+- `research/runs/target132-stopgrad-smoke-b64-100/report.json`
+
+The requested prediction-SIGReg test kept the target attached, used target
+coefficient `5.76`, and added the calibrated 10%-gradient prediction
+coefficient `1.885`. It modestly moved mean prediction RMS from the attached
+endpoint's `0.9186` to `0.9266` and feature standard deviation from `0.8744`
+to `0.8825`. Rank (`30.08`) and action-shuffle separation (`4.00`) remained
+healthy, but DFM CE worsened to `4.9898`, accuracy fell to `0.0654`, cosine
+slipped to `0.7847`, and positive-MSE/zero-MSE worsened to `0.4321`.
+Throughput was unchanged within run noise.
+
+This point is also rejected. The current checkpoint does not exhibit
+prediction rank/variance collapse, and marginal prediction Gaussianity is not
+the main bottleneck. The report is
+`research/runs/target576-pred1885-smoke-b64-100/report.json`.
+
 ## Strict local checkpoint/resume
 
 Commit `f6b9c40` adds a research checkpoint format with:
