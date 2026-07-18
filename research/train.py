@@ -1710,6 +1710,16 @@ def joint_stage1_loss_fn(
                 "jepa_online_future_vs_ema_target_mse": (
                     online_positive_target_mse
                 ),
+                "z_online_future_target_norm": aux["z_target_norm"],
+                "z_positive_ema_target_norm": jnp.mean(
+                    jnp.linalg.norm(
+                        jnp.asarray(
+                            target_vectors,
+                            dtype=jnp.float32,
+                        ),
+                        axis=-1,
+                    )
+                ),
             }
         )
     return loss, aux
@@ -1853,6 +1863,11 @@ def validate_objective_config(
         raise ValueError(
             "jepa_target_ema_decay must be in [0, 1), found "
             f"{config.jepa_target_ema_decay}"
+        )
+    if np.float32(config.jepa_target_ema_decay) >= np.float32(1.0):
+        raise ValueError(
+            "jepa_target_ema_decay rounds to 1.0 in FP32 and would "
+            "freeze the EMA target; choose a smaller decay."
         )
     if (
         config.jepa_target_semantics == "online"
@@ -2487,6 +2502,9 @@ def build_research_resume_contract(
     if config.jepa_target_semantics == "ema":
         objective_contract["jepa_target_ema"] = {
             "decay": float(config.jepa_target_ema_decay),
+            "effective_decay_float32": float(
+                np.float32(config.jepa_target_ema_decay)
+            ),
             "initialization": "exact_copy_after_source_restore",
             "parameter_scope": [
                 "encoder",

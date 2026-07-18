@@ -39,9 +39,12 @@ class FixedLinear(nnx.Module):
         self.b = None if b is None else param_cls(jnp.asarray(b, dtype=self.dtype))
 
     def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
-        y = jnp.asarray(x, dtype=self.dtype) @ self.w[...]
+        y = (
+            jnp.asarray(x, dtype=self.dtype)
+            @ jnp.asarray(self.w[...], dtype=self.dtype)
+        )
         if self.b is not None:
-            y = y + self.b[...]
+            y = y + jnp.asarray(self.b[...], dtype=self.dtype)
         return y
 
 
@@ -154,7 +157,10 @@ class InputEmbedding(nnx.Module):
         x = mish(self.proj(x))
         x = self.ln(x)
         x = x.reshape((batch, 64, self.embedding_size))
-        x = x * self.mul_gate[...] + self.add_gate[...]
+        x = (
+            x * jnp.asarray(self.mul_gate[...], dtype=self.dtype)
+            + jnp.asarray(self.add_gate[...], dtype=self.dtype)
+        )
         x = x.reshape((-1, self.embedding_size))
         ffn = mish(self.ffn1(x))
         ffn = self.ffn2(ffn)
@@ -184,7 +190,10 @@ class Smolgen(nnx.Module):
         s = self.ln2(s)
         # s: [Batch, Headcount * SmolGenSz]
         s = s.reshape((batch, self.headcount, -1))
-        s = s @ self.shared_w[...] # [Batch, Headcount, 64*64]
+        s = (
+            s
+            @ jnp.asarray(self.shared_w[...], dtype=self.dtype)
+        )  # [Batch, Headcount, 64*64]
         return s.reshape((batch, self.headcount, 64, 64))
 
 
@@ -295,7 +304,10 @@ class EncoderLayer(nnx.Module):
         else:
             logits = jnp.matmul(q, k.transpose(0, 1, 3, 2))
             if self.use_qk_gain:
-                logits = logits * self.qk_gain[...]
+                logits = logits * jnp.asarray(
+                    self.qk_gain[...],
+                    dtype=self.compute_dtype,
+                )
             else:
                 logits = logits / np.sqrt(self.head_dim)
             if bias is not None:

@@ -14,7 +14,11 @@ import pytest
 from flax import nnx
 
 import research.train as train
-from chess_dfm_jax.nnx_bt4 import TrainableParam
+from chess_dfm_jax.nnx_bt4 import (
+    EncoderLayer,
+    InputEmbedding,
+    TrainableParam,
+)
 from research.prepare import REPO_ROOT
 
 
@@ -122,6 +126,158 @@ class TinyEncoder(nnx.Module):
                 if len(self.layers) > 0
                 else 1.0
             )
+        tokens, batch_size = self.embedding(planes, alpha)
+        tokens = tokens.reshape(
+            (batch_size, 64, self.embedding_size)
+        )
+        for layer in self.layers:
+            tokens = layer(tokens, alpha)
+        return tokens
+
+
+def shaped_values(
+    shape: tuple[int, ...],
+    *,
+    scale: float = 0.1,
+) -> np.ndarray:
+    size = int(np.prod(shape))
+    return np.linspace(
+        -scale,
+        scale,
+        size,
+        dtype=np.float32,
+    ).reshape(shape)
+
+
+class SyntheticBfloat16Bt4Encoder(nnx.Module):
+    """Small real BT4 trunk that exercises every storage-dtype cast site."""
+
+    def __init__(self):
+        width = 8
+        headcount = 2
+        embedding_dense_size = 2
+        input_channels = 4
+        pos_planes = 1
+        embedding_params = {
+            "preproc_w": shaped_values(
+                (64 * pos_planes, 64 * embedding_dense_size)
+            ),
+            "preproc_b": shaped_values(
+                (64 * embedding_dense_size,)
+            ),
+            "w": shaped_values(
+                (input_channels + embedding_dense_size, width)
+            ),
+            "b": shaped_values((width,)),
+            "ln_scale": np.ones((width,), dtype=np.float32),
+            "ln_bias": shaped_values((width,), scale=0.01),
+            "mul_gate": shaped_values((width,), scale=0.5) + 1.0,
+            "add_gate": shaped_values((width,), scale=0.05),
+            "ffn": {
+                "dense1_w": shaped_values((width, 16)),
+                "dense1_b": shaped_values((16,)),
+                "dense2_w": shaped_values((16, width)),
+                "dense2_b": shaped_values((width,)),
+            },
+            "ffn_ln_scale": np.ones((width,), dtype=np.float32),
+            "ffn_ln_bias": shaped_values((width,), scale=0.01),
+        }
+        smolgen_hidden = 8
+        smolgen_size = 4
+        layer_params = {
+            "mha": {
+                "q_w": shaped_values((width, width)),
+                "q_b": shaped_values((width,)),
+                "k_w": shaped_values((width, width)),
+                "k_b": shaped_values((width,)),
+                "v_w": shaped_values((width, width)),
+                "v_b": shaped_values((width,)),
+                "dense_w": shaped_values((width, width)),
+                "dense_b": shaped_values((width,)),
+                "smolgen": {
+                    "compress_w": shaped_values((width, 2)),
+                    "dense1_w": shaped_values(
+                        (64 * 2, smolgen_hidden)
+                    ),
+                    "dense1_b": shaped_values((smolgen_hidden,)),
+                    "ln1_scale": np.ones(
+                        (smolgen_hidden,),
+                        dtype=np.float32,
+                    ),
+                    "ln1_bias": shaped_values(
+                        (smolgen_hidden,),
+                        scale=0.01,
+                    ),
+                    "dense2_w": shaped_values(
+                        (
+                            smolgen_hidden,
+                            headcount * smolgen_size,
+                        )
+                    ),
+                    "dense2_b": shaped_values(
+                        (headcount * smolgen_size,)
+                    ),
+                    "ln2_scale": np.ones(
+                        (headcount * smolgen_size,),
+                        dtype=np.float32,
+                    ),
+                    "ln2_bias": shaped_values(
+                        (headcount * smolgen_size,),
+                        scale=0.01,
+                    ),
+                },
+            },
+            "ln1": {
+                "scale": np.ones((width,), dtype=np.float32),
+                "bias": shaped_values((width,), scale=0.01),
+            },
+            "ffn": {
+                "dense1_w": shaped_values((width, 32)),
+                "dense1_b": shaped_values((32,)),
+                "dense2_w": shaped_values((32, width)),
+                "dense2_b": shaped_values((width,)),
+            },
+            "ln2": {
+                "scale": np.ones((width,), dtype=np.float32),
+                "bias": shaped_values((width,), scale=0.01),
+            },
+        }
+        self.embedding_size = width
+        self.embedding = InputEmbedding(
+            embedding_params,
+            embedding_size=width,
+            embedding_dense_size=embedding_dense_size,
+            pos_planes=pos_planes,
+            dtype=jnp.bfloat16,
+            param_cls=TrainableParam,
+        )
+        self.layers = nnx.List(
+            [
+                EncoderLayer(
+                    width=width,
+                    num_heads=headcount,
+                    mlp_dim=32,
+                    rngs=nnx.Rngs(0),
+                    param_dtype=jnp.bfloat16,
+                    compute_dtype=jnp.bfloat16,
+                    use_qk_gain=True,
+                    attention_impl="manual",
+                    layer_params=layer_params,
+                    shared_smolgen_w=shaped_values(
+                        (smolgen_size, 64 * 64)
+                    ),
+                    param_cls=TrainableParam,
+                )
+            ]
+        )
+
+    def encode_tokens(
+        self,
+        planes: jax.Array,
+        alpha: float | None = None,
+    ) -> jax.Array:
+        if alpha is None:
+            alpha = float((2.0 * len(self.layers)) ** -0.25)
         tokens, batch_size = self.embedding(planes, alpha)
         tokens = tokens.reshape(
             (batch_size, 64, self.embedding_size)
@@ -262,6 +418,65 @@ def assert_trees_exact(left: Any, right: Any) -> None:
         )
 
 
+def test_bfloat16_bt4_compute_is_invariant_to_fp32_shadow_storage() -> None:
+    online = SyntheticBfloat16Bt4Encoder()
+    shadow = train.EmaBt4Encoder(online)
+    shadow_state = nnx.state(shadow)
+    nnx.update(
+        shadow,
+        jax.tree.map(
+            lambda value: jnp.array(
+                value,
+                dtype=jnp.float32,
+                copy=True,
+            ),
+            shadow_state,
+        ),
+    )
+    online_state = {
+        "embedding": pure_state(online.embedding),
+        "layers": pure_state(online.layers),
+    }
+    fp32_state = pure_state(shadow)
+    for online_leaf, shadow_leaf in zip(
+        jax.tree.leaves(online_state),
+        jax.tree.leaves(fp32_state),
+        strict=True,
+    ):
+        assert np.asarray(online_leaf).dtype == jnp.bfloat16
+        assert np.asarray(shadow_leaf).dtype == np.float32
+        assert (
+            online_leaf.unsafe_buffer_pointer()
+            != shadow_leaf.unsafe_buffer_pointer()
+        )
+
+    planes = jnp.linspace(
+        -1.0,
+        1.0,
+        2 * 4 * 8 * 8,
+        dtype=jnp.float32,
+    ).reshape((2, 4, 8, 8))
+
+    @nnx.jit
+    def encode_pair(online_encoder, shadow_encoder, inputs):
+        return (
+            online_encoder.encode_tokens(inputs),
+            shadow_encoder.encode_tokens(inputs),
+        )
+
+    online_tokens, shadow_tokens = encode_pair(
+        online,
+        shadow,
+        planes,
+    )
+    jax.block_until_ready((online_tokens, shadow_tokens))
+    assert bool(jnp.all(jnp.isfinite(online_tokens)))
+    np.testing.assert_array_equal(
+        np.asarray(online_tokens),
+        np.asarray(shadow_tokens),
+    )
+
+
 def test_ema_config_is_checked_cli_overridable_and_resume_bound(
     monkeypatch,
 ) -> None:
@@ -284,6 +499,13 @@ def test_ema_config_is_checked_cli_overridable_and_resume_bound(
         train.validate_objective_config(
             objective="normalized",
             config=tiny_config(jepa_target_ema_decay=1.0),
+        )
+    with pytest.raises(ValueError, match="rounds to 1.0 in FP32"):
+        train.validate_objective_config(
+            objective="normalized",
+            config=tiny_config(
+                jepa_target_ema_decay=1.0 - 1e-10
+            ),
         )
     with pytest.raises(ValueError, match="inert unless"):
         train.validate_objective_config(
@@ -347,6 +569,9 @@ def test_ema_config_is_checked_cli_overridable_and_resume_bound(
     assert semantics["jepa_target_ema"]["update_order"] == (
         "after_online_optimizer"
     )
+    assert semantics["jepa_target_ema"][
+        "effective_decay_float32"
+    ] == float(np.float32(0.975))
     assert semantics["jepa_target_ema"]["online_target_sigreg_gradient"] == (
         "attached"
     )
@@ -363,6 +588,10 @@ def test_ema_config_is_checked_cli_overridable_and_resume_bound(
         "online"
     )
     assert "jepa_target_ema" not in online_contract["objective"]
+    assert (
+        "chess_dfm_jax/nnx_bt4.py"
+        in online_contract["code"]["files"]
+    )
 
 
 def test_ema_shadow_scope_sync_and_post_optimizer_formula() -> None:
@@ -445,6 +674,36 @@ def test_ema_shadow_scope_sync_and_post_optimizer_formula() -> None:
     assert_trees_exact(target_after, expected_after)
 
 
+def test_fp32_ema_master_keeps_sub_bfloat16_increment() -> None:
+    model, ema_target, _ = make_components()
+    target_before = float(
+        ema_target.encoder.embedding.scale[...]
+    )
+    assert target_before == 1.0
+    next_bfloat16 = jnp.nextafter(
+        jnp.asarray(1.0, dtype=jnp.bfloat16),
+        jnp.asarray(2.0, dtype=jnp.bfloat16),
+    )
+    model.encoder.embedding.scale[...] = jnp.asarray(
+        next_bfloat16,
+        dtype=model.encoder.embedding.scale[...].dtype,
+    )
+    decay = 0.999
+    train.update_ema_target_after_optimizer(
+        ema_target,
+        model,
+        decay,
+    )
+    target_after = ema_target.encoder.embedding.scale[...]
+    assert target_after.dtype == jnp.float32
+    assert float(target_after) > target_before
+    assert float(target_after) < float(next_bfloat16)
+    assert jnp.asarray(target_after, dtype=jnp.bfloat16) == jnp.asarray(
+        target_before,
+        dtype=jnp.bfloat16,
+    )
+
+
 def test_ema_chunked_future_encoder_never_flattens_batch_and_horizon() -> None:
     _, ema_target, _ = make_components(
         expected_batch_size=2,
@@ -497,6 +756,10 @@ def test_ema_positive_target_has_no_gradient_and_reports_clear_metrics() -> None
     assert float(aux["jepa_target_semantics_ema"]) == 1.0
     assert float(aux["jepa_positive_ema_target_rms"]) > 0.0
     assert float(aux["jepa_online_future_target_rms"]) > 0.0
+    assert float(aux["z_online_future_target_norm"]) == float(
+        aux["z_target_norm"]
+    )
+    assert float(aux["z_positive_ema_target_norm"]) > 0.0
     assert (
         float(aux["jepa_online_future_vs_ema_target_mse"])
         > 0.0
