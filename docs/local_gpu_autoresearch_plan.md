@@ -582,7 +582,8 @@ sweeps, held-out data, and repeated seeds.
 - [x] Create the one-editable-file compatibility scaffold.
 - [x] Move the experimental model/optimizer into `research/train.py` and pass
   exact CPU and real-checkpoint GPU parity.
-- [ ] Move the loss into `research/train.py`, pass loss/gradient parity, and
+- [x] Move the loss into `research/train.py`, pass exact loss/gradient and
+  real-checkpoint GPU parity, and
   remove the final legacy model/loss import.
 - [x] Add initial duplication/padding invariance and collapse tests.
 - [x] Capture the first active-model GPU profile.
@@ -590,8 +591,14 @@ sweeps, held-out data, and repeated seeds.
 - [x] Calibrate normalized SIGReg coefficients by per-module gradient norms.
 - [x] Reject target SIGReg `0.40` after a fixed-slice stability run exposed
   target/prediction scale contraction.
+- [x] Reject the calibrated 10%-gradient target SIGReg point `1.32` after the
+  same scale shortcut persisted.
 - [x] Add and real-GPU verify strict atomic checkpoint/resume with deterministic
   data-cursor continuation.
+- [ ] Replace the unsafe initial legacy loader with a checksummed, exact-ABI,
+  one-time source conversion.
+- [ ] Make effective experiment overrides explicit and reject silent no-op
+  configuration before enabling unattended autoresearch.
 - [ ] Freeze a corrected baseline objective after a stronger target-SIGReg
   stability run.
 - [x] Implement and golden-test separate legacy-absolute and board-aware LC0

@@ -354,6 +354,35 @@ The complete report is
 This compatibility run did not save final weights, so strict final checkpoint
 save/resume is a gate before any 30-minute experiment.
 
+### Target-SIGReg 1.32 stability point
+
+The calibrated 10%-gradient point also fails the scale gate. A second
+batch-64, 100-update run used target coefficient `1.32`, prediction coefficient
+zero, reference count one, and the same two fixed validation batches:
+
+| Fixed validation metric | Initial | Final |
+|---|---:|---:|
+| DFM CE | 4.8472 | 5.0349 |
+| Masked-action accuracy | 0.0586 | 0.0605 |
+| JEPA positive loss | 0.4897 | 0.4041 |
+| Target normalized SIGReg | 0.0475 | 0.0556 |
+| FP32 first legal mass | 0.4548 | 0.4149 |
+
+Mean target RMS contracted from `1.0105` to `0.8599`; mean prediction RMS
+contracted from `0.9611` to `0.8985`. Mean prediction effective rank remained
+healthy (`29.44` to `29.14`) and mean prediction-target cosine improved
+slightly (`0.7782` to `0.7808`), but positive-MSE/zero-MSE worsened from
+`0.4180` to `0.4562`. The regularizer discrepancy itself again increased.
+This is still a target-scale shortcut, not prediction-rank collapse, and
+coefficient `1.32` is rejected.
+
+The local loss completed 6,400 examples at `39.1` examples/s and `351.5`
+encoded boards/s. Mean GPU utilization was `89.1%`, mean power was `246.4 W`,
+peak JAX live memory was `5.94 GB`, and scalar loss clipping was never active.
+The next justified calibration point is `3.96`, whose initial target-SIGReg
+gradient is approximately 30% of the JEPA-positive gradient. The report is
+`research/runs/target132-smoke-b64-100/report.json`.
+
 ## Strict local checkpoint/resume
 
 Commit `f6b9c40` adds a research checkpoint format with:
@@ -389,8 +418,13 @@ timing. The source and resumed reports are:
 - `research/runs/real-checkpoint-resume-b1-step2/report.json`
 
 The initial import of the known legacy step-265,000 checkpoint still uses its
-older loader. Its exact fingerprint and ABI are verified, but a future cleanup
-should route that one-time import through the same preflight machinery.
+older loader. A failure-injection audit found that its `strict=True` mode
+accepts missing and wrong-shaped leaves, accepts an empty optimizer tree and a
+non-integral step, uses pickle-enabled NPZ loading, and can mutate the model
+before later optimizer validation fails. The known source file has an external
+fingerprint, but normal autoresearch must not rely on this loader. A one-time
+checksummed conversion with exact model-and-optimizer ABI preflight is now a
+hard gate.
 
 ## Action-codec audit
 
@@ -429,8 +463,10 @@ suite passes.
 
 Commit `4a981ca` moves the complete checkpoint-visible model configuration,
 adapters, projector, recurrent JEPA transition, DFM planner, value/WDL head,
-optimizer construction, and legacy step wrappers into `research/train.py`.
-Only the legacy stage-1 loss remains as a temporary parity oracle.
+optimizer construction, and step wrappers into `research/train.py`.
+Commit `45bd269` then moves the full stage-1 objective and its closed helper
+set into the same file. Production has no import from the legacy joint
+model/loss module; that module is now used only by tests as a parity oracle.
 
 Three CPU parity tests compare the local and legacy paths with the same seed:
 
@@ -439,22 +475,24 @@ Three CPU parity tests compare the local and legacy paths with the same seed:
 - every Muon/warmup optimizer-state path, dtype, shape, and value;
 - encoded tokens/vectors, noisy planner logits and hidden state, and free JEPA
   rollout; and
-- the complete legacy loss/auxiliary tree.
+- the complete legacy loss/auxiliary tree and every trainable gradient leaf.
 
-All comparisons are exact. A real step-265,000 B4 GPU evaluation then compared
-114 validation metrics against the pre-refactor corrected-objective report and
-found zero differences. It exactly retained total loss `3.9873406887`, DFM CE
-`3.2872314453`, FP32 legal mass `0.9995466471`, target SIGReg
-`0.1506309509`, and prediction SIGReg `0.1407624930`. The report is
-`research/runs/local-model-parity-step265k-b4/report.json`.
+All comparisons are exact. Real step-265,000 B4 GPU evaluations after both the
+model and loss moves compared 114 validation metrics against the pre-refactor
+corrected-objective report and found zero differences. They exactly retained
+total loss `3.9873406887`, DFM CE `3.2872314453`, FP32 legal mass
+`0.9995466471`, target SIGReg `0.1506309509`, and prediction SIGReg
+`0.1407624930`. The final report is
+`research/runs/local-loss-parity-step265k-b4/report.json`.
 
 ## Next acceptance point
 
 The compatibility harness is not yet open to autoresearch. The next milestone
-is a clean loss definition in `research/train.py` that:
+is a safe and unambiguous experiment surface that:
 
-- matches this fingerprint in compatibility mode;
-- computes legal mass correctly;
-- replaces batch-scaled training SIGReg with the normalized definition;
-- computes real collapse/baseline diagnostics; and
-- activates a controlled prediction-SIGReg ablation.
+- converts the legacy source once through exact, atomic preflight;
+- makes the effective experiment overrides obvious instead of silently
+  replacing edited defaults with checkpoint metadata;
+- removes or rejects inert knobs and placeholder-zero diagnostics;
+- freezes a target-scale-stable normalized objective; and
+- then activates a controlled prediction-SIGReg ablation.
