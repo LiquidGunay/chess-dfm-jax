@@ -14,10 +14,17 @@ import argparse
 import csv
 import dataclasses
 import gc
+import hashlib
+import importlib.metadata
 import json
+import os
+import re
+import shutil
 import subprocess
 import sys
+import tempfile
 import time
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import IO, Any, NamedTuple
@@ -45,7 +52,9 @@ from research.legacy_baseline import flatten_metrics, resolve_config  # noqa: E4
 from research.prepare import (  # noqa: E402
     REPO_ROOT,
     FixedTrajectoryBatches,
+    load_asset_manifest,
     require_within_workspace,
+    sha256_file,
     validate_environment,
     write_json,
 )
@@ -58,6 +67,9 @@ DEFAULT_RUN_ROOT = REPO_ROOT / "checkpoints" / "source" / "step0265000"
 DEFAULT_CHECKPOINT_DIR = DEFAULT_RUN_ROOT / "checkpoints"
 DEFAULT_MODELS_DIR = REPO_ROOT / "models" / "source" / "extracted"
 DEFAULT_DATA_ROOT = REPO_ROOT / "data" / "trajectory_v3"
+
+RESEARCH_CHECKPOINT_FORMAT = "chess-dfm-research-checkpoint-v1"
+RESEARCH_CHECKPOINT_PATTERN = re.compile(r"^update(\d{8,})$")
 
 GRADIENT_COMPONENT_NAMES = (
     "dfm_ce",
@@ -74,6 +86,519 @@ class SigRegResult(NamedTuple):
     official: jax.Array
     valid_count: jax.Array
     discrepancy: jax.Array
+
+
+def _json_default(value: Any) -> Any:
+    if isinstance(value, Path):
+        return str(value)
+    if isinstance(value, np.generic):
+        return value.item()
+    raise TypeError(f"Cannot encode {type(value).__name__} as checkpoint JSON")
+
+
+def _canonical_json_bytes(value: Any) -> bytes:
+    return json.dumps(
+        value,
+        default=_json_default,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+
+
+def _json_normalize(value: Any) -> Any:
+    return json.loads(_canonical_json_bytes(value))
+
+
+def _json_sha256(value: Any) -> str:
+    return hashlib.sha256(_canonical_json_bytes(value)).hexdigest()
+
+
+def _abi_mapping_key(key: Any) -> dict[str, Any]:
+    if isinstance(key, bool):
+        return {"type": "bool", "value": key}
+    if isinstance(key, int):
+        return {"type": "int", "value": key}
+    if isinstance(key, str):
+        return {"type": "str", "value": key}
+    raise TypeError(f"Unsupported state mapping key {key!r} ({type(key).__name__})")
+
+
+def _abi_path_text(path: list[dict[str, Any]]) -> str:
+    if not path:
+        return "<root>"
+    parts = []
+    for item in path:
+        kind = item["type"]
+        value = item["value"]
+        parts.append(f"[{value}]" if kind in {"index", "int"} else f".{value}")
+    return "".join(parts).lstrip(".")
+
+
+def _state_schema_records(
+    value: Any,
+    *,
+    path: tuple[dict[str, Any], ...] = (),
+) -> list[dict[str, Any]]:
+    path_list = list(path)
+    if isinstance(value, Mapping):
+        keyed = [(_abi_mapping_key(key), child) for key, child in value.items()]
+        keyed.sort(key=lambda item: _canonical_json_bytes(item[0]))
+        records = [
+            {
+                "path": path_list,
+                "kind": "mapping",
+                "keys": [key for key, _ in keyed],
+            }
+        ]
+        for key, child in keyed:
+            records.extend(_state_schema_records(child, path=path + (key,)))
+        return records
+
+    if isinstance(value, list):
+        records = [{"path": path_list, "kind": "list", "length": len(value)}]
+        for index, child in enumerate(value):
+            key = {"type": "index", "value": index}
+            records.extend(_state_schema_records(child, path=path + (key,)))
+        return records
+
+    if isinstance(value, tuple):
+        records = [
+            {
+                "path": path_list,
+                "kind": "tuple",
+                "length": len(value),
+                "type": f"{type(value).__module__}.{type(value).__qualname__}",
+            }
+        ]
+        for index, child in enumerate(value):
+            key = {"type": "index", "value": index}
+            records.extend(_state_schema_records(child, path=path + (key,)))
+        return records
+
+    array = np.asarray(value)
+    if array.dtype.hasobject:
+        raise TypeError(f"Object-valued state leaf at {_abi_path_text(path_list)}")
+    return [
+        {
+            "path": path_list,
+            "kind": "leaf",
+            "shape": list(array.shape),
+            "dtype": array.dtype.name,
+            "nbytes": int(array.size * array.dtype.itemsize),
+        }
+    ]
+
+
+def research_state_abi(value: Any) -> dict[str, Any]:
+    """Return a canonical path/shape/dtype ABI for a model or optimizer tree."""
+
+    schema = _state_schema_records(value)
+    leaves = [record for record in schema if record["kind"] == "leaf"]
+    return {
+        "schema_version": 1,
+        "sha256": _json_sha256(schema),
+        "leaf_count": len(leaves),
+        "nbytes": sum(int(record["nbytes"]) for record in leaves),
+        "schema": schema,
+    }
+
+
+def _schema_by_path(abi: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    return {
+        _canonical_json_bytes(record["path"]).decode("utf-8"): record
+        for record in abi["schema"]
+    }
+
+
+def assert_research_state_compatible(
+    expected: Any,
+    incoming: Any,
+    *,
+    label: str,
+) -> None:
+    """Reject any state path, container, shape, or dtype mismatch."""
+
+    expected_abi = research_state_abi(expected)
+    incoming_abi = research_state_abi(incoming)
+    if expected_abi["sha256"] == incoming_abi["sha256"]:
+        return
+
+    expected_records = _schema_by_path(expected_abi)
+    incoming_records = _schema_by_path(incoming_abi)
+    missing = sorted(set(expected_records) - set(incoming_records))
+    extra = sorted(set(incoming_records) - set(expected_records))
+    changed = sorted(
+        path
+        for path in set(expected_records) & set(incoming_records)
+        if expected_records[path] != incoming_records[path]
+    )
+
+    details: list[str] = []
+    for kind, paths in (("missing", missing), ("extra", extra), ("changed", changed)):
+        for encoded_path in paths[:3]:
+            record = (expected_records if kind != "extra" else incoming_records)[encoded_path]
+            details.append(f"{kind} {_abi_path_text(record['path'])}")
+    if len(missing) + len(extra) + len(changed) > len(details):
+        details.append("additional differences omitted")
+    joined = "; ".join(details) or "schema digest differs"
+    raise ValueError(
+        f"{label} checkpoint ABI mismatch "
+        f"(expected {expected_abi['sha256']}, incoming {incoming_abi['sha256']}): {joined}"
+    )
+
+
+def extract_research_train_state(model: nnx.Module, optimizer: nnx.Optimizer) -> dict[str, Any]:
+    """Copy trainable model and optimizer state to a raw NumPy payload."""
+
+    def to_host(value: Any) -> Any:
+        if isinstance(value, jax.Array):
+            return np.asarray(value)
+        return value
+
+    model_state = jax.tree.map(to_host, nnx.state(model, TrainableParam))
+    optimizer_state = jax.tree.map(to_host, nnx.state(optimizer.opt_state))
+    return {
+        "step": np.asarray(int(optimizer.step[...]), dtype=np.int64),
+        "model_trainable": dict(nnx.to_pure_dict(model_state)),
+        "optimizer_state": dict(nnx.to_pure_dict(optimizer_state)),
+    }
+
+
+def strict_restore_research_payload(
+    payload: dict[str, Any],
+    model: nnx.Module,
+    optimizer: nnx.Optimizer,
+) -> int:
+    """Preflight both state trees, then restore them without partial fallback."""
+
+    required = {"step", "model_trainable", "optimizer_state"}
+    if set(payload) != required:
+        missing = sorted(required - set(payload))
+        extra = sorted(set(payload) - required)
+        raise ValueError(f"Research state payload keys differ: missing={missing}, extra={extra}")
+
+    step_array = np.asarray(payload["step"])
+    if step_array.shape != () or not np.issubdtype(step_array.dtype, np.integer):
+        raise ValueError(
+            f"Research optimizer step must be an integer scalar, got "
+            f"shape={step_array.shape}, dtype={step_array.dtype}"
+        )
+    optimizer_step = int(step_array)
+    if optimizer_step < 0:
+        raise ValueError(f"Research optimizer step must be non-negative, got {optimizer_step}")
+
+    model_state = nnx.state(model, TrainableParam)
+    optimizer_state = nnx.state(optimizer.opt_state)
+    model_current = dict(nnx.to_pure_dict(model_state))
+    optimizer_current = dict(nnx.to_pure_dict(optimizer_state))
+    assert_research_state_compatible(
+        model_current,
+        payload["model_trainable"],
+        label="model",
+    )
+    assert_research_state_compatible(
+        optimizer_current,
+        payload["optimizer_state"],
+        label="optimizer",
+    )
+
+    nnx.replace_by_pure_dict(model_state, payload["model_trainable"])
+    nnx.replace_by_pure_dict(optimizer_state, payload["optimizer_state"])
+    nnx.update(model, model_state)
+    nnx.update(optimizer.opt_state, optimizer_state)
+    optimizer.step[...] = jnp.asarray(optimizer_step, dtype=optimizer.step[...].dtype)
+    return int(optimizer.step[...])
+
+
+def _research_checkpoint_update(path: Path) -> int | None:
+    match = RESEARCH_CHECKPOINT_PATTERN.fullmatch(path.name)
+    if match is None or not path.is_dir():
+        return None
+    return int(match.group(1))
+
+
+def _read_research_manifest(checkpoint_dir: Path) -> dict[str, Any]:
+    manifest_path = require_within_workspace(checkpoint_dir / "manifest.json")
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"Invalid research checkpoint manifest: {manifest_path}") from exc
+    if not isinstance(manifest, dict):
+        raise ValueError(f"Research checkpoint manifest must be an object: {manifest_path}")
+    if manifest.get("format") != RESEARCH_CHECKPOINT_FORMAT:
+        raise ValueError(
+            f"Unsupported research checkpoint format {manifest.get('format')!r}: {manifest_path}"
+        )
+    directory_update = _research_checkpoint_update(checkpoint_dir)
+    if directory_update is None or int(manifest.get("research_update", -1)) != directory_update:
+        raise ValueError(f"Research checkpoint directory/manifest update mismatch: {checkpoint_dir}")
+    return manifest
+
+
+def completed_research_checkpoints(checkpoint_root: Path) -> list[Path]:
+    """List published checkpoints; hidden/incomplete temporary directories are ignored."""
+
+    checkpoint_root = require_within_workspace(checkpoint_root)
+    if not checkpoint_root.is_dir():
+        return []
+    completed: list[tuple[int, Path]] = []
+    for path in checkpoint_root.iterdir():
+        update = _research_checkpoint_update(path)
+        if update is None or not (path / "manifest.json").is_file():
+            continue
+        try:
+            manifest = _read_research_manifest(path)
+        except ValueError:
+            continue
+        if not (path / "state.npz").is_file():
+            continue
+        completed.append((int(manifest["research_update"]), path))
+    return [path for _, path in sorted(completed)]
+
+
+def latest_research_checkpoint(checkpoint_root: Path) -> Path | None:
+    checkpoints = completed_research_checkpoints(checkpoint_root)
+    return checkpoints[-1] if checkpoints else None
+
+
+def resolve_research_checkpoint(path: Path) -> Path:
+    """Resolve an exact update directory, a checkpoint root, or a run directory."""
+
+    candidate = require_within_workspace(path)
+    if _research_checkpoint_update(candidate) is not None:
+        _read_research_manifest(candidate)
+        return candidate
+    if (candidate / "checkpoints").is_dir():
+        candidate = require_within_workspace(candidate / "checkpoints")
+    latest = latest_research_checkpoint(candidate)
+    if latest is None:
+        raise FileNotFoundError(f"No completed research checkpoint under {candidate}")
+    return latest
+
+
+def _load_research_npz(path: Path) -> dict[str, Any]:
+    with np.load(require_within_workspace(path), allow_pickle=True) as data:
+        payload: dict[str, Any] = {}
+        for key in data.files:
+            value = data[key]
+            if isinstance(value, np.ndarray) and value.shape == () and value.dtype == object:
+                payload[key] = value.item()
+            else:
+                payload[key] = value
+    return payload
+
+
+def _fsync_path(path: Path) -> None:
+    try:
+        descriptor = os.open(path, os.O_RDONLY)
+    except OSError:
+        return
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
+def prune_research_checkpoints(checkpoint_root: Path, *, max_to_keep: int) -> list[Path]:
+    """Prune old completed checkpoints and return the retained paths."""
+
+    checkpoint_root = require_within_workspace(checkpoint_root)
+    checkpoints = completed_research_checkpoints(checkpoint_root)
+    if max_to_keep <= 0 or len(checkpoints) <= max_to_keep:
+        return checkpoints
+    for path in checkpoints[:-max_to_keep]:
+        shutil.rmtree(path)
+    _fsync_path(checkpoint_root)
+    return checkpoints[-max_to_keep:]
+
+
+def save_research_checkpoint(
+    checkpoint_root: Path,
+    *,
+    model: nnx.Module,
+    optimizer: nnx.Optimizer,
+    research_update: int,
+    next_data_cursor: int,
+    resume_contract: dict[str, Any],
+    lineage: dict[str, Any],
+    max_to_keep: int = 2,
+    extra: dict[str, Any] | None = None,
+) -> Path:
+    """Atomically publish a checksummed local research checkpoint."""
+
+    checkpoint_root = require_within_workspace(checkpoint_root)
+    checkpoint_root.mkdir(parents=True, exist_ok=True)
+    research_update = int(research_update)
+    next_data_cursor = int(next_data_cursor)
+    if research_update < 0 or next_data_cursor < 0:
+        raise ValueError("research_update and next_data_cursor must be non-negative")
+
+    final_dir = checkpoint_root / f"update{research_update:08d}"
+    if final_dir.exists():
+        raise FileExistsError(f"Research checkpoint already exists: {final_dir}")
+    temporary_dir = Path(
+        tempfile.mkdtemp(
+            prefix=f".update{research_update:08d}.partial-",
+            dir=checkpoint_root,
+        )
+    )
+    try:
+        payload = extract_research_train_state(model, optimizer)
+        state_path = temporary_dir / "state.npz"
+        np.savez(state_path, **payload)
+        _fsync_path(state_path)
+        state_size = state_path.stat().st_size
+        state_sha256 = sha256_file(state_path)
+
+        normalized_contract = _json_normalize(resume_contract)
+        normalized_lineage = _json_normalize(lineage)
+        manifest = {
+            "format": RESEARCH_CHECKPOINT_FORMAT,
+            "created_utc": datetime.now(UTC).isoformat(),
+            "research_update": research_update,
+            "optimizer_step": int(np.asarray(payload["step"])),
+            "next_data_cursor": next_data_cursor,
+            "resume_contract": normalized_contract,
+            "resume_contract_sha256": _json_sha256(normalized_contract),
+            "lineage": normalized_lineage,
+            "model_abi": research_state_abi(payload["model_trainable"]),
+            "optimizer_abi": research_state_abi(payload["optimizer_state"]),
+            "state": {
+                "filename": "state.npz",
+                "size_bytes": state_size,
+                "sha256": state_sha256,
+            },
+            "extra": _json_normalize(extra or {}),
+        }
+        write_json(temporary_dir / "manifest.json", manifest)
+        _fsync_path(temporary_dir / "manifest.json")
+        _fsync_path(temporary_dir)
+        os.replace(temporary_dir, final_dir)
+        _fsync_path(checkpoint_root)
+    except BaseException:
+        shutil.rmtree(temporary_dir, ignore_errors=True)
+        raise
+
+    prune_research_checkpoints(checkpoint_root, max_to_keep=max_to_keep)
+    return final_dir
+
+
+def load_research_checkpoint(
+    path: Path,
+    *,
+    model: nnx.Module,
+    optimizer: nnx.Optimizer,
+    expected_resume_contract: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Verify and strictly restore a completed local research checkpoint."""
+
+    checkpoint_dir = resolve_research_checkpoint(path)
+    manifest = _read_research_manifest(checkpoint_dir)
+    state = manifest.get("state")
+    if not isinstance(state, dict) or state.get("filename") != "state.npz":
+        raise ValueError(f"Invalid state record in {checkpoint_dir / 'manifest.json'}")
+    state_path = require_within_workspace(checkpoint_dir / "state.npz")
+    if state_path.stat().st_size != int(state.get("size_bytes", -1)):
+        raise ValueError(f"Research checkpoint state size mismatch: {state_path}")
+    observed_sha256 = sha256_file(state_path)
+    if observed_sha256 != state.get("sha256"):
+        raise ValueError(f"Research checkpoint state checksum mismatch: {state_path}")
+
+    contract = manifest.get("resume_contract")
+    if _json_sha256(contract) != manifest.get("resume_contract_sha256"):
+        raise ValueError(f"Research checkpoint resume contract checksum mismatch: {checkpoint_dir}")
+    if expected_resume_contract is not None:
+        normalized_expected = _json_normalize(expected_resume_contract)
+        if _json_sha256(normalized_expected) != manifest["resume_contract_sha256"]:
+            raise ValueError(
+                "Research checkpoint resume contract mismatch "
+                f"(expected {_json_sha256(normalized_expected)}, "
+                f"incoming {manifest['resume_contract_sha256']})"
+            )
+
+    payload = _load_research_npz(state_path)
+    payload_step = int(np.asarray(payload.get("step", -1)))
+    if payload_step != int(manifest.get("optimizer_step", -1)):
+        raise ValueError(
+            f"Research optimizer step mismatch: manifest={manifest.get('optimizer_step')}, "
+            f"payload={payload_step}"
+        )
+    payload_model_abi = research_state_abi(payload.get("model_trainable"))
+    payload_optimizer_abi = research_state_abi(payload.get("optimizer_state"))
+    if payload_model_abi != manifest.get("model_abi"):
+        raise ValueError(f"Research checkpoint model ABI manifest mismatch: {checkpoint_dir}")
+    if payload_optimizer_abi != manifest.get("optimizer_abi"):
+        raise ValueError(f"Research checkpoint optimizer ABI manifest mismatch: {checkpoint_dir}")
+
+    strict_restore_research_payload(payload, model, optimizer)
+    restored = dict(manifest)
+    restored["checkpoint_dir"] = str(checkpoint_dir)
+    return restored
+
+
+def build_research_resume_contract(
+    *,
+    config: Any,
+    objective: str,
+    sigreg_reference_count: float,
+    batch_size: int,
+    train_seed: int,
+    train_provenance: dict[str, Any],
+    models_dir: Path,
+) -> dict[str, Any]:
+    """Build the semantic contract that must remain fixed for exact continuation."""
+
+    models_dir = require_within_workspace(models_dir)
+    exported_model = require_within_workspace(models_dir / "BT4_exported.pb.gz")
+    assets = load_asset_manifest()
+    trajectory_asset = assets["trajectory_v3"]["archive"]
+    source_files = (
+        Path(__file__),
+        REPO_ROOT / "research" / "prepare.py",
+        REPO_ROOT / "chess_dfm_jax" / "training" / "joint_latent_sasa.py",
+        REPO_ROOT / "chess_dfm_jax" / "nnx_bt4.py",
+        REPO_ROOT / "chess_dfm_jax" / "data" / "trajectory_v3.py",
+    )
+    return {
+        "architecture_source": ARCHITECTURE_SOURCE,
+        "model_config": dataclasses.asdict(config),
+        "objective": {
+            "name": objective,
+            "target_sigreg_coeff": float(config.jepa_sigreg_coeff),
+            "pred_sigreg_coeff": float(config.jepa_pred_sigreg_coeff),
+            "target_sigreg_reference_count": float(sigreg_reference_count),
+            "pred_sigreg_reference_count": float(sigreg_reference_count),
+        },
+        "data": {
+            "batch_size": int(batch_size),
+            "horizon": int(config.horizon),
+            "view": "joint_latent_sasa",
+            "train_seed": int(train_seed),
+            "schedule": train_provenance,
+            "source_archive_sha256": trajectory_asset["sha256"],
+            "source_archive_size_bytes": int(trajectory_asset["size_bytes"]),
+        },
+        "assets": {
+            "bt4_exported_path": str(exported_model),
+            "bt4_exported_sha256": sha256_file(exported_model),
+        },
+        "code": {
+            "files": {
+                str(path.relative_to(REPO_ROOT)): sha256_file(path)
+                for path in source_files
+            },
+        },
+        "software": {
+            "python": ".".join(str(part) for part in sys.version_info[:3]),
+            "jax": jax.__version__,
+            "flax": importlib.metadata.version("flax"),
+            "numpy": np.__version__,
+            "optax": importlib.metadata.version("optax"),
+            "device_platform": jax.devices()[0].platform,
+            "device_kind": jax.devices()[0].device_kind,
+        },
+    }
 
 
 def normalized_le_jepa_sigreg(
@@ -499,6 +1024,11 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run-root", type=Path, default=DEFAULT_RUN_ROOT)
     parser.add_argument("--checkpoint-dir", type=Path, default=DEFAULT_CHECKPOINT_DIR)
+    parser.add_argument(
+        "--resume-from",
+        type=Path,
+        help="Strictly continue a completed local research checkpoint or checkpoint root.",
+    )
     parser.add_argument("--models-dir", type=Path, default=DEFAULT_MODELS_DIR)
     parser.add_argument("--data-root", type=Path, default=DEFAULT_DATA_ROOT)
     parser.add_argument(
@@ -559,6 +1089,24 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--run-id", default="")
     parser.add_argument("--output-dir", type=Path)
+    parser.add_argument(
+        "--save-every",
+        type=int,
+        default=0,
+        help="Save every N updates in this invocation; zero disables periodic saves.",
+    )
+    parser.add_argument(
+        "--save-final",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Save final model and optimizer state (about 1.85 GB for the baseline).",
+    )
+    parser.add_argument(
+        "--max-checkpoints",
+        type=int,
+        default=2,
+        help="Maximum completed checkpoints retained in this run segment; zero keeps all.",
+    )
     return parser.parse_args()
 
 
@@ -1151,9 +1699,20 @@ def main() -> int:
         raise ValueError("--gradient-audit requires --objective normalized")
     if not 0.0 <= args.val_deterministic_t <= 1.0:
         raise ValueError("--val-deterministic-t must be in [0, 1]")
+    if args.save_every < 0:
+        raise ValueError("--save-every must be non-negative")
+    if args.max_checkpoints < 0:
+        raise ValueError("--max-checkpoints must be non-negative")
+    if args.resume_from is not None and args.init != "exact":
+        raise ValueError("--resume-from is an exact continuation and cannot use --init model-only")
 
     run_root = require_within_workspace(args.run_root)
     checkpoint_dir = require_within_workspace(args.checkpoint_dir)
+    resume_from = (
+        require_within_workspace(args.resume_from)
+        if args.resume_from is not None
+        else None
+    )
     models_dir = require_within_workspace(args.models_dir)
     data_root = require_within_workspace(args.data_root)
     commit = git_commit()
@@ -1162,7 +1721,6 @@ def main() -> int:
     output_dir = require_within_workspace(
         args.output_dir or REPO_ROOT / "research" / "runs" / run_id
     )
-    output_dir.mkdir(parents=True, exist_ok=False)
     metrics_path = output_dir / "metrics.jsonl"
 
     config, metadata = resolve_config(run_root)
@@ -1193,24 +1751,83 @@ def main() -> int:
         seed=args.val_seed,
         shuffle_files=False,
     )
+    resume_contract = build_research_resume_contract(
+        config=config,
+        objective=args.objective,
+        sigreg_reference_count=args.sigreg_reference_count,
+        batch_size=args.batch_size,
+        train_seed=args.seed,
+        train_provenance=train_batches.provenance(),
+        models_dir=models_dir,
+    )
 
     model_params = load_mapped_bt4_params(models_dir=models_dir)
     model, optimizer = create_joint_components(model_params, config, seed=args.seed)
     restore_started = time.perf_counter()
-    payload = load_training_checkpoint(
-        checkpoint_dir,
-        model=model,
-        optimizer=(
-            optimizer
-            if args.init == "exact" and not args.gradient_audit
-            else None
-        ),
-        step=int(metadata["latest_step"]),
-        strict=True,
-    )
+    research_update = 0
+    next_data_cursor = 0
+    resumed_from: str | None = None
+    if resume_from is not None:
+        resume_manifest = load_research_checkpoint(
+            resume_from,
+            model=model,
+            optimizer=optimizer,
+            expected_resume_contract=resume_contract,
+        )
+        checkpoint_step = int(resume_manifest["optimizer_step"])
+        research_update = int(resume_manifest["research_update"])
+        next_data_cursor = int(resume_manifest["next_data_cursor"])
+        resumed_from = str(resume_manifest["checkpoint_dir"])
+        lineage = {
+            "kind": "research_resume",
+            "parent_checkpoint": resumed_from,
+            "parent_manifest_sha256": sha256_file(
+                Path(resumed_from) / "manifest.json"
+            ),
+            "parent_run_id": resume_manifest.get("lineage", {}).get("run_id"),
+            "run_id": run_id,
+            "git_commit": commit,
+        }
+    else:
+        payload = load_training_checkpoint(
+            checkpoint_dir,
+            model=model,
+            optimizer=(
+                optimizer
+                if args.init == "exact" and not args.gradient_audit
+                else None
+            ),
+            step=int(metadata["latest_step"]),
+            strict=True,
+        )
+        checkpoint_step = int(payload["step"])
+        del payload
+        source_checkpoint_path = require_within_workspace(
+            checkpoint_dir / f"step{checkpoint_step:07d}" / "state.npz"
+        )
+        checkpoint_asset = load_asset_manifest()["checkpoint_step_265000"]
+        if (
+            checkpoint_step == 265_000
+            and source_checkpoint_path
+            == DEFAULT_CHECKPOINT_DIR / "step0265000" / "state.npz"
+        ):
+            source_checkpoint_sha256 = checkpoint_asset["state_npz_sha256"]
+        else:
+            source_checkpoint_sha256 = sha256_file(source_checkpoint_path)
+        lineage = {
+            "kind": "legacy_import",
+            "source_checkpoint": str(source_checkpoint_path),
+            "source_checkpoint_step": checkpoint_step,
+            "source_checkpoint_sha256": source_checkpoint_sha256,
+            "init_mode": args.init,
+            "run_id": run_id,
+            "git_commit": commit,
+        }
     restore_seconds = time.perf_counter() - restore_started
-    checkpoint_step = int(payload["step"])
-    del payload
+    initial_optimizer_step = int(optimizer.step[...])
+    initial_research_update = research_update
+    initial_data_cursor = next_data_cursor
+    output_dir.mkdir(parents=True, exist_ok=False)
 
     if args.gradient_audit:
         if config.jepa_sigreg_coeff == 0.0 or config.jepa_pred_sigreg_coeff == 0.0:
@@ -1244,6 +1861,12 @@ def main() -> int:
             },
             "model_config": dataclasses.asdict(config),
             "checkpoint_step": checkpoint_step,
+            "initial_optimizer_step": initial_optimizer_step,
+            "initial_research_update": initial_research_update,
+            "initial_data_cursor": initial_data_cursor,
+            "resumed_from": resumed_from,
+            "resume_contract": resume_contract,
+            "resume_contract_sha256": _json_sha256(resume_contract),
             "restore_seconds": restore_seconds,
             "train_data": train_batches.provenance(),
             "audit": audit,
@@ -1288,6 +1911,12 @@ def main() -> int:
         "args": vars(args) | {"output_dir": str(output_dir)},
         "model_config": dataclasses.asdict(config),
         "checkpoint_step": checkpoint_step,
+        "initial_optimizer_step": initial_optimizer_step,
+        "initial_research_update": initial_research_update,
+        "initial_data_cursor": initial_data_cursor,
+        "resumed_from": resumed_from,
+        "resume_contract": resume_contract,
+        "resume_contract_sha256": _json_sha256(resume_contract),
         "train_data": train_batches.provenance(),
         "val_data": val_batches.provenance(),
     }
@@ -1303,8 +1932,11 @@ def main() -> int:
     compiler_cost_analysis_raw: dict[str, float] = {}
     compiler_memory_analysis: dict[str, int] = {}
     if args.compile_ahead and not args.eval_only:
-        compile_batch = train_batches.batch_at(0)
-        compile_rng = jax.random.fold_in(jax.random.PRNGKey(args.seed), 0)
+        compile_batch = train_batches.batch_at(next_data_cursor)
+        compile_rng = jax.random.fold_in(
+            jax.random.PRNGKey(args.seed),
+            next_data_cursor,
+        )
         compile_args = training_call_args(
             objective=args.objective,
             model=model,
@@ -1335,6 +1967,28 @@ def main() -> int:
     deadline: float | None = float("inf") if args.train_seconds > 0 else None
     training_wall_started = time.perf_counter()
     gpu_monitor: tuple[subprocess.Popen[str], IO[str], IO[str]] | None = None
+    checkpoint_save_seconds = 0.0
+    last_checkpoint_path: Path | None = None
+    last_checkpoint_update: int | None = None
+
+    def save_current_checkpoint() -> Path:
+        nonlocal checkpoint_save_seconds, last_checkpoint_path, last_checkpoint_update
+        save_started = time.perf_counter()
+        saved = save_research_checkpoint(
+            output_dir / "checkpoints",
+            model=model,
+            optimizer=optimizer,
+            research_update=research_update,
+            next_data_cursor=next_data_cursor,
+            resume_contract=resume_contract,
+            lineage=lineage,
+            max_to_keep=args.max_checkpoints,
+            extra={"last_train_metrics": final_train_metrics},
+        )
+        checkpoint_save_seconds += time.perf_counter() - save_started
+        last_checkpoint_path = saved
+        last_checkpoint_update = research_update
+        return saved
 
     try:
         with metrics_path.open("w", encoding="utf-8") as metrics_log:
@@ -1351,7 +2005,7 @@ def main() -> int:
                         interval_ms=args.gpu_monitor_interval_ms,
                     )
 
-                data_step = updates
+                data_step = next_data_cursor
                 fetch_started = time.perf_counter()
                 batch = train_batches.batch_at(data_step)
                 fetch_seconds = time.perf_counter() - fetch_started
@@ -1370,6 +2024,8 @@ def main() -> int:
                 update_seconds = time.perf_counter() - update_started
 
                 updates += 1
+                research_update += 1
+                next_data_cursor += 1
                 examples += args.batch_size
                 if first_update_seconds is None:
                     first_update_seconds = update_seconds
@@ -1381,8 +2037,10 @@ def main() -> int:
                 final_train_metrics = {"loss": float(loss), **flatten_metrics(aux)}
                 record = {
                     "update": updates,
+                    "research_update": research_update,
                     "optimizer_step": int(optimizer.step[...]),
                     "data_step": data_step,
+                    "next_data_cursor": next_data_cursor,
                     "fetch_seconds": fetch_seconds,
                     "update_seconds": update_seconds,
                     "examples_per_second": args.batch_size / max(update_seconds, 1e-12),
@@ -1390,9 +2048,18 @@ def main() -> int:
                 }
                 metrics_log.write(json.dumps(record, sort_keys=True) + "\n")
                 metrics_log.flush()
+                if args.save_every > 0 and updates % args.save_every == 0:
+                    save_current_checkpoint()
     finally:
         if gpu_monitor is not None:
             stop_gpu_monitor(*gpu_monitor)
+
+    if (
+        args.save_final
+        and updates > 0
+        and last_checkpoint_update != research_update
+    ):
+        save_current_checkpoint()
 
     training_wall_seconds = time.perf_counter() - training_wall_started
     final_val, final_val_seconds = evaluate(
@@ -1442,6 +2109,10 @@ def main() -> int:
         "initial_validation_seconds": initial_val_seconds,
         "final_validation_seconds": final_val_seconds,
         "training_wall_seconds": training_wall_seconds,
+        "checkpoint_save_seconds": checkpoint_save_seconds,
+        "last_checkpoint_path": (
+            str(last_checkpoint_path) if last_checkpoint_path is not None else None
+        ),
         "explicit_compile_seconds": explicit_compile_seconds,
         "first_update_seconds": first_update_seconds,
         "compile_and_first_update_seconds": (
@@ -1459,6 +2130,9 @@ def main() -> int:
         **performance,
         **throughput,
         "updates": updates,
+        "research_update": research_update,
+        "next_data_cursor": next_data_cursor,
+        "final_optimizer_step": int(optimizer.step[...]),
         "examples": examples,
         "initial_validation": initial_val,
         "final_train": final_train_metrics,
@@ -1473,7 +2147,10 @@ def main() -> int:
                 "output_dir": str(output_dir),
                 "autoresearch_ready": AUTORESEARCH_READY,
                 "updates": updates,
+                "research_update": research_update,
+                "next_data_cursor": next_data_cursor,
                 "examples": examples,
+                "last_checkpoint_path": report["last_checkpoint_path"],
                 "initial_val_dfm_ce": initial_val.get("dfm_ce_loss"),
                 "final_val_dfm_ce": final_val.get("dfm_ce_loss"),
                 "explicit_compile_seconds": explicit_compile_seconds,
