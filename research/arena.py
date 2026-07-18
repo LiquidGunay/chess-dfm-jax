@@ -15,6 +15,7 @@ import math
 import os
 import tempfile
 from collections.abc import Iterable, Mapping, Sequence
+from numbers import Integral
 from pathlib import Path
 from typing import Any
 
@@ -59,6 +60,11 @@ FINAL_RESULTS = frozenset({*DECISIVE_RESULTS, DRAW_RESULT})
 
 PENTANOMIAL_PAIR_POINTS = (0.0, 0.5, 1.0, 1.5, 2.0)
 PENTANOMIAL_LABELS = ("LL", "LD", "DD_or_WL_or_LW", "WD", "WW")
+PENTANOMIAL_REGULARIZATION_PSEUDOCOUNT = 1e-3
+NORMALIZED_ELO_PER_T_VALUE = 800.0 / math.log(10.0)
+NORMALIZED_PROMOTION_ELO0 = 0.0
+NORMALIZED_PROMOTION_ELO1 = 20.0
+NORMALIZED_PROMOTION_MAX_PAIRS = 2048
 GSPRT_DECISIONS = frozenset(
     {"continue", "accept_h0", "accept_h1", "max_pairs"}
 )
@@ -72,14 +78,18 @@ def arena_foundation_contract() -> dict[str, Any]:
         "uci_adapter": "absent",
         "sequential_stopping_unit": "completed_color_reversed_pair",
         "promotion_stopping": {
-            "status": "unsupported_pending_normalized_pentanomial_gsprt",
+            "status": "supported",
             "elo_model": "normalized",
-            "elo0": 0.0,
-            "elo1": 20.0,
+            "elo0": NORMALIZED_PROMOTION_ELO0,
+            "elo1": NORMALIZED_PROMOTION_ELO1,
             "alpha": 0.05,
             "beta": 0.05,
-            "max_games": 4096,
-            "max_pairs": 2048,
+            "max_games": 2 * NORMALIZED_PROMOTION_MAX_PAIRS,
+            "max_pairs": NORMALIZED_PROMOTION_MAX_PAIRS,
+            "llr_method": (
+                "pentanomial_constrained_mle_normalized_t_value"
+            ),
+            "promotion_eligible": True,
         },
         "legacy_action_codec": json.loads(
             json.dumps(LEGACY_ACTION_CODEC_CAPABILITY)
@@ -772,12 +782,23 @@ class PentanomialStats:
     counts: tuple[int, int, int, int, int]
 
     def __post_init__(self) -> None:
-        if len(self.counts) != 5 or any(
-            int(count) != count or count < 0 for count in self.counts
-        ):
+        if len(self.counts) != 5:
             raise ValueError(
                 "Pentanomial counts must contain five non-negative integers."
             )
+        validated: list[int] = []
+        for count in self.counts:
+            if (
+                isinstance(count, (bool, np.bool_))
+                or not isinstance(count, Integral)
+                or count < 0
+            ):
+                raise ValueError(
+                    "Pentanomial counts must contain five non-negative "
+                    "integers."
+                )
+            validated.append(int(count))
+        object.__setattr__(self, "counts", tuple(validated))
 
     @property
     def pair_count(self) -> int:
@@ -824,6 +845,105 @@ def pentanomial_stats(
     for pair_score in pair_scores:
         counts[_pair_score_index(pair_score)] += 1
     return PentanomialStats(tuple(counts))
+
+
+def _regularized_pentanomial_pdf(
+    stats: PentanomialStats,
+) -> tuple[float, tuple[tuple[float, float], ...]]:
+    regularized = tuple(
+        float(count)
+        if count > 0
+        else PENTANOMIAL_REGULARIZATION_PSEUDOCOUNT
+        for count in stats.counts
+    )
+    sample_count = sum(regularized)
+    pdf = tuple(
+        (
+            index / (len(regularized) - 1),
+            count / sample_count,
+        )
+        for index, count in enumerate(regularized)
+    )
+    return sample_count, pdf
+
+
+def _pdf_mean_variance(
+    pdf: Sequence[tuple[float, float]],
+) -> tuple[float, float]:
+    probability_sum = sum(probability for _value, probability in pdf)
+    if not math.isclose(probability_sum, 1.0, abs_tol=1e-9):
+        raise RuntimeError(
+            "Pentanomial probability distribution does not sum to one."
+        )
+    mean = sum(value * probability for value, probability in pdf)
+    variance = sum(
+        probability * (value - mean) ** 2 for value, probability in pdf
+    )
+    if not (
+        math.isfinite(mean)
+        and math.isfinite(variance)
+        and variance > 0.0
+    ):
+        raise RuntimeError(
+            "Pentanomial probability distribution has invalid variance."
+        )
+    return float(mean), float(variance)
+
+
+@dataclasses.dataclass(frozen=True)
+class NormalizedEloDiagnostics:
+    """Auditable normalized-Elo quantities from regularized pair counts."""
+
+    pair_count: int
+    regularized_sample_count: float
+    regularization_pseudocount: float
+    pair_mean: float
+    pair_variance: float
+    pair_standard_deviation: float
+    per_game_standard_deviation: float
+    normalized_t_value: float
+    normalized_elo: float
+
+    def as_dict(self) -> dict[str, Any]:
+        return dataclasses.asdict(self)
+
+
+def pentanomial_normalized_elo_diagnostics(
+    counts: Sequence[int],
+) -> NormalizedEloDiagnostics:
+    """Return Fishtest-normalized Elo diagnostics for completed pair counts.
+
+    Five counts are required in ``LL, LD, middle, WD, WW`` order. Empty
+    categories receive the same ``1e-3`` pseudocount as Fishtest's GSPRT
+    implementation so that early sequential states remain finite and
+    auditable. ``pair_count`` always reports real completed pairs.
+    """
+    stats = PentanomialStats(tuple(counts))
+    sample_count, pdf = _regularized_pentanomial_pdf(stats)
+    mean, variance = _pdf_mean_variance(pdf)
+    pair_standard_deviation = math.sqrt(variance)
+    per_game_standard_deviation = math.sqrt(2.0 * variance)
+    normalized_t_value = (
+        mean - 0.5
+    ) / per_game_standard_deviation
+    normalized_elo = (
+        normalized_t_value * NORMALIZED_ELO_PER_T_VALUE
+    )
+    return NormalizedEloDiagnostics(
+        pair_count=stats.pair_count,
+        regularized_sample_count=float(sample_count),
+        regularization_pseudocount=(
+            PENTANOMIAL_REGULARIZATION_PSEUDOCOUNT
+        ),
+        pair_mean=float(mean),
+        pair_variance=float(variance),
+        pair_standard_deviation=float(pair_standard_deviation),
+        per_game_standard_deviation=float(
+            per_game_standard_deviation
+        ),
+        normalized_t_value=float(normalized_t_value),
+        normalized_elo=float(normalized_elo),
+    )
 
 
 def expected_score_from_elo(elo: float) -> float:
@@ -927,16 +1047,55 @@ class GSPRTConfig:
             raise ValueError("alpha + beta must be less than 1.")
         if self.max_pairs < 1:
             raise ValueError("max_pairs must be positive.")
-        if self.elo_model != "logistic":
+        if self.elo_model not in {"logistic", "normalized"}:
             raise ValueError(
-                "Only logistic pentanomial GSPRT bookkeeping is implemented; "
-                "normalized-Elo promotion stopping is pending."
+                "GSPRT elo_model must be 'logistic' or 'normalized'."
             )
-        if not all(
-            0.0 < expected_score_from_elo(elo) < 1.0
-            for elo in (self.elo0, self.elo1)
-        ):
-            raise ValueError("GSPRT Elo hypotheses are numerically saturated.")
+        if self.elo_model == "logistic":
+            if not all(
+                0.0 < expected_score_from_elo(elo) < 1.0
+                for elo in (self.elo0, self.elo1)
+            ):
+                raise ValueError(
+                    "GSPRT Elo hypotheses are numerically saturated."
+                )
+        else:
+            if (
+                self.elo0 != NORMALIZED_PROMOTION_ELO0
+                or self.elo1 != NORMALIZED_PROMOTION_ELO1
+            ):
+                raise ValueError(
+                    "The promotion GSPRT requires normalized-Elo "
+                    f"H0={NORMALIZED_PROMOTION_ELO0:g} and "
+                    f"H1={NORMALIZED_PROMOTION_ELO1:g}."
+                )
+            if self.max_pairs > NORMALIZED_PROMOTION_MAX_PAIRS:
+                raise ValueError(
+                    "The normalized-Elo promotion GSPRT has a hard cap of "
+                    f"{NORMALIZED_PROMOTION_MAX_PAIRS} complete pairs."
+                )
+
+    @classmethod
+    def normalized_promotion(
+        cls,
+        *,
+        alpha: float = 0.05,
+        beta: float = 0.05,
+        max_pairs: int = NORMALIZED_PROMOTION_MAX_PAIRS,
+    ) -> GSPRTConfig:
+        """Build the fixed H0=0, H1=20 normalized-Elo promotion gate."""
+        return cls(
+            elo0=NORMALIZED_PROMOTION_ELO0,
+            elo1=NORMALIZED_PROMOTION_ELO1,
+            alpha=alpha,
+            beta=beta,
+            max_pairs=max_pairs,
+            elo_model="normalized",
+        )
+
+    @property
+    def promotion_eligible(self) -> bool:
+        return self.elo_model == "normalized"
 
     @property
     def lower_bound(self) -> float:
@@ -1018,6 +1177,99 @@ def _mle_with_expected_score(
     return probabilities
 
 
+def _mle_with_t_value(
+    empirical_pdf: Sequence[tuple[float, float]],
+    *,
+    reference: float,
+    target_t_value: float,
+) -> tuple[float, ...]:
+    """Project a discrete PDF onto a standardized-mean hypothesis.
+
+    This is a direct dependency-free implementation of Fishtest's
+    ``MLE_t_value`` fixed-point iteration. The statistic constrained here is
+    ``(mean - reference) / standard_deviation``.
+    """
+    if not (
+        math.isfinite(reference)
+        and math.isfinite(target_t_value)
+    ):
+        raise ValueError(
+            "Normalized-Elo reference and t-value must be finite."
+        )
+    category_count = len(empirical_pdf)
+    if category_count < 2:
+        raise ValueError(
+            "Normalized-Elo constrained MLE needs at least two outcomes."
+        )
+    probabilities = tuple(
+        1.0 / category_count for _entry in empirical_pdf
+    )
+    for _iteration in range(10):
+        previous = probabilities
+        current_pdf = tuple(
+            (value, probability)
+            for (value, _empirical), probability in zip(
+                empirical_pdf,
+                probabilities,
+                strict=True,
+            )
+        )
+        mean, variance = _pdf_mean_variance(current_pdf)
+        standard_deviation = math.sqrt(variance)
+        constraint_pdf = tuple(
+            (
+                value
+                - reference
+                - target_t_value
+                * standard_deviation
+                * (
+                    1.0
+                    + ((mean - value) / standard_deviation) ** 2
+                )
+                / 2.0,
+                empirical_probability,
+            )
+            for value, empirical_probability in empirical_pdf
+        )
+        root = _secular_root(constraint_pdf)
+        probabilities = tuple(
+            empirical_probability
+            / (1.0 + root * constraint_value)
+            for (
+                constraint_value,
+                empirical_probability,
+            ) in constraint_pdf
+        )
+        if max(
+            abs(old - new)
+            for old, new in zip(previous, probabilities, strict=True)
+        ) < 1e-9:
+            break
+
+    projected_pdf = tuple(
+        (value, probability)
+        for (value, _empirical), probability in zip(
+            empirical_pdf,
+            probabilities,
+            strict=True,
+        )
+    )
+    mean, variance = _pdf_mean_variance(projected_pdf)
+    observed_t_value = (
+        mean - reference
+    ) / math.sqrt(variance)
+    if not math.isclose(
+        observed_t_value,
+        target_t_value,
+        abs_tol=1e-5,
+    ):
+        raise RuntimeError(
+            "Normalized-Elo constrained-MLE validation failed: "
+            f"{observed_t_value} != {target_t_value}."
+        )
+    return probabilities
+
+
 def pentanomial_gsprt_llr(
     counts: Sequence[int],
     *,
@@ -1027,39 +1279,48 @@ def pentanomial_gsprt_llr(
 ) -> float:
     """Generalized pentanomial LLR using constrained multinomial MLEs.
 
-    This follows fishtest's ``LLR_logistic`` construction: empty categories get
-    a small regularizing pseudocount, and the empirical five-outcome
-    distribution is separately projected onto each hypothesis' expected score.
+    This follows Fishtest's ``LLR_logistic`` and ``LLR_normalized``
+    constructions. Empty categories get a small regularizing pseudocount.
+    Logistic hypotheses constrain expected score. Normalized-Elo hypotheses
+    constrain the standardized mean, with the required ``sqrt(2)`` conversion
+    from per-game normalized Elo to paired pentanomial observations.
     """
     stats = PentanomialStats(tuple(counts))
-    if stats.pair_count == 0:
-        return 0.0
-    if elo_model != "logistic":
+    if elo_model not in {"logistic", "normalized"}:
         raise ValueError(
-            "Normalized pentanomial GSPRT is not implemented in this foundation."
+            "GSPRT elo_model must be 'logistic' or 'normalized'."
         )
     if not math.isfinite(elo0) or not math.isfinite(elo1) or elo0 >= elo1:
         raise ValueError("GSPRT LLR requires finite elo0 < elo1.")
-    regularized = [
-        float(count) if count > 0 else 1e-3
-        for count in stats.counts
-    ]
-    sample_count = sum(regularized)
-    empirical_pdf = tuple(
-        (
-            index / (len(regularized) - 1),
-            count / sample_count,
+    if stats.pair_count == 0:
+        return 0.0
+    sample_count, empirical_pdf = _regularized_pentanomial_pdf(stats)
+    if elo_model == "logistic":
+        hypothesis0 = _mle_with_expected_score(
+            empirical_pdf,
+            expected_score_from_elo(elo0),
         )
-        for index, count in enumerate(regularized)
-    )
-    hypothesis0 = _mle_with_expected_score(
-        empirical_pdf,
-        expected_score_from_elo(elo0),
-    )
-    hypothesis1 = _mle_with_expected_score(
-        empirical_pdf,
-        expected_score_from_elo(elo1),
-    )
+        hypothesis1 = _mle_with_expected_score(
+            empirical_pdf,
+            expected_score_from_elo(elo1),
+        )
+    else:
+        hypothesis_t_values = tuple(
+            elo
+            / NORMALIZED_ELO_PER_T_VALUE
+            * math.sqrt(2.0)
+            for elo in (elo0, elo1)
+        )
+        hypothesis0 = _mle_with_t_value(
+            empirical_pdf,
+            reference=0.5,
+            target_t_value=hypothesis_t_values[0],
+        )
+        hypothesis1 = _mle_with_t_value(
+            empirical_pdf,
+            reference=0.5,
+            target_t_value=hypothesis_t_values[1],
+        )
     llr_per_pair = sum(
         empirical_probability * math.log(p1 / p0)
         for (
@@ -1170,12 +1431,32 @@ class GSPRTState:
             decision=decision,
         )
 
+    def update_from_pair_outcomes(
+        self,
+        outcomes: Sequence[GameOutcome],
+        *,
+        model_id: str,
+    ) -> GSPRTState:
+        """Validate and consume exactly one complete color-reversed pair."""
+        return self.update(
+            pair_score_for_model(outcomes, model_id=model_id)
+        )
+
     def as_dict(self) -> dict[str, Any]:
-        return {
-            "schema_version": "chess-dfm-arena-gsprt-v1",
+        normalized = self.config.elo_model == "normalized"
+        payload: dict[str, Any] = {
+            "schema_version": (
+                "chess-dfm-arena-normalized-elo-gsprt-v1"
+                if normalized
+                else "chess-dfm-arena-gsprt-v1"
+            ),
             "update_unit": "completed_color_reversed_pair",
-            "llr_method": "pentanomial_constrained_mle_logistic",
-            "promotion_eligible": False,
+            "llr_method": (
+                "pentanomial_constrained_mle_normalized_t_value"
+                if normalized
+                else "pentanomial_constrained_mle_logistic"
+            ),
+            "promotion_eligible": self.config.promotion_eligible,
             "config": dataclasses.asdict(self.config),
             "counts": list(self.counts),
             "llr": self.llr,
@@ -1183,29 +1464,76 @@ class GSPRTState:
             "pair_count": self.pair_count,
             "score": self.stats.score if self.pair_count else None,
         }
+        if normalized:
+            hypothesis_pair_t_values = [
+                elo
+                / NORMALIZED_ELO_PER_T_VALUE
+                * math.sqrt(2.0)
+                for elo in (self.config.elo0, self.config.elo1)
+            ]
+            payload.update(
+                {
+                    "promotion_gate": {
+                        "candidate_passed": (
+                            self.decision == "accept_h1"
+                        ),
+                        "hard_pair_cap": (
+                            NORMALIZED_PROMOTION_MAX_PAIRS
+                        ),
+                        "lower_llr_bound": self.config.lower_bound,
+                        "upper_llr_bound": self.config.upper_bound,
+                        "hypothesis_pair_t_values": (
+                            hypothesis_pair_t_values
+                        ),
+                    },
+                    "normalized_elo_diagnostics": (
+                        pentanomial_normalized_elo_diagnostics(
+                            self.counts
+                        ).as_dict()
+                        if self.pair_count
+                        else None
+                    ),
+                }
+            )
+        return payload
 
     @classmethod
     def from_dict(cls, payload: Mapping[str, Any]) -> GSPRTState:
-        if payload.get("schema_version") != "chess-dfm-arena-gsprt-v1":
-            raise ValueError("Unsupported GSPRT state schema.")
         if payload.get("update_unit") != "completed_color_reversed_pair":
             raise ValueError("GSPRT state is not pair-boundary bookkeeping.")
-        if payload.get("llr_method") != "pentanomial_constrained_mle_logistic":
-            raise ValueError("Unsupported GSPRT LLR method.")
-        if payload.get("promotion_eligible") is not False:
-            raise ValueError(
-                "This logistic GSPRT state cannot claim promotion eligibility."
-            )
         config_payload = payload.get("config")
         if not isinstance(config_payload, Mapping):
             raise ValueError("GSPRT state is missing config.")
         config = GSPRTConfig(**dict(config_payload))
+        normalized = config.elo_model == "normalized"
+        expected_schema = (
+            "chess-dfm-arena-normalized-elo-gsprt-v1"
+            if normalized
+            else "chess-dfm-arena-gsprt-v1"
+        )
+        if payload.get("schema_version") != expected_schema:
+            raise ValueError("Unsupported GSPRT state schema.")
+        expected_method = (
+            "pentanomial_constrained_mle_normalized_t_value"
+            if normalized
+            else "pentanomial_constrained_mle_logistic"
+        )
+        if payload.get("llr_method") != expected_method:
+            raise ValueError("Unsupported GSPRT LLR method.")
+        if (
+            payload.get("promotion_eligible")
+            is not config.promotion_eligible
+        ):
+            raise ValueError(
+                "GSPRT promotion eligibility does not match its Elo model."
+            )
         counts_raw = payload.get("counts")
         if not isinstance(counts_raw, list) or len(counts_raw) != 5:
             raise ValueError("GSPRT state counts must be a five-item list.")
+        counts = PentanomialStats(tuple(counts_raw)).counts
         state = cls(
             config=config,
-            counts=tuple(int(value) for value in counts_raw),
+            counts=counts,
             llr=float(payload["llr"]),
             decision=str(payload["decision"]),
         )
@@ -1215,6 +1543,16 @@ class GSPRTState:
         expected_score = state.stats.score if state.pair_count else None
         if persisted_score != expected_score:
             raise ValueError("GSPRT persisted score mismatch.")
+        if normalized:
+            expected_payload = state.as_dict()
+            for key in (
+                "promotion_gate",
+                "normalized_elo_diagnostics",
+            ):
+                if payload.get(key) != expected_payload[key]:
+                    raise ValueError(
+                        f"GSPRT persisted {key} mismatch."
+                    )
         return state
 
 
@@ -1229,7 +1567,12 @@ __all__ = [
     "HELDOUT_SPLITS",
     "LEGACY_ACTION_CODEC_CAPABILITY",
     "LEGACY_INCOMPLETE_PROMOTION_COVERAGE_LIMITATION",
+    "NORMALIZED_ELO_PER_T_VALUE",
+    "NORMALIZED_PROMOTION_ELO0",
+    "NORMALIZED_PROMOTION_ELO1",
+    "NORMALIZED_PROMOTION_MAX_PAIRS",
     "NORMAL_TERMINATION",
+    "NormalizedEloDiagnostics",
     "OPENING_POOL_SCHEMA",
     "OPENING_SELECTION_ALGORITHM",
     "PENTANOMIAL_LABELS",
@@ -1249,6 +1592,7 @@ __all__ = [
     "pair_aware_score_elo_interval",
     "pair_score_for_model",
     "pentanomial_gsprt_llr",
+    "pentanomial_normalized_elo_diagnostics",
     "pentanomial_stats",
     "save_opening_pool",
 ]

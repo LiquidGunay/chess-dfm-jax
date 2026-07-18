@@ -3,6 +3,7 @@ from __future__ import annotations
 import dataclasses
 import hashlib
 import json
+import math
 import tempfile
 from pathlib import Path
 
@@ -15,7 +16,10 @@ from research.arena import (
     GSPRTConfig,
     GSPRTState,
     LEGACY_ACTION_CODEC_CAPABILITY,
+    NORMALIZED_ELO_PER_T_VALUE,
+    NORMALIZED_PROMOTION_MAX_PAIRS,
     OPENING_SELECTION_ALGORITHM,
+    PentanomialStats,
     arena_foundation_contract,
     build_opening_pool,
     canonicalize_fen,
@@ -26,6 +30,7 @@ from research.arena import (
     pair_aware_score_elo_interval,
     pair_score_for_model,
     pentanomial_gsprt_llr,
+    pentanomial_normalized_elo_diagnostics,
     pentanomial_stats,
     save_opening_pool,
 )
@@ -366,12 +371,151 @@ def test_pentanomial_gsprt_matches_reference_and_stops_only_at_pair_cap():
     with pytest.raises(RuntimeError, match="terminal GSPRT"):
         state.update(2.0)
 
-    with pytest.raises(ValueError, match="normalized-Elo promotion"):
+    with pytest.raises(ValueError, match="elo_model"):
         GSPRTConfig(
             elo0=0.0,
             elo1=20.0,
+            elo_model="unsupported",
+        )
+
+
+def test_normalized_elo_gsprt_matches_official_fishtest_reference():
+    # Values independently evaluated with official-stockfish/fishtest
+    # server/fishtest/stats/LLRcalc.py::LLR_normalized.
+    assert pentanomial_gsprt_llr(
+        (10789, 19328, 33806, 19402, 10543),
+        elo0=0.0,
+        elo1=20.0,
+        elo_model="normalized",
+    ) == pytest.approx(-340.2492043700217, abs=1e-10)
+    assert pentanomial_gsprt_llr(
+        (100, 200, 400, 250, 150),
+        elo0=0.0,
+        elo1=20.0,
+        elo_model="normalized",
+    ) == pytest.approx(7.004863094500454, abs=1e-11)
+    assert pentanomial_gsprt_llr(
+        (39, 2226, 31451, 2412, 40),
+        elo0=0.764,
+        elo1=3.439,
+        elo_model="normalized",
+    ) == pytest.approx(2.162940869584568, abs=1e-11)
+
+    diagnostics = pentanomial_normalized_elo_diagnostics(
+        (100, 200, 400, 250, 150)
+    )
+    assert diagnostics.pair_count == 1100
+    assert diagnostics.regularized_sample_count == 1100.0
+    assert diagnostics.pair_mean == pytest.approx(0.5340909090909091)
+    assert diagnostics.pair_variance == pytest.approx(
+        0.08122417355371901
+    )
+    assert diagnostics.normalized_t_value == pytest.approx(
+        0.08458258116519006
+    )
+    assert diagnostics.normalized_elo == pytest.approx(
+        29.386998612140772
+    )
+    assert diagnostics.normalized_elo == pytest.approx(
+        diagnostics.normalized_t_value * NORMALIZED_ELO_PER_T_VALUE
+    )
+
+
+def test_normalized_promotion_gate_is_auditable_and_passes_at_pair_boundaries():
+    config = GSPRTConfig.normalized_promotion()
+    assert config.elo0 == 0.0
+    assert config.elo1 == 20.0
+    assert config.max_pairs == NORMALIZED_PROMOTION_MAX_PAIRS
+    assert config.elo_model == "normalized"
+    assert config.promotion_eligible
+
+    state = GSPRTState(config)
+    while not state.terminal:
+        state = state.update(2.0)
+    assert state.pair_count == 38
+    assert state.decision == "accept_h1"
+    payload = state.as_dict()
+    assert payload["schema_version"] == (
+        "chess-dfm-arena-normalized-elo-gsprt-v1"
+    )
+    assert payload["update_unit"] == "completed_color_reversed_pair"
+    assert payload["llr_method"] == (
+        "pentanomial_constrained_mle_normalized_t_value"
+    )
+    assert payload["promotion_eligible"] is True
+    assert payload["promotion_gate"]["candidate_passed"] is True
+    assert payload["promotion_gate"]["hard_pair_cap"] == 2048
+    assert payload["promotion_gate"]["hypothesis_pair_t_values"] == (
+        pytest.approx([0.0, 0.08140867667575735])
+    )
+    audit = payload["normalized_elo_diagnostics"]
+    assert audit["pair_count"] == state.pair_count
+    assert audit["regularization_pseudocount"] == 1e-3
+    assert math.isfinite(audit["normalized_elo"])
+    assert GSPRTState.from_dict(payload) == state
+
+
+def test_normalized_promotion_gate_fails_closed_on_bad_or_incomplete_pairs():
+    with pytest.raises(ValueError, match="H0=0 and H1=20"):
+        GSPRTConfig(
+            elo0=-1.0,
+            elo1=20.0,
             elo_model="normalized",
         )
+    with pytest.raises(ValueError, match="hard cap of 2048"):
+        GSPRTConfig.normalized_promotion(max_pairs=2049)
+
+    invalid_counts = (
+        (1.0, 0, 0, 0, 0),
+        (True, 0, 0, 0, 0),
+        (-1, 0, 0, 0, 0),
+        ("1", 0, 0, 0, 0),
+    )
+    for counts in invalid_counts:
+        with pytest.raises(ValueError, match="non-negative integers"):
+            PentanomialStats(counts)
+        with pytest.raises(ValueError, match="non-negative integers"):
+            pentanomial_gsprt_llr(
+                counts,
+                elo0=0.0,
+                elo1=20.0,
+                elo_model="normalized",
+            )
+
+    first, second = make_color_reversed_pairs(
+        [_fen_after_deterministic_line(41)],
+        model_a="candidate",
+        model_b="reference",
+    )[0]
+    first_outcome = classify_game_outcome(
+        first,
+        termination="ply_cap",
+        ply_count=8,
+        ply_cap=8,
+    )
+    second_outcome = classify_game_outcome(
+        second,
+        termination="ply_cap",
+        ply_count=8,
+        ply_cap=8,
+    )
+    state = GSPRTState(GSPRTConfig.normalized_promotion(max_pairs=2))
+    with pytest.raises(ValueError, match="requires two games"):
+        state.update_from_pair_outcomes(
+            [first_outcome],
+            model_id="candidate",
+        )
+    state = state.update_from_pair_outcomes(
+        [first_outcome, second_outcome],
+        model_id="candidate",
+    )
+    assert state.pair_count == 1
+    assert state.counts == (0, 0, 1, 0, 0)
+
+    tampered = state.as_dict()
+    tampered["counts"][2] = 1.5
+    with pytest.raises(ValueError, match="non-negative integers"):
+        GSPRTState.from_dict(tampered)
 
 
 def test_foundation_contract_records_missing_adapters_and_codec_handicap():
@@ -380,12 +524,16 @@ def test_foundation_contract_records_missing_adapters_and_codec_handicap():
     assert contract["gpu_model_loading"] == "absent"
     assert contract["uci_adapter"] == "absent"
     promotion = contract["promotion_stopping"]
-    assert promotion["status"].startswith("unsupported")
+    assert promotion["status"] == "supported"
     assert promotion["elo_model"] == "normalized"
     assert promotion["elo0"] == 0.0
     assert promotion["elo1"] == 20.0
     assert promotion["max_games"] == 4096
     assert promotion["max_pairs"] == 2048
+    assert promotion["promotion_eligible"] is True
+    assert promotion["llr_method"] == (
+        "pentanomial_constrained_mle_normalized_t_value"
+    )
     codec = contract["legacy_action_codec"]
     assert codec == LEGACY_ACTION_CODEC_CAPABILITY
     assert codec["complete_legal_move_coverage"] is False
