@@ -155,7 +155,7 @@ def test_local_config_and_initialized_model_match_legacy_exactly():
     _assert_trees_exact(local_state, legacy_state)
 
 
-def test_local_model_outputs_and_legacy_loss_match_legacy_model_exactly():
+def test_local_model_outputs_loss_aux_and_gradients_match_legacy_exactly():
     kwargs = _config_kwargs()
     local_model = local.JointLatentSASAModel(
         DummyEncoder(),
@@ -236,19 +236,33 @@ def test_local_model_outputs_and_legacy_loss_match_legacy_model_exactly():
     _assert_trees_exact(local_pred, legacy_pred)
 
     rng = jax.random.PRNGKey(101)
-    local_loss = legacy.joint_stage1_loss_fn(
+    local_loss_and_grad = nnx.value_and_grad(
+        local.joint_stage1_loss_fn,
+        argnums=nnx.DiffState(0, TrainableParam),
+        has_aux=True,
+    )
+    legacy_loss_and_grad = nnx.value_and_grad(
+        legacy.joint_stage1_loss_fn,
+        argnums=nnx.DiffState(0, TrainableParam),
+        has_aux=True,
+    )
+    local_value, local_gradients = local_loss_and_grad(
         local_model,
         batch,
         rng,
         compute_fp32_legality=True,
     )
-    legacy_loss = legacy.joint_stage1_loss_fn(
+    legacy_value, legacy_gradients = legacy_loss_and_grad(
         legacy_model,
         batch,
         rng,
         compute_fp32_legality=True,
     )
-    _assert_trees_exact(local_loss, legacy_loss)
+    _assert_trees_exact(local_value, legacy_value)
+    _assert_trees_exact(
+        nnx.to_pure_dict(local_gradients),
+        nnx.to_pure_dict(legacy_gradients),
+    )
 
 
 def test_local_component_builder_matches_legacy_model_and_optimizer(monkeypatch):

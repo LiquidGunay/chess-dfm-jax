@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 """Single-GPU compatibility trainer for the clean research path.
 
-This first milestone intentionally imports the legacy model and loss so it can
-serve as a local-GPU training/parity harness. It is *not* yet eligible for
-autoresearch: the final version will define the experimental model and objective
-directly in this file while continuing to use immutable support from
-``research.prepare``.
+The checkpoint-compatible model and stage-1 objective live directly in this
+file so architecture and loss experiments have one production edit surface.
+The trainer is not yet eligible for unattended autoresearch while the remaining
+support boundaries and research protocol are being stabilized.
 """
 
 from __future__ import annotations
@@ -50,9 +49,6 @@ from chess_dfm_jax.nnx_bt4 import (  # noqa: E402
     rounded_swiglu_dim,
 )
 from chess_dfm_jax.training.checkpoints import load_training_checkpoint  # noqa: E402
-from chess_dfm_jax.training.joint_latent_sasa import (  # noqa: E402
-    joint_stage1_loss_fn as _legacy_joint_stage1_loss_fn,
-)
 from research.prepare import (  # noqa: E402
     REPO_ROOT,
     FixedTrajectoryBatches,
@@ -65,7 +61,7 @@ from research.prepare import (  # noqa: E402
 
 
 AUTORESEARCH_READY = False
-ARCHITECTURE_SOURCE = "research_train_local_model_legacy_loss"
+ARCHITECTURE_SOURCE = "research_train_local_model_and_loss"
 
 DEFAULT_RUN_ROOT = REPO_ROOT / "checkpoints" / "source" / "step0265000"
 DEFAULT_CHECKPOINT_DIR = DEFAULT_RUN_ROOT / "checkpoints"
@@ -159,6 +155,202 @@ def _parse_compute_dtype(dtype_str: str) -> jnp.dtype:
     if dtype not in mapping:
         raise ValueError(f"Unsupported compute dtype: {dtype_str}")
     return mapping[dtype]
+
+
+def _weighted_horizon_mean(
+    sample_values: jnp.ndarray,
+    mask: jnp.ndarray,
+) -> jnp.ndarray:
+    return jnp.sum(sample_values * mask) / jnp.maximum(jnp.sum(mask), 1.0)
+
+
+def _sigreg_moments_loss(
+    z: jnp.ndarray,
+    sample_weight: jnp.ndarray | None = None,
+) -> jnp.ndarray:
+    """Cheap SigReg surrogate without per-dimension sorting."""
+    z = jnp.asarray(z, dtype=jnp.float32)
+    if sample_weight is None:
+        sample_weight = jnp.ones((z.shape[0],), dtype=jnp.float32)
+    sample_weight = jnp.maximum(
+        jnp.asarray(sample_weight, dtype=jnp.float32),
+        0.0,
+    )
+    denom = jnp.maximum(jnp.sum(sample_weight), 1.0)
+    weight = sample_weight[:, None]
+    mean = jnp.sum(z * weight, axis=0) / denom
+    centered = z - mean
+    variance = jnp.sum(jnp.square(centered) * weight, axis=0) / denom
+    return jnp.mean(jnp.square(mean)) + jnp.mean(
+        jnp.square(variance - 1.0)
+    )
+
+
+def _sync_rng_for_pmap(
+    rng: jnp.ndarray,
+    axis_name: str | None,
+) -> jnp.ndarray:
+    """Use one projection seed across replicas, while still changing it each step."""
+    rng = jnp.asarray(rng, dtype=jnp.uint32)
+    if axis_name is None:
+        return rng
+    return jax.lax.pmin(rng, axis_name=axis_name)
+
+
+def _official_le_jepa_sigreg_loss(
+    z: jnp.ndarray,
+    *,
+    proj_dim: int,
+    rng: jnp.ndarray,
+    sample_weight: jnp.ndarray | None = None,
+    axis_name: str | None = None,
+    t_max: float = 3.0,
+    n_points: int = 17,
+) -> jnp.ndarray:
+    """LeJEPA Epps-Pulley SIGReg with random slices.
+
+    This follows the official structure:
+      1. Project latents onto random unit directions.
+      2. Match each projected empirical characteristic function to N(0, 1).
+      3. Average the Epps-Pulley statistic over slices.
+    """
+    z = jnp.asarray(z, dtype=jnp.float32)
+    sample_count, dim = z.shape
+    if sample_count == 0:
+        return jnp.zeros((), dtype=jnp.float32)
+
+    rng = _sync_rng_for_pmap(rng, axis_name)
+    directions = jax.random.normal(
+        rng,
+        (dim, proj_dim),
+        dtype=jnp.float32,
+    )
+    directions = directions / jnp.maximum(
+        jnp.linalg.norm(directions, axis=0, keepdims=True),
+        1e-12,
+    )
+    if sample_weight is None:
+        sample_weight = jnp.ones(
+            (sample_count,),
+            dtype=jnp.float32,
+        )
+    sample_weight = jnp.maximum(
+        jnp.asarray(sample_weight, dtype=jnp.float32),
+        0.0,
+    )
+
+    projected = z @ directions
+
+    t = jnp.linspace(0.0, t_max, n_points, dtype=jnp.float32)
+    dt = jnp.asarray(
+        t_max / max(n_points - 1, 1),
+        dtype=jnp.float32,
+    )
+    weights = jnp.full((n_points,), 2.0 * dt, dtype=jnp.float32)
+    weights = weights.at[0].set(dt)
+    weights = weights.at[-1].set(dt)
+    phi = jnp.exp(-0.5 * jnp.square(t))
+    weights = weights * phi
+
+    xt = projected[:, :, None] * t[None, None, :]
+    weight = sample_weight[:, None, None]
+    cos_sum = jnp.sum(jnp.cos(xt) * weight, axis=0)
+    sin_sum = jnp.sum(jnp.sin(xt) * weight, axis=0)
+    global_sample_count = jnp.sum(sample_weight)
+    if axis_name is not None:
+        cos_sum = jax.lax.psum(cos_sum, axis_name=axis_name)
+        sin_sum = jax.lax.psum(sin_sum, axis_name=axis_name)
+        global_sample_count = jax.lax.psum(
+            global_sample_count,
+            axis_name=axis_name,
+        )
+    denom = jnp.maximum(global_sample_count, 1.0)
+    cos_mean = cos_sum / denom
+    sin_mean = sin_sum / denom
+
+    err = jnp.square(cos_mean - phi[None, :]) + jnp.square(sin_mean)
+    per_slice = (err @ weights) * global_sample_count
+    return jnp.where(
+        global_sample_count > 0.0,
+        jnp.mean(per_slice),
+        jnp.zeros((), dtype=jnp.float32),
+    )
+
+
+def _quantile_sigreg_loss(
+    z: jnp.ndarray,
+    d_proj: int = 128,
+    rng: jnp.ndarray | None = None,
+) -> jnp.ndarray:
+    if rng is None:
+        rng = jax.random.PRNGKey(0)
+    batch_size, dim = z.shape
+    if batch_size == 0:
+        return jnp.zeros(())
+    W = jax.random.normal(rng, (dim, d_proj))
+    W = W / jnp.maximum(
+        jnp.linalg.norm(W, axis=0, keepdims=True),
+        1e-12,
+    )
+    z_proj = jnp.matmul(z, W)
+    z_proj_sorted = jnp.sort(z_proj, axis=0)
+    p = (jnp.arange(batch_size, dtype=jnp.float32) + 0.5) / batch_size
+    from jax.scipy.special import ndtri
+
+    target_quantiles = ndtri(p)
+    target_quantiles = jnp.expand_dims(target_quantiles, axis=-1)
+    return jnp.mean(jnp.square(z_proj_sorted - target_quantiles))
+
+
+def _clip_loss_preserve_gradient(
+    loss: jnp.ndarray,
+    clip_value: float,
+) -> tuple[jnp.ndarray, jnp.ndarray]:
+    """Scale an oversized scalar loss without making its gradient exactly zero."""
+    loss = jnp.asarray(loss, dtype=jnp.float32)
+    if clip_value <= 0.0:
+        return loss, jnp.asarray(1.0, dtype=jnp.float32)
+    clip = jnp.asarray(clip_value, dtype=jnp.float32)
+    stopped_loss = jax.lax.stop_gradient(jnp.maximum(loss, 1e-6))
+    scale = jnp.minimum(1.0, clip / stopped_loss)
+    return loss * scale, scale
+
+
+def mask_actions(
+    actions: jnp.ndarray,
+    mask_prob: jnp.ndarray,
+    mask_token_id: int,
+    rng: jnp.ndarray,
+) -> tuple[jnp.ndarray, jnp.ndarray]:
+    """Apply masking for Categorical Diffusion.
+    actions: [B, K]
+    mask_prob: [B]
+    mask_token_id: int
+    rng: PRNGKey
+    """
+    batch, K = actions.shape
+    r = jax.random.uniform(rng, shape=(batch, K))
+    mask = r < mask_prob[:, None]
+    noisy_actions = jnp.where(mask, mask_token_id, actions)
+    return noisy_actions, mask
+
+
+def legal_mass_from_indices(
+    probs: jnp.ndarray,
+    legal_idx: jnp.ndarray,
+    legal_count: jnp.ndarray,
+) -> jnp.ndarray:
+    safe_idx = jnp.clip(
+        jnp.asarray(legal_idx, dtype=jnp.int32),
+        0,
+        probs.shape[-1] - 1,
+    )
+    legal_probs = jnp.take_along_axis(probs, safe_idx, axis=-1)
+    slot_valid = jnp.arange(
+        safe_idx.shape[-1],
+        dtype=jnp.int32,
+    ) < jnp.asarray(legal_count, dtype=jnp.int32)[..., None]
+    return jnp.sum(jnp.where(slot_valid, legal_probs, 0.0), axis=-1)
 
 
 class LinearAdapter(nnx.Module):
@@ -832,6 +1024,337 @@ class JointLatentSASAModel(nnx.Module):
         )
 
 
+def joint_stage1_loss_fn(
+    model: JointLatentSASAModel,
+    batch: dict[str, jnp.ndarray],
+    rng: jnp.ndarray,
+    sigreg_axis_name: str | None = None,
+    compute_fp32_legality: bool = False,
+) -> tuple[jnp.ndarray, dict[str, jnp.ndarray]]:
+    actions = batch["action_indices"][:, : model.config.horizon]
+    batch_size, horizon = actions.shape
+    loss_horizon = horizon if model.config.loss_horizon <= 0 else min(model.config.loss_horizon, horizon)
+    loss_horizon_mask = (jnp.arange(horizon) < loss_horizon).astype(jnp.float32)
+
+    valid = jnp.asarray(batch["valid"], dtype=jnp.float32)
+    denom = jnp.maximum(jnp.sum(valid), 1.0)
+    future_valid = jnp.asarray(batch["future_valid"], dtype=jnp.float32)[:, :horizon]
+    future_planes = jnp.asarray(batch["future_planes"], dtype=jnp.float32)[:, :horizon]
+
+    with jax.named_scope("joint_encode_project_current_future"):
+        all_bt4_tokens, z_all = model.encode_current_and_future_tokens_and_vectors(
+            batch["current_planes"],
+            future_planes,
+        )
+    current_bt4_tokens = all_bt4_tokens[:, 0]
+    z_jepa = z_all[:, 0]
+    target_z = z_all[:, 1:]
+    with jax.named_scope("joint_dfm_state_projector"):
+        z_dfm = model.dfm_latents(current_bt4_tokens)
+
+    rng_t, rng_mask, rng_sigreg = jax.random.split(rng, 3)
+    t = jax.random.uniform(rng_t, shape=(batch_size,))
+    if "deterministic_t" in batch:
+        t = jnp.full_like(t, batch["deterministic_t"])
+    noisy_actions, is_masked = mask_actions(actions, 1.0 - t, model.config.action_vocab_size, rng_mask)
+
+    with jax.named_scope("joint_dfm_noisy_planner"):
+        logits = model.planner_from_latents(z_dfm, noisy_actions, t)
+    with jax.named_scope("joint_dfm_ce_loss"):
+        log_probs = jax.nn.log_softmax(logits, axis=-1)
+    ce_by_horizon = -jnp.take_along_axis(log_probs, actions[..., None], axis=-1)[..., 0]
+    loss_mask = jnp.asarray(is_masked, dtype=jnp.float32) * loss_horizon_mask[None, :]
+    weighted_loss_mask = loss_mask * valid[:, None]
+    dfm_ce_num_by_horizon = jnp.sum(ce_by_horizon * weighted_loss_mask, axis=0)
+    dfm_ce_den_by_horizon = jnp.sum(weighted_loss_mask, axis=0)
+    dfm_ce_loss_by_horizon = dfm_ce_num_by_horizon / jnp.maximum(dfm_ce_den_by_horizon, 1.0)
+    dfm_ce_horizon_valid = (dfm_ce_den_by_horizon > 0).astype(jnp.float32) * loss_horizon_mask
+    dfm_ce_loss = jnp.sum(dfm_ce_loss_by_horizon * dfm_ce_horizon_valid) / jnp.maximum(
+        jnp.sum(dfm_ce_horizon_valid),
+        1.0,
+    )
+    dfm_mask_fraction_by_horizon = dfm_ce_den_by_horizon / denom
+
+    probs = jnp.exp(log_probs)
+    first_legal_mass = legal_mass_from_indices(
+        probs[:, :1],
+        batch["legal_idx"][:, :1],
+        batch["legal_count"][:, :1],
+    )[:, 0]
+    first_legal_valid = jnp.ones_like(first_legal_mass)
+    if "legal_masks_valid" in batch:
+        first_legal_valid = jnp.asarray(batch["legal_masks_valid"], dtype=jnp.float32)[:, 0]
+    first_legal_gate = jnp.asarray(is_masked, dtype=jnp.float32)[:, 0]
+    if not model.config.legality_on_masked_only:
+        first_legal_gate = jnp.ones_like(first_legal_gate)
+    first_slot_valid = valid * first_legal_valid * loss_horizon_mask[0] * first_legal_gate
+    first_legality_loss = (
+        jnp.sum((1.0 - first_legal_mass) * first_slot_valid)
+        / jnp.maximum(jnp.sum(first_slot_valid), 1.0)
+    )
+    if compute_fp32_legality:
+        first_probs_fp32 = jax.nn.softmax(
+            jnp.asarray(logits[:, :1], dtype=jnp.float32),
+            axis=-1,
+        )
+        first_legal_mass_fp32_by_sample = jnp.clip(
+            legal_mass_from_indices(
+                first_probs_fp32,
+                batch["legal_idx"][:, :1],
+                batch["legal_count"][:, :1],
+            )[:, 0],
+            0.0,
+            1.0,
+        )
+        first_legality_loss_fp32 = (
+            jnp.sum((1.0 - first_legal_mass_fp32_by_sample) * first_slot_valid)
+            / jnp.maximum(jnp.sum(first_slot_valid), 1.0)
+        )
+    else:
+        first_legality_loss_fp32 = first_legality_loss
+    horizon_legality_loss = jnp.asarray(0.0, dtype=jnp.float32)
+    legality_loss = first_legality_loss
+    weighted_legality_loss = model.config.first_legality_coeff * first_legality_loss
+
+    clean_t = jnp.ones((batch_size,), dtype=jnp.float32)
+    with jax.named_scope("joint_dfm_clean_planner_hidden"):
+        _, clean_hidden = model.planner_from_latents(z_dfm, actions, clean_t, return_hidden=True)
+    with jax.named_scope("joint_jepa_recurrent_rollout"):
+        teacher_forcing = jnp.asarray(batch.get("jepa_teacher_forcing", 0.0), dtype=jnp.float32)
+
+        def teacher_forced_rollout(_):
+            return model.jepa_teacher_forced_from_latents(z_all[:, :horizon], actions, clean_hidden["action_tokens"])
+
+        def free_rollout(_):
+            return model.jepa_rollout_from_latents(
+                z_jepa,
+                actions,
+                clean_hidden["action_tokens"],
+                z0_normalized=True,
+            )
+
+        pred_z = jax.lax.cond(teacher_forcing > 0.5, teacher_forced_rollout, free_rollout, operand=None)
+    selected_horizons = jnp.arange(horizon, dtype=jnp.int32)
+    pred_for_loss = pred_z
+    future_valid_for_loss = future_valid
+    if model.config.jepa_target_mode == "current_repeat":
+        # Profiling-only target: removes future-state information from JEPA.
+        # This is not a meaningful training objective.
+        with jax.named_scope("joint_jepa_current_repeat_target"):
+            target_vectors = jnp.broadcast_to(z_jepa[:, None, :], pred_for_loss.shape)
+    else:
+        target_vectors = target_z
+    with jax.named_scope("joint_jepa_raw_mse_loss"):
+        sample_raw_mse = jnp.mean(
+            (jnp.asarray(pred_for_loss, dtype=jnp.float32) - jnp.asarray(target_vectors, dtype=jnp.float32)) ** 2,
+            axis=-1,
+        )
+    with jax.named_scope("joint_jepa_rms_norm_loss"):
+        pred_rms = jnp.sqrt(jnp.mean(jnp.square(jnp.asarray(pred_for_loss, dtype=jnp.float32)), axis=-1) + 1e-6)
+        target_rms = jax.lax.stop_gradient(
+            jnp.sqrt(jnp.mean(jnp.square(jnp.asarray(target_vectors, dtype=jnp.float32)), axis=-1) + 1e-6)
+        )
+        sample_norm_loss = jnp.abs(jnp.log(pred_rms) - jnp.log(target_rms))
+        sample_jepa = sample_raw_mse + sample_norm_loss
+    horizon_weights = model.config.jepa_gamma ** selected_horizons.astype(jnp.float32)
+    jepa_mask = future_valid_for_loss * valid[:, None] * horizon_weights[None, :]
+    jepa_positive_loss = _weighted_horizon_mean(sample_jepa, jepa_mask)
+    jepa_raw_mse = _weighted_horizon_mean(sample_raw_mse, jepa_mask)
+    jepa_norm_loss = _weighted_horizon_mean(sample_norm_loss, jepa_mask)
+    jepa_sigreg_loss = jnp.asarray(0.0, dtype=jnp.float32)
+    valid_all = jnp.concatenate([valid[:, None], valid[:, None] * future_valid], axis=1)
+    sigreg_weight = valid_all.reshape((-1,))
+    sigreg_valid_count = jnp.sum(sigreg_weight)
+    if model.config.jepa_sigreg_coeff != 0.0:
+        with jax.named_scope("joint_jepa_sigreg"):
+            sigreg_tokens = jnp.asarray(z_all, dtype=jnp.float32).reshape((-1, z_all.shape[-1]))
+            if model.config.jepa_sigreg_kind == "moments":
+                jepa_sigreg_loss = _sigreg_moments_loss(sigreg_tokens, sample_weight=sigreg_weight)
+            elif model.config.jepa_sigreg_kind == "quantile":
+                jepa_sigreg_loss = _quantile_sigreg_loss(
+                    sigreg_tokens,
+                    d_proj=model.config.jepa_sigreg_proj_dim,
+                    rng=rng_sigreg,
+                )
+            elif model.config.jepa_sigreg_kind == "le_jepa":
+                jepa_sigreg_loss = _official_le_jepa_sigreg_loss(
+                    sigreg_tokens,
+                    proj_dim=model.config.jepa_sigreg_proj_dim,
+                    rng=rng_sigreg,
+                    sample_weight=sigreg_weight,
+                    axis_name=sigreg_axis_name,
+                )
+            else:
+                raise ValueError(f"Unsupported jepa_sigreg_kind: {model.config.jepa_sigreg_kind!r}")
+    jepa_pred_sigreg_loss = jnp.asarray(0.0, dtype=jnp.float32)
+    pred_sigreg_weight = (future_valid_for_loss * valid[:, None]).reshape((-1,))
+    pred_sigreg_valid_count = jnp.sum(pred_sigreg_weight)
+    if model.config.jepa_pred_sigreg_coeff != 0.0:
+        with jax.named_scope("joint_jepa_pred_sigreg"):
+            pred_sigreg_tokens = jnp.asarray(pred_z, dtype=jnp.float32).reshape((-1, pred_z.shape[-1]))
+            if model.config.jepa_sigreg_kind == "moments":
+                jepa_pred_sigreg_loss = _sigreg_moments_loss(pred_sigreg_tokens, sample_weight=pred_sigreg_weight)
+            elif model.config.jepa_sigreg_kind == "quantile":
+                jepa_pred_sigreg_loss = _quantile_sigreg_loss(
+                    pred_sigreg_tokens,
+                    d_proj=model.config.jepa_sigreg_proj_dim,
+                    rng=rng_sigreg,
+                )
+            elif model.config.jepa_sigreg_kind == "le_jepa":
+                jepa_pred_sigreg_loss = _official_le_jepa_sigreg_loss(
+                    pred_sigreg_tokens,
+                    proj_dim=model.config.jepa_sigreg_proj_dim,
+                    rng=rng_sigreg,
+                    sample_weight=pred_sigreg_weight,
+                    axis_name=sigreg_axis_name,
+                )
+            else:
+                raise ValueError(f"Unsupported jepa_sigreg_kind: {model.config.jepa_sigreg_kind!r}")
+
+    value_loss = jnp.asarray(0.0, dtype=jnp.float32)
+    wdl_loss = jnp.asarray(0.0, dtype=jnp.float32)
+    value_pred_mean = jnp.asarray(0.0, dtype=jnp.float32)
+    value_target_mean = jnp.asarray(0.0, dtype=jnp.float32)
+    if model.config.value_coeff != 0.0 or model.config.wdl_coeff != 0.0:
+        with jax.named_scope("joint_value_wdl_heads"):
+            value_pred, wdl_logits = model.value_wdl_from_pred(pred_z)
+        value_targets = jnp.asarray(batch.get("value_targets", jnp.zeros_like(value_pred)), dtype=jnp.float32)[:, :horizon]
+        value_loss_by_horizon = jnp.square(value_pred - value_targets)
+        value_loss = _weighted_horizon_mean(value_loss_by_horizon, future_valid * valid[:, None])
+        wdl_targets = jnp.asarray(batch.get("wdl_targets", jnp.zeros_like(wdl_logits)), dtype=jnp.float32)[:, :horizon]
+        wdl_sum = jnp.sum(wdl_targets, axis=-1, keepdims=True)
+        wdl_valid = (wdl_sum[..., 0] > 0).astype(jnp.float32)
+        wdl_targets = wdl_targets / jnp.maximum(wdl_sum, 1e-12)
+        wdl_loss_by_horizon = -jnp.sum(wdl_targets * jax.nn.log_softmax(wdl_logits, axis=-1), axis=-1)
+        wdl_loss = _weighted_horizon_mean(wdl_loss_by_horizon, future_valid * valid[:, None] * wdl_valid)
+        value_pred_mean = jnp.mean(jnp.asarray(value_pred, dtype=jnp.float32))
+        value_target_mean = jnp.mean(jnp.asarray(value_targets, dtype=jnp.float32))
+
+    horizon_valid = future_valid_for_loss * valid[:, None]
+    horizon_num = jnp.zeros((horizon,), dtype=jnp.float32).at[selected_horizons].add(
+        jnp.sum(sample_jepa * horizon_valid, axis=0)
+    )
+    horizon_raw_mse_num = jnp.zeros((horizon,), dtype=jnp.float32).at[selected_horizons].add(
+        jnp.sum(sample_raw_mse * horizon_valid, axis=0)
+    )
+    horizon_norm_num = jnp.zeros((horizon,), dtype=jnp.float32).at[selected_horizons].add(
+        jnp.sum(sample_norm_loss * horizon_valid, axis=0)
+    )
+    horizon_denom = jnp.zeros((horizon,), dtype=jnp.float32).at[selected_horizons].add(jnp.sum(horizon_valid, axis=0))
+    jepa_loss_by_horizon = horizon_num / jnp.maximum(horizon_denom, 1.0)
+    jepa_raw_mse_by_horizon = horizon_raw_mse_num / jnp.maximum(horizon_denom, 1.0)
+    jepa_norm_loss_by_horizon = horizon_norm_num / jnp.maximum(horizon_denom, 1.0)
+    target_horizon_mask = jnp.zeros((horizon,), dtype=jnp.float32).at[selected_horizons].set(1.0)
+
+    zero = jnp.asarray(0.0, dtype=jnp.float32)
+    zero_by_horizon = jnp.zeros((horizon,), dtype=jnp.float32)
+    jepa_cosine_loss = zero
+    jepa_normalized_mse = zero
+    mean_token_cosine = zero
+    mean_token_cosine_by_horizon = zero_by_horizon
+    pred_token_norm = zero
+    target_token_norm = zero
+    identity_jepa_loss = zero
+    identity_jepa_cosine_loss = zero
+    identity_mean_token_cosine = zero
+    shuffled_jepa_loss = jnp.asarray(0.0, dtype=jnp.float32)
+    shuffled_jepa_cosine_loss = jnp.asarray(0.0, dtype=jnp.float32)
+    shuffled_mean_token_cosine = jnp.asarray(0.0, dtype=jnp.float32)
+    action_contrast_loss = jnp.asarray(0.0, dtype=jnp.float32)
+    jepa_state_rms_scale_raw = jnp.asarray(model.jepa_state_norm.scale[...], dtype=jnp.float32)
+    jepa_state_rms_scale = jepa_state_rms_scale_raw
+    if model.config.jepa_state_rms_scale_max > 0.0:
+        jepa_state_rms_scale_cap = jnp.asarray(model.config.jepa_state_rms_scale_max, dtype=jnp.float32)
+        jepa_state_rms_scale = jnp.clip(
+            jepa_state_rms_scale_raw,
+            1.0 / jepa_state_rms_scale_cap,
+            jepa_state_rms_scale_cap,
+        )
+
+    unclipped_loss = (
+        model.config.dfm_ce_coeff * dfm_ce_loss
+        + weighted_legality_loss
+        + model.config.jepa_positive_coeff * jepa_positive_loss
+        + model.config.jepa_sigreg_coeff * jepa_sigreg_loss
+        + model.config.jepa_pred_sigreg_coeff * jepa_pred_sigreg_loss
+        + model.config.value_coeff * value_loss
+        + model.config.wdl_coeff * wdl_loss
+        + model.config.jepa_action_contrast_coeff * action_contrast_loss
+    )
+    loss, loss_clip_scale = _clip_loss_preserve_gradient(unclipped_loss, model.config.loss_clip_value)
+
+    preds = jnp.argmax(logits, axis=-1)
+    accuracy = (
+        jnp.sum((preds == actions) * weighted_loss_mask)
+        / jnp.maximum(jnp.sum(weighted_loss_mask), 1.0)
+    )
+    aux = {
+        "loss": loss,
+        "unclipped_loss": unclipped_loss,
+        "loss_clip_value": jnp.asarray(model.config.loss_clip_value, dtype=jnp.float32),
+        "loss_clip_scale": loss_clip_scale,
+        "dfm_ce_loss": dfm_ce_loss,
+        "dfm_ce_loss_by_horizon": dfm_ce_loss_by_horizon,
+        "dfm_mask_fraction_by_horizon": dfm_mask_fraction_by_horizon,
+        "legality_loss": legality_loss,
+        "first_legality_loss": first_legality_loss,
+        "first_legality_loss_fp32": first_legality_loss_fp32,
+        "first_legal_mass_fp32": 1.0 - first_legality_loss_fp32,
+        "horizon_legality_loss": horizon_legality_loss,
+        "weighted_legality_loss": weighted_legality_loss,
+        "first_legal_mass": 1.0 - first_legality_loss,
+        "horizon_legal_mass": jnp.asarray(0.0, dtype=jnp.float32),
+        "horizon_legality_evaluated": jnp.asarray(0.0, dtype=jnp.float32),
+        "jepa_positive_loss": jepa_positive_loss,
+        "jepa_cosine_loss": jepa_cosine_loss,
+        "jepa_raw_mse": jepa_raw_mse,
+        "jepa_norm_loss": jepa_norm_loss,
+        "jepa_normalized_mse": jepa_normalized_mse,
+        "jepa_sigreg_loss": jepa_sigreg_loss,
+        "jepa_pred_sigreg_loss": jepa_pred_sigreg_loss,
+        "jepa_sigreg_valid_count": sigreg_valid_count,
+        "jepa_pred_sigreg_valid_count": pred_sigreg_valid_count,
+        "jepa_teacher_forcing": teacher_forcing,
+        "value_loss": value_loss,
+        "wdl_loss": wdl_loss,
+        "value_pred_mean": value_pred_mean,
+        "value_target_mean": value_target_mean,
+        "jepa_action_contrast_loss": action_contrast_loss,
+        "jepa_shuffled_loss": shuffled_jepa_loss,
+        "jepa_shuffled_cosine_loss": shuffled_jepa_cosine_loss,
+        "jepa_shuffled_mean_token_cosine": shuffled_mean_token_cosine,
+        "jepa_true_minus_shuffled": zero,
+        "jepa_loss_by_horizon": jepa_loss_by_horizon,
+        "jepa_raw_mse_by_horizon": jepa_raw_mse_by_horizon,
+        "jepa_norm_loss_by_horizon": jepa_norm_loss_by_horizon,
+        "jepa_target_horizon_mask": target_horizon_mask,
+        "jepa_target_sample_count": jnp.asarray(selected_horizons.shape[0], dtype=jnp.float32),
+        "jepa_target_sample_fraction": jnp.asarray(selected_horizons.shape[0] / horizon, dtype=jnp.float32),
+        "jepa_target_mean_horizon": jnp.mean(selected_horizons.astype(jnp.float32) + 1.0),
+        "mean_token_cosine": mean_token_cosine,
+        "mean_token_cosine_by_horizon": mean_token_cosine_by_horizon,
+        "pred_token_norm": pred_token_norm,
+        "target_token_norm": target_token_norm,
+        "z_state_norm": jnp.mean(jnp.linalg.norm(jnp.asarray(z_all, dtype=jnp.float32), axis=-1)),
+        "z_state_std": jnp.std(jnp.asarray(z_all, dtype=jnp.float32)),
+        "z_pred_norm": jnp.mean(jnp.linalg.norm(jnp.asarray(pred_z, dtype=jnp.float32), axis=-1)),
+        "z_target_norm": jnp.mean(jnp.linalg.norm(jnp.asarray(target_z, dtype=jnp.float32), axis=-1)),
+        "jepa_state_rms_scale_raw_max": jnp.max(jepa_state_rms_scale_raw),
+        "jepa_state_rms_scale_raw_min": jnp.min(jepa_state_rms_scale_raw),
+        "jepa_state_rms_scale_effective_max": jnp.max(jepa_state_rms_scale),
+        "jepa_state_rms_scale_effective_min": jnp.min(jepa_state_rms_scale),
+        "identity_jepa_loss": identity_jepa_loss,
+        "identity_jepa_cosine_loss": identity_jepa_cosine_loss,
+        "identity_mean_token_cosine": identity_mean_token_cosine,
+        "jepa_loss_minus_identity": zero,
+        "accuracy": accuracy,
+        "mask_prob": jnp.mean(1.0 - t),
+        "loss_horizon": jnp.asarray(loss_horizon, dtype=jnp.float32),
+    }
+    return loss, aux
+
+
+
 def create_joint_components(
     bt4_params: dict[str, Any],
     config: JointLatentSASAConfig,
@@ -1452,7 +1975,6 @@ def build_research_resume_contract(
     source_files = (
         Path(__file__),
         REPO_ROOT / "research" / "prepare.py",
-        REPO_ROOT / "chess_dfm_jax" / "training" / "joint_latent_sasa.py",
         REPO_ROOT / "chess_dfm_jax" / "nnx_bt4.py",
         REPO_ROOT / "chess_dfm_jax" / "data" / "trajectory_v3.py",
     )
@@ -1719,33 +2241,21 @@ def diagnose_joint_latents(
     return metrics
 
 
-def _clip_loss_preserve_gradient(
-    loss: jax.Array,
-    clip_value: float,
-) -> tuple[jax.Array, jax.Array]:
-    loss = jnp.asarray(loss, dtype=jnp.float32)
-    if clip_value <= 0.0:
-        return loss, jnp.asarray(1.0, dtype=jnp.float32)
-    clip = jnp.asarray(clip_value, dtype=jnp.float32)
-    scale = jnp.minimum(1.0, clip / jax.lax.stop_gradient(jnp.maximum(loss, 1e-6)))
-    return loss * scale, scale
-
-
-_legacy_stage1_loss_and_grad = nnx.value_and_grad(
-    _legacy_joint_stage1_loss_fn,
+_compat_stage1_loss_and_grad = nnx.value_and_grad(
+    joint_stage1_loss_fn,
     argnums=nnx.DiffState(0, TrainableParam),
     has_aux=True,
 )
 
 
-def _legacy_train_step_impl(
+def _compat_train_step_impl(
     model: JointLatentSASAModel,
     optimizer: nnx.Optimizer,
     batch: dict[str, jax.Array],
     rng: jax.Array,
 ):
     with jax.named_scope("joint_stage1_loss_and_grad"):
-        (loss, aux), grads = _legacy_stage1_loss_and_grad(
+        (loss, aux), grads = _compat_stage1_loss_and_grad(
             model,
             batch,
             rng,
@@ -1761,7 +2271,7 @@ def eval_joint_stage1_step(
     batch: dict[str, jax.Array],
     rng: jax.Array,
 ):
-    return _legacy_joint_stage1_loss_fn(model, batch, rng)
+    return joint_stage1_loss_fn(model, batch, rng)
 
 
 @nnx.jit
@@ -1771,7 +2281,7 @@ def train_joint_stage1_step(
     batch: dict[str, jax.Array],
     rng: jax.Array,
 ):
-    return _legacy_train_step_impl(model, optimizer, batch, rng)
+    return _compat_train_step_impl(model, optimizer, batch, rng)
 
 
 @nnx.jit(donate_argnums=(0, 1))
@@ -1781,7 +2291,7 @@ def train_joint_stage1_step_donated(
     batch: dict[str, jax.Array],
     rng: jax.Array,
 ):
-    return _legacy_train_step_impl(model, optimizer, batch, rng)
+    return _compat_train_step_impl(model, optimizer, batch, rng)
 
 
 def normalized_stage1_loss_fn(
@@ -1793,21 +2303,33 @@ def normalized_stage1_loss_fn(
 ) -> tuple[jax.Array, dict[str, jax.Array]]:
     """Compatibility loss with corrected count scaling and legal bounds.
 
-    The legacy forward graph remains the oracle in this milestone. Its official
-    EP statistics are converted to fixed-reference discrepancies algebraically,
-    preserving their exact gradients while removing valid-count scaling.
+    The compatibility forward graph's official EP statistics are converted to
+    fixed-reference discrepancies algebraically, preserving their exact
+    gradients while removing valid-count scaling.
     """
 
-    _, legacy_aux = _legacy_joint_stage1_loss_fn(
+    _, compatibility_aux = joint_stage1_loss_fn(
         model,
         batch,
         rng,
         compute_fp32_legality=True,
     )
-    target_official = jnp.asarray(legacy_aux["jepa_sigreg_loss"], dtype=jnp.float32)
-    pred_official = jnp.asarray(legacy_aux["jepa_pred_sigreg_loss"], dtype=jnp.float32)
-    target_count = jnp.asarray(legacy_aux["jepa_sigreg_valid_count"], dtype=jnp.float32)
-    pred_count = jnp.asarray(legacy_aux["jepa_pred_sigreg_valid_count"], dtype=jnp.float32)
+    target_official = jnp.asarray(
+        compatibility_aux["jepa_sigreg_loss"],
+        dtype=jnp.float32,
+    )
+    pred_official = jnp.asarray(
+        compatibility_aux["jepa_pred_sigreg_loss"],
+        dtype=jnp.float32,
+    )
+    target_count = jnp.asarray(
+        compatibility_aux["jepa_sigreg_valid_count"],
+        dtype=jnp.float32,
+    )
+    pred_count = jnp.asarray(
+        compatibility_aux["jepa_pred_sigreg_valid_count"],
+        dtype=jnp.float32,
+    )
 
     target_normalized = target_official * (
         jnp.asarray(target_reference_count, dtype=jnp.float32) / jnp.maximum(target_count, 1.0)
@@ -1817,16 +2339,22 @@ def normalized_stage1_loss_fn(
     )
 
     corrected_first_legality = jnp.asarray(
-        legacy_aux["first_legality_loss_fp32"],
+        compatibility_aux["first_legality_loss_fp32"],
         dtype=jnp.float32,
     )
     corrected_legal_mass = 1.0 - corrected_first_legality
     corrected_weighted_legality = model.config.first_legality_coeff * corrected_first_legality
 
-    unclipped = jnp.asarray(legacy_aux["unclipped_loss"], dtype=jnp.float32)
+    unclipped = jnp.asarray(
+        compatibility_aux["unclipped_loss"],
+        dtype=jnp.float32,
+    )
     unclipped = (
         unclipped
-        - jnp.asarray(legacy_aux["weighted_legality_loss"], dtype=jnp.float32)
+        - jnp.asarray(
+            compatibility_aux["weighted_legality_loss"],
+            dtype=jnp.float32,
+        )
         - model.config.jepa_sigreg_coeff * target_official
         - model.config.jepa_pred_sigreg_coeff * pred_official
         + corrected_weighted_legality
@@ -1835,7 +2363,7 @@ def normalized_stage1_loss_fn(
     )
     loss, clip_scale = _clip_loss_preserve_gradient(unclipped, model.config.loss_clip_value)
 
-    aux = dict(legacy_aux)
+    aux = dict(compatibility_aux)
     aux.update(
         {
             "loss": loss,
