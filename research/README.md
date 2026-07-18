@@ -25,3 +25,12 @@ results.tsv  compact append-only experiment ledger
 
 Those files are introduced incrementally after the legacy checkpoint has a
 verified local-GPU baseline.
+
+The parity oracle is run separately:
+
+```bash
+research/run_gpu.sh .venv/bin/python research/legacy_baseline.py
+```
+
+It uses strict model-state restoration and writes a deterministic loss
+fingerprint under `artifacts/baselines/`.

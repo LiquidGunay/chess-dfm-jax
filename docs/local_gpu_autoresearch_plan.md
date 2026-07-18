@@ -96,6 +96,8 @@ The default local layout is:
     tmp/
   data/
     trajectory_v3/
+  models/
+    source/
   checkpoints/
     source/
     recovered/
@@ -115,8 +117,7 @@ The approved local baseline uses only the existing Drive assets:
 
 - trajectory-v3 LC0 H8 archive: about 11.53 GB;
 - joint checkpoint at step 265,000: about 2.12 GB of state data; and
-- base model archive only if the joint checkpoint is insufficient for the raw
-  BT4 comparison.
+- base model archive: about 1.46 GB.
 
 The trajectory manifest contains approximately:
 
@@ -131,9 +132,16 @@ LC0 PGN WDL/value labels are final-game-result labels, not engine evaluations.
 They are available for later ablation but remain disabled in the reproduction
 baseline.
 
-The step-265,000 source state is missing its normal checkpoint metadata. Its
-matching sweep configuration has been identified. Recovery must verify model
-structure and outputs instead of trusting reconstructed metadata alone.
+The Drive split manifest initially appeared to describe only `state.npz`, but
+the verified tar also contains the original `checkpoint_state.json`,
+`run_config.json`, and metrics history. No metadata reconstruction is required.
+Strict structure and output verification is still mandatory because the
+checkpoint does not record the training git SHA.
+
+The joint checkpoint contains the fine-tuned BT4 embedding and encoder, but not
+the frozen policy/value/moves-left heads or policy mapping. The base
+`BT4_exported.pb.gz` is therefore required both to instantiate the current model
+and to evaluate raw BT4.
 
 ## Phase 0: reproduce before simplifying
 
@@ -232,10 +240,20 @@ masking, microbatching, and device layout.
 Required tests:
 
 - duplicating every example leaves normalized loss and gradient unchanged;
-- splitting the same global batch into microbatches leaves the result unchanged;
 - invalid horizons do not affect the statistic;
 - target and prediction reference scales are explicit; and
 - the raw official statistic remains available for comparison.
+
+Epps-Pulley is non-additive across independently evaluated microbatches.
+Gradient accumulation must not average per-microbatch SIGReg losses. The first
+correct implementation either:
+
+1. disables gradient accumulation while SIGReg is active; or
+2. aggregates global cosine/sine/count sufficient statistics before forming
+   the loss, using a differentiable two-pass or equivalent implementation.
+
+Only the second implementation may claim invariance to microbatch partitioning,
+and it requires a dedicated loss-and-gradient parity test.
 
 ### Prediction-collapse ablations
 
@@ -262,6 +280,8 @@ Collapse measurements are computed per horizon before aggregation:
 - Loss and gradients are invariant to batch layout within numerical tolerance.
 - Predicted latents retain nontrivial variance and effective rank.
 - JEPA beats trivial baselines at useful horizons.
+- Legal probability mass is accumulated in FP32 and bounded to `[0, 1]`; the
+  legality penalty cannot become negative through BF16 summation error.
 - Loss clipping is not permanently active.
 - Validation metrics contain no zero placeholders.
 
@@ -451,10 +471,10 @@ sweeps, held-out data, and repeated seeds.
 - [x] Preserve the historical commit on `legacy/tpu-joint-latent-sasa`.
 - [x] Create `research/local-gpu-autoresearch`.
 - [ ] Establish and test the workspace-local environment contract.
-- [ ] Ground and download the approved Drive assets.
-- [ ] Verify archive and checkpoint digests.
-- [ ] Recover checkpoint metadata.
-- [ ] Produce the first local-GPU baseline report.
+- [x] Ground and download the approved Drive assets.
+- [x] Verify archive and checkpoint digests.
+- [x] Recover the original checkpoint metadata and sidecars.
+- [x] Produce the first strict local-GPU baseline fingerprint.
 - [ ] Create the one-editable-file research scaffold.
 - [ ] Add loss-invariance and collapse tests.
 - [ ] Capture the first active-model GPU profile.

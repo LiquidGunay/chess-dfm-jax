@@ -1,0 +1,1 @@
+timestamp_utc	commit	parent_commit	run_id	seed	init_lineage	train_seconds	compile_seconds	examples	val_dfm_ce	val_action_top1	val_legal_mass	jepa_vs_identity	pred_effective_rank	examples_per_second	peak_hbm_bytes	status	hypothesis
