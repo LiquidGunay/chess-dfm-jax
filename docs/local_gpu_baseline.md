@@ -301,6 +301,123 @@ starting scale is intentional.
 The complete audit is
 `research/runs/gradient-audit-step265k-b64-v3/gradient_audit.json`.
 
+## First normalized-objective stability run
+
+The first 100-update acceptance run used physical batch 64, target SIGReg
+coefficient `0.40`, prediction SIGReg coefficient `0.0`, and fixed reference
+count one. It strictly resumed the step-265,000 model and optimizer and trained
+on 6,400 examples. Initial and final validation used the same two deterministic
+held-out batches (128 examples), so the before/after delta is exact for that
+slice but is not yet a population-quality estimate.
+
+The run was numerically and operationally stable:
+
+- every reported scalar was finite, all 100 loss clip scales were one, and the
+  optimizer step advanced contiguously from 265,001 through 265,100 (the
+  current logger does not expose the apply-if-finite skip counter);
+- steady updates averaged `1.624 s` (`39.4` examples/s and `354.8` encoded
+  boards/s);
+- mean GPU utilization was `88.9%`, mean power was `250.7 W`, and JAX reported
+  `5.94 GB` peak live buffers; and
+- the 100-update training loop took `169.4 s`, excluding initial evaluation and
+  compilation.
+
+It was not a quality win:
+
+| Fixed validation metric | Initial | Final |
+|---|---:|---:|
+| DFM CE | 4.8472 | 4.9547 |
+| Masked-action accuracy | 0.0586 | 0.0693 |
+| JEPA positive loss | 0.4897 | 0.4051 |
+| Target normalized SIGReg | 0.0475 | 0.0573 |
+| FP32 first legal mass | 0.4548 | 0.4700 |
+
+More importantly, target RMS contracted from approximately `1.008–1.016` to
+`0.846–0.860`, and prediction RMS contracted from `0.936–0.971` to
+`0.881–0.894`. Prediction effective rank remained about `26.4–32.1`, so this is
+early scale contraction rather than rank collapse. Because the future target
+encoder is jointly trainable (the raw JEPA target is not stop-gradient), lower
+positive loss alone can reward shrinking both sides. The target SIGReg
+discrepancy worsening at the same time confirms that coefficient `0.40` is too
+weak to counter that pressure. The positive-MSE/zero-baseline-MSE ratio also
+worsened from `0.418` to `0.472`, and mean prediction-target cosine slipped
+from `0.778` to `0.773`; the lower raw MSE is therefore not evidence of better
+scale-independent prediction.
+
+This point is rejected rather than promoted. Before the 2×2 prediction-SIGReg
+ablation, the target regularizer must be re-anchored at a stronger gradient
+fraction (the calibration audit gives `1.32` at 10% and `3.96` at 30% on the
+JEPA parameter group), with latent scale and rank as acceptance metrics.
+
+The complete report is
+`research/runs/baseline-target040-smoke-b64-100/report.json`.
+This compatibility run did not save final weights, so strict final checkpoint
+save/resume is a gate before any 30-minute experiment.
+
+## Strict local checkpoint/resume
+
+Commit `f6b9c40` adds a research checkpoint format with:
+
+- atomic publication from a hidden temporary directory under the run;
+- state size and SHA-256 verification;
+- a semantic resume-contract digest covering model/objective configuration,
+  deterministic data schedule, source assets, code, software, and GPU kind;
+- complete typed path/container/shape/dtype ABIs for both trainable model and
+  optimizer state, checked before either tree is mutated;
+- separate optimizer step, absolute research update, and next data cursor; and
+- parent-checkpoint lineage plus completed-checkpoint-only discovery/pruning.
+
+Fifteen focused CPU tests pass, including a bit-for-bit comparison of
+uninterrupted training against save/reconstruct/resume with cursor-derived RNG.
+A real 274M-parameter GPU smoke then saved after one update:
+
+| Item | Result |
+|---|---:|
+| State payload | 1,851,704,172 bytes |
+| Save + hash + atomic publish | 15.82 s |
+| Model ABI | 455 leaves / 705,987,352 bytes |
+| Optimizer ABI | 830 leaves / 1,145,636,465 bytes |
+| Research update / cursor / optimizer | 1 / 1 / 265,001 |
+
+The next process strictly restored the full payload in `6.32 s`, consumed
+`data_step=1`, and advanced to research update `2`, next cursor `2`, and
+optimizer step `265,002`. The first resumed update took `18.73 s`, primarily
+persistent executable load/startup; this is still excluded from steady-state
+timing. The source and resumed reports are:
+
+- `research/runs/real-checkpoint-save-b1-step1/report.json`
+- `research/runs/real-checkpoint-resume-b1-step2/report.json`
+
+The initial import of the known legacy step-265,000 checkpoint still uses its
+older loader. Its exact fingerprint and ABI are verified, but a future cleanup
+should route that one-time import through the same preflight machinery.
+
+## Action-codec audit
+
+The official 1,858-move and attention-map tables are correct, but the current
+boardless helpers use them with the wrong orientation. Plane encoding mirrors
+black-to-move boards into side-to-move coordinates, whereas preprocessing
+stored raw absolute UCI indices and legal masks. In 163,840 sampled held-out
+moves, every stored label matched the absolute adapter and no black move
+matched the canonical adapter; for example, black `c7c5` is stored as index
+`1440`, while canonical `c2c4` is `264`.
+
+The recovered DFM action space must therefore be named and preserved as
+`legacy_absolute_1858`. Native BT4 policy inference needs a separate,
+board-aware `lc0_canonical_1858` adapter that mirrors black moves before lookup.
+The two may coexist in an arena, but their logits and legal masks must never be
+interchanged.
+
+Promotion handling is also incomplete. LC0 encodes knight promotion with the
+ordinary from-to slot and appends suffixes only for queen, rook, and bishop.
+The boardless helper rejects white knight promotion and every black promotion.
+A scan of 500 shards in each split found only white rank-7-to-8 queen/rook/bishop
+promotions, confirming preprocessing selection bias. The canonical adapter
+must enumerate board-legal moves, encode all four promotion types, require a
+unique match on decode, and fail closed. The legacy adapter cannot fully
+represent black underpromotions without changing checkpoint semantics, so the
+arena must record that limitation rather than invent a silent mapping.
+
 ## Next acceptance point
 
 The compatibility harness is not yet open to autoresearch. The next milestone

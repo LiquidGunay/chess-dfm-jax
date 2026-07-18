@@ -273,6 +273,13 @@ that make the auxiliary gradient roughly 1%, 3%, 10%, and 30% of the main
 gradient. The legacy coefficient is not transferred blindly after removing the
 sample-count multiplier.
 
+The first 3%-scale target point (`0.40` with reference count one) was
+numerically stable but allowed target and prediction RMS to contract while raw
+JEPA MSE fell. The next baseline calibration must include the 10% and 30%
+gradient points and the batch-64 legacy-equivalent strength (`5.76` with
+reference count one). Selection uses scale-independent prediction quality and
+latent-scale/rank gates, not raw MSE alone.
+
 ### Prediction-collapse ablations
 
 Run a paired 2×2 target-SIGReg off/on × prediction-SIGReg off/on ablation.
@@ -283,6 +290,13 @@ sensitivity, policy metrics, or relative Elo. If Gaussian marginal shape is
 not the failure mode, prefer a targeted action-coupling loss. A per-horizon
 VICReg-style standard-deviation hinge is the first fallback for actual
 collapse.
+
+The current future target is produced by the same trainable encoder/projector
+and is not stop-gradient. That makes joint target/predictor scale contraction a
+real shortcut. Preserve this behavior for the compatibility baseline, then
+compare a stop-gradient target and an EMA target encoder as explicit research
+ablations; do not silently change target-gradient semantics while calibrating
+SIGReg.
 
 Collapse measurements are computed per horizon before aggregation:
 
@@ -361,6 +375,22 @@ wall-clock and fixed-example budgets.
 
 External Stockfish, puzzle, and opening datasets are not required.
 
+The approved state/action shards also contain per-horizon scalar
+`value_targets` in `{-1,0,1}` and one-hot `wdl_targets`. They are final-outcome
+labels rather than search evaluations, but they are sufficient for a later
+controlled value/WDL-head training and candidate-ranking experiment. The
+compatibility baseline leaves those coefficients at zero, and the recovered
+head has never been outcome-supervised.
+
+Each horizon label is from the side to move after that action, so its root-side
+sign alternates with horizon parity. Train or evaluate with this convention
+made explicit; never average raw per-horizon scalar values. The first clean
+value experiment freezes/detaches the representation and trains only the head,
+compares target-latent and predicted-latent inputs, validates label shape and
+one-hotness fail-closed, and initially ranks with calibrated WDL expected score.
+These played-continuation outcomes are not counterfactual action values, so any
+candidate-ranking benefit still requires paired-arena validation.
+
 ### Frequent offline evaluation
 
 - fixed validation DFM cross-entropy;
@@ -388,6 +418,21 @@ colors swapped. Initial anchors are:
 - recovered step-265,000 model;
 - previous promoted model; and
 - current candidate.
+
+Before any games, make action semantics explicit:
+
+- existing trajectory labels, legal masks, and the recovered DFM use
+  `legacy_absolute_1858`;
+- the native BT4 policy head uses board-aware `lc0_canonical_1858`; and
+- every model manifest records its codec ID.
+
+The canonical codec mirrors black moves into side-to-move coordinates, treats
+knight promotion as the ordinary from-to slot, handles queen/rook/bishop
+suffixes, and decodes by uniquely matching board-legal moves. Golden
+white/black pairs, every promotion type, legal-mask cardinality, round trips,
+and mirrored-board properties must pass before the arena is trusted. Do not
+permute recovered weights: white is identity while black requires a
+board-dependent transformation.
 
 The frequent arena is an in-process, batched GPU evaluator rather than a serial
 UCI tournament. UCI remains a correctness and interoperability path.
@@ -540,4 +585,12 @@ sweeps, held-out data, and repeated seeds.
 - [x] Capture the first active-model GPU profile.
 - [x] Recompute legality from the original logits in FP32 with correct gradients.
 - [x] Calibrate normalized SIGReg coefficients by per-module gradient norms.
+- [x] Reject target SIGReg `0.40` after a fixed-slice stability run exposed
+  target/prediction scale contraction.
+- [x] Add and real-GPU verify strict atomic checkpoint/resume with deterministic
+  data-cursor continuation.
+- [ ] Freeze a corrected baseline objective after a stronger target-SIGReg
+  stability run.
+- [ ] Implement and golden-test separate legacy-absolute and board-aware LC0
+  canonical 1,858 action codecs.
 - [ ] Implement the persistent batched paired-opening arena.
