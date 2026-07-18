@@ -418,10 +418,40 @@ unique match on decode, and fail closed. The legacy adapter cannot fully
 represent black underpromotions without changing checkpoint semantics, so the
 arena must record that limitation rather than invent a silent mapping.
 
+Commit `ea62aa8` implements both explicit codec IDs without changing any
+existing preprocessing call. Its golden tests cover mirrored pawn/knight moves,
+castling, en passant, straight and capture promotions for all four pieces,
+full legal-mask round trips, invalid indices, unsupported input formats, and
+whole-board mirror invariance. The combined codec/trajectory compatibility
+suite passes.
+
+## One-file model localization
+
+Commit `4a981ca` moves the complete checkpoint-visible model configuration,
+adapters, projector, recurrent JEPA transition, DFM planner, value/WDL head,
+optimizer construction, and legacy step wrappers into `research/train.py`.
+Only the legacy stage-1 loss remains as a temporary parity oracle.
+
+Three CPU parity tests compare the local and legacy paths with the same seed:
+
+- every configuration field/default;
+- every trainable-state path, dtype, shape, and initialized value;
+- every Muon/warmup optimizer-state path, dtype, shape, and value;
+- encoded tokens/vectors, noisy planner logits and hidden state, and free JEPA
+  rollout; and
+- the complete legacy loss/auxiliary tree.
+
+All comparisons are exact. A real step-265,000 B4 GPU evaluation then compared
+114 validation metrics against the pre-refactor corrected-objective report and
+found zero differences. It exactly retained total loss `3.9873406887`, DFM CE
+`3.2872314453`, FP32 legal mass `0.9995466471`, target SIGReg
+`0.1506309509`, and prediction SIGReg `0.1407624930`. The report is
+`research/runs/local-model-parity-step265k-b4/report.json`.
+
 ## Next acceptance point
 
 The compatibility harness is not yet open to autoresearch. The next milestone
-is a clean loss/model definition in `research/train.py` that:
+is a clean loss definition in `research/train.py` that:
 
 - matches this fingerprint in compatibility mode;
 - computes legal mass correctly;

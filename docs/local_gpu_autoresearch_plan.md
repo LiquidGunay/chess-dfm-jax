@@ -580,7 +580,10 @@ sweeps, held-out data, and repeated seeds.
 - [x] Recover the original checkpoint metadata and sidecars.
 - [x] Produce the first strict local-GPU baseline fingerprint.
 - [x] Create the one-editable-file compatibility scaffold.
-- [ ] Move the experimental model/loss into `research/train.py` and pass parity.
+- [x] Move the experimental model/optimizer into `research/train.py` and pass
+  exact CPU and real-checkpoint GPU parity.
+- [ ] Move the loss into `research/train.py`, pass loss/gradient parity, and
+  remove the final legacy model/loss import.
 - [x] Add initial duplication/padding invariance and collapse tests.
 - [x] Capture the first active-model GPU profile.
 - [x] Recompute legality from the original logits in FP32 with correct gradients.
@@ -591,6 +594,6 @@ sweeps, held-out data, and repeated seeds.
   data-cursor continuation.
 - [ ] Freeze a corrected baseline objective after a stronger target-SIGReg
   stability run.
-- [ ] Implement and golden-test separate legacy-absolute and board-aware LC0
+- [x] Implement and golden-test separate legacy-absolute and board-aware LC0
   canonical 1,858 action codecs.
 - [ ] Implement the persistent batched paired-opening arena.
