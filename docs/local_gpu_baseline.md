@@ -383,6 +383,47 @@ The next justified calibration point is `3.96`, whose initial target-SIGReg
 gradient is approximately 30% of the JEPA-positive gradient. The report is
 `research/runs/target132-smoke-b64-100/report.json`.
 
+### Target-SIGReg 3.96 and 5.76 stability points
+
+The same paired run at coefficient `3.96` slowed target contraction but did not
+stop it. Mean target RMS ended at `0.8943`, mean prediction RMS at `0.9149`,
+and normalized target SIGReg still worsened from `0.0475` to `0.0503`.
+Prediction rank stayed healthy, cosine improved from `0.7782` to `0.7858`,
+accuracy improved to `0.0713`, and legal mass improved to `0.5246`, but DFM CE
+worsened to `5.1425`. This point also fails the scale gate. Its report is
+`research/runs/target396-smoke-b64-100/report.json`.
+
+Coefficient `5.76` is the normalized equivalent of the original coefficient
+`0.01` for a fully valid local batch of 64 (`64 * 9 * 0.01`). It produced the
+best policy-side result in this calibration:
+
+| Fixed validation metric | Initial | Final |
+|---|---:|---:|
+| DFM CE | 4.8472 | 4.8106 |
+| Masked-action accuracy | 0.0586 | 0.0732 |
+| FP32 first legal mass | 0.4548 | 0.5039 |
+| Mean prediction-target cosine | 0.7782 | 0.7854 |
+| Mean prediction effective rank | 29.44 | 30.01 |
+
+It still did not remove the shortcut. Mean target RMS fell from `1.0105` to
+`0.9078`, target feature standard deviation fell from `0.9705` to `0.8719`,
+and target SIGReg worsened from `0.0475` to `0.0491`. Prediction RMS fell to
+`0.9186`; positive-MSE/zero-MSE worsened slightly from `0.4180` to `0.4285`.
+The action-shuffled/positive-MSE ratio improved from `3.90` to `4.00`, so
+action dependence and rank are not collapsing.
+
+This is the strongest compatibility point, but it is not yet the frozen clean
+objective. The next controlled experiment changes target-gradient semantics:
+stop the JEPA positive-loss gradient through future target vectors while
+retaining target-SIGReg gradients into the encoder/projector. This directly
+removes the self-shrinking target shortcut without conflating it with
+prediction-SIGReg.
+
+The `5.76` run processed 6,400 examples at `38.9` examples/s. Mean GPU
+utilization was `86.4%`, mean power was `242.5 W`, peak JAX live memory was
+`6.04 GB`, and scalar loss clipping was never active. Its report is
+`research/runs/target576-smoke-b64-100/report.json`.
+
 ## Strict local checkpoint/resume
 
 Commit `f6b9c40` adds a research checkpoint format with:
@@ -417,14 +458,39 @@ timing. The source and resumed reports are:
 - `research/runs/real-checkpoint-save-b1-step1/report.json`
 - `research/runs/real-checkpoint-resume-b1-step2/report.json`
 
-The initial import of the known legacy step-265,000 checkpoint still uses its
-older loader. A failure-injection audit found that its `strict=True` mode
-accepts missing and wrong-shaped leaves, accepts an empty optimizer tree and a
-non-integral step, uses pickle-enabled NPZ loading, and can mutate the model
-before later optimizer validation fails. The known source file has an external
-fingerprint, but normal autoresearch must not rely on this loader. A one-time
-checksummed conversion with exact model-and-optimizer ABI preflight is now a
-hard gate.
+The original legacy loader's `strict=True` mode was found by failure injection
+to accept missing and wrong-shaped leaves, accept an empty optimizer tree and a
+non-integral step, use pickle-enabled NPZ loading, and mutate the model before
+later optimizer validation failed.
+
+Commit `7532f3a` removes it from the clean trainer. The new pinned-source import
+boundary:
+
+- verifies the pinned `1,851,704,172`-byte size and SHA-256 on the same open
+  file descriptor before decoding;
+- opens the NPZ envelope with `allow_pickle=False`, then decodes the historical
+  scalar object members through a restricted NumPy/BT4-dtype/Optax-sentinel
+  unpickler;
+- validates exact top-level keys and integer step;
+- validates complete typed model and optimizer ABIs before mutating either;
+  and
+- makes model-only initialization explicit while still validating the ignored
+  source optimizer.
+
+Twenty-two focused importer tests cover exact and model-only success, BF16 and
+the Optax masking sentinel, bad size/hash/step/top-level keys, and
+missing/extra/wrong-shape/wrong-dtype leaves in both trees. Every failure test
+asserts that model and optimizer remain unchanged. The actual source imported
+in `6.97 s`; all 114 B4 GPU metrics then matched the prior local-loss report
+exactly. The report is
+`research/runs/strict-import-parity-step265k-b4/report.json`.
+
+The same commit pins JAX, JAXlib, CUDA plugin/PJRT, Flax, NumPy, Optax,
+protobuf, and python-chess versions. Every `research/run_gpu.sh` entry now
+checks those versions before executing. This was added after a concurrent
+development sync changed JAX/JAXlib to `0.10.2` while the CUDA plugin remained
+`0.10.1`; the mismatch was detected during startup, the run was aborted before
+an update, and no result was accepted.
 
 ## Action-codec audit
 
@@ -490,7 +556,6 @@ total loss `3.9873406887`, DFM CE `3.2872314453`, FP32 legal mass
 The compatibility harness is not yet open to autoresearch. The next milestone
 is a safe and unambiguous experiment surface that:
 
-- converts the legacy source once through exact, atomic preflight;
 - makes the effective experiment overrides obvious instead of silently
   replacing edited defaults with checkpoint metadata;
 - removes or rejects inert knobs and placeholder-zero diagnostics;

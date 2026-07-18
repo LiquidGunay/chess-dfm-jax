@@ -593,10 +593,16 @@ sweeps, held-out data, and repeated seeds.
   target/prediction scale contraction.
 - [x] Reject the calibrated 10%-gradient target SIGReg point `1.32` after the
   same scale shortcut persisted.
+- [x] Evaluate target SIGReg `3.96` and batch-64 legacy-equivalent `5.76`;
+  retain `5.76` as the best compatibility point but reject both for the clean
+  scale-stability gate.
 - [x] Add and real-GPU verify strict atomic checkpoint/resume with deterministic
   data-cursor continuation.
-- [ ] Replace the unsafe initial legacy loader with a checksummed, exact-ABI,
-  one-time source conversion.
+- [x] Replace the unsafe initial legacy loader with a checksummed, restricted,
+  exact-ABI pinned-source import boundary.
+- [x] Pin and preflight the complete local-GPU runtime before every run.
+- [ ] Run the explicit positive-target stop-gradient stability ablation while
+  retaining target-SIGReg gradients.
 - [ ] Make effective experiment overrides explicit and reject silent no-op
   configuration before enabling unattended autoresearch.
 - [ ] Freeze a corrected baseline objective after a stronger target-SIGReg
