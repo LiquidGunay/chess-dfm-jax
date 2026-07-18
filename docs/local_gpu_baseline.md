@@ -559,8 +559,10 @@ A scan of 500 shards in each split found only white rank-7-to-8 queen/rook/bisho
 promotions, confirming preprocessing selection bias. The canonical adapter
 must enumerate board-legal moves, encode all four promotion types, require a
 unique match on decode, and fail closed. The legacy adapter cannot fully
-represent black underpromotions without changing checkpoint semantics, so the
-arena must record that limitation rather than invent a silent mapping.
+represent white knight promotion or any black promotion without changing
+checkpoint semantics, so the arena must record those incomplete move classes,
+strict-mask coverage, and any resulting losses rather than invent a remapping
+or fallback.
 
 Commit `ea62aa8` implements both explicit codec IDs without changing any
 existing preprocessing call. Its golden tests cover mirrored pawn/knight moves,
@@ -595,13 +597,109 @@ total loss `3.9873406887`, DFM CE `3.2872314453`, FP32 legal mass
 `0.1407624930`. The final report is
 `research/runs/local-loss-parity-step265k-b4/report.json`.
 
+## Checked research edit surface
+
+Commit `d12c45b` makes the intended Karpathy-style edit point explicit:
+`EXPERIMENT_OVERRIDES` is a small checked-in mapping near the top of
+`research/train.py`. The effective configuration is constructed in this order:
+
+1. restore the pinned source-checkpoint metadata;
+2. apply the checked-in experiment mapping; and
+3. apply only explicit CLI overrides.
+
+The final configuration is recorded in the run report and included in the
+strict resume contract. Tests cover precedence and resume binding. Unknown
+keys and wrong types fail before model construction. Non-default fields for
+legacy features absent from the local stage-1 graph—such as action contrast,
+candidate sampling, horizon legality, and scheduled teacher forcing—also fail
+closed rather than creating silent no-op trials.
+
+Commit `f5f6b27` also prevents 18 always-zero compatibility placeholders from
+appearing as measured experiment results. The raw loss auxiliary tree is left
+unchanged for exact legacy parity. At the reporting boundary, the placeholders
+must still exist and be exactly zero, are recorded by name in run metadata,
+and are then omitted. A missing or newly nonzero placeholder fails closed so a
+future implementation cannot silently inherit the old reporting semantics.
+Authoritative free-rollout collapse and action-dependence diagnostics remain
+separately computed and reported.
+
+## Frozen arena foundation
+
+Commit `c65f77f` adds the engine-agnostic persistent arena layer:
+
+- exact-ply, strict-standard-chess, hash-ranked opening pools with source,
+  selection, ordered-FEN, and whole-pool digests;
+- exact same-FEN color-reversed game pairs;
+- fail-closed result classification in which illegal moves, timeouts, and
+  exceptions are losses and a ply-cap draw must occur exactly at the cap;
+- pentanomial pair statistics and a conservative complete-pair Hoeffding
+  interval; and
+- count-based constrained-multinomial logistic GSPRT bookkeeping checked only
+  after complete pairs.
+
+The logistic likelihood matches the official Fishtest construction, but is
+explicitly descriptive and `promotion_eligible=false`. Normalized-Elo GSPRT,
+the in-process engine adapter, and actual gameplay are still absent; the
+foundation contract records those omissions so it cannot be mistaken for a
+working promotion gate.
+
+The real frozen artifacts are:
+
+- development: 128 validation FENs, pool digest
+  `451784d106bc25b06a3891e910213220275d93eae434badddfe1a38b2e58138a`,
+  ordered-FEN digest
+  `f86f0fa9de93a8753d2d3b508af4f2479bf9d36f007cd45a378607603b9fb52b`;
+  and
+- promotion: 2,048 test FENs, pool digest
+  `2d4b67e0d4c181e57e5cb88d95eaa5a79f8d911d51c70dd6348d385687e4954a`,
+  ordered-FEN digest
+  `34da392d80ada4e7b87500f7060589b05c5d31a03b1c966adf3570da38a3a04b`.
+
+The promotion pool excludes all 12,297 valid unique validation candidates,
+committed by digest
+`30927f0f322fa5305352bd7f1e05ea6c3762a18d734087c2ee12536ff6f5a202`;
+the selected development/promotion overlap is zero. The local JSON artifacts
+are under `artifacts/arena/`.
+
+## Local inference profile
+
+Commit `c79d94b` adds checked batched inference for the localized model. It
+encodes BT4 once, caches the DFM latents across any fixed number of refinement
+passes, requires a nonempty boolean `legacy_absolute_1858` root mask, and never
+remaps or falls back. The per-pass trace records raw entropy, raw legal mass,
+legal-conditioned entropy/top-k, actions before/after refinement, and top-k
+turnover. A no-tie oracle matches the historical sampler; deterministic stable
+rank handling removes its threshold over-unmask ambiguity on confidence ties.
+
+The source step-265,000 A10G profile used 100 measured calls after ten warmups:
+
+| Batch | Passes | p50 latency | p95 latency | Positions/s |
+|---:|---:|---:|---:|---:|
+| 1 | 1 | 23.47 ms | 30.82 ms | 42.6 |
+| 1 | 8 | 25.86 ms | 26.96 ms | 38.7 |
+| 64 | 1 | 48.82 ms | 50.33 ms | 1,311.0 |
+| 64 | 8 | 62.56 ms | 64.67 ms | 1,023.0 |
+
+Peak JAX memory was 1.765 GiB. Thus seven additional lightweight DFM passes
+cost about 2.4 ms at batch one and 13.7 ms at batch 64; the cached BT4 encode
+dominates inference. The cold compile/first-call sweep is
+`artifacts/profiles/inference-step265k-a10g-v1.json` (file SHA-256
+`a6fac32e1b9698655484e78870686cd12965cd2fb1061d7ee6335ab5ff77b926`);
+the warmed profile is
+`artifacts/profiles/inference-step265k-a10g-steady-v2.json` (file SHA-256
+`e457d95d7be97bbb0a264cd8a8a1a944ebd884337c30519485e35991f7cbe237`).
+
 ## Next acceptance point
 
-The compatibility harness is not yet open to autoresearch. The next milestone
-is a safe and unambiguous experiment surface that:
+The compatibility harness is not yet open to unattended autoresearch. A
+checked-in `EXPERIMENT_OVERRIDES` block now applies after checkpoint metadata
+and before explicit CLI flags; the final effective configuration is
+resume-bound and recorded. Unknown keys, wrong types, and non-default legacy
+knobs that the local graph cannot honor fail closed.
 
-- makes the effective experiment overrides obvious instead of silently
-  replacing edited defaults with checkpoint metadata;
-- removes or rejects inert knobs and placeholder-zero diagnostics;
-- freezes a target-scale-stable normalized objective; and
-- then activates a controlled prediction-SIGReg ablation.
+The remaining acceptance work is to:
+
+- freeze a target-scale-stable normalized objective after the EMA-target and
+  per-horizon variance-hinge comparisons; and
+- connect the checked inference kernel to persistent paired gameplay and add
+  the normalized-Elo promotion GSPRT.

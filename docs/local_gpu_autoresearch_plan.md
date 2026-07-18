@@ -446,6 +446,26 @@ Use a frozen, hash-selected development pool and a separate promotion pool from
 held-out trajectory game/FEN groups. No external Stockfish opening or puzzle
 dataset is needed. Store pool checksums and selection seeds.
 
+The held-out shard audit found that persisted `game_id` is a constant
+placeholder and therefore cannot define groups safely. Pool construction
+instead uses exactly `ply == 12`, which yields one position after six full
+moves per source game, rejects invalid or terminal standard-chess FENs before
+canonicalization, deduplicates exact six-field FENs, and hash-ranks the
+remainder. The real inventory is:
+
+- validation: 15,101 ply-12 rows, 14,553 valid standard positions, and 12,297
+  unique FENs;
+- test: 15,040 ply-12 rows, 14,484 valid standard positions, and 12,227 unique
+  FENs; and
+- 1,404 FENs overlap the two splits, leaving 10,823 promotion candidates after
+  excluding the entire valid validation universe.
+
+About 3.6% of the ply-12 rows have Chess960-like castling metadata invalid
+under standard-chess rules and are excluded rather than repaired. The
+development pool is 128 validation FENs; its first 16 form the correctness
+tier. The promotion pool contains 2,048 test FENs after excluding every valid
+validation candidate, not merely the selected development subset.
+
 Report model-pool relative logistic and normalized Elo with pair-aware 95%
 uncertainty, game count, score breakdown, FEN set digest, refinement count,
 candidate count, latency, and games/s. Never label it as human or Lichess Elo.
@@ -607,10 +627,15 @@ sweeps, held-out data, and repeated seeds.
   rank was already healthy and policy quality regressed.
 - [ ] Compare an EMA target and a per-horizon variance hinge before deciding
   whether target-scale stability warrants a semantic change.
-- [ ] Make effective experiment overrides explicit and reject silent no-op
+- [x] Make effective experiment overrides explicit and reject silent no-op
   configuration before enabling unattended autoresearch.
+- [x] Remove always-zero legacy placeholders from experiment reports while
+  preserving the exact parity oracle and failing closed on metric drift.
 - [ ] Freeze a corrected baseline objective after a stronger target-SIGReg
   stability run.
 - [x] Implement and golden-test separate legacy-absolute and board-aware LC0
   canonical 1,858 action codecs.
+- [x] Implement deterministic paired-arena foundations, audit the real
+  held-out FEN universe, and freeze disjoint development/promotion pools.
+- [x] Implement and profile cached-BT4 batched multi-pass DFM inference.
 - [ ] Implement the persistent batched paired-opening arena.

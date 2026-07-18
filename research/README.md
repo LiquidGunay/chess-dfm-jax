@@ -17,14 +17,17 @@ outside `/mountpoint/.exp`.
 The intended stable interface is:
 
 ```text
-prepare.py   fixed data, checkpoint, and evaluation support
-train.py     the single editable architecture/training surface
-program.md   rules for automated research
-results.tsv  compact append-only experiment ledger
+prepare.py        fixed data and asset validation
+import_legacy.py  checksummed, restricted source-checkpoint boundary
+train.py          single editable model/objective/training surface
+inference.py      checked cached-BT4 multi-pass inference and profiling
+arena.py          frozen pools, paired outcomes, and arena statistics
+program.md        rules for automated research
+results.tsv       compact append-only experiment ledger
 ```
 
-Those files are introduced incrementally after the legacy checkpoint has a
-verified local-GPU baseline.
+All mutable state, including Python and JAX caches, remains below
+`/mountpoint/.exp`.
 
 The parity oracle is run separately:
 
@@ -41,7 +44,22 @@ The first compatibility trainer is:
 research/run_gpu.sh .venv/bin/python research/train.py --steps 1 --batch-size 1
 ```
 
-It is intentionally marked `autoresearch_ready=false`: it provides a strict
-single-GPU training and validation harness while still importing the legacy
-model/loss. Architecture search does not begin until that implementation is
-moved into `train.py` and passes parity.
+`research/train.py` now owns the checkpoint-visible model, stage-1 objective,
+optimizer, training step, and validation step. The legacy implementation is
+used only as a test oracle; fresh runs cross `import_legacy.py` after exact
+size, digest, serialization, and ABI checks.
+
+For a checked-in experiment, edit the small `EXPERIMENT_OVERRIDES` mapping near
+the top of `train.py`. Effective configuration precedence is:
+
+```text
+source checkpoint metadata -> EXPERIMENT_OVERRIDES -> explicit CLI flags
+```
+
+The final effective configuration is written to the report and bound into the
+resume contract. Unknown keys, wrong types, and non-default legacy knobs that
+the local graph cannot honor fail before training.
+
+The harness remains intentionally marked `autoresearch_ready=false` while the
+normalized objective and paired arena promotion gate are being frozen. See the
+plan and baseline report for the measured A10G results and remaining gates.
