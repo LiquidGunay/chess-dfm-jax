@@ -1225,6 +1225,72 @@ have SHA-256:
 - `checkpoint_summary.json`:
   `511fd6e04fa1f76260d83958d6af6c371863db043c9abecc5ce9646f6032ef60`.
 
+### Prediction-SIGReg 0.57 30-minute rejection
+
+The first baseline-length prediction-SIGReg experiment changed only the
+prediction coefficient from `0.0` to `0.57`. It completed 547 updates
+(70,016 examples) in the fixed 30-minute window at `40.9593` steady
+fetch-inclusive examples/s. Its report is
+`research/runs/experiment-predsigreg057-target576-b128-lr3e5-bt4lr1e6-30m-v1/report.json`
+with SHA-256
+`c6f3da8c68ff1a1298624ec2c473ea2e9f6535e5225b4335339f87224a4edead`.
+
+The run's pruned update-200 checkpoint was retained separately and evaluated
+with the same two-pool protocol. The complete checkpoint selection is:
+
+| Update | Mean DFM CE | Accuracy | Legal mass |
+|---:|---:|---:|---:|
+| Retained 200 | 4.520289022 | 0.108291626 | 0.638778948 |
+| 300 | 4.512970001 | 0.107666016 | 0.640452380 |
+| 400 | **4.511721076** | **0.108612061** | **0.642275913** |
+| 500 | 4.514939129 | 0.107498169 | 0.634509238 |
+| 547 | 4.518924110 | 0.107955933 | 0.634585755 |
+
+Update 400 is the experiment's best checkpoint, but its two-seed CE
+`4.511721076` is worse than the incumbent v2/u300 CE `4.510334061`. Its state
+has SHA-256
+`fa712e6d641aab2df74f8993c8833fa4fde3e0dda6c590c972e51b335e32f581`;
+its manifest has SHA-256
+`481c0ea5a4ffe3e55de236ca2ec9ec6c53eef1a4990c27493ea775d80bea48e6`.
+
+The selection artifacts have SHA-256:
+
+| Evaluation | `checkpoint_metrics.jsonl` | `checkpoint_summary.json` |
+|---|---|---|
+| Updates 300/400/500/547, seeds 10k/20k | `1ad738c04e76318251b62f5b44435ab4bfb27e4b99ec93de3e01073bd0dc06fc` | `c44a1e3ee72bc12259b806fd73a2d15485874d920a537fdf29acea4a00986dcb` |
+| Retained update 200, seeds 10k/20k | `05d48d2a1709c3c35325ffa73df115e296f085790ba716ab201d24429ecc2b22` | `a98f6209681e5e8ad031fe8bd613204004e11950718a25a901ca0a6dbefdd6d7` |
+
+A matched seed-10,000 collapse audit compares prediction-SIGReg/update 400
+with baseline-v2/update 400, avoiding checkpoint-age confounding:
+
+| Metric | Baseline v2/u400 | Prediction-SIGReg/u400 | Delta |
+|---|---:|---:|---:|
+| DFM CE | 4.540353823 | 4.542889878 | +0.002536055 |
+| Accuracy | 0.107238770 | 0.106201172 | -0.001037598 |
+| First legal mass | 0.643751895 | 0.641704401 | -0.002047494 |
+| JEPA raw MSE | 0.240220358 | 0.241087545 | +0.000867187 |
+| Mean prediction effective rank | 30.860577 | 30.980221 | +0.119643 |
+| Mean prediction feature-std p05 | 0.664535 | 0.665982 | +0.001447 |
+| Mean prediction RMS | 0.922548 | 0.923893 | +0.001345 |
+
+The small diversity/scale movements do not compensate for worse policy CE,
+accuracy, legal mass, and JEPA MSE. Prediction-SIGReg `0.57` is rejected; it
+does not replace the incumbent and receives no arena or promotion run.
+
+The prediction-SIGReg collapse artifacts have SHA-256:
+
+- `research/runs/predsigreg057-target576-b128-u400-collapse-globalval64-seed10000-v1/checkpoint_metrics.jsonl`:
+  `c511cb8e5d1922e31650579eb89e4a1cb0c50b56be70eb5efd7056b51660c042`;
+- its `checkpoint_summary.json`:
+  `5674d5308cea9c38af2dc6f81433a0b99c169cc28856a4764d05bdcf27798fb6`.
+
+The matched baseline-v2/u400 collapse artifacts have SHA-256:
+
+- `research/runs/baseline-b128-v2-u400-collapse-globalval64-seed10000-v1/checkpoint_metrics.jsonl`:
+  `076ce2eca889ad41fd0768cfccd840c7eb4c3c8bcc25c62b79558094685621fe`;
+- its `checkpoint_summary.json`:
+  `d77a7c4c1bb28b544536893ed15211b25e9fd8e2b5d769cebfdf82924045e014`.
+
 ### Resumable arena foundation and promotion-pool defect
 
 Commit `a2ea5ed` adds the checked local relative-strength command described in
@@ -1265,14 +1331,50 @@ its score and Elo diagnostics must not be interpreted.
 Commit `72af918` fixes that defect by pinning one physical inference batch
 shape for the entire run, padding only already validated rows, slicing outputs
 back to real rows before semantic checks, and binding those rules in arena
-schema v2. The post-fix cap-64 rerun is pending.
+schema v2. Three post-fix, 16-pair static-batch pilots then completed with zero
+faults:
 
-No valid u300 Elo match has been completed, and no checkpoint has been
-promoted. The v2/u300 result is a baseline-qualification result, not an
-accepted autoresearch experiment, so `research/results.tsv` remains
-header-only. The code-level readiness flag remains
-`AUTORESEARCH_READY = False` pending the post-fix arena rerun and disposition
-of the current prediction-SIGReg experiment.
+| Additional-ply cap | Normal / cap draws | Gameplay wall | Disposition |
+|---:|---:|---:|---|
+| 64 | 5 / 27 | 156.943 s | cap-censored |
+| 128 | 19 / 13 | 396.576 s | cap-censored |
+| 256 | 32 / 0 | 592.284 s | first pilot-valid cap |
+
+All 32 cap-256 games were normal draws. The paired score is `0.5`, descriptive
+logistic Elo is `0.0`, and its 95% pair-aware interval is
+`[-287.451, +287.451]`; 16 pairs are calibration evidence, not a strength
+decision. At the measured pre-optimization rate, a strict 128-pair screen
+projects to about 79 minutes.
+
+The immutable state and block digests under the corresponding
+`artifacts/arena/baseline-b128-v2-u300-vs-source-development-pilot16-cap{64,128,256}-staticb16-v2/`
+directories are:
+
+| Cap | `state.json` SHA-256 | Pair-block SHA-256 |
+|---:|---|---|
+| 64 | `884d0c0bbe07c49e675797492e53918ade98d5e1213529a36f985c4bac7835e2` | `6dc1b7258b87144509aa2c99ae476f790e9943909a4c46b4cc43d8085ccde719` |
+| 128 | `8e9d4744230f2888a3dc496565a3282ccdcd3a87222ded774b34515f1566e9eb` | `142bb65837a18f22b9a1f2c89bdced5c2836cb258a7f89f50cd6f8a59a6c0cd0` |
+| 256 | `0c4c16937f4682c9e09d7ea699ebab78525813620915a54ae8a09fd4e776d438` | `78066de67f88c1107387b81f44d9eb9ffc82be6e8845256a42d6d7c14c47e721` |
+
+Commit `c2d5efb` adds an arena-only sealed, constant-size state attestation so
+the policy adapter can validate each trusted history endpoint in O(1). Full
+exact replay remains at the external opening boundary, and the authoritative
+stackful runner retains repetition and adjudication authority. The focused CPU
+suite passes 83 tests, including exact gameplay-payload parity between
+full-history replay and the sealed endpoint path.
+
+The three GPU pilots above predate that optimization and do not establish
+real-checkpoint GPU parity or post-optimization timing. An attempted elevated
+GPU benchmark/full 128-pair screen was blocked by the account usage limit
+reported through 2026-07-25. Do not project a speedup or reuse the
+pre-optimization timing as optimized-path performance; both the GPU benchmark
+and full screen remain pending.
+
+No checkpoint has been promoted. The v2/u300 result is a
+baseline-qualification result, not an accepted autoresearch experiment, so
+`research/results.tsv` remains header-only. The code-level readiness flag
+remains `AUTORESEARCH_READY = False` pending real-checkpoint GPU validation of
+the sealed path and a fault-free full strength screen.
 
 ## Strict local checkpoint/resume
 
@@ -1576,10 +1678,11 @@ gain is within `0.000210253` of v1/u300.
 
 The remaining acceptance work is to:
 
-- disposition the current prediction-SIGReg experiment against this frozen
-  offline comparison;
-- rerun the cap-64 development pilot through the static-shape arena path and
-  reject any result containing a policy fault;
+- retain prediction-SIGReg `0.0`; the `0.57` baseline-length experiment is
+  rejected on primary CE and matched policy/JEPA metrics;
+- run real-checkpoint GPU payload parity and timing for commit `c2d5efb` once
+  elevated execution is available;
+- complete the fault-free 128-pair strength screen at the pilot-valid cap 256;
 - decide how absolute target-scale contraction enters the frozen objective
   without undoing the repeat-qualified policy improvement;
 - regenerate and re-audit the promotion pool/history sidecar to remove the

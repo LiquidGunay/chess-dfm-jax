@@ -3,8 +3,8 @@
 Status: implementation in progress. The plan was approved on 2026-07-18;
 unattended research remains disabled with `AUTORESEARCH_READY = False` as of
 2026-07-19. V2/update 300 is the repeat-qualified offline baseline; the gate
-stays closed pending the prediction-SIGReg disposition and a valid post-fix
-arena rerun.
+stays closed pending real-checkpoint GPU validation of the sealed-history arena
+path and a fault-free full strength screen.
 
 This document is the implementation contract for turning the existing
 TPU/cloud-oriented BT4 + DFM + JEPA experiment into a fast, measurable,
@@ -372,10 +372,23 @@ its initial value; scale behavior remains a research target rather than a
 reason to relabel the selected checkpoint as promoted.
 
 This is a baseline-qualification result, not an accepted autoresearch
-experiment. It has no `research/results.tsv` row, valid Elo result, or
-promotion decision. Unattended search remains disabled pending disposition of
-the current prediction-SIGReg experiment and a valid rerun of the static-shape
-arena path.
+experiment. It has no `research/results.tsv` row, promotion-eligible Elo
+result, or promotion decision. A matched 30-minute prediction-SIGReg `0.57`
+experiment was rejected: its best two-pool CE is `4.511721` versus incumbent
+v2/u300 `4.510334`, and matched update-400 policy, legality, and JEPA metrics
+regress for only tiny rank/variance gains. Prediction-SIGReg therefore stays
+`0.0`.
+
+Static-batch arena pilots at caps 64, 128, and 256 eliminated timeout faults;
+only cap 256 completed all 32 games without cap adjudication, making it the
+first pilot-valid limit. Its 16-pair point estimate is `0` descriptive Elo
+with a deliberately broad `[-287.451, +287.451]` interval, not a strength
+decision. Commit `c2d5efb` replaces repeated hot-path history replay with
+sealed O(1) endpoint validation and passes 83 CPU tests with exact gameplay
+payload parity. Real-checkpoint GPU parity, optimized timing, and the full
+128-pair screen remain unmeasured because elevated execution is blocked by the
+account usage limit reported through 2026-07-25. Unattended search remains
+disabled.
 
 This scale/shape split is also motivated by
 [VISReg](https://arxiv.org/abs/2606.02572), which argues that sketching
@@ -841,6 +854,10 @@ sweeps, held-out data, and repeated seeds.
 - [x] Designate v2/update 300 as the repeat-qualified offline baseline. This
   does not append a ledger row, open unattended search, claim Elo, or promote
   the checkpoint.
+- [x] Run and reject the baseline-length prediction-SIGReg `0.57` experiment.
+  Its best checkpoint loses primary two-pool CE to v2/u300, and a
+  checkpoint-age-matched u400 audit trades policy/legal/JEPA regressions for
+  only tiny diversity gains.
 - [ ] Freeze a corrected baseline objective only after scale stability and
   policy/legal metrics pass together on matched global validation.
 - [x] Implement and golden-test separate legacy-absolute and board-aware LC0
@@ -860,9 +877,15 @@ sweeps, held-out data, and repeated seeds.
 - [x] Run v2/u300 versus source through the 16-pair correctness tier: zero
   faults and full evaluated-action coverage, but 32/32 games are short-cap
   draws and provide no strength evidence.
-- [ ] Rerun the cap-64 development pilot after commit `72af918` froze the
-  physical JAX inference batch shape. The pre-fix pilot's 29 timeout faults
-  make it invalid strength evidence.
+- [x] Rerun static-shape development pilots at caps 64, 128, and 256 with zero
+  faults. Caps 64/128 remain censored; cap 256 has 0/32 cap draws and is the
+  first pilot-valid limit.
+- [x] Add the sealed O(1) trusted-history arena path in commit `c2d5efb` and
+  establish exact CPU gameplay-payload parity across 83 focused tests.
+- [ ] Establish real-checkpoint GPU parity and timing for the sealed-history
+  path, then run the full fault-free 128-pair screen at cap 256. Elevated GPU
+  execution is unavailable under the reported account limit until 2026-07-25;
+  the pre-optimization pilot timings are not evidence of optimized speed.
 - [ ] Regenerate and repin the promotion pool: exact replay found entry 1,245
   already claim-draw terminal by root threefold repetition. Promotion remains
   unavailable until the replacement pool and history sidecar pass re-audit.

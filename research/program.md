@@ -16,8 +16,21 @@ selected update 300, and their four-pool DFM CE gains differ by only
 effective-rank, low-variance-tail, prediction/target RMS-ratio, and
 trivial-baseline checks. This repeat-qualified baseline is not an accepted
 autoresearch experiment, an Elo result, or a promoted checkpoint. Readiness
-remains closed pending disposition of the current prediction-SIGReg experiment
-and a valid post-fix arena rerun.
+remains closed.
+
+The baseline-length prediction-SIGReg `0.57` experiment is rejected. Its best
+two-pool CE is `4.511721` versus incumbent v2/u300 `4.510334`; a matched
+update-400 audit also regresses accuracy, legal mass, and JEPA MSE for only
+tiny rank/variance gains. Keep prediction-SIGReg at `0.0`.
+
+Static-batch arena pilots are fault-free, and cap 256 is the first tested limit
+with zero cap draws. Its 16-pair descriptive Elo point estimate is `0` with a
+95% interval of `[-287.451, +287.451]`, not a strength decision. Commit
+`c2d5efb` adds sealed O(1) trusted-history validation and passes 83 focused CPU
+tests with exact gameplay-payload parity. Real-checkpoint GPU parity,
+post-optimization timing, and the full 128-pair screen are still required.
+Elevated GPU execution is blocked by the reported account usage limit until
+2026-07-25; do not infer GPU parity or speedup from the CPU evidence.
 
 Promotion is independently unavailable: exact history replay found pinned
 promotion entry 1,245 already terminal by claimable threefold repetition.
