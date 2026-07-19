@@ -68,6 +68,8 @@ ARCHITECTURE_SOURCE = "research_train_local_model_and_loss"
 # metadata is loaded first, then these values, then explicit CLI overrides.
 EXPERIMENT_OVERRIDES: dict[str, Any] = {
     "lr_warmup_steps": 0,
+    # "jepa_norm_loss_coeff": 0.0,
+    # "jepa_pred_sigreg_coeff": 1.0,
     # "jepa_target_stop_gradient": True,
     # "jepa_target_semantics": "ema",
     # "jepa_target_ema_decay": 0.99,
@@ -148,6 +150,7 @@ class JointLatentSASAConfig:
     horizon_legality_coeff: float = 0.0
     legality_on_masked_only: bool = True
     jepa_positive_coeff: float = 1.0
+    jepa_norm_loss_coeff: float = 1.0
     jepa_loss_type: str = "raw_mse"
     jepa_target_mode: str = "projected_bt4"
     jepa_target_stop_gradient: bool = False
@@ -1681,7 +1684,15 @@ def joint_stage1_loss_fn(
             jnp.sqrt(jnp.mean(jnp.square(jnp.asarray(target_vectors, dtype=jnp.float32)), axis=-1) + 1e-6)
         )
         sample_norm_loss = jnp.abs(jnp.log(pred_rms) - jnp.log(target_rms))
-        sample_jepa = sample_raw_mse + sample_norm_loss
+        if model.config.jepa_norm_loss_coeff == 1.0:
+            sample_jepa = sample_raw_mse + sample_norm_loss
+        elif model.config.jepa_norm_loss_coeff == 0.0:
+            sample_jepa = sample_raw_mse
+        else:
+            sample_jepa = (
+                sample_raw_mse
+                + model.config.jepa_norm_loss_coeff * sample_norm_loss
+            )
     horizon_weights = model.config.jepa_gamma ** selected_horizons.astype(jnp.float32)
     jepa_mask = future_valid_for_loss * valid[:, None] * horizon_weights[None, :]
     jepa_positive_loss = _weighted_horizon_mean(sample_jepa, jepa_mask)
@@ -2177,6 +2188,20 @@ def validate_objective_config(
         raise ValueError(
             "--objective normalized requires jepa_sigreg_kind='le_jepa'; "
             f"found {config.jepa_sigreg_kind!r}"
+        )
+    if (
+        not math.isfinite(config.jepa_norm_loss_coeff)
+        or config.jepa_norm_loss_coeff < 0.0
+    ):
+        raise ValueError(
+            "jepa_norm_loss_coeff must be finite and non-negative, found "
+            f"{config.jepa_norm_loss_coeff}"
+        )
+    if objective == "legacy" and config.jepa_norm_loss_coeff != 1.0:
+        raise ValueError(
+            "--objective legacy requires jepa_norm_loss_coeff=1.0 for "
+            "exact compatibility; use --objective normalized for the "
+            "no-norm ablation."
         )
     if config.jepa_target_semantics not in ("online", "ema"):
         raise ValueError(
@@ -3117,6 +3142,7 @@ def build_research_resume_contract(
         "jepa_target_stop_gradient": bool(
             config.jepa_target_stop_gradient
         ),
+        "jepa_norm_loss_coeff": float(config.jepa_norm_loss_coeff),
         "target_sigreg_coeff": float(config.jepa_sigreg_coeff),
         "pred_sigreg_coeff": float(config.jepa_pred_sigreg_coeff),
         "target_sigreg_reference_count": float(sigreg_reference_count),
@@ -3900,6 +3926,15 @@ def parse_args(
     parser.add_argument("--target-sigreg-coeff", type=float)
     parser.add_argument("--pred-sigreg-coeff", type=float)
     parser.add_argument(
+        "--jepa-norm-loss-coeff",
+        type=float,
+        help=(
+            "Coefficient on the per-state prediction/target log-RMS "
+            "mismatch inside the positive JEPA loss. Use 0 only with "
+            "--objective normalized to test raw MSE plus SIGReg."
+        ),
+    )
+    parser.add_argument(
         "--jepa-target-stop-gradient",
         action=argparse.BooleanOptionalAction,
         default=None,
@@ -4075,6 +4110,11 @@ def apply_config_overrides(
             if args.pred_sigreg_coeff is None
             else args.pred_sigreg_coeff
         ),
+        jepa_norm_loss_coeff=(
+            config.jepa_norm_loss_coeff
+            if args.jepa_norm_loss_coeff is None
+            else args.jepa_norm_loss_coeff
+        ),
         jepa_target_stop_gradient=(
             config.jepa_target_stop_gradient
             if args.jepa_target_stop_gradient is None
@@ -4242,13 +4282,24 @@ def checkpoint_evaluation_contract(
     expected_values = {
         "jepa_target_semantics": config.jepa_target_semantics,
         "jepa_target_stop_gradient": bool(config.jepa_target_stop_gradient),
+        "jepa_norm_loss_coeff": float(config.jepa_norm_loss_coeff),
         "target_sigreg_coeff": float(config.jepa_sigreg_coeff),
         "pred_sigreg_coeff": float(config.jepa_pred_sigreg_coeff),
     }
     mismatches = {
-        key: (objective_contract.get(key), expected)
+        key: (
+            objective_contract.get(
+                key,
+                1.0 if key == "jepa_norm_loss_coeff" else None,
+            ),
+            expected,
+        )
         for key, expected in expected_values.items()
-        if objective_contract.get(key) != expected
+        if objective_contract.get(
+            key,
+            1.0 if key == "jepa_norm_loss_coeff" else None,
+        )
+        != expected
     }
     if mismatches:
         raise ValueError(
