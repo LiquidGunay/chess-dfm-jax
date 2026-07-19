@@ -2,7 +2,9 @@
 
 Status: implementation in progress. The plan was approved on 2026-07-18;
 unattended research remains disabled with `AUTORESEARCH_READY = False` as of
-2026-07-19.
+2026-07-19. V2/update 300 is the repeat-qualified offline baseline; the gate
+stays closed pending the prediction-SIGReg disposition and a valid post-fix
+arena rerun.
 
 This document is the implementation contract for turning the existing
 TPU/cloud-oriented BT4 + DFM + JEPA experiment into a fast, measurable,
@@ -351,14 +353,29 @@ Across all four pools, update 300 changes DFM CE
 `0.642926642 → 0.644614464`. CE improves at every horizon. Update 400 is
 `0.000801284` worse in aggregate CE but better on aggregate accuracy/legal
 mass, and update 300's action metrics do not improve on every individual pool.
-Update 300 is therefore provisional, not frozen.
 
-The v1 endpoint retains only `94.21%` of mean target RMS despite improving
-prediction rank-independent diagnostics. An identical v2 run is in progress;
-its partial state is not evidence. Until the completed repeat and matched
-checkpoint scan establish training noise and the selected checkpoint clears
-the latent gate, these results do not authorize architecture search. They have
-no `research/results.tsv` row, Elo result, or promotion decision.
+The identical 30-minute v2 repeat also produced 557 updates and independently
+selected update 300. Across the same four pools, v2/u300 changes DFM CE
+`4.550008280 → 4.529473042` (`-0.020535238`), accuracy
+`0.106750488 → 0.108810425`, and legal mass
+`0.642926642 → 0.646496401`; every horizon improves. Its primary gain differs
+from v1/u300 by only `0.000210253`. V2/u300 is therefore the
+repeat-qualified offline baseline.
+
+The full latent audit does not show prediction collapse: mean effective rank
+changes `31.4294 → 31.0318` with a minimum of `29.1529`, mean fifth-percentile
+feature standard deviation changes `0.6876 → 0.6644` with a minimum of
+`0.6515`, and the prediction/target RMS ratio changes `0.9600 → 0.9853`.
+Positive prediction beats zero and action-shuffled controls at every horizon.
+The v1 endpoint's absolute target RMS nevertheless retained only `94.21%` of
+its initial value; scale behavior remains a research target rather than a
+reason to relabel the selected checkpoint as promoted.
+
+This is a baseline-qualification result, not an accepted autoresearch
+experiment. It has no `research/results.tsv` row, valid Elo result, or
+promotion decision. Unattended search remains disabled pending disposition of
+the current prediction-SIGReg experiment and a valid rerun of the static-shape
+arena path.
 
 This scale/shape split is also motivated by
 [VISReg](https://arxiv.org/abs/2606.02572), which argues that sketching
@@ -817,10 +834,13 @@ sweeps, held-out data, and repeated seeds.
 - [x] Tie-break updates 300 and 400 on new seeds 30,000 and 40,000. Select
   update 300 provisionally: its four-pool CE improves by `0.020745492`, all
   horizons improve, and aggregate accuracy/legal mass also improve.
-- [ ] Complete and scan the identical v2 repeat, quantify checkpoint-selection
+- [x] Complete and scan the identical v2 repeat, quantify checkpoint-selection
   noise, and run the full latent gate on the selected repeat checkpoint.
-  Partial v2 state is not evidence, and v1's endpoint still misses 95% target
-  RMS retention.
+  V2 independently selects update 300; its four-pool CE gain is within
+  `0.000210253` of v1, and the recorded latent diagnostics do not show collapse.
+- [x] Designate v2/update 300 as the repeat-qualified offline baseline. This
+  does not append a ledger row, open unattended search, claim Elo, or promote
+  the checkpoint.
 - [ ] Freeze a corrected baseline objective only after scale stability and
   policy/legal metrics pass together on matched global validation.
 - [x] Implement and golden-test separate legacy-absolute and board-aware LC0
@@ -837,6 +857,12 @@ sweeps, held-out data, and repeated seeds.
 - [x] Add the resumable relative-strength command with immutable pair blocks,
   strict resume contracts, pair-boundary GSPRT stopping, and fail-closed model
   and codec accounting.
+- [x] Run v2/u300 versus source through the 16-pair correctness tier: zero
+  faults and full evaluated-action coverage, but 32/32 games are short-cap
+  draws and provide no strength evidence.
+- [ ] Rerun the cap-64 development pilot after commit `72af918` froze the
+  physical JAX inference batch shape. The pre-fix pilot's 29 timeout faults
+  make it invalid strength evidence.
 - [ ] Regenerate and repin the promotion pool: exact replay found entry 1,245
   already claim-draw terminal by root threefold repetition. Promotion remains
   unavailable until the replacement pool and history sidecar pass re-audit.

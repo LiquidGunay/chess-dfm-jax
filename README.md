@@ -32,17 +32,22 @@ final-trunk SAEs.
 
 Unattended autoresearch is not enabled: `AUTORESEARCH_READY = False`,
 `research/results.tsv` remains header-only, and no continuation checkpoint has
-received an Elo evaluation or promotion. The first 30-minute batch-128 run
-provisionally selects update 300: across four matched 4,096-position validation
-pools its DFM CE improves `4.550008280 → 4.529262789`, aggregate
-accuracy/legal mass improve, and all eight horizon CEs improve. Update 400 is
-close and better on the secondary aggregate action metrics, the v1 endpoint
-still misses the target-scale gate, and an identical v2 repeat is running.
+received a valid Elo evaluation or promotion. Two identical 30-minute
+batch-128 runs independently select update 300. The repeat-selected v2
+checkpoint is now the offline baseline: across four matched 4,096-position
+validation pools its DFM CE improves `4.550008280 → 4.529473042`, accuracy
+improves `0.106750488 → 0.108810425`, legal mass improves
+`0.642926642 → 0.646496401`, and all eight horizon CEs improve. Its CE gain is
+within `0.000210253` of the independently trained v1/u300 gain.
 
 The resumable relative-strength arena is implemented, but its promotion tier
 fails closed before model loading. Exact history replay found pinned promotion
 entry 1,245 already terminal by claimable threefold repetition; the pool and
 history sidecar must be regenerated and repinned rather than silently edited.
+A 16-pair correctness run had zero faults and full evaluated-action coverage,
+but all games were short-cap draws. The first cap-64 development pilot is
+invalid because shrinking JAX batch shapes caused 29 timeout faults; commit
+`72af918` freezes the physical inference shape, and its rerun is pending.
 
 ## Layout
 

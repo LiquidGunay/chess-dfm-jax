@@ -92,6 +92,31 @@ strength-valid long-game cap has not been frozen. Calibrate it with a pilot and
 report cap rate before treating development or promotion output as chess
 strength.
 
+## Current empirical status
+
+V2/update 300 versus source completed the 16-pair correctness tier with zero
+faults, a representable fraction of `1.0` for both models, and no incomplete
+coverage position. All 32 games reached the 16-ply additional cap, so the run
+checks wiring and color reversal but contains no strength information. Its
+state is
+`artifacts/arena/baseline-b128-v2-u300-vs-source-correctness-v1/state.json`
+(SHA-256
+`57904c1131b99db41c22204d9bfa44c348bc238a4e344670072a40c59d9d1308`).
+
+The first 16-pair development pilot with an additional-ply cap of 64 is
+invalid: 29 of 32 games ended in timeout faults while shrinking live
+populations triggered compilation of new JAX batch shapes. The retained
+fail-closed state is
+`artifacts/arena/baseline-b128-v2-u300-vs-source-development-pilot16-cap64-v1/state.json`
+(SHA-256
+`f06ecfa2cc6a7882d59826abf69701ff460f9a76de2ac66c794152d5b98de9a1`).
+Do not interpret its score or Elo diagnostics.
+
+Commit `72af918` introduced the static inference-batch contract above. The
+pre-fix pilot uses arena schema v1 and cannot resume into the fixed schema-v2
+path. A clean post-fix cap-64 rerun is pending; until it completes without
+faults, there is no valid u300 relative-strength result.
+
 ## Commands
 
 Use the lean diagnostics-off path for gameplay:

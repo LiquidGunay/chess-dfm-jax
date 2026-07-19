@@ -7,6 +7,10 @@ Last updated: 2026-07-19
 This records the first verified local-GPU baseline before any intentional model
 or objective change.
 
+Current disposition: v2/update 300 is the repeat-qualified offline baseline.
+It is not an accepted autoresearch result or promoted checkpoint, and
+`AUTORESEARCH_READY` remains false.
+
 ## Provenance
 
 - Legacy branch: `legacy/tpu-joint-latent-sasa`
@@ -1123,11 +1127,103 @@ directories are:
 | Update 300, seeds 30k/40k | `0522512d16cba9ccb1e14ca80a0372d00d9aeb775abd335d2ae45b4d996daa8d` | `2bfba7366fe0e6bfc72c21c56459f9635a56876dfed04c0dc9ce83596d64a804` |
 | Update 400, seeds 30k/40k | `3f4540825d070f4dc81765be358987630c07518e98d5270f464e63c8e239aa2b` | `5a98e926aa7870f94e836b7809d3a41379c6fffcafb783b80f23e9cc09d289cf` |
 
-An identical v2 30-minute baseline is currently running from the same source
-model, fresh optimizer, seed, data schedule, rates, batch sizes, checkpoint
-cadence, and objective. Partial v2 files are not evidence. Update 300 remains
-provisional until the completed repeat and matched checkpoint scan establish
-whether its improvement exceeds training nondeterminism.
+### Identical v2 repeat and repeat-qualified offline baseline
+
+The identical v2 run completed from the same source model, fresh optimizer,
+seed, data schedule, rates, batch sizes, checkpoint cadence, and objective. It
+again produced 557 updates and 71,296 examples. The run report is
+`research/runs/baseline-freshopt-online-target576-b128-lr3e5-bt4lr1e6-30m-v2/report.json`
+with SHA-256
+`9bf71b98f9c6196ca67805c523e356ab538fbf440613a242c0e78681706b4d3e`.
+The unselected final update-557 state has SHA-256
+`f21698d52c80bca85e84966a116f342ec44460df9c2ea29fbffeccfb69e9a4ce`.
+
+The full seed-10,000/20,000 checkpoint scan independently selects update 300:
+
+| Update | Mean DFM CE | Accuracy | Legal mass | CE delta from source |
+|---:|---:|---:|---:|---:|
+| Source | 4.530784944 | 0.106887817 | 0.638989463 | — |
+| 100 | 4.517196121 | 0.108261108 | 0.640673155 | -0.013588823 |
+| 200 | 4.516854411 | 0.108337402 | 0.640184840 | -0.013930533 |
+| 300 | **4.510334061** | **0.109420776** | 0.643805286 | **-0.020450883** |
+| 400 | 4.510955336 | 0.108886719 | **0.644191438** | -0.019829608 |
+| 500 | 4.516683474 | 0.107666016 | 0.634432756 | -0.014101470 |
+| 557 | 4.513480280 | 0.107772827 | 0.634521960 | -0.017304664 |
+
+Update 300 wins the primary CE by `0.000621274` over update 400. The scan
+artifacts under
+`research/runs/baseline-freshopt-online-target576-b128-30m-v2-checkpoint-scan-seeds10000-20000-v1/`
+have SHA-256:
+
+- `checkpoint_metrics.jsonl`:
+  `1078126b0ef0db1e0222fdebe4eea21e8bd9a708e8cec1abeebbb3f6cee67eab`;
+- `checkpoint_summary.json`:
+  `61ca6e7c407438ad3fcdf229aaf61139932ff6636c417b739476109715c74c84`.
+
+The selected update-300 state has SHA-256
+`491da32259be4669e8824a7a06dc06401483f1d98febdb860e65bbae2f63c1ba`;
+its manifest has SHA-256
+`6872ab05f240cef5dbc3c0f87e5150ccea20cd5b1f46690a2dd80e585e365cb2`.
+The additional seed-30,000/40,000 evidence under
+`research/runs/baseline-b128-v2-u300-checkpoint-scan-seeds30000-40000-v1/`
+has SHA-256:
+
+- `checkpoint_metrics.jsonl`:
+  `76447f4f906ac3dd30da488c677717d45d50b71fdeb9af85c26b93801d334895`;
+- `checkpoint_summary.json`:
+  `f836424758e99bcf14b0b0f69dca9a6fa043d099e559f542273c349680a6395d`.
+
+Across all four matched 4,096-position pools, the v2 aggregate is:
+
+| Model | DFM CE | Accuracy | First legal mass |
+|---|---:|---:|---:|
+| Source | 4.550008280 | 0.106750488 | 0.642926642 |
+| V2/update 300 | **4.529473042** | **0.108810425** | **0.646496401** |
+| Delta | **-0.020535238** | +0.002059937 | +0.003569760 |
+
+Every horizon improves:
+
+| Horizon | Source CE | V2/update-300 CE | Delta |
+|---:|---:|---:|---:|
+| 1 | 2.931054348 | 2.896588316 | -0.034466032 |
+| 2 | 3.361853272 | 3.328875899 | -0.032977372 |
+| 3 | 4.238529742 | 4.222782284 | -0.015747458 |
+| 4 | 4.677275896 | 4.652556300 | -0.024719596 |
+| 5 | 4.985557675 | 4.972647548 | -0.012910128 |
+| 6 | 5.220019460 | 5.200192332 | -0.019827127 |
+| 7 | 5.407092810 | 5.395286083 | -0.011806726 |
+| 8 | 5.578682899 | 5.566855431 | -0.011827469 |
+
+The v1/u300 four-pool CE gain was `-0.020745492`; the independently trained
+v2/u300 gain is `-0.020535238`, an absolute difference of only
+`0.000210253`. The repeated checkpoint-selection decision and near-identical
+held-out gain qualify v2/u300 as the offline baseline.
+
+The selected checkpoint also received a full seed-10,000 latent audit:
+
+| Collapse/coupling diagnostic | Source | V2/update 300 |
+|---|---:|---:|
+| Mean prediction effective rank | 31.4294 | 31.0318 |
+| Minimum horizon effective rank | 29.5291 | 29.1529 |
+| Mean prediction feature-std p05 | 0.6876 | 0.6644 |
+| Minimum horizon feature-std p05 | 0.6790 | 0.6515 |
+| Mean prediction/target RMS ratio | 0.9600 | 0.9853 |
+
+At every horizon, positive-prediction MSE is lower than both zero-prediction
+and action-shuffled MSE. The audit therefore finds no prediction-rank collapse
+or loss of action conditioning. Absolute target scale still contracts:
+mean target RMS changes `0.995286 → 0.935079` (`93.95%` retention), while mean
+prediction RMS changes `0.955479 → 0.921361`. This remaining scale behavior is
+why “repeat-qualified offline baseline” does not mean “frozen objective.”
+
+The collapse artifacts under
+`research/runs/baseline-b128-v2-u300-collapse-globalval64-seed10000-v1/`
+have SHA-256:
+
+- `checkpoint_metrics.jsonl`:
+  `6938ccbca92ef820efdc1c5a828750a040ed29214874c1c1a05c679ca1b3e3bf`;
+- `checkpoint_summary.json`:
+  `511fd6e04fa1f76260d83958d6af6c371863db043c9abecc5ce9646f6032ef60`.
 
 ### Resumable arena foundation and promotion-pool defect
 
@@ -1149,10 +1245,34 @@ sidecar must be regenerated, re-audited, and repinned. The correctness and
 development tiers remain available, but a strength-valid long-game cap is not
 yet frozen.
 
-No u300 Elo match has been run, and no checkpoint has been promoted. The v1
-run is a baseline-qualification result, not an accepted autoresearch
-experiment, so `research/results.tsv` remains header-only. The code-level
-readiness flag remains `AUTORESEARCH_READY = False`.
+The v2/u300-versus-source correctness run completed 16 pairs with zero faults,
+full representable coverage on every evaluated position, and no incomplete
+coverage positions. All 32 games reached the 16-ply additional cap, so this is
+plumbing evidence rather than strength evidence. Its state file is
+`artifacts/arena/baseline-b128-v2-u300-vs-source-correctness-v1/state.json`
+with SHA-256
+`57904c1131b99db41c22204d9bfa44c348bc238a4e344670072a40c59d9d1308`.
+
+The first 16-pair development pilot at cap 64 is invalid strength evidence:
+29 of 32 games ended in timeout faults. The shrinking live-game population
+caused JAX to compile new batch shapes during nominal policy calls. Its
+fail-closed state is retained at
+`artifacts/arena/baseline-b128-v2-u300-vs-source-development-pilot16-cap64-v1/state.json`
+with SHA-256
+`f06ecfa2cc6a7882d59826abf69701ff460f9a76de2ac66c794152d5b98de9a1`;
+its score and Elo diagnostics must not be interpreted.
+
+Commit `72af918` fixes that defect by pinning one physical inference batch
+shape for the entire run, padding only already validated rows, slicing outputs
+back to real rows before semantic checks, and binding those rules in arena
+schema v2. The post-fix cap-64 rerun is pending.
+
+No valid u300 Elo match has been completed, and no checkpoint has been
+promoted. The v2/u300 result is a baseline-qualification result, not an
+accepted autoresearch experiment, so `research/results.tsv` remains
+header-only. The code-level readiness flag remains
+`AUTORESEARCH_READY = False` pending the post-fix arena rerun and disposition
+of the current prediction-SIGReg experiment.
 
 ## Strict local checkpoint/resume
 
@@ -1448,19 +1568,20 @@ The continuation study explains a large part of the earlier policy regression:
 the exact source optimizer and learning rates came from global batch `8,192`,
 the recovered source checkpoint was already past its best recorded validation
 point, and local batch 64 restarted the data/RNG stream. A fresh lower-rate
-optimizer removes the large short-run regression. The completed v1
-checkpoint scan provisionally selects update 300; across four matched
-validation pools it improves aggregate DFM CE, accuracy, legal mass, and every
-per-horizon CE relative to source.
+optimizer removes the large short-run regression. Both completed 30-minute
+runs independently select update 300. V2/u300 is the repeat-qualified offline
+baseline: across four matched validation pools it improves aggregate DFM CE,
+accuracy, legal mass, and every per-horizon CE relative to source, and its CE
+gain is within `0.000210253` of v1/u300.
 
 The remaining acceptance work is to:
 
-- finish the identical v2 run and matched checkpoint scan without using its
-  partial state as evidence;
-- quantify selection noise and run the full collapse/scale gate on the
-  repeated selected checkpoint;
-- retain at least 95% target scale while confirming that the four-pool policy
-  improvement exceeds training noise;
+- disposition the current prediction-SIGReg experiment against this frozen
+  offline comparison;
+- rerun the cap-64 development pilot through the static-shape arena path and
+  reject any result containing a policy fault;
+- decide how absolute target-scale contraction enters the frozen objective
+  without undoing the repeat-qualified policy improvement;
 - regenerate and re-audit the promotion pool/history sidecar to remove the
   claim-draw-terminal entry without changing the sequential test in place; and
 - calibrate a strength-valid long-game cap before any Elo result.

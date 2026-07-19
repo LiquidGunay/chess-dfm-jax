@@ -7,13 +7,22 @@ inference faster.
 Current gate: `AUTORESEARCH_READY = False`. Do not launch unattended
 architecture search, append calibration runs to `research/results.tsv`, run a
 promotion arena, or describe a checkpoint as promoted until a repeated,
-noise-qualified baseline passes the offline gates below.
+noise-qualified baseline passes the offline gates below and the arena path is
+strength-valid.
 
-The current update-300 checkpoint is provisional pending the identical v2
-repeat and matched checkpoint scan. Promotion is independently unavailable:
-exact history replay found pinned promotion entry 1,245 already terminal by
-claimable threefold repetition. Regenerate, re-audit, and repin the pool and
-history sidecar; never skip the entry in place.
+The current offline baseline is v2/update 300. An identical v1 run also
+selected update 300, and their four-pool DFM CE gains differ by only
+`0.000210253`; the selected v2 checkpoint also passes the recorded
+effective-rank, low-variance-tail, prediction/target RMS-ratio, and
+trivial-baseline checks. This repeat-qualified baseline is not an accepted
+autoresearch experiment, an Elo result, or a promoted checkpoint. Readiness
+remains closed pending disposition of the current prediction-SIGReg experiment
+and a valid post-fix arena rerun.
+
+Promotion is independently unavailable: exact history replay found pinned
+promotion entry 1,245 already terminal by claimable threefold repetition.
+Regenerate, re-audit, and repin the pool and history sidecar; never skip the
+entry in place.
 
 ## Editable surface
 
