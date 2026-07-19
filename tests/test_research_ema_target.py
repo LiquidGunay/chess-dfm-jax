@@ -350,6 +350,28 @@ def make_components(
     return model, ema_target, optimizer
 
 
+def make_bfloat16_components(
+    *,
+    seed: int = 13,
+) -> tuple[
+    train.JointLatentSASAModel,
+    train.EmaTargetModel,
+]:
+    config = tiny_config(
+        compute_dtype="bfloat16",
+        param_dtype="bfloat16",
+        encoder_dtype="bfloat16",
+    )
+    model = train.JointLatentSASAModel(
+        SyntheticBfloat16Bt4Encoder(),
+        config,
+        rngs=nnx.Rngs(seed),
+    )
+    ema_target = train.EmaTargetModel(model)
+    train.sync_ema_target_from_online(ema_target, model)
+    return model, ema_target
+
+
 def batch() -> dict[str, jax.Array]:
     current = jnp.linspace(
         -0.25,
@@ -405,6 +427,24 @@ def pure_state(module: nnx.Module) -> dict[str, Any]:
     return dict(nnx.to_pure_dict(nnx.state(module)))
 
 
+def pure_headless_encoder(module: nnx.Module) -> dict[str, Any]:
+    return {
+        "embedding": pure_state(module.embedding),
+        "layers": pure_state(module.layers),
+    }
+
+
+def pure_ema_authoritative(
+    ema_target: train.EmaTargetModel,
+) -> dict[str, Any]:
+    return {
+        name: dict(nnx.to_pure_dict(component_state))
+        for name, component_state in train.ema_checkpoint_state(
+            ema_target
+        ).items()
+    }
+
+
 def assert_trees_exact(left: Any, right: Any) -> None:
     assert jax.tree.structure(left) == jax.tree.structure(right)
     for left_leaf, right_leaf in zip(
@@ -418,37 +458,45 @@ def assert_trees_exact(left: Any, right: Any) -> None:
         )
 
 
-def test_bfloat16_bt4_compute_is_invariant_to_fp32_shadow_storage() -> None:
-    online = SyntheticBfloat16Bt4Encoder()
-    shadow = train.EmaBt4Encoder(online)
-    shadow_state = nnx.state(shadow)
-    nnx.update(
-        shadow,
-        jax.tree.map(
-            lambda value: jnp.array(
-                value,
-                dtype=jnp.float32,
-                copy=True,
-            ),
-            shadow_state,
-        ),
-    )
-    online_state = {
-        "embedding": pure_state(online.embedding),
-        "layers": pure_state(online.layers),
-    }
-    fp32_state = pure_state(shadow)
-    for online_leaf, shadow_leaf in zip(
+def assert_buffer_trees_independent(left: Any, right: Any) -> None:
+    assert jax.tree.structure(left) == jax.tree.structure(right)
+    for left_leaf, right_leaf in zip(
+        jax.tree.leaves(left),
+        jax.tree.leaves(right),
+        strict=True,
+    ):
+        assert (
+            left_leaf.unsafe_buffer_pointer()
+            != right_leaf.unsafe_buffer_pointer()
+        )
+
+
+def test_bfloat16_ema_compute_mirror_is_exact_and_independent() -> None:
+    model, ema_target = make_bfloat16_components()
+    online_state = pure_headless_encoder(model.encoder)
+    master_state = pure_state(ema_target.encoder_master)
+    compute_state = pure_state(ema_target.encoder_compute)
+    for online_leaf, master_leaf, compute_leaf in zip(
         jax.tree.leaves(online_state),
-        jax.tree.leaves(fp32_state),
+        jax.tree.leaves(master_state),
+        jax.tree.leaves(compute_state),
         strict=True,
     ):
         assert np.asarray(online_leaf).dtype == jnp.bfloat16
-        assert np.asarray(shadow_leaf).dtype == np.float32
-        assert (
-            online_leaf.unsafe_buffer_pointer()
-            != shadow_leaf.unsafe_buffer_pointer()
+        assert np.asarray(master_leaf).dtype == np.float32
+        assert np.asarray(compute_leaf).dtype == jnp.bfloat16
+        np.testing.assert_array_equal(
+            np.asarray(compute_leaf),
+            np.asarray(online_leaf),
         )
+        np.testing.assert_array_equal(
+            np.asarray(master_leaf, dtype=np.float32),
+            np.asarray(online_leaf, dtype=np.float32),
+        )
+    assert_buffer_trees_independent(online_state, master_state)
+    assert_buffer_trees_independent(online_state, compute_state)
+    assert_buffer_trees_independent(master_state, compute_state)
+    train.validate_ema_encoder_compute(ema_target)
 
     planes = jnp.linspace(
         -1.0,
@@ -458,22 +506,42 @@ def test_bfloat16_bt4_compute_is_invariant_to_fp32_shadow_storage() -> None:
     ).reshape((2, 4, 8, 8))
 
     @nnx.jit
-    def encode_pair(online_encoder, shadow_encoder, inputs):
+    def encode_pair(online_model, target_model, inputs):
         return (
-            online_encoder.encode_tokens(inputs),
-            shadow_encoder.encode_tokens(inputs),
+            online_model.encode_bt4_tokens(inputs),
+            target_model.encode_bt4_tokens(inputs),
         )
 
-    online_tokens, shadow_tokens = encode_pair(
-        online,
-        shadow,
+    online_tokens, teacher_tokens = encode_pair(
+        model,
+        ema_target,
         planes,
     )
-    jax.block_until_ready((online_tokens, shadow_tokens))
+    jax.block_until_ready((online_tokens, teacher_tokens))
     assert bool(jnp.all(jnp.isfinite(online_tokens)))
     np.testing.assert_array_equal(
         np.asarray(online_tokens),
-        np.asarray(shadow_tokens),
+        np.asarray(teacher_tokens),
+    )
+
+    future_planes = jnp.stack((planes + 0.125, planes - 0.25), axis=1)
+
+    @nnx.jit
+    def encode_future_pair(online_model, target_model, inputs):
+        return (
+            online_model.encode_future_targets(inputs),
+            target_model.encode_future_targets(inputs),
+        )
+
+    online_targets, teacher_targets = encode_future_pair(
+        model,
+        ema_target,
+        future_planes,
+    )
+    jax.block_until_ready((online_targets, teacher_targets))
+    np.testing.assert_array_equal(
+        np.asarray(online_targets),
+        np.asarray(teacher_targets),
     )
 
 
@@ -575,6 +643,26 @@ def test_ema_config_is_checked_cli_overridable_and_resume_bound(
     assert semantics["jepa_target_ema"]["online_target_sigreg_gradient"] == (
         "attached"
     )
+    assert semantics["jepa_target_ema"]["checkpointed_master_scope"] == [
+        "encoder_master",
+        "state_projector",
+        "jepa_state_norm",
+    ]
+    assert semantics["jepa_target_ema"]["derived_runtime_scope"] == [
+        "encoder_compute"
+    ]
+    assert (
+        semantics["jepa_target_ema"]["encoder_forward_source"]
+        == "encoder_compute_only"
+    )
+    assert not semantics["jepa_target_ema"][
+        "encoder_compute_checkpointed"
+    ]
+    assert semantics["jepa_target_ema"]["encoder_compute_refresh"] == [
+        "after_source_sync",
+        "after_each_post_optimizer_ema_update",
+        "after_checkpoint_restore",
+    ]
     online_contract = train.build_research_resume_contract(
         config=train.JointLatentSASAConfig(),
         objective="normalized",
@@ -596,41 +684,57 @@ def test_ema_config_is_checked_cli_overridable_and_resume_bound(
 
 def test_ema_shadow_scope_sync_and_post_optimizer_formula() -> None:
     model, ema_target, _ = make_components()
-    assert not hasattr(ema_target.encoder, "policy_head")
-    assert not hasattr(ema_target.encoder, "value_head")
-    assert not hasattr(ema_target.encoder, "moves_left_head")
+    for encoder in (
+        ema_target.encoder_master,
+        ema_target.encoder_compute,
+    ):
+        assert not hasattr(encoder, "policy_head")
+        assert not hasattr(encoder, "value_head")
+        assert not hasattr(encoder, "moves_left_head")
     assert set(pure_trainable(ema_target)) == {
-        "encoder",
+        "encoder_master",
+        "encoder_compute",
         "jepa_state_norm",
         "state_projector",
     }
+    online_encoder_state = pure_headless_encoder(model.encoder)
     online_shadow_source = {
-        "encoder": {
-            "embedding": pure_state(model.encoder.embedding),
-            "layers": pure_state(model.encoder.layers),
-        },
-        "jepa_state_norm": pure_state(model.jepa_state_norm),
-        "state_projector": pure_state(model.state_projector),
+        "encoder_master": jax.tree.map(
+            lambda value: np.asarray(value, dtype=np.float32),
+            online_encoder_state,
+        ),
+        "encoder_compute": online_encoder_state,
+        "jepa_state_norm": jax.tree.map(
+            lambda value: np.asarray(value, dtype=np.float32),
+            pure_state(model.jepa_state_norm),
+        ),
+        "state_projector": jax.tree.map(
+            lambda value: np.asarray(value, dtype=np.float32),
+            pure_state(model.state_projector),
+        ),
     }
     target_runtime_state = pure_state(ema_target)
     assert_trees_exact(target_runtime_state, online_shadow_source)
-    for target_leaf, online_leaf in zip(
-        jax.tree.leaves(target_runtime_state),
-        jax.tree.leaves(online_shadow_source),
-        strict=True,
-    ):
-        assert (
-            target_leaf.unsafe_buffer_pointer()
-            != online_leaf.unsafe_buffer_pointer()
-        )
-    target_before = pure_trainable(ema_target)
+    assert_buffer_trees_independent(
+        pure_state(ema_target.encoder_master),
+        online_encoder_state,
+    )
+    assert_buffer_trees_independent(
+        pure_state(ema_target.encoder_compute),
+        online_encoder_state,
+    )
+    assert_buffer_trees_independent(
+        pure_state(ema_target.encoder_master),
+        pure_state(ema_target.encoder_compute),
+    )
+    target_before = pure_ema_authoritative(ema_target)
     assert all(
         np.asarray(leaf).dtype == np.float32
         for leaf in jax.tree.leaves(target_before)
     )
 
     for target_component, online_component in (
-        (ema_target.encoder, model.encoder),
+        (ema_target.encoder_master, model.encoder),
         (ema_target.state_projector, model.state_projector),
         (ema_target.jepa_state_norm, model.jepa_state_norm),
     ):
@@ -657,9 +761,9 @@ def test_ema_shadow_scope_sync_and_post_optimizer_formula() -> None:
         model,
         0.75,
     )
-    target_after = pure_trainable(ema_target)
+    target_after = pure_ema_authoritative(ema_target)
     online_after = {
-        "encoder": pure_trainable(model.encoder),
+        "encoder_master": pure_trainable(model.encoder),
         "jepa_state_norm": pure_trainable(model.jepa_state_norm),
         "state_projector": pure_trainable(model.state_projector),
     }
@@ -672,36 +776,55 @@ def test_ema_shadow_scope_sync_and_post_optimizer_formula() -> None:
         online_after,
     )
     assert_trees_exact(target_after, expected_after)
+    train.validate_ema_encoder_compute(ema_target)
+    expected_compute = jax.tree.map(
+        lambda compute, master: np.asarray(
+            master,
+            dtype=np.asarray(compute).dtype,
+        ),
+        pure_state(ema_target.encoder_compute),
+        pure_state(ema_target.encoder_master),
+    )
+    assert_trees_exact(
+        pure_state(ema_target.encoder_compute),
+        expected_compute,
+    )
 
 
 def test_fp32_ema_master_keeps_sub_bfloat16_increment() -> None:
-    model, ema_target, _ = make_components()
-    target_before = float(
-        ema_target.encoder.embedding.scale[...]
-    )
-    assert target_before == 1.0
+    model, ema_target = make_bfloat16_components()
+    online_parameter = model.encoder.embedding.mul_gate
+    master_parameter = ema_target.encoder_master.embedding.mul_gate
+    compute_parameter = ema_target.encoder_compute.embedding.mul_gate
+    source_before = online_parameter[0]
+    target_before = float(master_parameter[0])
+    assert source_before.dtype == jnp.bfloat16
+    assert master_parameter[...].dtype == jnp.float32
+    assert compute_parameter[...].dtype == jnp.bfloat16
     next_bfloat16 = jnp.nextafter(
-        jnp.asarray(1.0, dtype=jnp.bfloat16),
-        jnp.asarray(2.0, dtype=jnp.bfloat16),
+        source_before,
+        jnp.asarray(jnp.inf, dtype=jnp.bfloat16),
     )
-    model.encoder.embedding.scale[...] = jnp.asarray(
-        next_bfloat16,
-        dtype=model.encoder.embedding.scale[...].dtype,
-    )
+    online_parameter[0] = next_bfloat16
     decay = 0.999
     train.update_ema_target_after_optimizer(
         ema_target,
         model,
         decay,
     )
-    target_after = ema_target.encoder.embedding.scale[...]
+    target_after = master_parameter[0]
     assert target_after.dtype == jnp.float32
     assert float(target_after) > target_before
     assert float(target_after) < float(next_bfloat16)
     assert jnp.asarray(target_after, dtype=jnp.bfloat16) == jnp.asarray(
-        target_before,
+        source_before,
         dtype=jnp.bfloat16,
     )
+    np.testing.assert_array_equal(
+        np.asarray(compute_parameter[0]),
+        np.asarray(source_before),
+    )
+    train.validate_ema_encoder_compute(ema_target)
 
 
 def test_ema_chunked_future_encoder_never_flattens_batch_and_horizon() -> None:
@@ -776,7 +899,7 @@ def test_train_step_ema_uses_updated_online_parameters() -> None:
     )
     target_before = jax.tree.map(
         lambda value: np.asarray(value).copy(),
-        pure_trainable(donated_target),
+        pure_ema_authoritative(donated_target),
     )
     rng = jax.random.PRNGKey(23)
     reference_loss, _ = train.train_ema_normalized_stage1_step(
@@ -812,9 +935,30 @@ def test_train_step_ema_uses_updated_online_parameters() -> None:
             donated_target,
         ),
     )
+    assert_trees_exact(
+        pure_state(ema_target),
+        pure_state(donated_target),
+    )
+    train.validate_ema_encoder_compute(ema_target)
+    train.validate_ema_encoder_compute(donated_target)
+    donated_online_encoder = pure_headless_encoder(
+        donated_model.encoder
+    )
+    assert_buffer_trees_independent(
+        pure_state(donated_target.encoder_master),
+        donated_online_encoder,
+    )
+    assert_buffer_trees_independent(
+        pure_state(donated_target.encoder_compute),
+        donated_online_encoder,
+    )
+    assert_buffer_trees_independent(
+        pure_state(donated_target.encoder_master),
+        pure_state(donated_target.encoder_compute),
+    )
 
     online_after = {
-        "encoder": pure_trainable(donated_model.encoder),
+        "encoder_master": pure_trainable(donated_model.encoder),
         "jepa_state_norm": pure_trainable(
             donated_model.jepa_state_norm
         ),
@@ -831,7 +975,7 @@ def test_train_step_ema_uses_updated_online_parameters() -> None:
         online_after,
     )
     assert_trees_exact(
-        pure_trainable(donated_target),
+        pure_ema_authoritative(donated_target),
         expected,
     )
 
@@ -907,10 +1051,80 @@ def test_ema_checkpoint_resume_restores_shadow_exactly() -> None:
             "optimizer_state",
             "ema_target",
         }
+        assert set(ema_payload["ema_target"]) == {
+            "encoder_master",
+            "jepa_state_norm",
+            "state_projector",
+        }
+        assert "encoder_compute" not in ema_payload["ema_target"]
+        with np.load(
+            checkpoint / "state.npz",
+            allow_pickle=True,
+        ) as checkpoint_state:
+            stored_ema = checkpoint_state["ema_target"].item()
+        assert set(stored_ema) == {
+            "encoder_master",
+            "jepa_state_norm",
+            "state_projector",
+        }
+        assert "encoder_compute" not in stored_ema
+
+        invalid_model, invalid_target, invalid_optimizer = (
+            make_components(seed=31)
+        )
+        invalid_target.encoder_compute.unexpected_state = (
+            TrainableParam(jnp.zeros((), dtype=jnp.float32))
+        )
+        invalid_before = (
+            train.extract_research_train_state(
+                invalid_model,
+                invalid_optimizer,
+                invalid_target,
+            ),
+            pure_state(invalid_target),
+        )
+        with pytest.raises(
+            ValueError,
+            match="master/compute structures differ",
+        ):
+            train.load_research_checkpoint(
+                checkpoint,
+                model=invalid_model,
+                optimizer=invalid_optimizer,
+                ema_target=invalid_target,
+                expected_resume_contract=contract,
+            )
+        invalid_after = (
+            train.extract_research_train_state(
+                invalid_model,
+                invalid_optimizer,
+                invalid_target,
+            ),
+            pure_state(invalid_target),
+        )
+        assert_trees_exact(invalid_after, invalid_before)
 
         resumed_model, resumed_target, resumed_optimizer = (
             make_components(seed=31)
         )
+        stale_compute_state = nnx.state(
+            resumed_target.encoder_compute
+        )
+        nnx.update(
+            resumed_target.encoder_compute,
+            jax.tree.map(
+                lambda value: value + jnp.asarray(
+                    7.0,
+                    dtype=value.dtype,
+                ),
+                stale_compute_state,
+            ),
+        )
+        with pytest.raises(
+            ValueError,
+            match=r"differs from cast\(master\)",
+        ):
+            train.validate_ema_encoder_compute(resumed_target)
         manifest = train.load_research_checkpoint(
             checkpoint,
             model=resumed_model,
@@ -919,6 +1133,7 @@ def test_ema_checkpoint_resume_restores_shadow_exactly() -> None:
             expected_resume_contract=contract,
         )
         assert "ema_target_abi" in manifest
+        train.validate_ema_encoder_compute(resumed_target)
         assert_trees_exact(
             train.extract_research_train_state(
                 model,
@@ -930,6 +1145,10 @@ def test_ema_checkpoint_resume_restores_shadow_exactly() -> None:
                 resumed_optimizer,
                 resumed_target,
             ),
+        )
+        assert_trees_exact(
+            pure_state(ema_target),
+            pure_state(resumed_target),
         )
 
         without_target_model, _, without_target_optimizer = (
@@ -955,7 +1174,7 @@ def test_ema_checkpoint_resume_restores_shadow_exactly() -> None:
             ),
         ):
             continued_loss, _ = (
-                train._ema_normalized_train_step_impl(
+                train.train_ema_normalized_stage1_step_donated(
                     candidate_model,
                     candidate_target,
                     candidate_optimizer,
@@ -966,6 +1185,7 @@ def test_ema_checkpoint_resume_restores_shadow_exactly() -> None:
                 )
             )
             jax.block_until_ready(continued_loss)
+            train.validate_ema_encoder_compute(candidate_target)
         assert_trees_exact(
             train.extract_research_train_state(
                 model,
@@ -977,4 +1197,8 @@ def test_ema_checkpoint_resume_restores_shadow_exactly() -> None:
                 resumed_optimizer,
                 resumed_target,
             ),
+        )
+        assert_trees_exact(
+            pure_state(ema_target),
+            pure_state(resumed_target),
         )

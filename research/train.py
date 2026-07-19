@@ -1123,24 +1123,25 @@ class EmaBt4Encoder(nnx.Module):
 
 
 class EmaTargetModel(nnx.Module):
-    """Non-optimized FP32 shadow of the JEPA target-producing parameters.
+    """Non-optimized EMA state for the JEPA target-producing parameters.
 
-    The shadow contains exactly the headless BT4 token encoder, state
-    projector, and optional JEPA state RMSNorm path. All floating runtime
-    variables use physically independent FP32 buffers; only trainable shadow
-    variables need checkpointing.
+    The checkpointed EMA master contains a headless FP32 BT4 token encoder,
+    FP32 state projector, and optional FP32 JEPA state RMSNorm path. A
+    physically independent native-dtype encoder mirror is derived from the
+    FP32 encoder master for GPU-exact forward computation.
     """
 
     def __init__(self, online_model: JointLatentSASAModel):
-        self.encoder = EmaBt4Encoder(online_model.encoder)
+        self.encoder_master = EmaBt4Encoder(online_model.encoder)
+        self.encoder_compute = EmaBt4Encoder(online_model.encoder)
         self.state_projector = nnx.clone(online_model.state_projector)
         self.jepa_state_norm = nnx.clone(online_model.jepa_state_norm)
         self.config = online_model.config
         self.compute_dtype = online_model.compute_dtype
         self.z_dim = online_model.z_dim
 
-        shadow_state = nnx.state(self)
-        fp32_shadow_state = jax.tree.map(
+        master_state = nnx.state(self.encoder_master)
+        fp32_master_state = jax.tree.map(
             lambda value: jnp.array(
                 value,
                 dtype=(
@@ -1153,13 +1154,45 @@ class EmaTargetModel(nnx.Module):
                 ),
                 copy=True,
             ),
-            shadow_state,
+            master_state,
         )
-        nnx.update(self, fp32_shadow_state)
+        nnx.update(self.encoder_master, fp32_master_state)
+
+        for component in (
+            self.state_projector,
+            self.jepa_state_norm,
+        ):
+            component_state = nnx.state(component)
+            independent_state = jax.tree.map(
+                lambda value: jnp.array(
+                    value,
+                    dtype=(
+                        jnp.float32
+                        if jnp.issubdtype(
+                            jnp.asarray(value).dtype,
+                            jnp.floating,
+                        )
+                        else jnp.asarray(value).dtype
+                    ),
+                    copy=True,
+                ),
+                component_state,
+            )
+            nnx.update(component, independent_state)
+        compute_state = nnx.state(self.encoder_compute)
+        independent_compute_state = jax.tree.map(
+            lambda value: jnp.array(
+                value,
+                dtype=jnp.asarray(value).dtype,
+                copy=True,
+            ),
+            compute_state,
+        )
+        nnx.update(self.encoder_compute, independent_compute_state)
 
     def encode_bt4_tokens(self, planes: jnp.ndarray) -> jnp.ndarray:
         return jnp.asarray(
-            self.encoder.encode_tokens(planes),
+            self.encoder_compute.encode_tokens(planes),
             dtype=self.compute_dtype,
         )
 
@@ -1226,10 +1259,97 @@ def _ema_target_component_pairs(
     online: JointLatentSASAModel,
 ) -> tuple[tuple[nnx.Module, nnx.Module], ...]:
     return (
-        (target.encoder, online.encoder),
+        (target.encoder_master, online.encoder),
         (target.state_projector, online.state_projector),
         (target.jepa_state_norm, online.jepa_state_norm),
     )
+
+
+def assert_ema_encoder_compute_structure(
+    target: EmaTargetModel,
+) -> None:
+    """Preflight that master and derived encoder state graphs still match."""
+
+    compute_structure = jax.tree.structure(
+        nnx.state(target.encoder_compute)
+    )
+    master_structure = jax.tree.structure(
+        nnx.state(target.encoder_master)
+    )
+    if compute_structure != master_structure:
+        raise ValueError("EMA encoder master/compute structures differ")
+
+
+def refresh_ema_encoder_compute(
+    target: EmaTargetModel,
+) -> None:
+    """Refresh the native encoder mirror from the FP32 EMA master."""
+
+    assert_ema_encoder_compute_structure(target)
+    compute_state = nnx.state(target.encoder_compute)
+    master_state = nnx.state(target.encoder_master)
+    refreshed = jax.tree.map(
+        lambda compute_value, master_value: jnp.array(
+            master_value,
+            dtype=jnp.asarray(compute_value).dtype,
+            copy=True,
+        ),
+        compute_state,
+        master_state,
+    )
+    nnx.update(target.encoder_compute, refreshed)
+
+
+def validate_ema_encoder_compute(
+    target: EmaTargetModel,
+) -> None:
+    """Fail if the native compute mirror differs from ``cast(master)``."""
+
+    assert_ema_encoder_compute_structure(target)
+    compute_state = nnx.to_pure_dict(
+        nnx.state(target.encoder_compute)
+    )
+    master_state = nnx.to_pure_dict(
+        nnx.state(target.encoder_master)
+    )
+    for index, (compute_value, master_value) in enumerate(
+        zip(
+            jax.tree.leaves(compute_state),
+            jax.tree.leaves(master_state),
+            strict=True,
+        )
+    ):
+        compute_array = np.asarray(compute_value)
+        expected = np.asarray(master_value).astype(
+            compute_array.dtype,
+            copy=False,
+        )
+        if not np.array_equal(compute_array, expected):
+            raise ValueError(
+                "EMA encoder compute mirror differs from cast(master) "
+                f"at leaf {index}"
+            )
+
+
+def ema_checkpoint_state(
+    target: EmaTargetModel,
+) -> dict[str, Any]:
+    """Return only authoritative EMA state; the compute mirror is derived."""
+
+    return {
+        "encoder_master": nnx.state(
+            target.encoder_master,
+            TrainableParam,
+        ),
+        "jepa_state_norm": nnx.state(
+            target.jepa_state_norm,
+            TrainableParam,
+        ),
+        "state_projector": nnx.state(
+            target.state_projector,
+            TrainableParam,
+        ),
+    }
 
 
 def sync_ema_target_from_online(
@@ -1257,6 +1377,7 @@ def sync_ema_target_from_online(
             online_state,
         )
         nnx.update(target_component, copied)
+    refresh_ema_encoder_compute(target)
 
 
 def update_ema_target_after_optimizer(
@@ -1284,6 +1405,7 @@ def update_ema_target_after_optimizer(
             online_state,
         )
         nnx.update(target_component, updated)
+    refresh_ema_encoder_compute(target)
 
 
 def joint_stage1_loss_fn(
@@ -2121,7 +2243,7 @@ def assert_research_state_compatible(
 def extract_research_train_state(
     model: nnx.Module,
     optimizer: nnx.Optimizer,
-    ema_target: nnx.Module | None = None,
+    ema_target: EmaTargetModel | None = None,
 ) -> dict[str, Any]:
     """Copy trainable model and optimizer state to a raw NumPy payload."""
 
@@ -2138,11 +2260,16 @@ def extract_research_train_state(
         "optimizer_state": dict(nnx.to_pure_dict(optimizer_state)),
     }
     if ema_target is not None:
-        ema_state = jax.tree.map(
-            to_host,
-            nnx.state(ema_target, TrainableParam),
-        )
-        payload["ema_target"] = dict(nnx.to_pure_dict(ema_state))
+        payload["ema_target"] = {
+            name: dict(
+                nnx.to_pure_dict(
+                    jax.tree.map(to_host, component_state)
+                )
+            )
+            for name, component_state in ema_checkpoint_state(
+                ema_target
+            ).items()
+        }
     return payload
 
 
@@ -2150,7 +2277,7 @@ def strict_restore_research_payload(
     payload: dict[str, Any],
     model: nnx.Module,
     optimizer: nnx.Optimizer,
-    ema_target: nnx.Module | None = None,
+    ema_target: EmaTargetModel | None = None,
 ) -> int:
     """Preflight both state trees, then restore them without partial fallback."""
 
@@ -2186,24 +2313,45 @@ def strict_restore_research_payload(
         payload["optimizer_state"],
         label="optimizer",
     )
-    ema_state = None
+    ema_states: dict[str, Any] | None = None
     if ema_target is not None:
-        ema_state = nnx.state(ema_target, TrainableParam)
-        ema_current = dict(nnx.to_pure_dict(ema_state))
+        ema_states = ema_checkpoint_state(ema_target)
+        ema_current = {
+            name: dict(nnx.to_pure_dict(component_state))
+            for name, component_state in ema_states.items()
+        }
         assert_research_state_compatible(
             ema_current,
             payload["ema_target"],
             label="EMA target",
         )
+        assert_ema_encoder_compute_structure(ema_target)
 
     nnx.replace_by_pure_dict(model_state, payload["model_trainable"])
     nnx.replace_by_pure_dict(optimizer_state, payload["optimizer_state"])
-    if ema_state is not None:
-        nnx.replace_by_pure_dict(ema_state, payload["ema_target"])
+    if ema_states is not None:
+        for name, component_state in ema_states.items():
+            nnx.replace_by_pure_dict(
+                component_state,
+                payload["ema_target"][name],
+            )
     nnx.update(model, model_state)
     nnx.update(optimizer.opt_state, optimizer_state)
-    if ema_state is not None:
-        nnx.update(ema_target, ema_state)
+    if ema_states is not None:
+        nnx.update(
+            ema_target.encoder_master,
+            ema_states["encoder_master"],
+        )
+        nnx.update(
+            ema_target.jepa_state_norm,
+            ema_states["jepa_state_norm"],
+        )
+        nnx.update(
+            ema_target.state_projector,
+            ema_states["state_projector"],
+        )
+        refresh_ema_encoder_compute(ema_target)
+        validate_ema_encoder_compute(ema_target)
     optimizer.step[...] = jnp.asarray(optimizer_step, dtype=optimizer.step[...].dtype)
     return int(optimizer.step[...])
 
@@ -2321,7 +2469,7 @@ def save_research_checkpoint(
     lineage: dict[str, Any],
     max_to_keep: int = 2,
     extra: dict[str, Any] | None = None,
-    ema_target: nnx.Module | None = None,
+    ema_target: EmaTargetModel | None = None,
 ) -> Path:
     """Atomically publish a checksummed local research checkpoint."""
 
@@ -2396,7 +2544,7 @@ def load_research_checkpoint(
     model: nnx.Module,
     optimizer: nnx.Optimizer,
     expected_resume_contract: dict[str, Any] | None = None,
-    ema_target: nnx.Module | None = None,
+    ema_target: EmaTargetModel | None = None,
 ) -> dict[str, Any]:
     """Verify and strictly restore a completed local research checkpoint."""
 
@@ -2506,12 +2654,24 @@ def build_research_resume_contract(
                 np.float32(config.jepa_target_ema_decay)
             ),
             "initialization": "exact_copy_after_source_restore",
-            "parameter_scope": [
-                "encoder",
+            "checkpointed_master_scope": [
+                "encoder_master",
                 "state_projector",
                 "jepa_state_norm",
             ],
-            "floating_shadow_storage_dtype": "float32",
+            "derived_runtime_scope": ["encoder_compute"],
+            "floating_master_storage_dtype": "float32",
+            "encoder_compute_storage_dtype": "online_native",
+            "encoder_forward_source": "encoder_compute_only",
+            "encoder_compute_checkpointed": False,
+            "encoder_compute_refresh": [
+                "after_source_sync",
+                "after_each_post_optimizer_ema_update",
+                "after_checkpoint_restore",
+            ],
+            "encoder_compute_equation": (
+                "encoder_compute=cast_online_native(encoder_master)"
+            ),
             "positive_target_gradient": "always_stopped",
             "online_target_sigreg_gradient": "attached",
             "update_order": "after_online_optimizer",
@@ -4263,6 +4423,78 @@ def main() -> int:
         ema_target=ema_target,
     )
 
+    ema_target_metadata: dict[str, Any] | None = None
+    if ema_target is not None:
+        ema_checkpoint_abi = research_state_abi(
+            ema_checkpoint_state(ema_target)
+        )
+        ema_master_abi = research_state_abi(
+            nnx.state(ema_target.encoder_master)
+        )
+        ema_compute_abi = research_state_abi(
+            nnx.state(ema_target.encoder_compute)
+        )
+        ema_target_metadata = {
+            "checkpointed_trainable_state_abi": ema_checkpoint_abi,
+            "runtime_variable_state_abi": research_state_abi(
+                nnx.state(ema_target)
+            ),
+            "encoder_master_state_abi": ema_master_abi,
+            "encoder_compute_mirror_state_abi": ema_compute_abi,
+            "checkpointed_master_scope": [
+                "encoder_master",
+                "state_projector",
+                "jepa_state_norm",
+            ],
+            "derived_runtime_scope": ["encoder_compute"],
+            "floating_master_storage_dtype": "float32",
+            "encoder_compute_storage_dtype": "online_native",
+            "encoder_forward_source": "encoder_compute_only",
+            "encoder_compute_checkpointed": False,
+            "encoder_compute_refresh": [
+                "after_source_sync",
+                "after_each_post_optimizer_ema_update",
+                "after_checkpoint_restore",
+            ],
+            "encoder_compute_equation": (
+                "encoder_compute=cast_online_native(encoder_master)"
+            ),
+            "mirror_refresh_state_bandwidth_per_update": {
+                "encoder_master_read_bytes": int(
+                    ema_master_abi["nbytes"]
+                ),
+                "encoder_compute_write_bytes": int(
+                    ema_compute_abi["nbytes"]
+                ),
+                "total_bytes": int(
+                    ema_master_abi["nbytes"]
+                    + ema_compute_abi["nbytes"]
+                ),
+            },
+            "extra_forward": {
+                "scope": "future_planes_only",
+                "modules": ["bt4_encoder", "state_projector"],
+                "encoded_boards_per_example": int(config.horizon),
+                "compilation_static": True,
+            },
+            "positive_loss_target_source": "ema_future_vectors",
+            "target_sigreg_source": (
+                "online_z_all_current_and_future"
+            ),
+            "initialization": (
+                "restored_checkpoint"
+                if resumed_from is not None
+                else "exact_copy_after_source_restore"
+            ),
+            "update_order": "after_online_optimizer",
+            "hard_acceptance_metrics": [
+                "steady_examples_per_second",
+                "steady_encoded_boards_per_second",
+                "gpu_memory.peak_bytes_in_use",
+                "gpu_monitor.memory_used_mib_max",
+            ],
+        }
+
     run_config = {
         "autoresearch_ready": AUTORESEARCH_READY,
         "architecture_source": ARCHITECTURE_SOURCE,
@@ -4274,54 +4506,7 @@ def main() -> int:
         "timestamp_utc": timestamp,
         "args": vars(args) | {"output_dir": str(output_dir)},
         "model_config": dataclasses.asdict(config),
-        "ema_target": (
-            None
-            if ema_target is None
-            else {
-                "checkpointed_trainable_state_abi": research_state_abi(
-                    dict(
-                        nnx.to_pure_dict(
-                            nnx.state(ema_target, TrainableParam)
-                        )
-                    )
-                ),
-                "runtime_variable_state_abi": research_state_abi(
-                    dict(
-                        nnx.to_pure_dict(
-                            nnx.state(ema_target)
-                        )
-                    )
-                ),
-                "parameter_scope": [
-                    "encoder",
-                    "state_projector",
-                    "jepa_state_norm",
-                ],
-                "floating_shadow_storage_dtype": "float32",
-                "extra_forward": {
-                    "scope": "future_planes_only",
-                    "modules": ["bt4_encoder", "state_projector"],
-                    "encoded_boards_per_example": int(config.horizon),
-                    "compilation_static": True,
-                },
-                "positive_loss_target_source": "ema_future_vectors",
-                "target_sigreg_source": (
-                    "online_z_all_current_and_future"
-                ),
-                "initialization": (
-                    "restored_checkpoint"
-                    if resumed_from is not None
-                    else "exact_copy_after_source_restore"
-                ),
-                "update_order": "after_online_optimizer",
-                "hard_acceptance_metrics": [
-                    "steady_examples_per_second",
-                    "steady_encoded_boards_per_second",
-                    "gpu_memory.peak_bytes_in_use",
-                    "gpu_monitor.memory_used_mib_max",
-                ],
-            }
-        ),
+        "ema_target": ema_target_metadata,
         "checkpoint_step": checkpoint_step,
         "initial_optimizer_step": initial_optimizer_step,
         "initial_research_update": initial_research_update,
