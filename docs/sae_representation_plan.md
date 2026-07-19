@@ -5,6 +5,16 @@ corrected checkpoint now has 128-pair strength anchors against both the
 recovered DFM/JEPA source and original raw BT4. No published sparse artifact
 has yet passed the source-model parity gate described below.
 
+Local Stage-0 progress, 2026-07-19: commit `7c896a8` exposes the five normative
+pre/post-branch tensors without adding checkpoint state. On the real
+15-layer FP32 source, the captured final tokens are bit-identical to the
+ordinary local path and every hook at every layer agrees with the independent
+`reference_bt4.py` path within `5e-4`. Unit tests also prove that attention and
+MLP overrides are applied before `alpha`, residual addition, and layer norm.
+This passes the local JAX dense-hook ABI gate. Cross-framework
+TransformerLens parity, source sparse reconstruction, and published-artifact
+support parity remain pending.
+
 This document defines how to compare the original BT4 backbone with the
 recovered step-265,000 backbone, promoted intermediate checkpoints, and a final
 locally trained BT4 + DFM + JEPA model. It is the detailed Phase 6 companion to
@@ -464,7 +474,7 @@ Add a read-only hook/capture path for all five normative tensors and a
 replacement path for the two raw branches. On a fixed FP32 source batch:
 
 1. show that post-layer tensors from the hooked path match the unmodified JAX
-   forward;
+   forward; **complete locally in commit `7c896a8`**;
 2. export identical stored planes to the pinned upstream-compatible model;
 3. compare every layer and branch with max absolute/relative error, cosine,
    and RMS;

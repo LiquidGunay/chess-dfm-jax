@@ -1143,7 +1143,12 @@ sweeps, held-out data, and repeated seeds.
   immutable v3 pins.
 - [x] Keep SAE training and representation interventions deferred until both
   relative-Elo anchors exist.
-- [ ] Implement the read-only representation Stage-0 hook/parity gate, then
-  run dense Stage-1 drift on the frozen four-model comparison set. Schedule all
-  representation GPU work sequentially; sparse downloads/training remain
-  gated on source parity.
+- [x] Expose all five normative BT4 hook tensors and pre-`alpha` branch
+  replacement boundaries in commit `7c896a8`. Real-source FP32 capture is
+  bit-identical to the ordinary local tokens and matches the independent JAX
+  reference within `5e-4` at every hook/layer.
+- [ ] Run dense Stage-1 drift on the frozen four-model comparison set.
+  Schedule all representation GPU work sequentially; sparse
+  downloads/training remain gated on source parity.
+- [ ] Complete upstream TransformerLens/source-weight parity, then validate one
+  published transcoder before interpreting fixed sparse-feature transfer.

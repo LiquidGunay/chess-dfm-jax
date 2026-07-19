@@ -1935,7 +1935,8 @@ compatibility v2/update 300 remains the norm-on control. Both initial strength
 anchors now exist, so the next acceptance work is to:
 
 - implement the read-only five-hook BT4 capture path and prove that capture
-  leaves the unmodified FP32 source forward unchanged;
+  leaves the unmodified FP32 source forward unchanged (the local JAX portion
+  passed in commit `7c896a8`; upstream cross-framework parity remains);
 - run dense representation drift on the frozen raw/source/compatibility/
   corrected comparison set before loading a sparse artifact;
 - freeze a checkpoint-retention and disk-space policy before another
