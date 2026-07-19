@@ -296,7 +296,19 @@ and is not stop-gradient. That makes joint target/predictor scale contraction a
 real shortcut. Preserve this behavior for the compatibility baseline, then
 compare a stop-gradient target and an EMA target encoder as explicit research
 ablations; do not silently change target-gradient semantics while calibrating
-SIGReg.
+SIGReg. The controlled EMA `0.99` implementation now passes the provisional
+scale/rank gates, but it regresses fixed-slice policy and coupling metrics and
+costs about `17%` throughput, so it remains an available ablation rather than
+the promoted baseline. The per-horizon variance hinge is still required before
+the objective decision; measured details are in
+`docs/local_gpu_baseline.md`.
+
+This scale/shape split is also motivated by
+[VISReg](https://arxiv.org/abs/2606.02572), which argues that sketching
+regularizers can have weak gradients near collapse and retains a separate
+VICReg-style variance term for scale control. It is supporting evidence for
+the comparison, not an equivalent objective: VISReg uses sliced Wasserstein
+for distribution shape, whereas this baseline retains Epps-Pulley SIGReg.
 
 Collapse measurements are computed per horizon before aggregation:
 
@@ -603,6 +615,8 @@ sweeps, held-out data, and repeated seeds.
   [official Epps-Pulley implementation](https://github.com/galilai-group/lejepa/blob/main/lejepa/univariate/epps_pulley.py)
 - [LeWorldModel](https://arxiv.org/abs/2603.19312), the closest published
   predictive-world-model use of unscaled SIGReg
+- [VISReg](https://arxiv.org/abs/2606.02572) for explicitly separating
+  variance/scale control from distribution-shape regularization
 - [VICReg](https://arxiv.org/abs/2105.04906) and its
   [official implementation](https://github.com/facebookresearch/vicreg)
 - [RankMe](https://arxiv.org/abs/2210.02885) for entropy-based effective rank
@@ -646,14 +660,17 @@ sweeps, held-out data, and repeated seeds.
   preserves scale but weakens prediction/action/policy quality.
 - [x] Run and reject calibrated 10%-gradient prediction SIGReg: prediction
   rank was already healthy and policy quality regressed.
-- [ ] Compare an EMA target and a per-horizon variance hinge before deciding
-  whether target-scale stability warrants a semantic change.
+- [x] Implement, exact-parity test, and profile the controlled EMA target; it
+  passes scale/rank gates but is not promoted because policy/coupling metrics
+  regress and A10G throughput falls about `17%`.
+- [ ] Compare a per-horizon variance hinge before deciding whether
+  target-scale stability warrants a semantic change.
 - [x] Make effective experiment overrides explicit and reject silent no-op
   configuration before enabling unattended autoresearch.
 - [x] Remove always-zero legacy placeholders from experiment reports while
   preserving the exact parity oracle and failing closed on metric drift.
-- [ ] Freeze a corrected baseline objective after a stronger target-SIGReg
-  stability run.
+- [ ] Freeze a corrected baseline objective after the per-horizon
+  variance-hinge comparison.
 - [x] Implement and golden-test separate legacy-absolute and board-aware LC0
   canonical 1,858 action codecs.
 - [x] Implement deterministic paired-arena foundations, audit the real

@@ -468,6 +468,75 @@ prediction rank/variance collapse, and marginal prediction Gaussianity is not
 the main bottleneck. The report is
 `research/runs/target576-pred1885-smoke-b64-100/report.json`.
 
+### Controlled EMA-target ablation
+
+Commits `2667829`, `4ca012d`, and `fce9783` add an explicit EMA target
+semantics without changing the default online path. The positive JEPA target is
+always detached and comes from the EMA teacher, while normalized target SIGReg
+remains attached to the online current-and-future `z_all`. With decay `0.99`,
+the authoritative teacher is updated after each online optimizer step:
+
+```text
+teacher = 0.99 * teacher + 0.01 * online_updated
+```
+
+The teacher keeps a headless FP32 encoder master plus FP32 projector and state
+normalization state. A physically independent native-BF16 encoder mirror is
+used for the forward pass and refreshed after source initialization, every EMA
+update, and checkpoint restore. This split is required for exact A10G compute
+parity: the two rejected forensic prototypes
+`ema-target099-a10g-b1-smoke-v1` and
+`ema-target099-a10g-b1-parity-v2` produced initial online/teacher MSE
+`0.02834` and `0.03129`, respectively, because FP32 teacher buffers changed
+the GPU compute path even when cast at their read sites. The final
+master-plus-mirror implementation has exactly zero initial MSE at every
+horizon and identical initial RMS and norms. Its batch-one report is
+`research/runs/ema-target099-a10g-b1-master-mirror-v3/report.json`
+(SHA-256
+`3b0dbcc9bffb578a25cd0bd057c2a7b9ff528196def5b8def16fccef60ffc58d`).
+
+Only the authoritative master/projector/normalization state is checkpointed:
+`888,558,592` bytes. The derived BF16 compute mirror is excluded and rebuilt,
+giving `1,279,170,048` bytes of total runtime teacher state. The encoder master
+is `781,222,912` bytes, its mirror is `390,611,456` bytes, and refreshing it
+reads/writes `1,171,834,368` bytes per update. The extra teacher forward
+encodes the eight future boards, so the active graph processes 17 boards per
+example rather than nine.
+
+On the A10G batch-64 profile, EMA sustained `32.20` examples/s versus `38.94`
+for attached-online target `5.76`, a `17.3%` throughput cost. JAX peak live
+memory rose from `6,036,286,464` to `7,053,931,776` bytes, about `1.02 GB`.
+The EMA profile averaged `88.1%` GPU utilization. Its report is
+`research/runs/ema-target099-a10g-b64-profile-v1/report.json` (SHA-256
+`6e3d2bd88e10051ed179866a94af2e045bf0fd3fab80aa657398de92834014ed`).
+
+The paired 100-update run retained target SIGReg `5.76`, prediction SIGReg
+zero, the same 6,400 training examples, and the same two fixed validation
+batches as the attached-online run:
+
+| Fixed-slice result | Attached online 5.76 | EMA 0.99 + 5.76 |
+|---|---:|---:|
+| Mean positive-target RMS, final / initial | 0.9078 / 1.0105 | 0.9865 / 1.0105 |
+| Mean prediction RMS, final / initial | 0.9186 / 0.9611 | 0.9487 / 0.9611 |
+| Mean prediction effective rank, final / initial | 30.01 / 29.44 | 30.01 / 29.44 |
+| DFM CE, final (delta) | 4.8106 (-0.0366) | 4.9219 (+0.0747) |
+| Accuracy, final (delta) | 0.0732 (+0.0146) | 0.0498 (-0.0088) |
+| First legal mass, final (delta) | 0.5039 (+0.0491) | 0.4132 (-0.0416) |
+| Mean prediction-target cosine, final (delta) | 0.7854 (+0.0072) | 0.7704 (-0.0078) |
+| Action-shuffled / positive MSE, final (initial 3.90) | 4.00 | 3.79 |
+
+EMA passes the provisional scale/rank gates: target RMS retains `97.62%`,
+prediction RMS `98.71%`, and prediction effective rank `101.94%` of their
+initial means. It nevertheless regresses policy metrics, cosine alignment, and
+action-shuffle separation on this slice; the online/EMA target MSE also grows
+from zero to `0.04584` as intended. The 100-update run sustained `33.28`
+examples/s with `91.1%` mean GPU utilization and `7,116,167,680` bytes peak
+JAX memory. EMA is therefore a valid target-semantics experiment, but it is not
+promoted or frozen on its own. The per-horizon variance-hinge comparison
+remains the next objective decision. The complete report is
+`research/runs/ema-target099-target576-b64-100-v1/report.json` (SHA-256
+`e0020ccd1395a8d6c5b4faa8db30f6323eb1bddabcc3d833951be56d80872fd3`).
+
 ## Strict local checkpoint/resume
 
 Commit `f6b9c40` adds a research checkpoint format with:
@@ -754,5 +823,5 @@ knobs that the local graph cannot honor fail closed.
 
 The remaining acceptance work is to:
 
-- freeze a target-scale-stable normalized objective after the EMA-target and
-  per-horizon variance-hinge comparisons.
+- freeze a target-scale-stable normalized objective after the per-horizon
+  variance-hinge comparison.
