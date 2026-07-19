@@ -229,6 +229,7 @@ def test_experiment_then_cli_override_precedence_and_resume_contract(
     assert default_args.learning_rate is None
     assert default_args.bt4_learning_rate is None
     assert default_args.train_batch_schedule == "shard_major"
+    assert default_args.eval_batch_size is None
     default_config = local.apply_config_overrides(
         experiment_config,
         default_args,
@@ -247,6 +248,8 @@ def test_experiment_then_cli_override_precedence_and_resume_contract(
             "1e-6",
             "--train-batch-schedule",
             "global_permutation",
+            "--eval-batch-size",
+            "64",
         ]
     )
     disabled_config = local.apply_config_overrides(
@@ -258,6 +261,7 @@ def test_experiment_then_cli_override_precedence_and_resume_contract(
     assert disabled_config.learning_rate == 2.5e-5
     assert disabled_config.bt4_learning_rate == 1e-6
     assert disabled_args.train_batch_schedule == "global_permutation"
+    assert disabled_args.eval_batch_size == 64
 
     monkeypatch.setattr(
         local,

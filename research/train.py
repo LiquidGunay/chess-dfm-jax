@@ -3788,6 +3788,15 @@ def parse_args(
     parser.add_argument("--eval-only", action="store_true")
     parser.add_argument("--eval-batches", type=int, default=1)
     parser.add_argument(
+        "--eval-batch-size",
+        type=int,
+        help=(
+            "Validation batch size. Omit to match --batch-size; set it "
+            "explicitly to keep held-out positions fixed across training "
+            "batch-size experiments."
+        ),
+    )
+    parser.add_argument(
         "--collapse-diagnostics",
         action=argparse.BooleanOptionalAction,
         default=False,
@@ -4669,6 +4678,10 @@ def main() -> int:
         raise ValueError("Set --steps > 0 or --train-seconds > 0")
     if args.train_seconds < 0:
         raise ValueError("--train-seconds must be non-negative")
+    if args.batch_size < 1:
+        raise ValueError("--batch-size must be positive")
+    if args.eval_batch_size is not None and args.eval_batch_size < 1:
+        raise ValueError("--eval-batch-size must be positive")
     if args.sigreg_reference_count <= 0:
         raise ValueError("--sigreg-reference-count must be positive")
     for flag, value in (
@@ -4735,9 +4748,14 @@ def main() -> int:
         shuffle_files=True,
         batch_schedule=args.train_batch_schedule,
     )
+    eval_batch_size = (
+        args.batch_size
+        if args.eval_batch_size is None
+        else args.eval_batch_size
+    )
     val_batches = FixedTrajectoryBatches(
         data_root / "val",
-        batch_size=args.batch_size,
+        batch_size=eval_batch_size,
         horizon=config.horizon,
         seed=args.val_seed,
         shuffle_files=True,
