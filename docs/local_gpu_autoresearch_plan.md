@@ -1,10 +1,26 @@
 # Local GPU Autoresearch Plan
 
-Status: implementation in progress. The plan was approved on 2026-07-18;
-unattended research remains disabled with `AUTORESEARCH_READY = False` as of
-2026-07-19. V2/update 300 is the repeat-qualified offline baseline; the gate
-stays closed pending real-checkpoint GPU validation of the sealed-history arena
-path and a fault-free full strength screen.
+Status: implementation in progress. The plan was approved on 2026-07-18 and
+revised on 2026-07-19; unattended research remains disabled with
+`AUTORESEARCH_READY = False`. V2/update 300 is the repeat-qualified
+compatibility control, not a frozen objective. GPU execution is available
+again.
+
+The agreed critical path is now:
+
+1. replace the per-state prediction/target RMS-matching term with calibrated
+   prediction SIGReg while retaining raw JEPA MSE and target SIGReg;
+2. profile the resulting compiled graph across feasible physical batch sizes
+   before selecting the training batch;
+3. calibrate both SIGReg coefficients on that selected graph and batch, then
+   run short causal objective screens;
+4. repeat-qualify a corrected 30-minute baseline;
+5. measure relative Elo against the recovered DFM/JEPA model and raw BT4
+   anchor under identical searchless inference budgets; and
+6. begin the SAE/representation study only after those strength anchors exist.
+
+The A10G is single-tenant throughout this sequence. Training, profiling,
+arena evaluation, and SAE work do not run concurrently.
 
 This document is the implementation contract for turning the existing
 TPU/cloud-oriented BT4 + DFM + JEPA experiment into a fast, measurable,
@@ -286,14 +302,63 @@ latent-scale/rank gates, not raw MSE alone.
 
 ### Prediction-collapse ablations
 
-Run a paired 2×2 target-SIGReg off/on × prediction-SIGReg off/on ablation.
-Prediction SIGReg is not the new default: the recovered checkpoint currently
-has healthy prediction variance/rank and a strong action-shuffle gap. Accept it
-only if it improves prediction stability or quality without weakening action
-sensitivity, policy metrics, or relative Elo. If Gaussian marginal shape is
-not the failure mode, prefer a targeted action-coupling loss. A per-horizon
-VICReg-style standard-deviation hinge is the first fallback for actual
-collapse.
+The compatibility loss adds the following per-state, per-horizon term directly
+to raw JEPA MSE:
+
+```text
+abs(log(rms(z_pred)) - stop_gradient(log(rms(z_target))))
+```
+
+This term prevents prediction scale from separating from target scale, but it
+does not prevent joint target/prediction contraction. The recovered checkpoint
+and repeat-qualified compatibility control currently have healthy prediction
+variance/rank and a strong action-shuffle gap, so the norm term may contribute
+to prediction health but has not been isolated as its cause.
+
+The corrected-objective hypothesis is:
+
+```text
+loss = policy_ce
+     + raw_jepa_mse
+     + target_sigreg_coeff * normalized_sigreg(z_target)
+     + pred_sigreg_coeff * normalized_sigreg(z_pred)
+     + legality
+```
+
+Remove the RMS-matching term while leaving target attachment, rollout,
+initialization, and all other loss semantics unchanged. This tests absolute
+distributional regularization of both target and prediction latents instead of
+relative norm matching.
+
+The earlier prediction-SIGReg `0.57` rejection does not test this replacement:
+that run retained the norm term and added a roughly 3%-of-JEPA-group-gradient
+regularizer. Keep it rejected as an add-on to the compatibility objective, but
+do not transfer `0.57` to the no-norm objective. Removing the norm term changes
+the primary gradient, so both target and prediction SIGReg coefficients must be
+audited again after selecting the physical batch.
+
+Use three sequential, matched short screens rather than paying for a new full
+grid:
+
+1. norm on, prediction SIGReg off: compatibility control;
+2. norm off, prediction SIGReg off: expose unregularized collapse pressure;
+3. norm off, prediction SIGReg on: test the calibrated replacement.
+
+Record raw and weighted scalar contributions, per-component gradient norms and
+cosines, and their trajectories over the first 50--100 updates. Coefficients
+should keep weighted terms in a comparable order of magnitude while preventing
+auxiliary gradients from dominating the primary gradient. A rapidly falling
+SIGReg value is expected and must be judged over the early trajectory, not only
+at update zero.
+
+The current implementation pools valid prediction tokens across horizons for
+prediction SIGReg. Retain that implementation for the first isolated test, but
+gate and report scale, rank, and action coupling separately at every horizon.
+If pooled SIGReg hides a horizon-specific failure, compare per-horizon SIGReg
+as a subsequent controlled change. If Gaussian marginal shape is not the
+failure mode, prefer a targeted action-coupling loss; a per-horizon
+VICReg-style standard-deviation hinge remains the first fallback for actual
+low-variance collapse.
 
 The current future target is produced by the same trainable encoder/projector
 and is not stop-gradient. That makes joint target/predictor scale contraction a
@@ -304,10 +369,12 @@ SIGReg. The controlled EMA `0.99` implementation now passes the provisional
 scale/rank gates, but it regresses fixed-slice policy and coupling metrics and
 costs about `17%` throughput, so it remains an available ablation rather than
 the promoted baseline. The per-horizon variance-hinge comparison is also
-complete: coefficient `1.75` is the smallest measured point that retains 95%
-of target RMS, while `3.75` fully stabilizes scale and coupling. Both regress
-DFM CE and legal mass, so neither is promoted. Measured details are in
-`docs/local_gpu_baseline.md`.
+complete: coefficient `1.75` was the smallest measured point that crossed the
+old provisional 95% target-RMS-retention threshold, while `3.75` fully
+stabilized scale and coupling. Both regress DFM CE and legal mass, so neither
+is promoted. The 95% threshold is retained only as historical calibration
+context, not as the corrected objective's acceptance gate. Measured details
+are in `docs/local_gpu_baseline.md`.
 
 Those EMA and hinge comparisons used the original first-shard validation
 slice. They remain mechanistic calibration evidence, but not representative
@@ -377,7 +444,8 @@ result, or promotion decision. A matched 30-minute prediction-SIGReg `0.57`
 experiment was rejected: its best two-pool CE is `4.511721` versus incumbent
 v2/u300 `4.510334`, and matched update-400 policy, legality, and JEPA metrics
 regress for only tiny rank/variance gains. Prediction-SIGReg therefore stays
-`0.0`.
+`0.0` in the compatibility control; its role as a replacement for the norm
+term remains untested.
 
 Static-batch arena pilots at caps 64, 128, and 256 eliminated timeout faults;
 only cap 256 completed all 32 games without cap adjudication, making it the
@@ -385,10 +453,9 @@ first pilot-valid limit. Its 16-pair point estimate is `0` descriptive Elo
 with a deliberately broad `[-287.451, +287.451]` interval, not a strength
 decision. Commit `c2d5efb` replaces repeated hot-path history replay with
 sealed O(1) endpoint validation and passes 83 CPU tests with exact gameplay
-payload parity. Real-checkpoint GPU parity, optimized timing, and the full
-128-pair screen remain unmeasured because elevated execution is blocked by the
-account usage limit reported through 2026-07-25. Unattended search remains
-disabled.
+payload parity. GPU access is restored; real-checkpoint GPU parity, optimized
+timing, and the full 128-pair screen remain unmeasured. Unattended search
+remains disabled.
 
 This scale/shape split is also motivated by
 [VISReg](https://arxiv.org/abs/2606.02572), which argues that sketching
@@ -411,10 +478,23 @@ Collapse measurements are computed per horizon before aggregation:
 ### Gate
 
 - Loss and gradients are invariant to batch layout within numerical tolerance.
+- Removing the explicit valid-count multiplier does not justify treating
+  finite-sample SIGReg as independent of the sampled batch. Its value and
+  gradient dispersion are measured across candidate physical batch sizes.
 - Quality comparisons use seeded globally permuted validation slots; a
   first-shard slice is only a correctness/calibration instrument.
-- Predicted latents retain nontrivial variance and effective rank.
+- Target and predicted latents remain inside an empirically calibrated
+  representation-health envelope based on repeated-control variability:
+  absolute RMS by horizon, prediction/target RMS ratio, effective rank,
+  low-tail feature standard deviation, and normalized SIGReg discrepancy.
+- The old 95% mean-target-RMS retention threshold is a diagnostic only, not a
+  hard promotion gate. Aggregate RMS must not hide horizon- or
+  feature-specific failure.
 - JEPA beats trivial baselines at useful horizons.
+- Positive predictions beat zero and action-shuffled predictions at every
+  useful horizon.
+- Policy CE, accuracy, and legal mass remain within predeclared
+  repeated-control tolerances.
 - Legal probability mass is accumulated in FP32 and bounded to `[0, 1]`; the
   legality penalty cannot become negative through BF16 summation error.
 - Loss clipping is not permanently active.
@@ -457,16 +537,34 @@ use XLA cost/memory analysis plus 100 ms `nvidia-smi` utilization, memory,
 power, and clock samples. Do not let an unavailable profiler block
 wall-clock/throughput optimization or silently omit the limitation.
 
+Batch 128 is the measured incumbent, not the selected final batch. First
+implement the no-norm objective with nonzero target and prediction SIGReg so
+the profile includes the intended compiled work. Then profile physical batches
+64, 128, 192, and 256, stopping at OOM, compile instability, or a clear
+throughput plateau. For every point, separate compilation from steady state
+and record end-to-end examples/s, device examples/s, input stall, HBM,
+utilization, power, and clocks.
+
+Select the throughput knee rather than the largest batch that fits. Then verify
+learning efficiency at fixed wall time, because a larger batch produces fewer
+optimizer updates and may require a separate learning-rate comparison. Keep
+validation fixed at 64-example batches over identical positions and finite
+sample partitions. Exact SIGReg coefficients are calibrated only after this
+physical batch is selected; a representative nonzero coefficient is sufficient
+to include the correct work in the hardware profile.
+
 Optimization sequence:
 
-1. batch and microbatch size;
-2. real gradient accumulation;
-3. input prefetch and pinned-transfer behavior;
-4. future-encoder chunking/rematerialization;
-5. sampled future targets with `K=1,2,8`;
-6. BF16/FP32 boundaries;
-7. scan/unroll choices; and
-8. only then architecture changes.
+1. no-norm target-plus-prediction-SIGReg compiled graph;
+2. physical batch feasibility and end-to-end throughput;
+3. selected-batch learning rate and fixed-time learning efficiency;
+4. real gradient accumulation, only with correct global SIGReg statistics;
+5. input prefetch and pinned-transfer behavior;
+6. future-encoder chunking/rematerialization;
+7. sampled future targets with `K=1,2,8`;
+8. BF16/FP32 boundaries;
+9. scan/unroll choices; and
+10. only then architecture changes.
 
 The main expected lever is avoiding nine trainable BT4 encodes per sample on
 every step. Future-horizon sampling must be unbiased and compared at fixed
@@ -608,6 +706,18 @@ Report model-pool relative logistic and normalized Elo with pair-aware 95%
 uncertainty, game count, score breakdown, FEN set digest, refinement count,
 candidate count, latency, and games/s. Never label it as human or Lichess Elo.
 
+The first strength milestone is not promotion. It is a decision-useful relative
+Elo estimate under an identical searchless inference budget against both:
+
+- the recovered step-265,000 DFM/JEPA source checkpoint, which anchors local
+  training progress; and
+- the original self-play BT4 policy, which anchors the representation study.
+
+Validate the raw-BT4 policy adapter and board-aware codec before treating that
+second comparison as evidence. Use the correctness tier first, then the
+128-pair screen for checkpoints that pass the offline gates. The broad 16-pair
+interval is pipeline evidence only.
+
 Arena tiers:
 
 1. 16 opening pairs for correctness only;
@@ -681,14 +791,17 @@ promotion metric.
 
 Initial experiment order:
 
-1. loss normalization and prediction collapse;
-2. future-target sampling;
-3. teacher-forced versus free-state rollout schedules;
-4. projector width, depth, and latent dimension;
-5. DFM width, depth, and refinement training;
-6. recurrent versus direct multi-horizon JEPA;
-7. optimizer and BT4 learning-rate/freeze schedules; and
-8. closed-loop latent-conditioned DFM refinement.
+1. remove RMS norm matching and replace it with calibrated prediction SIGReg;
+2. select physical batch size and learning rate from active-graph profiling;
+3. freeze a repeat-qualified 30-minute corrected baseline;
+4. establish relative Elo against the recovered model and raw BT4;
+5. future-target sampling;
+6. teacher-forced versus free-state rollout schedules;
+7. projector width, depth, and latent dimension;
+8. DFM width, depth, and refinement training;
+9. recurrent versus direct multi-horizon JEPA;
+10. optimizer and BT4 learning-rate/freeze schedules; and
+11. closed-loop latent-conditioned DFM refinement.
 
 ## Phase 6: representation and SAE study
 
@@ -699,6 +812,13 @@ replacements, not final-trunk SAEs. They operate on raw pre-`alpha` branch
 outputs and their corresponding inputs. Source-model FP32 reconstruction and
 cross-framework hook parity must pass before they can support claims about
 backbone drift.
+
+This phase is deliberately off the GPU critical path until the corrected model
+has a decision-useful relative Elo estimate against the recovered DFM/JEPA
+checkpoint and the raw BT4 anchor. Do not run SAE training concurrently with
+model training, profiling, or arena evaluation; the single A10G performs one
+of these workloads at a time. Elo-aligned checkpoints, rather than merely the
+lowest-loss checkpoint, determine the first representation comparison set.
 
 Use an identical fixed board/trajectory corpus and consistent hook semantics for:
 
@@ -861,8 +981,24 @@ sweeps, held-out data, and repeated seeds.
   Its best checkpoint loses primary two-pool CE to v2/u300, and a
   checkpoint-age-matched u400 audit trades policy/legal/JEPA regressions for
   only tiny diversity gains.
-- [ ] Freeze a corrected baseline objective only after scale stability and
-  policy/legal metrics pass together on matched global validation.
+- [ ] Make the per-state RMS norm term explicitly configurable, preserve exact
+  compatibility behavior when enabled, and test the no-norm raw-MSE path.
+- [ ] Validate the no-norm target-plus-prediction-SIGReg objective, including
+  disabled-path parity, duplication/padding invariance, finite-sample metrics,
+  and per-horizon collapse/coupling diagnostics.
+- [ ] Profile physical batches 64, 128, 192, and 256 on the active no-norm
+  target-plus-prediction-SIGReg graph; choose the A10G throughput knee before
+  fixing the training batch, while retaining validation batch 64.
+- [ ] Re-audit target and prediction SIGReg scalar contributions, gradient
+  norms, and gradient cosines on the selected graph and physical batch. Do not
+  transfer target `5.76` or prediction `0.57` blindly.
+- [ ] Run matched short screens for norm-on/pred-SIGReg-off,
+  norm-off/pred-SIGReg-off, and norm-off/pred-SIGReg-on. Advance only the
+  corrected objective that passes policy, legality, action-coupling, and
+  representation-health checks.
+- [ ] Repeat-qualify a 30-minute corrected baseline and freeze its loss,
+  physical batch, learning rate, validation contract, and noise envelope
+  before enabling unattended architecture research.
 - [x] Implement and golden-test separate legacy-absolute and board-aware LC0
   canonical 1,858 action codecs.
 - [x] Implement deterministic paired-arena foundations, audit the real
@@ -886,11 +1022,14 @@ sweeps, held-out data, and repeated seeds.
 - [x] Add the sealed O(1) trusted-history arena path in commit `c2d5efb` and
   establish exact CPU gameplay-payload parity across 83 focused tests.
 - [ ] Establish real-checkpoint GPU parity and timing for the sealed-history
-  path, then run the full fault-free 128-pair screen at cap 256. Elevated GPU
-  execution is unavailable under the reported account limit until 2026-07-25;
-  the pre-optimization pilot timings are not evidence of optimized speed.
+  path, then run full fault-free 128-pair screens at cap 256 against the
+  recovered DFM/JEPA checkpoint and, after adapter validation, raw BT4. The
+  pre-optimization pilot timings are not evidence of optimized speed.
 - [x] Regenerate and repin the promotion pool after exact replay found entry
   1,245 claim-draw terminal. Two v3 source regenerations were byte-identical,
   all 2,048 final histories pass the production replay loader, selected
   validation/test overlap is zero, and the evaluator is reopened on the
   immutable v3 pins.
+- [ ] Keep SAE training and representation interventions deferred until those
+  relative-Elo anchors exist; thereafter schedule all SAE GPU work
+  sequentially after training and arena jobs.
