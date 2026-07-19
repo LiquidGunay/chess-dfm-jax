@@ -172,6 +172,45 @@ def _install_fake_inference(
     return calls
 
 
+def _install_fake_lean_inference(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    mutate: Callable[[np.ndarray], np.ndarray] | None = None,
+) -> list[dict[str, object]]:
+    calls: list[dict[str, object]] = []
+
+    def fake_infer(
+        model,
+        current_planes,
+        root_legal_mask,
+        *,
+        refinement_passes,
+        action_codec_id,
+    ):
+        mask = np.asarray(root_legal_mask)
+        calls.append(
+            {
+                "model": model,
+                "current_planes": np.asarray(current_planes),
+                "root_legal_mask": mask,
+                "refinement_passes": refinement_passes,
+                "action_codec_id": action_codec_id,
+            }
+        )
+        selected = np.asarray(
+            [np.flatnonzero(row)[0] for row in mask],
+            dtype=np.int32,
+        )
+        actions = np.broadcast_to(
+            selected[:, None],
+            (mask.shape[0], model.config.horizon),
+        ).copy()
+        return jnp.asarray(actions if mutate is None else mutate(actions))
+
+    monkeypatch.setattr(local_policy, "infer_dfm_actions_from_current", fake_infer)
+    return calls
+
+
 def _replace_trace(
     result: DFMInferenceResult,
     **updates,
@@ -283,6 +322,179 @@ def test_lean_adapter_returns_checked_actions_without_trace_diagnostics():
     assert result.action_indices.shape == (1,)
     assert result.moves == (chess.Move.from_uci("e2e4"),)
     assert result.action_indices.flags.writeable is False
+
+
+@pytest.mark.parametrize("active_batch_size", [1, 3])
+def test_frozen_lean_batch_matches_unpadded_actions_for_odd_and_singleton_tails(
+    active_batch_size: int,
+):
+    histories = (
+        _push_history(),
+        _push_history("e2e4"),
+        _push_history("d2d4", "d7d5"),
+    )[:active_batch_size]
+    boards = tuple(history[-1] for history in histories)
+    dynamic = LocalDFMPolicy(
+        model=_CompiledModel(),
+        model_id="dynamic",
+        refinement_passes=2,
+        collect_diagnostics=False,
+    ).select_actions(boards, histories)
+    frozen = LocalDFMPolicy(
+        model=_CompiledModel(),
+        model_id="frozen",
+        refinement_passes=2,
+        collect_diagnostics=False,
+        inference_batch_size=4,
+    ).select_actions(boards, histories)
+
+    np.testing.assert_array_equal(frozen.action_indices, dynamic.action_indices)
+    assert frozen.moves == dynamic.moves
+    assert frozen.action_indices.shape == (active_batch_size,)
+    assert frozen.diagnostics is None
+
+
+def test_frozen_lean_batch_uses_one_physical_shape_as_population_shrinks(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    histories = (
+        _push_history(),
+        _push_history("e2e4"),
+        _push_history("d2d4", "d7d5"),
+        _push_history("c2c4", "g8f6", "b1c3"),
+    )
+    calls = _install_fake_lean_inference(monkeypatch)
+    adapter = LocalDFMPolicy(
+        model=_Model(),
+        model_id="static-shape",
+        refinement_passes=3,
+        collect_diagnostics=False,
+        inference_batch_size=4,
+    )
+
+    for active_batch_size in (4, 3, 1):
+        active_histories = histories[:active_batch_size]
+        result = adapter.select_actions(
+            [history[-1] for history in active_histories],
+            active_histories,
+        )
+        assert result.action_indices.shape == (active_batch_size,)
+
+    assert [call["current_planes"].shape[0] for call in calls] == [4, 4, 4]
+    assert [call["root_legal_mask"].shape[0] for call in calls] == [4, 4, 4]
+    for active_batch_size, call in zip((4, 3, 1), calls, strict=True):
+        if active_batch_size == 4:
+            continue
+        np.testing.assert_array_equal(
+            call["current_planes"][active_batch_size:],
+            np.repeat(
+                call["current_planes"][:1],
+                4 - active_batch_size,
+                axis=0,
+            ),
+        )
+        np.testing.assert_array_equal(
+            call["root_legal_mask"][active_batch_size:],
+            np.repeat(
+                call["root_legal_mask"][:1],
+                4 - active_batch_size,
+                axis=0,
+            ),
+        )
+
+
+@pytest.mark.parametrize("inference_batch_size", [0, -1, True, 1.5])
+def test_frozen_inference_batch_size_must_be_a_positive_integer(
+    inference_batch_size,
+):
+    with pytest.raises(LocalPolicyError, match="inference_batch_size"):
+        LocalDFMPolicy(
+            model=_Model(),
+            model_id="bad-static-shape",
+            inference_batch_size=inference_batch_size,
+        )
+
+
+def test_active_rows_cannot_exceed_frozen_inference_batch_size(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    calls = _install_fake_lean_inference(monkeypatch)
+    histories = (_push_history(), _push_history("e2e4"))
+    adapter = LocalDFMPolicy(
+        model=_Model(),
+        model_id="too-small-static-shape",
+        collect_diagnostics=False,
+        inference_batch_size=1,
+    )
+    with pytest.raises(LocalPolicyError, match="exceeds frozen"):
+        adapter.select_actions(
+            [history[-1] for history in histories],
+            histories,
+        )
+    assert calls == []
+
+
+def test_frozen_lean_padding_outputs_are_inert_but_real_outputs_fail_closed(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    history = _push_history()
+
+    def invalidate_padding(actions: np.ndarray) -> np.ndarray:
+        actions[1:] = -1
+        return actions
+
+    _install_fake_lean_inference(monkeypatch, mutate=invalidate_padding)
+    adapter = LocalDFMPolicy(
+        model=_Model(),
+        model_id="inert-padding",
+        collect_diagnostics=False,
+        inference_batch_size=4,
+    )
+    result = adapter.select_actions([history[-1]], [history])
+    assert result.action_indices.shape == (1,)
+    assert len(result.moves) == 1
+
+    def invalidate_real_row(actions: np.ndarray) -> np.ndarray:
+        actions[0] = -1
+        return actions
+
+    _install_fake_lean_inference(monkeypatch, mutate=invalidate_real_row)
+    with pytest.raises(LocalPolicyError, match="out-of-range"):
+        adapter.select_actions([history[-1]], [history])
+
+
+def test_frozen_diagnostic_batch_slices_every_trace_to_real_rows(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    histories = (_push_history(), _push_history("e2e4"), _push_history("d2d4"))
+
+    def poison_padding(result: DFMInferenceResult) -> DFMInferenceResult:
+        return _replace_trace(
+            result,
+            root_raw_entropy=result.trace.root_raw_entropy.at[:, 3].set(jnp.nan),
+        )
+
+    calls = _install_fake_inference(monkeypatch, mutate=poison_padding)
+    result = LocalDFMPolicy(
+        model=_Model(),
+        model_id="diagnostic-static-shape",
+        refinement_passes=3,
+        trace_top_k=2,
+        collect_diagnostics=True,
+        inference_batch_size=4,
+    ).select_actions(
+        [history[-1] for history in histories],
+        histories,
+    )
+
+    assert calls[0]["current_planes"].shape == (4, 112, 8, 8)
+    assert result.action_indices.shape == (3,)
+    assert result.diagnostics is not None
+    assert result.diagnostics.encoded_planes_shape == (3, 112, 8, 8)
+    assert result.diagnostics.actions_before.shape == (3, 3, 4)
+    assert result.diagnostics.actions_after.shape == (3, 3, 4)
+    assert result.diagnostics.root_raw_entropy.shape == (3, 3)
+    assert result.diagnostics.root_legal_topk_indices.shape == (3, 3, 2)
 
 
 def test_adapter_runs_through_real_compiled_inference_boundary():
@@ -522,6 +734,27 @@ def test_adapter_preserves_timeout_classification(
             (_push_history(),),
             refinement_passes=2,
             trace_top_k=2,
+        )
+
+
+def test_frozen_lean_adapter_preserves_timeout_without_padded_row_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    def time_out(*args, **kwargs):
+        raise TimeoutError("static arena move deadline")
+
+    monkeypatch.setattr(local_policy, "infer_dfm_actions_from_current", time_out)
+    history = _push_history()
+    adapter = LocalDFMPolicy(
+        model=_Model(),
+        model_id="static-timeout",
+        collect_diagnostics=False,
+        inference_batch_size=4,
+    )
+    with pytest.raises(TimeoutError, match="static arena move deadline"):
+        adapter.select_actions(
+            [history[-1]],
+            [history],
         )
 
 

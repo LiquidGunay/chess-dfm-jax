@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import tempfile
@@ -9,23 +10,35 @@ import chess
 import numpy as np
 import pytest
 
+import research.local_policy as local_policy
 from chess_dfm_jax.policy import (
     ACTION_CODEC_LEGACY_ABSOLUTE_1858,
+    ACTION_VOCAB_SIZE,
     legal_action_mask,
 )
-from research.arena import build_opening_pool
+from research.arena import build_opening_pool, make_color_reversed_pairs
 from research.evaluate_arena import (
     ARENA_RUN_SCHEMA,
     FROZEN_TIERS,
+    PolicyTracker,
+    TrackingPolicy,
     _resolved_run_options,
+    _static_inference_batch_size,
     load_run_state,
     run_blocks,
 )
+from research.local_policy import (
+    STATIC_INFERENCE_BATCHING_SCHEMA,
+    STATIC_INFERENCE_PADDING_MODE,
+    LocalDFMPolicy,
+)
 from research.play_arena import (
+    FAULT_TIMEOUT,
     OPENING_HISTORY_CONVENTION,
     OPENING_HISTORY_SCHEMA,
     histories_for_pairs,
     load_opening_history_sidecar,
+    play_arena_pairs,
 )
 from research.prepare import REPO_ROOT
 
@@ -111,8 +124,19 @@ class _Selection:
         self.action_indices = np.asarray(action_indices, dtype=np.int32)
 
 
+class _LeanModel:
+    class Config:
+        horizon = 4
+        action_vocab_size = ACTION_VOCAB_SIZE
+
+    config = Config()
+
+
 class _FirstLegalPolicy:
     action_codec_id = ACTION_CODEC_LEGACY_ABSOLUTE_1858
+    inference_batching_schema = STATIC_INFERENCE_BATCHING_SCHEMA
+    inference_padding_mode = STATIC_INFERENCE_PADDING_MODE
+    inference_batch_size = 1
 
     def __init__(self, model_id: str):
         self.model_id = model_id
@@ -134,6 +158,18 @@ class _FirstLegalPolicy:
         )
 
 
+class _StaticPhysicalRecordingPolicy(_FirstLegalPolicy):
+    inference_batch_size = 4
+
+    def __init__(self, model_id: str):
+        super().__init__(model_id)
+        self.physical_batch_sizes: list[int] = []
+
+    def select_actions(self, boards, histories):
+        self.physical_batch_sizes.append(self.inference_batch_size)
+        return super().select_actions(boards, histories)
+
+
 def _contract(*, promotion: bool = False):
     return {
         "relative_elo_scope": "checkpoint_pool_relative_only",
@@ -153,7 +189,37 @@ def _contract(*, promotion: bool = False):
             "policy_timeout_seconds": 30.0,
             "policy_batch_size_cap": 2,
         },
+        "inference_batching": {
+            "schema_version": STATIC_INFERENCE_BATCHING_SCHEMA,
+            "physical_batch_size": 1,
+            "padding_mode": STATIC_INFERENCE_PADDING_MODE,
+            "padding_source": "first_validated_active_encoded_row",
+            "active_rows": "ordered_prefix",
+            "output_handling": "slice_to_active_rows_before_semantic_validation",
+            "host_validation_scope": "active_rows_only",
+            "metrics_basis": "real_rows_only",
+            "timing_basis": "physical_padded_call_wall_time",
+            "runtime_rng": "none_deterministic_greedy_inference",
+        },
     }
+
+
+@pytest.mark.parametrize(
+    ("block_pairs", "policy_batch_size_cap", "expected"),
+    [(16, 64, 16), (128, 32, 32), (1, 64, 1)],
+)
+def test_static_physical_shape_uses_smaller_block_or_chunk_bound(
+    block_pairs: int,
+    policy_batch_size_cap: int,
+    expected: int,
+):
+    assert (
+        _static_inference_batch_size(
+            block_pairs=block_pairs,
+            policy_batch_size_cap=policy_batch_size_cap,
+        )
+        == expected
+    )
 
 
 def test_history_sidecar_is_digest_checked_aligned_and_replayed(
@@ -238,6 +304,24 @@ def test_resumable_blocks_persist_relative_stats_and_verify_immutable_files(
     )
     assert resumed == state
 
+    changed_batching = copy.deepcopy(contract)
+    changed_batching["inference_batching"]["physical_batch_size"] = 2
+    with pytest.raises(ValueError, match="resume contract mismatch"):
+        load_run_state(
+            output_dir,
+            expected_contract=changed_batching,
+        )
+
+    changed_version = copy.deepcopy(contract)
+    changed_version["inference_batching"]["schema_version"] = (
+        "chess-dfm-static-inference-batching-v0"
+    )
+    with pytest.raises(ValueError, match="resume contract mismatch"):
+        load_run_state(
+            output_dir,
+            expected_contract=changed_version,
+        )
+
     block_path = Path(state["blocks"][0]["path"])
     block_path.write_text(
         block_path.read_text(encoding="utf-8") + " ",
@@ -248,6 +332,72 @@ def test_resumable_blocks_persist_relative_stats_and_verify_immutable_files(
             output_dir,
             expected_contract=contract,
         )
+
+
+def test_tracking_counts_only_active_rows_while_physical_shape_stays_frozen():
+    delegate = _StaticPhysicalRecordingPolicy("candidate")
+    tracker = PolicyTracker()
+    policy = TrackingPolicy(delegate=delegate, tracker=tracker)
+    board = chess.Board()
+
+    policy.select_actions([board, board, board], [(), (), ()])
+    policy.select_actions([board], [()])
+
+    assert delegate.physical_batch_sizes == [4, 4]
+    assert tracker.positions == 4
+    assert tracker.legal_moves == 80
+    assert tracker.representable_legal_actions == 80
+    assert tracker.incomplete_coverage_positions == 0
+    assert tracker.calls == 2
+    assert tracker.call_seconds >= 0.0
+
+
+def test_static_padded_timeout_faults_only_the_real_active_game(
+    workspace_tmp: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    pool, _path, _sidecar, loaded = _fixture_assets(workspace_tmp)
+    pairs = make_color_reversed_pairs(
+        [pool["openings"][0]["fen"]],
+        model_a="candidate",
+        model_b="opponent",
+    )
+    histories = histories_for_pairs(pairs, loaded)
+
+    def time_out(*args, **kwargs):
+        raise TimeoutError("synthetic padded device timeout")
+
+    monkeypatch.setattr(local_policy, "infer_dfm_actions_from_current", time_out)
+    tracker = PolicyTracker()
+    candidate = TrackingPolicy(
+        delegate=LocalDFMPolicy(
+            model=_LeanModel(),
+            model_id="candidate",
+            collect_diagnostics=False,
+            inference_batch_size=4,
+        ),
+        tracker=tracker,
+    )
+    result = play_arena_pairs(
+        pairs,
+        opening_histories=histories,
+        policies={
+            "candidate": candidate,
+            "opponent": _FirstLegalPolicy("opponent"),
+        },
+        additional_ply_cap=1,
+        policy_batch_size_cap=4,
+    )
+
+    timeout_records = [record for record in result.records if record.fault_kind == FAULT_TIMEOUT]
+    assert len(result.records) == 2
+    assert len(timeout_records) == 1
+    assert timeout_records[0].fault_model == "candidate"
+    candidate_stats = {stats.model_id: stats for stats in result.model_stats}["candidate"]
+    assert candidate_stats.policy_calls == 1
+    assert candidate_stats.positions_evaluated == 1
+    assert tracker.calls == 1
+    assert tracker.positions == 1
 
 
 def test_promotion_state_advances_at_one_complete_pair_boundary(

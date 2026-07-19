@@ -29,6 +29,10 @@ program.md        rules for automated research
 results.tsv       compact append-only experiment ledger
 ```
 
+The arena freezes one physical JAX inference batch shape per run and pads only
+already-validated encoded rows. Shrinking game populations therefore reuse the
+warmup executable instead of compiling new batch shapes.
+
 All mutable state, including Python and JAX caches, remains below
 `/mountpoint/.exp`.
 

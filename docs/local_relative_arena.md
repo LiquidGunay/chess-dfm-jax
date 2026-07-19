@@ -17,6 +17,8 @@ training preprocessing.
 - a fixed, recorded refinement-pass count;
 - one newly encoded BT4 state per played position, with BT4 latents cached
   across refinement passes;
+- one run-frozen physical inference batch shape, including shrinking and final
+  partial gameplay batches;
 - root legality in the recovered `legacy_absolute_1858` codec; and
 - normal `python-chess` outcomes or a symmetric additional-ply-cap draw.
 
@@ -27,6 +29,40 @@ outputs, and positions with no representable action fail closed as losses.
 The legacy codec cannot represent white knight promotions or any black
 promotion. Every result records this capability contract, fault counts, total
 legal/representable actions, and positions with incomplete coverage.
+
+## Static inference batches
+
+JAX compiles a different executable when the batch dimension changes. Arena
+populations shrink as games terminate, so passing each live population
+directly to the model can turn normal moves into compilation-length timeouts.
+The evaluator freezes the physical inference shape for the whole run at:
+
+```text
+min(block_pairs, policy_batch_size_cap)
+```
+
+For the default 16-pair correctness/development block and a cap of 64, both
+models warm and run only physical batch 16.
+
+The local policy first validates full histories, encodes boards, and builds
+legacy legal masks for real rows only. A short batch then repeats the first
+already-validated encoded plane and its legal mask to the frozen shape. No
+fabricated all-legal or empty mask is used, and no additional active-row mask
+is needed: the model has no cross-batch operation, and every output and
+diagnostic is sliced back to the ordered real-row prefix before semantic
+validation. A bad padded action cannot become a move or fault; a bad real
+action still fails closed.
+
+Inference is deterministic greedy computation and contains no runtime random
+draw, dropout, or batch-stat update. Padding therefore neither consumes nor
+reorders RNG state. The construction seed and explicit no-runtime-RNG contract
+remain recorded for provenance. A future stochastic policy requires stateless
+per-game keys before it can use this batching protocol.
+
+Coverage and `positions_evaluated` count real rows only. Call timing includes
+the actual padded device work. A timeout or exception still loses only the
+real games in the affected policy call; padded rows are never decoded,
+adjudicated, or used as fallback moves.
 
 ## Tiers
 
@@ -108,6 +144,9 @@ The run writes `state.json` plus immutable per-block JSON files below
 and atomic replacement; no system `/tmp` path is used. Resume checks the
 checkpoint, code, pool, history, configuration, state, and every block digest.
 An orphaned, missing, modified, reordered, or cross-run block fails closed.
+The run and block schemas are version 2, and the resume contract pins the
+physical batch size, padding rule, real-row metric basis, output slicing, and
+no-runtime-RNG behavior. Version-1 pilot state cannot resume into this path.
 
 Full refinement traces remain available with `--collect-diagnostics`, but the
 default action-only kernel avoids constructing and transferring entropy/top-k

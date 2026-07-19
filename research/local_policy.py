@@ -40,6 +40,8 @@ from research.inference import (
 
 PLANE_HISTORY_MODE_CURRENT_ONLY_AS_PREPROCESSED = "current_only_as_preprocessed"
 POLICY_INPUT_FORMAT = LC0_CANONICAL_1858_INPUT_FORMAT
+STATIC_INFERENCE_BATCHING_SCHEMA = "chess-dfm-static-inference-batching-v1"
+STATIC_INFERENCE_PADDING_MODE = "repeat_first_validated_encoded_row_v1"
 
 
 class LocalPolicyError(ValueError):
@@ -87,6 +89,7 @@ class LocalDFMPolicy:
     refinement_passes: int = 8
     trace_top_k: int = 5
     collect_diagnostics: bool = True
+    inference_batch_size: int | None = None
     action_codec_id: str = dataclasses.field(
         default=ACTION_CODEC_LEGACY_ABSOLUTE_1858,
         init=False,
@@ -96,12 +99,24 @@ class LocalDFMPolicy:
         default=PLANE_HISTORY_MODE_CURRENT_ONLY_AS_PREPROCESSED,
         init=False,
     )
+    inference_batching_schema: str = dataclasses.field(
+        default=STATIC_INFERENCE_BATCHING_SCHEMA,
+        init=False,
+    )
+    inference_padding_mode: str = dataclasses.field(
+        default=STATIC_INFERENCE_PADDING_MODE,
+        init=False,
+    )
 
     def __post_init__(self) -> None:
         if not isinstance(self.model_id, str) or not self.model_id.strip():
             raise LocalPolicyError("model_id must be a non-empty string")
         if not isinstance(self.collect_diagnostics, bool):
             raise LocalPolicyError("collect_diagnostics must be boolean")
+        _validate_inference_batch_size(
+            self.inference_batch_size,
+            active_batch_size=1,
+        )
         _validate_policy_options(
             refinement_passes=self.refinement_passes,
             trace_top_k=self.trace_top_k,
@@ -126,6 +141,7 @@ class LocalDFMPolicy:
             refinement_passes=passes,
             trace_top_k=top_k,
             collect_diagnostics=self.collect_diagnostics,
+            inference_batch_size=self.inference_batch_size,
         )
 
 
@@ -140,6 +156,28 @@ def _validate_policy_options(*, refinement_passes: int, trace_top_k: int) -> Non
         raise LocalPolicyError(
             f"trace_top_k must be in [1, {ACTION_VOCAB_SIZE}], got {trace_top_k}"
         )
+
+
+def _validate_inference_batch_size(
+    inference_batch_size: int | None,
+    *,
+    active_batch_size: int,
+) -> int:
+    if inference_batch_size is None:
+        return active_batch_size
+    if isinstance(inference_batch_size, bool) or not isinstance(
+        inference_batch_size,
+        int,
+    ):
+        raise LocalPolicyError("inference_batch_size must be an integer or None")
+    if inference_batch_size < 1:
+        raise LocalPolicyError("inference_batch_size must be positive")
+    if active_batch_size > inference_batch_size:
+        raise LocalPolicyError(
+            f"active batch size {active_batch_size} exceeds frozen inference "
+            f"batch size {inference_batch_size}"
+        )
+    return inference_batch_size
 
 
 def _materialize_batch(value: Any, *, name: str) -> tuple[Any, ...]:
@@ -269,6 +307,114 @@ def _require_bool(array: np.ndarray, *, name: str) -> None:
 def _require_finite(array: np.ndarray, *, name: str) -> None:
     if not np.all(np.isfinite(array)):
         raise LocalPolicyError(f"inference diagnostic {name} contains nonfinite values")
+
+
+def _pad_validated_inference_inputs(
+    current_planes: np.ndarray,
+    root_legal_mask: np.ndarray,
+    *,
+    inference_batch_size: int,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Repeat one checked row to a frozen physical inference batch shape."""
+
+    active_batch_size = current_planes.shape[0]
+    if root_legal_mask.shape[0] != active_batch_size:
+        raise RuntimeError("Validated policy inputs disagree on active batch size.")
+    if active_batch_size == inference_batch_size:
+        return current_planes, root_legal_mask
+    padding_rows = inference_batch_size - active_batch_size
+    if padding_rows < 1:
+        raise RuntimeError("Frozen inference batch size is smaller than its active batch.")
+    padded_planes = np.concatenate(
+        (
+            current_planes,
+            np.repeat(current_planes[:1], padding_rows, axis=0),
+        ),
+        axis=0,
+    )
+    padded_mask = np.concatenate(
+        (
+            root_legal_mask,
+            np.repeat(root_legal_mask[:1], padding_rows, axis=0),
+        ),
+        axis=0,
+    )
+    return padded_planes, padded_mask
+
+
+def _slice_inference_result_to_active_rows(
+    inference_result: Any,
+    *,
+    active_batch_size: int,
+    inference_batch_size: int,
+    horizon: int,
+    refinement_passes: int,
+    trace_top_k: int,
+) -> Any:
+    """Check physical shapes, then discard every padded diagnostic row."""
+
+    try:
+        trace = inference_result.trace
+        values = {
+            "actions": inference_result.actions,
+            "times": trace.times,
+            "actions_before": trace.actions_before,
+            "actions_after": trace.actions_after,
+            "root_raw_entropy": trace.root_raw_entropy,
+            "root_raw_legal_mass": trace.root_raw_legal_mass,
+            "root_legal_entropy": trace.root_legal_entropy,
+            "root_legal_topk_indices": trace.root_legal_topk_indices,
+            "root_legal_topk_probabilities": trace.root_legal_topk_probabilities,
+            "root_legal_topk_valid": trace.root_legal_topk_valid,
+        }
+    except AttributeError as exc:
+        raise LocalPolicyError("localized inference returned an incomplete result") from exc
+    expected_shapes = {
+        "actions": (inference_batch_size, horizon),
+        "times": (refinement_passes,),
+        "actions_before": (refinement_passes, inference_batch_size, horizon),
+        "actions_after": (refinement_passes, inference_batch_size, horizon),
+        "root_raw_entropy": (refinement_passes, inference_batch_size),
+        "root_raw_legal_mass": (refinement_passes, inference_batch_size),
+        "root_legal_entropy": (refinement_passes, inference_batch_size),
+        "root_legal_topk_indices": (
+            refinement_passes,
+            inference_batch_size,
+            trace_top_k,
+        ),
+        "root_legal_topk_probabilities": (
+            refinement_passes,
+            inference_batch_size,
+            trace_top_k,
+        ),
+        "root_legal_topk_valid": (
+            refinement_passes,
+            inference_batch_size,
+            trace_top_k,
+        ),
+    }
+    for name, expected_shape in expected_shapes.items():
+        observed_shape = tuple(values[name].shape)
+        if observed_shape != expected_shape:
+            raise LocalPolicyError(
+                f"inference diagnostic {name} must have shape {expected_shape} "
+                f"for the physical batch, got {observed_shape}"
+            )
+    return inference_result._replace(
+        actions=inference_result.actions[:active_batch_size],
+        trace=trace._replace(
+            actions_before=trace.actions_before[:, :active_batch_size],
+            actions_after=trace.actions_after[:, :active_batch_size],
+            root_raw_entropy=trace.root_raw_entropy[:, :active_batch_size],
+            root_raw_legal_mass=trace.root_raw_legal_mass[:, :active_batch_size],
+            root_legal_entropy=trace.root_legal_entropy[:, :active_batch_size],
+            root_legal_topk_indices=trace.root_legal_topk_indices[:, :active_batch_size],
+            root_legal_topk_probabilities=trace.root_legal_topk_probabilities[
+                :, :active_batch_size
+            ],
+            root_legal_topk_valid=trace.root_legal_topk_valid[:, :active_batch_size],
+        ),
+    )
 
 
 def _validate_trace(
@@ -414,6 +560,7 @@ def select_local_dfm_actions(
     refinement_passes: int = 8,
     trace_top_k: int = 5,
     collect_diagnostics: bool = True,
+    inference_batch_size: int | None = None,
 ) -> LocalPolicyBatchResult:
     """Run strict batched localized-DFM policy inference.
 
@@ -498,6 +645,16 @@ def select_local_dfm_actions(
 
     current_planes = np.stack(planes_list, axis=0)
     root_legal_mask = np.stack(masks, axis=0)
+    active_batch_size = len(checked_boards)
+    physical_batch_size = _validate_inference_batch_size(
+        inference_batch_size,
+        active_batch_size=active_batch_size,
+    )
+    inference_planes, inference_root_legal_mask = _pad_validated_inference_inputs(
+        current_planes,
+        root_legal_mask,
+        inference_batch_size=physical_batch_size,
+    )
     try:
         horizon = int(model.config.horizon)
     except (AttributeError, TypeError, ValueError) as exc:
@@ -510,16 +667,24 @@ def select_local_dfm_actions(
         if collect_diagnostics:
             inference_result = infer_dfm_from_current(
                 model,
-                current_planes,
-                root_legal_mask,
+                inference_planes,
+                inference_root_legal_mask,
                 refinement_passes=refinement_passes,
                 trace_top_k=trace_top_k,
                 action_codec_id=ACTION_CODEC_LEGACY_ABSOLUTE_1858,
             )
             inference_result = jax.block_until_ready(inference_result)
+            inference_result = _slice_inference_result_to_active_rows(
+                inference_result,
+                active_batch_size=active_batch_size,
+                inference_batch_size=physical_batch_size,
+                horizon=horizon,
+                refinement_passes=refinement_passes,
+                trace_top_k=trace_top_k,
+            )
             actions, trace_arrays = _validate_trace(
                 inference_result,
-                batch_size=len(checked_boards),
+                batch_size=active_batch_size,
                 horizon=horizon,
                 refinement_passes=refinement_passes,
                 trace_top_k=trace_top_k,
@@ -528,18 +693,20 @@ def select_local_dfm_actions(
         else:
             action_values = infer_dfm_actions_from_current(
                 model,
-                current_planes,
-                root_legal_mask,
+                inference_planes,
+                inference_root_legal_mask,
                 refinement_passes=refinement_passes,
                 action_codec_id=ACTION_CODEC_LEGACY_ABSOLUTE_1858,
             )
-            actions = np.asarray(jax.device_get(jax.block_until_ready(action_values)))
-            expected_shape = (len(checked_boards), horizon)
-            if actions.shape != expected_shape:
+            physical_actions = np.asarray(jax.device_get(jax.block_until_ready(action_values)))
+            expected_physical_shape = (physical_batch_size, horizon)
+            if physical_actions.shape != expected_physical_shape:
                 raise LocalPolicyError(
-                    f"lean inference actions must have shape {expected_shape}, got {actions.shape}"
+                    "lean inference actions must have physical shape "
+                    f"{expected_physical_shape}, got {physical_actions.shape}"
                 )
-            _require_integer(actions, name="actions")
+            _require_integer(physical_actions, name="actions")
+            actions = physical_actions[:active_batch_size]
             if np.any((actions < 0) | (actions >= ACTION_VOCAB_SIZE)):
                 raise LocalPolicyError(
                     "lean inference actions contain a mask or out-of-range index"
@@ -610,5 +777,7 @@ __all__ = [
     "LocalPolicyError",
     "PLANE_HISTORY_MODE_CURRENT_ONLY_AS_PREPROCESSED",
     "POLICY_INPUT_FORMAT",
+    "STATIC_INFERENCE_BATCHING_SCHEMA",
+    "STATIC_INFERENCE_PADDING_MODE",
     "select_local_dfm_actions",
 ]

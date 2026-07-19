@@ -49,7 +49,11 @@ from research.arena import (
     pentanomial_stats,
 )
 from research.import_legacy import import_legacy_checkpoint
-from research.local_policy import LocalDFMPolicy
+from research.local_policy import (
+    STATIC_INFERENCE_BATCHING_SCHEMA,
+    STATIC_INFERENCE_PADDING_MODE,
+    LocalDFMPolicy,
+)
 from research.play_arena import (
     ArenaGameplayResult,
     BatchedArenaPolicy,
@@ -66,8 +70,8 @@ from research.prepare import (
 )
 
 
-ARENA_RUN_SCHEMA = "chess-dfm-relative-arena-run-v1"
-ARENA_BLOCK_SCHEMA = "chess-dfm-relative-arena-block-v1"
+ARENA_RUN_SCHEMA = "chess-dfm-relative-arena-run-v2"
+ARENA_BLOCK_SCHEMA = "chess-dfm-relative-arena-block-v2"
 RELATIVE_ELO_SCOPE = "checkpoint_pool_relative_only"
 DEFAULT_MODELS_DIR = REPO_ROOT / "models" / "source" / "extracted"
 DEFAULT_SOURCE_RUN_ROOT = REPO_ROOT / "checkpoints" / "source" / "step0265000"
@@ -419,6 +423,7 @@ def load_research_policy(
     seed: int,
     refinement_passes: int,
     collect_diagnostics: bool,
+    inference_batch_size: int,
 ) -> tuple[LocalDFMPolicy, dict[str, Any]]:
     from research.train import (
         EmaTargetModel,
@@ -448,6 +453,7 @@ def load_research_policy(
             refinement_passes=refinement_passes,
             trace_top_k=1,
             collect_diagnostics=collect_diagnostics,
+            inference_batch_size=inference_batch_size,
         ),
         {
             "load_seconds": elapsed,
@@ -465,6 +471,7 @@ def load_source_policy(
     seed: int,
     refinement_passes: int,
     collect_diagnostics: bool,
+    inference_batch_size: int,
 ) -> tuple[LocalDFMPolicy, dict[str, Any]]:
     from research.train import create_joint_components
 
@@ -493,6 +500,7 @@ def load_source_policy(
             refinement_passes=refinement_passes,
             trace_top_k=1,
             collect_diagnostics=collect_diagnostics,
+            inference_batch_size=inference_batch_size,
         ),
         {
             "load_seconds": elapsed,
@@ -591,6 +599,64 @@ def _warm_policy(
     return time.perf_counter() - started
 
 
+def _static_inference_batch_size(
+    *,
+    block_pairs: int,
+    policy_batch_size_cap: int,
+) -> int:
+    """Choose one physical shape that bounds every per-model block batch."""
+
+    if block_pairs < 1 or policy_batch_size_cap < 1:
+        raise ValueError("Static inference batching requires positive bounds.")
+    return min(block_pairs, policy_batch_size_cap)
+
+
+def _validate_static_inference_contract(
+    contract: Mapping[str, Any],
+    *,
+    policies: Sequence[BatchedArenaPolicy],
+) -> int:
+    try:
+        run = contract["run"]
+        batching = contract["inference_batching"]
+        physical_batch_size = int(batching["physical_batch_size"])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError("Arena contract has no valid static inference batching.") from exc
+    expected_size = _static_inference_batch_size(
+        block_pairs=int(run["block_pairs"]),
+        policy_batch_size_cap=int(run["policy_batch_size_cap"]),
+    )
+    expected = {
+        "schema_version": STATIC_INFERENCE_BATCHING_SCHEMA,
+        "physical_batch_size": expected_size,
+        "padding_mode": STATIC_INFERENCE_PADDING_MODE,
+        "padding_source": "first_validated_active_encoded_row",
+        "active_rows": "ordered_prefix",
+        "output_handling": "slice_to_active_rows_before_semantic_validation",
+        "host_validation_scope": "active_rows_only",
+        "metrics_basis": "real_rows_only",
+        "timing_basis": "physical_padded_call_wall_time",
+        "runtime_rng": "none_deterministic_greedy_inference",
+    }
+    if dict(batching) != expected:
+        raise ValueError("Arena static inference batching contract mismatch.")
+    if physical_batch_size != expected_size:
+        raise ValueError("Arena physical inference batch size is not run-derived.")
+    for policy in policies:
+        if getattr(policy, "inference_batching_schema", None) != (STATIC_INFERENCE_BATCHING_SCHEMA):
+            raise ValueError(
+                f"Policy {policy.model_id!r} has no compatible static batching schema."
+            )
+        if getattr(policy, "inference_padding_mode", None) != (STATIC_INFERENCE_PADDING_MODE):
+            raise ValueError(f"Policy {policy.model_id!r} has no compatible static padding mode.")
+        if getattr(policy, "inference_batch_size", None) != physical_batch_size:
+            raise ValueError(
+                f"Policy {policy.model_id!r} does not use frozen physical batch "
+                f"size {physical_batch_size}."
+            )
+    return physical_batch_size
+
+
 def _gameplay_payload_digest(payload: Mapping[str, Any]) -> str:
     value = dict(payload)
     observed = value.pop("payload_sha256", None)
@@ -640,6 +706,22 @@ def _pair_scores_from_gameplay(
         )
         for offset in range(0, len(outcomes), 2)
     ]
+
+
+def _validate_real_row_tracking(
+    gameplay_result: ArenaGameplayResult,
+    *,
+    trackers: Mapping[str, PolicyTracker],
+) -> None:
+    by_model = {stats.model_id: stats for stats in gameplay_result.model_stats}
+    if set(by_model) != set(trackers):
+        raise RuntimeError("Arena policy tracking model IDs disagree with gameplay.")
+    for model_id, tracker in trackers.items():
+        stats = by_model[model_id]
+        if tracker.positions != stats.positions_evaluated:
+            raise RuntimeError(f"Policy tracker for {model_id!r} counted non-gameplay positions.")
+        if tracker.calls != stats.policy_calls:
+            raise RuntimeError(f"Policy tracker for {model_id!r} disagrees on call count.")
 
 
 def _empty_aggregate(model_ids: Sequence[str]) -> dict[str, Any]:
@@ -902,6 +984,10 @@ def run_blocks(
     resume: bool,
     session_setup: Mapping[str, Any],
 ) -> dict[str, Any]:
+    _validate_static_inference_contract(
+        contract,
+        policies=(candidate_policy, opponent_policy),
+    )
     destination = require_within_workspace(output_dir)
     state_path = require_within_workspace(destination / "state.json")
     blocks_dir = require_within_workspace(destination / "blocks")
@@ -984,6 +1070,13 @@ def run_blocks(
             policy_batch_size_cap=int(contract["run"]["policy_batch_size_cap"]),
         )
         gameplay_seconds = time.perf_counter() - started
+        _validate_real_row_tracking(
+            gameplay_result,
+            trackers={
+                candidate_id: candidate_tracker,
+                opponent_id: opponent_tracker,
+            },
+        )
         gameplay = gameplay_result.as_dict()
         pair_scores = _pair_scores_from_gameplay(
             gameplay,
@@ -1154,6 +1247,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         raise ValueError("policy_batch_size_cap must be positive.")
     if not math.isfinite(args.policy_timeout_seconds) or args.policy_timeout_seconds <= 0:
         raise ValueError("policy_timeout_seconds must be positive and finite.")
+    inference_batch_size = _static_inference_batch_size(
+        block_pairs=block_pairs,
+        policy_batch_size_cap=int(args.policy_batch_size_cap),
+    )
 
     models_dir = require_within_workspace(args.models_dir)
     output_dir = require_within_workspace(args.output_dir)
@@ -1226,6 +1323,18 @@ def main(argv: Sequence[str] | None = None) -> int:
             "deterministic_greedy_policy": True,
             "jepa_used_at_inference": False,
         },
+        "inference_batching": {
+            "schema_version": STATIC_INFERENCE_BATCHING_SCHEMA,
+            "physical_batch_size": inference_batch_size,
+            "padding_mode": STATIC_INFERENCE_PADDING_MODE,
+            "padding_source": "first_validated_active_encoded_row",
+            "active_rows": "ordered_prefix",
+            "output_handling": "slice_to_active_rows_before_semantic_validation",
+            "host_validation_scope": "active_rows_only",
+            "metrics_basis": "real_rows_only",
+            "timing_basis": "physical_padded_call_wall_time",
+            "runtime_rng": "none_deterministic_greedy_inference",
+        },
         "promotion_gate": (
             GSPRTState(GSPRTConfig.normalized_promotion()).as_dict()["config"]
             if tier.promotion_eligible
@@ -1252,6 +1361,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         seed=args.seed,
         refinement_passes=args.refinement_passes,
         collect_diagnostics=args.collect_diagnostics,
+        inference_batch_size=inference_batch_size,
     )
     if args.opponent_checkpoint is None:
         opponent_policy, opponent_load = load_source_policy(
@@ -1262,6 +1372,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             seed=args.seed + 1,
             refinement_passes=args.refinement_passes,
             collect_diagnostics=args.collect_diagnostics,
+            inference_batch_size=inference_batch_size,
         )
     else:
         opponent_policy, opponent_load = load_research_policy(
@@ -1271,13 +1382,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             seed=args.seed + 1,
             refinement_passes=args.refinement_passes,
             collect_diagnostics=args.collect_diagnostics,
+            inference_batch_size=inference_batch_size,
         )
 
-    warm_batch = min(
-        block_pairs,
-        args.policy_batch_size_cap,
-        pair_count,
-    )
+    warm_batch = inference_batch_size
     candidate_warm = _warm_policy(
         candidate_policy,
         opening_pool=opening_pool,
@@ -1296,7 +1404,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         "candidate_load": candidate_load,
         "opponent_load": opponent_load,
         "warmup": {
-            "batch_size": warm_batch,
+            "active_batch_size": warm_batch,
+            "physical_batch_size": inference_batch_size,
             "candidate_seconds": candidate_warm,
             "opponent_seconds": opponent_warm,
         },
