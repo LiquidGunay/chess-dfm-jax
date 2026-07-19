@@ -17,6 +17,11 @@ from chess_dfm_jax.policy import (
     legal_action_mask,
 )
 from research.arena import build_opening_pool, make_color_reversed_pairs
+from research.arena_history_trust import (
+    HISTORY_VALIDATION_FULL_REPLAY,
+    HISTORY_VALIDATION_SCHEMA,
+    HISTORY_VALIDATION_TRUSTED_ARENA_ENDPOINT,
+)
 from research.evaluate_arena import (
     ARENA_RUN_SCHEMA,
     FROZEN_TIERS,
@@ -137,6 +142,8 @@ class _FirstLegalPolicy:
     inference_batching_schema = STATIC_INFERENCE_BATCHING_SCHEMA
     inference_padding_mode = STATIC_INFERENCE_PADDING_MODE
     inference_batch_size = 1
+    history_validation_mode = HISTORY_VALIDATION_TRUSTED_ARENA_ENDPOINT
+    trusted_arena_history_schema = HISTORY_VALIDATION_SCHEMA
 
     def __init__(self, model_id: str):
         self.model_id = model_id
@@ -156,6 +163,10 @@ class _FirstLegalPolicy:
                 for board in boards
             ]
         )
+
+    def select_actions_from_trusted_arena(self, boards, endpoints):
+        del endpoints
+        return self.select_actions(boards, ())
 
 
 class _StaticPhysicalRecordingPolicy(_FirstLegalPolicy):
@@ -200,6 +211,17 @@ def _contract(*, promotion: bool = False):
             "metrics_basis": "real_rows_only",
             "timing_basis": "physical_padded_call_wall_time",
             "runtime_rng": "none_deterministic_greedy_inference",
+        },
+        "history_validation": {
+            "schema_version": HISTORY_VALIDATION_SCHEMA,
+            "public_policy_default": HISTORY_VALIDATION_FULL_REPLAY,
+            "arena_hot_path": HISTORY_VALIDATION_TRUSTED_ARENA_ENDPOINT,
+            "opening_validation": "full_exact_replay_sidecar_and_selected_pairs",
+            "authoritative_state": "full_stack_with_checked_legal_pushes",
+            "policy_board_copy": "stack_false",
+            "policy_payload": "sealed_constant_size_state_attestation",
+            "repetition_authority": "runner_claim_draw_boundary_check",
+            "complexity": "constant_per_policy_row",
         },
     }
 
@@ -320,6 +342,24 @@ def test_resumable_blocks_persist_relative_stats_and_verify_immutable_files(
         load_run_state(
             output_dir,
             expected_contract=changed_version,
+        )
+
+    changed_history_mode = copy.deepcopy(contract)
+    changed_history_mode["history_validation"]["arena_hot_path"] = HISTORY_VALIDATION_FULL_REPLAY
+    with pytest.raises(ValueError, match="resume contract mismatch"):
+        load_run_state(
+            output_dir,
+            expected_contract=changed_history_mode,
+        )
+
+    changed_history_version = copy.deepcopy(contract)
+    changed_history_version["history_validation"]["schema_version"] = (
+        "chess-dfm-arena-history-validation-v0"
+    )
+    with pytest.raises(ValueError, match="resume contract mismatch"):
+        load_run_state(
+            output_dir,
+            expected_contract=changed_history_version,
         )
 
     block_path = Path(state["blocks"][0]["path"])

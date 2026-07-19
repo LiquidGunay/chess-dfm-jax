@@ -64,6 +64,35 @@ the actual padded device work. A timeout or exception still loses only the
 real games in the affected policy call; padded rows are never decoded,
 adjudicated, or used as fallback moves.
 
+## History validation trust boundary
+
+`LocalDFMPolicy.select_actions()` remains the public and default boundary. It
+fully replays every supplied history from standard chess and rejects a missing,
+truncated, or corrupt transition.
+
+Arena gameplay uses a separate capability after two independent checks:
+
+1. `load_opening_history_sidecar()` verifies the pinned file and manifest,
+   aligns every entry to the pool, and exactly replays every opening.
+2. `play_arena_pairs()` exactly replays the selected openings into
+   authoritative stackful boards. Before each policy call it checks normal
+   termination with draw claims, the ply cap, standard-start/root/current
+   history invariants, move-stack and position counts, and the played suffix.
+   It advances those boards only through uniquely decoded legal actions.
+
+Only then does the runner mint an immutable process-local sealed attestation.
+The model receives a stackless current-board copy and that constant-size
+packet—not the growing history. The adapter verifies the seal, schema,
+standard-start marker, exact current FEN, ply/count/cap arithmetic, and the
+runner's stackful nonterminal attestation before encoding. A plain endpoint
+tuple, forged packet, mismatched FEN, or policy without the exact capability
+fails closed.
+
+The stackless copy is intentional: repetition claims cannot be re-established
+from a FEN. The authoritative stackful runner remains the sole repetition and
+adjudication authority. This makes per-call adapter history checking O(1)
+without weakening the external full-replay boundary.
+
 ## Tiers
 
 - `correctness`: first 16 of the 128 frozen validation openings; cap 16 by
@@ -113,9 +142,13 @@ fail-closed state is
 Do not interpret its score or Elo diagnostics.
 
 Commit `72af918` introduced the static inference-batch contract above. The
-pre-fix pilot uses arena schema v1 and cannot resume into the fixed schema-v2
-path. A clean post-fix cap-64 rerun is pending; until it completes without
-faults, there is no valid u300 relative-strength result.
+pre-fix pilot uses arena schema v1 and cannot resume into the fixed path.
+Post-static-batch pilots eliminated the recompilation timeout faults. The
+strict full-history cap-256 parity target completed all 32 games by normal
+chess termination with zero faults and no cap draws: 3,913 real positions in
+592.28 gameplay seconds (`6.61` positions/second). The sealed endpoint path
+must reproduce those games and aggregate statistics under arena schema v3
+before its speedup is accepted.
 
 ## Commands
 
@@ -169,9 +202,11 @@ The run writes `state.json` plus immutable per-block JSON files below
 and atomic replacement; no system `/tmp` path is used. Resume checks the
 checkpoint, code, pool, history, configuration, state, and every block digest.
 An orphaned, missing, modified, reordered, or cross-run block fails closed.
-The run and block schemas are version 2, and the resume contract pins the
+The run and block schemas are version 3, and the resume contract pins the
 physical batch size, padding rule, real-row metric basis, output slicing, and
-no-runtime-RNG behavior. Version-1 pilot state cannot resume into this path.
+no-runtime-RNG behavior. It also pins the sealed endpoint schema, public
+full-replay default, stackless policy copy, authoritative runner state, and
+repetition authority. Earlier pilot state cannot resume into this path.
 
 Full refinement traces remain available with `--collect-diagnostics`, but the
 default action-only kernel avoids constructing and transferring entropy/top-k
@@ -180,12 +215,11 @@ separately from gameplay.
 
 ## Current performance caveat
 
-The strict local policy still revalidates the complete standard-game history
-on every policy call. This is useful at the trust boundary but can make
-long-game runtime worse than linear in the ply cap. Promotion uses exact
-pair-boundary stopping rather than throughput-oriented multi-pair blocks, so
-it is honest but not yet optimized. Benchmark a long-cap pilot before
-budgeting a full 2,048-pair test.
+The hot arena path no longer replays or copies complete histories at every
+policy call. The authoritative runner still performs chess outcome and
+draw-claim adjudication on its full move stack, and promotion uses exact
+pair-boundary stopping rather than throughput-oriented multi-pair blocks.
+Benchmark a long-cap pilot before budgeting a full 2,048-pair test.
 
 Run the CPU support tests with:
 

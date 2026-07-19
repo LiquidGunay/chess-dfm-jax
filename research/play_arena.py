@@ -1,9 +1,10 @@
 """Fail-closed, in-process batched gameplay for the paired research arena.
 
-This module owns chess state, batching, legality, and adjudication.  Model
-adapters remain checkpoint- and framework-specific: they receive defensive
-copies of boards and their complete histories, then return one action index per
-position.
+This module owns chess state, batching, legality, and adjudication. Model
+adapters remain checkpoint- and framework-specific. Their public boundary
+receives defensive copies of boards and complete histories. A separately
+advertised arena-only capability may instead receive stackless board copies
+plus sealed constant-size state attestations minted by this runner.
 
 A FEN by itself cannot recover repetition and claim state.  Therefore every
 color-reversed pair must provide an :class:`ArenaOpeningHistory` containing the
@@ -12,8 +13,9 @@ FEN.  Missing, truncated, or discontinuous histories fail before play.
 
 The recovered local model is a separate concern: its source preprocessing used
 ``encode_board(board, [])``, so its adapter must encode the current board only.
-The histories supplied at this boundary preserve chess state and make the game
-auditable; they must not silently change that model's input distribution.
+The authoritative runner always retains the exact stackful histories needed
+for repetition and audit. The sealed policy view never changes the recovered
+model's current-only input distribution.
 """
 
 from __future__ import annotations
@@ -40,6 +42,13 @@ from chess_dfm_jax.policy import (
     decode_action,
     encode_action,
     legal_action_mask,
+)
+from research.arena_history_trust import (
+    HISTORY_VALIDATION_FULL_REPLAY,
+    HISTORY_VALIDATION_SCHEMA,
+    HISTORY_VALIDATION_TRUSTED_ARENA_ENDPOINT,
+    SUPPORTED_HISTORY_VALIDATION_MODES,
+    _mint_trusted_arena_history_endpoint,
 )
 from research.arena import (
     ArenaGameSpec,
@@ -88,6 +97,7 @@ class BatchedArenaPolicy(Protocol):
 
     model_id: str
     action_codec_id: str
+    history_validation_mode: str
 
     def select_actions(
         self,
@@ -637,6 +647,21 @@ def _validate_policies(
             )
         if not callable(getattr(policy, "select_actions", None)):
             raise TypeError(f"Policy {model_id!r} has no callable select_actions.")
+        history_validation_mode = getattr(
+            policy,
+            "history_validation_mode",
+            HISTORY_VALIDATION_FULL_REPLAY,
+        )
+        if history_validation_mode not in SUPPORTED_HISTORY_VALIDATION_MODES:
+            raise ValueError(
+                f"Policy {model_id!r} declares unsupported history validation "
+                f"mode {history_validation_mode!r}."
+            )
+        if history_validation_mode == HISTORY_VALIDATION_TRUSTED_ARENA_ENDPOINT:
+            if getattr(policy, "trusted_arena_history_schema", None) != (HISTORY_VALIDATION_SCHEMA):
+                raise ValueError(f"Policy {model_id!r} lacks the trusted arena history schema.")
+            if not callable(getattr(policy, "select_actions_from_trusted_arena", None)):
+                raise TypeError(f"Policy {model_id!r} lacks the trusted arena endpoint capability.")
         validated[model_id] = policy
     return validated
 
@@ -714,13 +739,62 @@ def _acting_model(state: _GameState) -> str:
     return state.spec.white_model if state.board.turn == chess.WHITE else state.spec.black_model
 
 
+def _assert_game_state_history_invariant(state: _GameState) -> None:
+    if not state.history:
+        raise RuntimeError("Arena game state lost its validated history.")
+    if len(state.history) != state.board.ply() + 1:
+        raise RuntimeError("Arena game state history length diverged from board ply.")
+    if len(state.board.move_stack) != state.board.ply():
+        raise RuntimeError("Arena authoritative board lost its full move stack.")
+    if _canonical_position_fen(state.history[0]) != _canonical_position_fen(chess.Board()):
+        raise RuntimeError("Arena game state history no longer starts at standard chess.")
+    if _canonical_position_fen(state.history[-1]) != _canonical_position_fen(state.board):
+        raise RuntimeError("Arena game state history endpoint diverged from its board.")
+    if len(state.moves_uci) != state.additional_plies:
+        raise RuntimeError("Arena played suffix diverged from additional ply count.")
+    root_ply = state.board.ply() - state.additional_plies
+    if root_ply < 0 or root_ply >= len(state.history):
+        raise RuntimeError("Arena opening root ply is outside its history.")
+    if _canonical_position_fen(state.history[root_ply]) != state.spec.fen:
+        raise RuntimeError("Arena opening root diverged from the game specification.")
+
+
 def _policy_inputs(
     states: Sequence[_GameState],
-) -> tuple[list[chess.Board], list[tuple[chess.Board, ...]]]:
-    boards = [state.board.copy(stack=True) for state in states]
-    histories = [
-        tuple(position.copy(stack=False) for position in state.history) for state in states
-    ]
+    *,
+    history_validation_mode: str,
+    ply_cap: int,
+) -> tuple[list[chess.Board], list[Any]]:
+    for state in states:
+        _assert_game_state_history_invariant(state)
+    if history_validation_mode == HISTORY_VALIDATION_TRUSTED_ARENA_ENDPOINT:
+        if any(state.additional_plies >= ply_cap for state in states):
+            raise RuntimeError("Arena attempted to mint an endpoint at its ply cap.")
+        boards = [state.board.copy(stack=False) for state in states]
+        histories = [
+            _mint_trusted_arena_history_endpoint(
+                pair_id=state.spec.pair_id,
+                opening_index=state.spec.opening_index,
+                game_in_pair=state.spec.game_in_pair,
+                current_fen=_canonical_position_fen(state.board),
+                position_count=len(state.history),
+                authoritative_move_stack_length=len(state.board.move_stack),
+                root_ply=state.board.ply() - state.additional_plies,
+                additional_plies=state.additional_plies,
+                played_suffix_count=len(state.moves_uci),
+                ply_cap=ply_cap,
+            )
+            for state in states
+        ]
+    elif history_validation_mode == HISTORY_VALIDATION_FULL_REPLAY:
+        boards = [state.board.copy(stack=True) for state in states]
+        histories = [
+            tuple(position.copy(stack=False) for position in state.history) for state in states
+        ]
+    else:
+        raise RuntimeError(
+            f"Validated policy has unknown history mode {history_validation_mode!r}."
+        )
     return boards, histories
 
 
@@ -1028,16 +1102,32 @@ def _play_policy_batch(
     batch_size = len(batch_states)
     policy_calls[model_id] += 1
     positions_evaluated[model_id] += batch_size
-    boards, histories = _policy_inputs(batch_states)
+    policy = policies[model_id]
+    history_validation_mode = getattr(
+        policy,
+        "history_validation_mode",
+        HISTORY_VALIDATION_FULL_REPLAY,
+    )
+    boards, histories = _policy_inputs(
+        batch_states,
+        history_validation_mode=history_validation_mode,
+        ply_cap=ply_cap,
+    )
 
     started = clock()
     call_error: Exception | None = None
     actions: np.ndarray | None = None
     try:
-        selection = policies[model_id].select_actions(
-            boards,
-            histories,
-        )
+        if history_validation_mode == HISTORY_VALIDATION_TRUSTED_ARENA_ENDPOINT:
+            selection = policy.select_actions_from_trusted_arena(
+                boards,
+                histories,
+            )
+        else:
+            selection = policy.select_actions(
+                boards,
+                histories,
+            )
         actions = _materialize_action_indices(
             selection,
             batch_size=batch_size,
@@ -1068,7 +1158,7 @@ def _play_policy_batch(
 
     if actions is None:
         raise RuntimeError("Successful policy call did not return actions.")
-    codec_id = str(policies[model_id].action_codec_id)
+    codec_id = str(policy.action_codec_id)
     for row, (state, mask) in enumerate(pending):
         game_key = (state.spec.pair_id, state.spec.game_in_pair)
         selected_index, row_fault = _selected_index_or_fault(actions[row])
@@ -1110,6 +1200,7 @@ def _play_policy_batch(
         state.history.append(state.board.copy(stack=False))
         state.moves_uci.append(move.uci())
         state.additional_plies += 1
+        _assert_game_state_history_invariant(state)
         boundary_record = _normal_or_cap_record(
             state,
             ply_cap=ply_cap,
@@ -1127,6 +1218,9 @@ __all__ = [
     "FAULT_NO_REPRESENTABLE_MOVE",
     "FAULT_TIMEOUT",
     "GAMEPLAY_SCHEMA",
+    "HISTORY_VALIDATION_FULL_REPLAY",
+    "HISTORY_VALIDATION_SCHEMA",
+    "HISTORY_VALIDATION_TRUSTED_ARENA_ENDPOINT",
     "LoadedOpeningHistories",
     "OPENING_HISTORY_CONVENTION",
     "OPENING_HISTORY_SCHEMA",

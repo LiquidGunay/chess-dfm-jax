@@ -9,6 +9,11 @@ otherwise surprising compatibility constraint explicit.
 This module accepts an already-constructed localized model.  It deliberately
 does not construct models, restore checkpoints, invoke a raw-BT4 policy head,
 or remap between action codecs.
+
+The public adapter always replays full histories. The evaluator may configure
+a separate arena-only method that accepts sealed state attestations minted
+after ``play_arena`` has replayed the opening, retained the authoritative move
+stack, checked terminal/cap boundaries, and advanced only decoded legal moves.
 """
 
 from __future__ import annotations
@@ -35,6 +40,14 @@ from research.inference import (
     LocalDFMInferenceModel,
     infer_dfm_actions_from_current,
     infer_dfm_from_current,
+)
+from research.arena_history_trust import (
+    HISTORY_VALIDATION_FULL_REPLAY,
+    HISTORY_VALIDATION_SCHEMA,
+    HISTORY_VALIDATION_TRUSTED_ARENA_ENDPOINT,
+    SUPPORTED_HISTORY_VALIDATION_MODES,
+    TrustedArenaHistoryEndpoint,
+    verify_trusted_arena_history_endpoint,
 )
 
 
@@ -90,6 +103,7 @@ class LocalDFMPolicy:
     trace_top_k: int = 5
     collect_diagnostics: bool = True
     inference_batch_size: int | None = None
+    history_validation_mode: str = HISTORY_VALIDATION_FULL_REPLAY
     action_codec_id: str = dataclasses.field(
         default=ACTION_CODEC_LEGACY_ABSOLUTE_1858,
         init=False,
@@ -107,6 +121,10 @@ class LocalDFMPolicy:
         default=STATIC_INFERENCE_PADDING_MODE,
         init=False,
     )
+    trusted_arena_history_schema: str = dataclasses.field(
+        default=HISTORY_VALIDATION_SCHEMA,
+        init=False,
+    )
 
     def __post_init__(self) -> None:
         if not isinstance(self.model_id, str) or not self.model_id.strip():
@@ -117,6 +135,7 @@ class LocalDFMPolicy:
             self.inference_batch_size,
             active_batch_size=1,
         )
+        _validate_history_validation_mode(self.history_validation_mode)
         _validate_policy_options(
             refinement_passes=self.refinement_passes,
             trace_top_k=self.trace_top_k,
@@ -142,6 +161,31 @@ class LocalDFMPolicy:
             trace_top_k=top_k,
             collect_diagnostics=self.collect_diagnostics,
             inference_batch_size=self.inference_batch_size,
+        )
+
+    def select_actions_from_trusted_arena(
+        self,
+        boards: Iterable[chess.Board],
+        endpoints: Iterable[TrustedArenaHistoryEndpoint],
+        *,
+        refinement_passes: int | None = None,
+        trace_top_k: int | None = None,
+    ) -> LocalPolicyBatchResult:
+        """Use sealed O(1) endpoints minted by the checked arena runner."""
+
+        if self.history_validation_mode != HISTORY_VALIDATION_TRUSTED_ARENA_ENDPOINT:
+            raise LocalPolicyError("trusted arena endpoint inference is disabled for this policy")
+        passes = self.refinement_passes if refinement_passes is None else refinement_passes
+        top_k = self.trace_top_k if trace_top_k is None else trace_top_k
+        return _select_local_dfm_actions_impl(
+            self.model,
+            boards,
+            endpoints,
+            refinement_passes=passes,
+            trace_top_k=top_k,
+            collect_diagnostics=self.collect_diagnostics,
+            inference_batch_size=self.inference_batch_size,
+            history_validation_mode=HISTORY_VALIDATION_TRUSTED_ARENA_ENDPOINT,
         )
 
 
@@ -178,6 +222,15 @@ def _validate_inference_batch_size(
             f"batch size {inference_batch_size}"
         )
     return inference_batch_size
+
+
+def _validate_history_validation_mode(history_validation_mode: str) -> None:
+    if history_validation_mode not in SUPPORTED_HISTORY_VALIDATION_MODES:
+        raise LocalPolicyError(
+            f"history_validation_mode must be one of "
+            f"{sorted(SUPPORTED_HISTORY_VALIDATION_MODES)}, got "
+            f"{history_validation_mode!r}"
+        )
 
 
 def _materialize_batch(value: Any, *, name: str) -> tuple[Any, ...]:
@@ -269,6 +322,31 @@ def _validate_history(
     if replay.is_game_over(claim_draw=True):
         raise LocalPolicyError(f"boards[{row}] is terminal when draw claims are honored")
     return checked
+
+
+def _validate_trusted_arena_history_endpoint(
+    original_board: chess.Board,
+    checked_board: chess.Board,
+    endpoint: Any,
+    *,
+    row: int,
+) -> None:
+    """Validate a sealed runner attestation without reconstructing transitions."""
+
+    try:
+        checked_endpoint = verify_trusted_arena_history_endpoint(endpoint)
+    except (TypeError, ValueError) as exc:
+        raise LocalPolicyError(f"trusted arena endpoint for row {row} is invalid") from exc
+    if original_board.move_stack:
+        raise LocalPolicyError(f"boards[{row}] must be a stackless trusted arena endpoint copy")
+    if checked_endpoint.current_fen != _exact_fen(checked_board):
+        raise LocalPolicyError(f"trusted arena endpoint must match boards[{row}]")
+    if checked_endpoint.authoritative_move_stack_length != checked_board.ply():
+        raise LocalPolicyError(f"trusted arena endpoint ply must match boards[{row}]")
+    if checked_endpoint.position_count != checked_board.ply() + 1:
+        raise LocalPolicyError(f"trusted arena endpoint position count must match boards[{row}]")
+    if checked_board.is_game_over(claim_draw=False):
+        raise LocalPolicyError(f"boards[{row}] is locally terminal")
 
 
 def _readonly(array: np.ndarray, *, dtype: np.dtype[Any] | None = None) -> np.ndarray:
@@ -552,15 +630,16 @@ def _validate_trace(
     return actions, arrays
 
 
-def select_local_dfm_actions(
+def _select_local_dfm_actions_impl(
     model: LocalDFMInferenceModel,
     boards: Iterable[chess.Board],
-    histories: Iterable[Iterable[chess.Board]],
+    histories: Iterable[Any],
     *,
     refinement_passes: int = 8,
     trace_top_k: int = 5,
     collect_diagnostics: bool = True,
     inference_batch_size: int | None = None,
+    history_validation_mode: str,
 ) -> LocalPolicyBatchResult:
     """Run strict batched localized-DFM policy inference.
 
@@ -574,6 +653,7 @@ def select_local_dfm_actions(
         refinement_passes=refinement_passes,
         trace_top_k=trace_top_k,
     )
+    _validate_history_validation_mode(history_validation_mode)
     board_items = _materialize_batch(boards, name="boards")
     history_items = _materialize_batch(histories, name="histories")
     if len(history_items) != len(board_items):
@@ -584,8 +664,20 @@ def select_local_dfm_actions(
     checked_boards = tuple(
         _require_standard_board(item, name=f"boards[{row}]") for row, item in enumerate(board_items)
     )
-    for row, (board, history) in enumerate(zip(checked_boards, history_items, strict=True)):
-        _validate_history(board, history, row=row)
+    for row, (original_board, checked_board, history) in enumerate(
+        zip(board_items, checked_boards, history_items, strict=True)
+    ):
+        if history_validation_mode == HISTORY_VALIDATION_FULL_REPLAY:
+            _validate_history(checked_board, history, row=row)
+        elif history_validation_mode == HISTORY_VALIDATION_TRUSTED_ARENA_ENDPOINT:
+            _validate_trusted_arena_history_endpoint(
+                original_board,
+                checked_board,
+                history,
+                row=row,
+            )
+        else:
+            raise RuntimeError("Validated history mode became unsupported.")
 
     planes_list: list[np.ndarray] = []
     masks: list[np.ndarray] = []
@@ -767,6 +859,30 @@ def select_local_dfm_actions(
         action_indices=_readonly(selected_indices, dtype=np.int32),
         moves=tuple(moves),
         diagnostics=diagnostics,
+    )
+
+
+def select_local_dfm_actions(
+    model: LocalDFMInferenceModel,
+    boards: Iterable[chess.Board],
+    histories: Iterable[Iterable[chess.Board]],
+    *,
+    refinement_passes: int = 8,
+    trace_top_k: int = 5,
+    collect_diagnostics: bool = True,
+    inference_batch_size: int | None = None,
+) -> LocalPolicyBatchResult:
+    """Public strict boundary: fully replay every supplied board history."""
+
+    return _select_local_dfm_actions_impl(
+        model,
+        boards,
+        histories,
+        refinement_passes=refinement_passes,
+        trace_top_k=trace_top_k,
+        collect_diagnostics=collect_diagnostics,
+        inference_batch_size=inference_batch_size,
+        history_validation_mode=HISTORY_VALIDATION_FULL_REPLAY,
     )
 
 

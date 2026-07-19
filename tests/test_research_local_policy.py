@@ -10,6 +10,11 @@ import pytest
 from flax import nnx
 
 import research.local_policy as local_policy
+from research.arena_history_trust import (
+    HISTORY_VALIDATION_TRUSTED_ARENA_ENDPOINT,
+    TrustedArenaHistoryEndpoint,
+    _mint_trusted_arena_history_endpoint,
+)
 from chess_dfm_jax.encoding import encode_board
 from chess_dfm_jax.policy import (
     ACTION_CODEC_LEGACY_ABSOLUTE_1858,
@@ -70,6 +75,30 @@ def _push_history(*moves: str) -> tuple[chess.Board, ...]:
         board.push_uci(move)
         history.append(board.copy(stack=False))
     return tuple(history)
+
+
+def _trusted_endpoint(
+    history: tuple[chess.Board, ...],
+    *,
+    root_ply: int | None = None,
+    additional_plies: int = 0,
+    current_fen: str | None = None,
+    ply_cap: int = 64,
+) -> TrustedArenaHistoryEndpoint:
+    current = history[-1]
+    resolved_root_ply = current.ply() if root_ply is None else root_ply
+    return _mint_trusted_arena_history_endpoint(
+        pair_id="fixture-pair",
+        opening_index=0,
+        game_in_pair=0,
+        current_fen=(current.fen(en_passant="legal") if current_fen is None else current_fen),
+        position_count=current.ply() + 1,
+        authoritative_move_stack_length=current.ply(),
+        root_ply=resolved_root_ply,
+        additional_plies=additional_plies,
+        played_suffix_count=additional_plies,
+        ply_cap=ply_cap,
+    )
 
 
 def _valid_result(
@@ -513,6 +542,159 @@ def test_adapter_runs_through_real_compiled_inference_boundary():
     )
     assert result.diagnostics.actions_after.shape == (2, 1, 4)
     assert np.all(np.isfinite(result.diagnostics.root_raw_entropy))
+
+
+def test_trusted_endpoint_matches_full_replay_with_static_padding(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    history = _push_history("e2e4", "e7e5", "g1f3")
+    board = history[-1].copy(stack=False)
+    calls = _install_fake_inference(monkeypatch)
+    full_policy = LocalDFMPolicy(
+        model=_Model(),
+        model_id="full",
+        refinement_passes=3,
+        trace_top_k=2,
+        inference_batch_size=4,
+    )
+    endpoint_policy = LocalDFMPolicy(
+        model=_Model(),
+        model_id="endpoint",
+        refinement_passes=3,
+        trace_top_k=2,
+        inference_batch_size=4,
+        history_validation_mode=HISTORY_VALIDATION_TRUSTED_ARENA_ENDPOINT,
+    )
+
+    full = full_policy.select_actions([board], [history])
+    endpoint = endpoint_policy.select_actions_from_trusted_arena(
+        [board],
+        [_trusted_endpoint(history)],
+    )
+
+    np.testing.assert_array_equal(endpoint.action_indices, full.action_indices)
+    assert endpoint.moves == full.moves
+    assert endpoint.diagnostics is not None
+    assert full.diagnostics is not None
+    np.testing.assert_array_equal(
+        endpoint.diagnostics.actions_after,
+        full.diagnostics.actions_after,
+    )
+    assert [call["current_planes"].shape[0] for call in calls] == [4, 4]
+    np.testing.assert_array_equal(
+        calls[1]["current_planes"],
+        calls[0]["current_planes"],
+    )
+    np.testing.assert_array_equal(
+        calls[1]["root_legal_mask"],
+        calls[0]["root_legal_mask"],
+    )
+
+
+def test_trusted_endpoint_rejects_mismatch_before_inference(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    history = _push_history("e2e4", "e7e5")
+    board = history[-1].copy(stack=False)
+    calls = _install_fake_lean_inference(monkeypatch)
+    policy = LocalDFMPolicy(
+        model=_Model(),
+        model_id="endpoint",
+        collect_diagnostics=False,
+        inference_batch_size=4,
+        history_validation_mode=HISTORY_VALIDATION_TRUSTED_ARENA_ENDPOINT,
+    )
+    corrupted = _trusted_endpoint(
+        history,
+        current_fen=chess.Board().fen(en_passant="legal"),
+    )
+
+    with pytest.raises(LocalPolicyError, match="must match"):
+        policy.select_actions_from_trusted_arena([board], [corrupted])
+    assert calls == []
+
+
+def test_trusted_endpoint_hot_path_never_replays_transitions(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    histories = (
+        _push_history("e2e4", "e7e5", "g1f3", "b8c6"),
+        _push_history(
+            "e2e4",
+            "e7e5",
+            "g1f3",
+            "b8c6",
+            "f1b5",
+            "a7a6",
+        ),
+    )
+    calls = _install_fake_lean_inference(monkeypatch)
+    replay_calls = 0
+
+    def reject_replay(*args, **kwargs):
+        nonlocal replay_calls
+        replay_calls += 1
+        raise AssertionError("trusted endpoint attempted transition replay")
+
+    monkeypatch.setattr(local_policy, "_matching_legal_move", reject_replay)
+    policy = LocalDFMPolicy(
+        model=_Model(),
+        model_id="endpoint",
+        collect_diagnostics=False,
+        inference_batch_size=4,
+        history_validation_mode=HISTORY_VALIDATION_TRUSTED_ARENA_ENDPOINT,
+    )
+    root_ply = 2
+    for history in histories:
+        additional_plies = history[-1].ply() - root_ply
+        result = policy.select_actions_from_trusted_arena(
+            [history[-1].copy(stack=False)],
+            [
+                _trusted_endpoint(
+                    history,
+                    root_ply=root_ply,
+                    additional_plies=additional_plies,
+                )
+            ],
+        )
+        assert result.action_indices.shape == (1,)
+
+    assert replay_calls == 0
+    assert [call["current_planes"].shape[0] for call in calls] == [4, 4]
+
+
+def test_trusted_endpoint_is_sealed_and_default_policy_cannot_use_it():
+    history = _push_history("e2e4")
+    with pytest.raises(TypeError, match="only be minted"):
+        TrustedArenaHistoryEndpoint(
+            pair_id="forged",
+            opening_index=0,
+            game_in_pair=0,
+            current_fen=history[-1].fen(en_passant="legal"),
+            position_count=2,
+            authoritative_move_stack_length=1,
+            root_ply=1,
+            additional_plies=0,
+            played_suffix_count=0,
+            ply_cap=4,
+            claim_draw_checked_nonterminal=True,
+            below_ply_cap=True,
+            _seal=object(),
+        )
+
+    sealed = _trusted_endpoint(history)
+    with pytest.raises(AttributeError, match="immutable"):
+        sealed.current_fen = chess.Board().fen(en_passant="legal")
+
+    default_policy = LocalDFMPolicy(
+        model=_Model(),
+        model_id="strict-default",
+    )
+    with pytest.raises(LocalPolicyError, match="disabled"):
+        default_policy.select_actions_from_trusted_arena(
+            [history[-1].copy(stack=False)],
+            [sealed],
+        )
 
 
 def test_history_accepts_legal_fen_round_trip_that_drops_irrelevant_ep_square(

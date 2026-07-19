@@ -48,6 +48,11 @@ from research.arena import (
     pentanomial_normalized_elo_diagnostics,
     pentanomial_stats,
 )
+from research.arena_history_trust import (
+    HISTORY_VALIDATION_FULL_REPLAY,
+    HISTORY_VALIDATION_SCHEMA,
+    HISTORY_VALIDATION_TRUSTED_ARENA_ENDPOINT,
+)
 from research.import_legacy import import_legacy_checkpoint
 from research.local_policy import (
     STATIC_INFERENCE_BATCHING_SCHEMA,
@@ -70,8 +75,8 @@ from research.prepare import (
 )
 
 
-ARENA_RUN_SCHEMA = "chess-dfm-relative-arena-run-v2"
-ARENA_BLOCK_SCHEMA = "chess-dfm-relative-arena-block-v2"
+ARENA_RUN_SCHEMA = "chess-dfm-relative-arena-run-v3"
+ARENA_BLOCK_SCHEMA = "chess-dfm-relative-arena-block-v3"
 RELATIVE_ELO_SCOPE = "checkpoint_pool_relative_only"
 DEFAULT_MODELS_DIR = REPO_ROOT / "models" / "source" / "extracted"
 DEFAULT_SOURCE_RUN_ROOT = REPO_ROOT / "checkpoints" / "source" / "step0265000"
@@ -239,6 +244,7 @@ def _code_provenance() -> dict[str, Any]:
         "research/train.py",
         "research/inference.py",
         "research/local_policy.py",
+        "research/arena_history_trust.py",
         "research/arena.py",
         "research/play_arena.py",
         "research/evaluate_arena.py",
@@ -454,6 +460,7 @@ def load_research_policy(
             trace_top_k=1,
             collect_diagnostics=collect_diagnostics,
             inference_batch_size=inference_batch_size,
+            history_validation_mode=HISTORY_VALIDATION_TRUSTED_ARENA_ENDPOINT,
         ),
         {
             "load_seconds": elapsed,
@@ -501,6 +508,7 @@ def load_source_policy(
             trace_top_k=1,
             collect_diagnostics=collect_diagnostics,
             inference_batch_size=inference_batch_size,
+            history_validation_mode=HISTORY_VALIDATION_TRUSTED_ARENA_ENDPOINT,
         ),
         {
             "load_seconds": elapsed,
@@ -544,10 +552,25 @@ class TrackingPolicy:
     def action_codec_id(self) -> str:
         return str(self.delegate.action_codec_id)
 
-    def select_actions(
+    @property
+    def history_validation_mode(self) -> str:
+        return str(
+            getattr(
+                self.delegate,
+                "history_validation_mode",
+                HISTORY_VALIDATION_FULL_REPLAY,
+            )
+        )
+
+    @property
+    def trusted_arena_history_schema(self) -> str | None:
+        value = getattr(self.delegate, "trusted_arena_history_schema", None)
+        return None if value is None else str(value)
+
+    def _select_with_tracking(
         self,
         boards: Sequence[chess.Board],
-        histories: Sequence[Sequence[chess.Board]],
+        invoke: Any,
     ) -> Any:
         for board in boards:
             legal_count = board.legal_moves.count()
@@ -562,7 +585,7 @@ class TrackingPolicy:
             self.tracker.incomplete_coverage_positions += int(representable_count != legal_count)
         started = time.perf_counter()
         try:
-            return self.delegate.select_actions(boards, histories)
+            return invoke()
         finally:
             elapsed = time.perf_counter() - started
             self.tracker.calls += 1
@@ -571,6 +594,33 @@ class TrackingPolicy:
                 self.tracker.max_call_seconds,
                 elapsed,
             )
+
+    def select_actions(
+        self,
+        boards: Sequence[chess.Board],
+        histories: Sequence[Sequence[chess.Board]],
+    ) -> Any:
+        return self._select_with_tracking(
+            boards,
+            lambda: self.delegate.select_actions(boards, histories),
+        )
+
+    def select_actions_from_trusted_arena(
+        self,
+        boards: Sequence[chess.Board],
+        endpoints: Sequence[Any],
+    ) -> Any:
+        capability = getattr(
+            self.delegate,
+            "select_actions_from_trusted_arena",
+            None,
+        )
+        if not callable(capability):
+            raise TypeError("Tracked policy lacks trusted arena history capability.")
+        return self._select_with_tracking(
+            boards,
+            lambda: capability(boards, endpoints),
+        )
 
 
 def _warm_policy(
@@ -587,6 +637,8 @@ def _warm_policy(
     for index in range(batch_size):
         fens = loaded_histories.histories_by_opening_index[index]
         history = tuple(chess.Board(fen) for fen in fens)
+        if history[0].fen(en_passant="legal") != chess.Board().fen(en_passant="legal"):
+            raise ValueError("Warmup history does not begin at standard chess.")
         if history[-1].fen(en_passant="legal") != opening_pool["openings"][index]["fen"]:
             raise ValueError("Warmup history does not match opening pool.")
         boards.append(history[-1])
@@ -655,6 +707,44 @@ def _validate_static_inference_contract(
                 f"size {physical_batch_size}."
             )
     return physical_batch_size
+
+
+def _validate_history_validation_contract(
+    contract: Mapping[str, Any],
+    *,
+    policies: Sequence[BatchedArenaPolicy],
+) -> None:
+    expected = {
+        "schema_version": HISTORY_VALIDATION_SCHEMA,
+        "public_policy_default": HISTORY_VALIDATION_FULL_REPLAY,
+        "arena_hot_path": HISTORY_VALIDATION_TRUSTED_ARENA_ENDPOINT,
+        "opening_validation": "full_exact_replay_sidecar_and_selected_pairs",
+        "authoritative_state": "full_stack_with_checked_legal_pushes",
+        "policy_board_copy": "stack_false",
+        "policy_payload": "sealed_constant_size_state_attestation",
+        "repetition_authority": "runner_claim_draw_boundary_check",
+        "complexity": "constant_per_policy_row",
+    }
+    try:
+        observed = dict(contract["history_validation"])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError("Arena contract has no valid history validation mode.") from exc
+    if observed != expected:
+        raise ValueError("Arena history validation contract mismatch.")
+    for policy in policies:
+        if getattr(policy, "history_validation_mode", None) != (
+            HISTORY_VALIDATION_TRUSTED_ARENA_ENDPOINT
+        ):
+            raise ValueError(
+                f"Policy {policy.model_id!r} does not use the pinned trusted "
+                "arena endpoint history mode."
+            )
+        if getattr(policy, "trusted_arena_history_schema", None) != (
+            HISTORY_VALIDATION_SCHEMA
+        ) or not callable(getattr(policy, "select_actions_from_trusted_arena", None)):
+            raise ValueError(
+                f"Policy {policy.model_id!r} lacks the pinned trusted arena endpoint capability."
+            )
 
 
 def _gameplay_payload_digest(payload: Mapping[str, Any]) -> str:
@@ -985,6 +1075,10 @@ def run_blocks(
     session_setup: Mapping[str, Any],
 ) -> dict[str, Any]:
     _validate_static_inference_contract(
+        contract,
+        policies=(candidate_policy, opponent_policy),
+    )
+    _validate_history_validation_contract(
         contract,
         policies=(candidate_policy, opponent_policy),
     )
@@ -1334,6 +1428,17 @@ def main(argv: Sequence[str] | None = None) -> int:
             "metrics_basis": "real_rows_only",
             "timing_basis": "physical_padded_call_wall_time",
             "runtime_rng": "none_deterministic_greedy_inference",
+        },
+        "history_validation": {
+            "schema_version": HISTORY_VALIDATION_SCHEMA,
+            "public_policy_default": HISTORY_VALIDATION_FULL_REPLAY,
+            "arena_hot_path": HISTORY_VALIDATION_TRUSTED_ARENA_ENDPOINT,
+            "opening_validation": "full_exact_replay_sidecar_and_selected_pairs",
+            "authoritative_state": "full_stack_with_checked_legal_pushes",
+            "policy_board_copy": "stack_false",
+            "policy_payload": "sealed_constant_size_state_attestation",
+            "repetition_authority": "runner_claim_draw_boundary_check",
+            "complexity": "constant_per_policy_row",
         },
         "promotion_gate": (
             GSPRTState(GSPRTConfig.normalized_promotion()).as_dict()["config"]

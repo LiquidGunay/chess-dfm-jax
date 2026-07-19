@@ -22,6 +22,7 @@ import_legacy.py  checksummed, restricted source-checkpoint boundary
 train.py          single editable model/objective/training surface
 inference.py      checked cached-BT4 multi-pass inference and profiling
 arena.py          frozen pools, paired outcomes, and arena statistics
+arena_history_trust.py sealed O(1) internal history attestations
 local_policy.py   strict current-only localized DFM arena adapter
 play_arena.py     bounded batched gameplay with exact history replay
 evaluate_arena.py strict in-process relative-Elo CLI and resumable blocks
