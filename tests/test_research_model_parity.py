@@ -257,6 +257,21 @@ def test_legacy_objective_requires_compatibility_norm_loss():
             "normalized",
             "requires jepa_sigreg_kind='le_jepa'",
         ),
+        (
+            {"jepa_sigreg_example_count": -1},
+            "normalized",
+            "must be a non-negative integer",
+        ),
+        (
+            {"jepa_sigreg_example_count": 1.5},
+            "normalized",
+            "must be a non-negative integer",
+        ),
+        (
+            {"jepa_sigreg_example_count": 1},
+            "legacy",
+            "requires --objective normalized",
+        ),
     ],
 )
 def test_invalid_sigreg_estimator_configs_fail_closed(
@@ -304,6 +319,7 @@ def test_experiment_then_cli_override_precedence_and_resume_contract(
     assert default_args.jepa_target_stop_gradient is None
     assert default_args.jepa_norm_loss_coeff is None
     assert default_args.sigreg_estimator is None
+    assert default_args.sigreg_example_count is None
     assert default_args.learning_rate is None
     assert default_args.bt4_learning_rate is None
     assert default_args.train_batch_schedule == "shard_major"
@@ -324,6 +340,8 @@ def test_experiment_then_cli_override_precedence_and_resume_contract(
             "0",
             "--sigreg-estimator",
             "u_stat",
+            "--sigreg-example-count",
+            "1",
             "--learning-rate",
             "2.5e-5",
             "--bt4-learning-rate",
@@ -342,6 +360,7 @@ def test_experiment_then_cli_override_precedence_and_resume_contract(
     assert disabled_config.jepa_sigreg_coeff == 0.5
     assert disabled_config.jepa_norm_loss_coeff == 0.0
     assert disabled_config.jepa_sigreg_estimator == "u_stat"
+    assert disabled_config.jepa_sigreg_example_count == 1
     assert disabled_config.learning_rate == 2.5e-5
     assert disabled_config.bt4_learning_rate == 1e-6
     assert disabled_args.train_batch_schedule == "global_permutation"
@@ -389,6 +408,7 @@ def test_experiment_then_cli_override_precedence_and_resume_contract(
     assert contract["model_config"]["jepa_sigreg_coeff"] == 0.25
     assert contract["model_config"]["jepa_norm_loss_coeff"] == 1.0
     assert contract["model_config"]["jepa_sigreg_estimator"] == "v_stat"
+    assert contract["model_config"]["jepa_sigreg_example_count"] == 0
     assert (
         contract["objective"]["jepa_target_stop_gradient"]
         is True
@@ -396,6 +416,7 @@ def test_experiment_then_cli_override_precedence_and_resume_contract(
     assert contract["objective"]["target_sigreg_coeff"] == 0.25
     assert contract["objective"]["jepa_norm_loss_coeff"] == 1.0
     assert contract["objective"]["jepa_sigreg_estimator"] == "v_stat"
+    assert contract["objective"]["jepa_sigreg_example_count"] == 0
     assert contract["data"]["schedule"] == train_provenance
 
 
@@ -462,6 +483,7 @@ def test_local_config_and_initialized_model_match_legacy_exactly():
             "jepa_target_ema_decay",
             "jepa_norm_loss_coeff",
             "jepa_sigreg_estimator",
+            "jepa_sigreg_example_count",
             "jepa_target_variance_hinge_coeff",
             "jepa_target_variance_hinge_gamma",
             "jepa_state_fixed_unit_rms",
@@ -501,6 +523,12 @@ def test_local_config_and_initialized_model_match_legacy_exactly():
             "jepa_sigreg_estimator"
         ].default
         == "v_stat"
+    )
+    assert (
+        local.JointLatentSASAConfig.__dataclass_fields__[
+            "jepa_sigreg_example_count"
+        ].default
+        == 0
     )
 
     kwargs = _config_kwargs()
@@ -877,6 +905,95 @@ def test_normalized_objective_selects_u_stat_and_retains_v_diagnostic():
         rtol=1e-6,
         atol=1e-6,
     )
+
+
+def test_fixed_sigreg_example_count_uses_shared_selected_examples():
+    batch = _batch() | {
+        "future_valid": jnp.ones((2, 2), dtype=jnp.float32),
+    }
+    model = local.JointLatentSASAModel(
+        DummyEncoder(),
+        local.JointLatentSASAConfig(
+            **(
+                _config_kwargs()
+                | {"jepa_sigreg_example_count": 1}
+            )
+        ),
+        rngs=nnx.Rngs(39),
+    )
+
+    _, aux = local.normalized_stage1_loss_fn(
+        model,
+        batch,
+        jax.random.PRNGKey(109),
+        1.0,
+        1.0,
+    )
+
+    assert float(aux["jepa_sigreg_example_count"]) == 1.0
+    assert float(aux["jepa_sigreg_sampling_fraction"]) == 0.5
+    assert float(aux["jepa_sigreg_valid_count"]) == 3.0
+    assert float(aux["jepa_pred_sigreg_valid_count"]) == 2.0
+    assert jnp.isfinite(aux["jepa_sigreg_loss"])
+    assert jnp.isfinite(aux["jepa_pred_sigreg_loss"])
+
+
+def test_full_batch_sigreg_count_preserves_default_rng_and_statistics():
+    batch = _batch()
+    rng = jax.random.PRNGKey(110)
+
+    def evaluate(example_count):
+        model = local.JointLatentSASAModel(
+            DummyEncoder(),
+            local.JointLatentSASAConfig(
+                **(
+                    _config_kwargs()
+                    | {"jepa_sigreg_example_count": example_count}
+                )
+            ),
+            rngs=nnx.Rngs(40),
+        )
+        return local.joint_stage1_loss_fn(
+            model,
+            batch,
+            rng,
+            compute_fp32_legality=True,
+        )
+
+    default_loss, default_aux = evaluate(0)
+    explicit_loss, explicit_aux = evaluate(batch["valid"].shape[0])
+
+    _assert_trees_exact(default_loss, explicit_loss)
+    for key in (
+        "jepa_sigreg_loss",
+        "jepa_pred_sigreg_loss",
+        "jepa_sigreg_valid_count",
+        "jepa_pred_sigreg_valid_count",
+    ):
+        _assert_trees_exact(default_aux[key], explicit_aux[key])
+
+
+def test_fixed_sigreg_example_count_cannot_exceed_physical_batch():
+    model = local.JointLatentSASAModel(
+        DummyEncoder(),
+        local.JointLatentSASAConfig(
+            **(
+                _config_kwargs()
+                | {"jepa_sigreg_example_count": 3}
+            )
+        ),
+        rngs=nnx.Rngs(41),
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="cannot exceed physical batch size",
+    ):
+        local.joint_stage1_loss_fn(
+            model,
+            _batch(),
+            jax.random.PRNGKey(111),
+        )
 
 
 def test_local_loss_oracle_covers_teacher_forcing_moments_and_heads():

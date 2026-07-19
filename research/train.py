@@ -71,6 +71,7 @@ EXPERIMENT_OVERRIDES: dict[str, Any] = {
     # "jepa_norm_loss_coeff": 0.0,
     # "jepa_pred_sigreg_coeff": 1.0,
     # "jepa_sigreg_estimator": "u_stat",
+    # "jepa_sigreg_example_count": 64,
     # "jepa_target_stop_gradient": True,
     # "jepa_target_semantics": "ema",
     # "jepa_target_ema_decay": 0.99,
@@ -165,6 +166,7 @@ class JointLatentSASAConfig:
     jepa_pred_sigreg_coeff: float = 0.0
     jepa_sigreg_kind: str = "le_jepa"
     jepa_sigreg_estimator: str = "v_stat"
+    jepa_sigreg_example_count: int = 0
     jepa_sigreg_proj_dim: int = 1024
     value_coeff: float = 0.0
     wdl_coeff: float = 0.0
@@ -1840,31 +1842,69 @@ def joint_stage1_loss_fn(
             ),
             jepa_mask,
         )
+    sigreg_z_all = z_all
+    sigreg_pred_z = pred_z
+    sigreg_valid = valid
+    sigreg_future_valid = future_valid
+    sigreg_projection_rng = rng_sigreg
+    sigreg_example_count = model.config.jepa_sigreg_example_count
+    if sigreg_example_count > batch_size:
+        raise ValueError(
+            "jepa_sigreg_example_count cannot exceed physical batch size: "
+            f"{sigreg_example_count} > {batch_size}"
+        )
+    if 0 < sigreg_example_count < batch_size:
+        sigreg_selection_rng, sigreg_projection_rng = jax.random.split(
+            rng_sigreg
+        )
+        sigreg_indices = jax.random.permutation(
+            sigreg_selection_rng,
+            batch_size,
+        )[:sigreg_example_count]
+        sigreg_z_all = jnp.take(z_all, sigreg_indices, axis=0)
+        sigreg_pred_z = jnp.take(pred_z, sigreg_indices, axis=0)
+        sigreg_valid = jnp.take(valid, sigreg_indices, axis=0)
+        sigreg_future_valid = jnp.take(
+            future_valid_for_loss,
+            sigreg_indices,
+            axis=0,
+        )
+    effective_sigreg_example_count = sigreg_z_all.shape[0]
+
     jepa_sigreg_loss = jnp.asarray(0.0, dtype=jnp.float32)
     jepa_sigreg_u_stat_discrepancy = jnp.asarray(
         0.0,
         dtype=jnp.float32,
     )
-    valid_all = jnp.concatenate([valid[:, None], valid[:, None] * future_valid], axis=1)
+    valid_all = jnp.concatenate(
+        [
+            sigreg_valid[:, None],
+            sigreg_valid[:, None] * sigreg_future_valid,
+        ],
+        axis=1,
+    )
     sigreg_weight = valid_all.reshape((-1,))
     sigreg_valid_count = jnp.sum(sigreg_weight)
     if model.config.jepa_sigreg_coeff != 0.0:
         with jax.named_scope("joint_jepa_sigreg"):
-            sigreg_tokens = jnp.asarray(z_all, dtype=jnp.float32).reshape((-1, z_all.shape[-1]))
+            sigreg_tokens = jnp.asarray(
+                sigreg_z_all,
+                dtype=jnp.float32,
+            ).reshape((-1, sigreg_z_all.shape[-1]))
             if model.config.jepa_sigreg_kind == "moments":
                 jepa_sigreg_loss = _sigreg_moments_loss(sigreg_tokens, sample_weight=sigreg_weight)
             elif model.config.jepa_sigreg_kind == "quantile":
                 jepa_sigreg_loss = _quantile_sigreg_loss(
                     sigreg_tokens,
                     d_proj=model.config.jepa_sigreg_proj_dim,
-                    rng=rng_sigreg,
+                    rng=sigreg_projection_rng,
                 )
             elif model.config.jepa_sigreg_kind == "le_jepa":
                 if model.config.jepa_sigreg_estimator == "u_stat":
                     sigreg_statistics = _le_jepa_sigreg_statistics(
                         sigreg_tokens,
                         proj_dim=model.config.jepa_sigreg_proj_dim,
-                        rng=rng_sigreg,
+                        rng=sigreg_projection_rng,
                         sample_weight=sigreg_weight,
                         axis_name=sigreg_axis_name,
                         compute_u_stat=True,
@@ -1877,7 +1917,7 @@ def joint_stage1_loss_fn(
                     jepa_sigreg_loss = _official_le_jepa_sigreg_loss(
                         sigreg_tokens,
                         proj_dim=model.config.jepa_sigreg_proj_dim,
-                        rng=rng_sigreg,
+                        rng=sigreg_projection_rng,
                         sample_weight=sigreg_weight,
                         axis_name=sigreg_axis_name,
                     )
@@ -1888,25 +1928,30 @@ def joint_stage1_loss_fn(
         0.0,
         dtype=jnp.float32,
     )
-    pred_sigreg_weight = (future_valid_for_loss * valid[:, None]).reshape((-1,))
+    pred_sigreg_weight = (
+        sigreg_future_valid * sigreg_valid[:, None]
+    ).reshape((-1,))
     pred_sigreg_valid_count = jnp.sum(pred_sigreg_weight)
     if model.config.jepa_pred_sigreg_coeff != 0.0:
         with jax.named_scope("joint_jepa_pred_sigreg"):
-            pred_sigreg_tokens = jnp.asarray(pred_z, dtype=jnp.float32).reshape((-1, pred_z.shape[-1]))
+            pred_sigreg_tokens = jnp.asarray(
+                sigreg_pred_z,
+                dtype=jnp.float32,
+            ).reshape((-1, sigreg_pred_z.shape[-1]))
             if model.config.jepa_sigreg_kind == "moments":
                 jepa_pred_sigreg_loss = _sigreg_moments_loss(pred_sigreg_tokens, sample_weight=pred_sigreg_weight)
             elif model.config.jepa_sigreg_kind == "quantile":
                 jepa_pred_sigreg_loss = _quantile_sigreg_loss(
                     pred_sigreg_tokens,
                     d_proj=model.config.jepa_sigreg_proj_dim,
-                    rng=rng_sigreg,
+                    rng=sigreg_projection_rng,
                 )
             elif model.config.jepa_sigreg_kind == "le_jepa":
                 if model.config.jepa_sigreg_estimator == "u_stat":
                     pred_sigreg_statistics = _le_jepa_sigreg_statistics(
                         pred_sigreg_tokens,
                         proj_dim=model.config.jepa_sigreg_proj_dim,
-                        rng=rng_sigreg,
+                        rng=sigreg_projection_rng,
                         sample_weight=pred_sigreg_weight,
                         axis_name=sigreg_axis_name,
                         compute_u_stat=True,
@@ -1922,7 +1967,7 @@ def joint_stage1_loss_fn(
                         _official_le_jepa_sigreg_loss(
                             pred_sigreg_tokens,
                             proj_dim=model.config.jepa_sigreg_proj_dim,
-                            rng=rng_sigreg,
+                            rng=sigreg_projection_rng,
                             sample_weight=pred_sigreg_weight,
                             axis_name=sigreg_axis_name,
                         )
@@ -2151,6 +2196,19 @@ def joint_stage1_loss_fn(
                 ),
             }
         )
+    if model.config.jepa_sigreg_example_count > 0:
+        aux.update(
+            {
+                "jepa_sigreg_example_count": jnp.asarray(
+                    effective_sigreg_example_count,
+                    dtype=jnp.float32,
+                ),
+                "jepa_sigreg_sampling_fraction": jnp.asarray(
+                    effective_sigreg_example_count / batch_size,
+                    dtype=jnp.float32,
+                ),
+            }
+        )
     if positive_target_override is not None:
         aux.update(
             {
@@ -2353,6 +2411,26 @@ def validate_objective_config(
         raise ValueError(
             "jepa_sigreg_estimator='u_stat' requires "
             "jepa_sigreg_kind='le_jepa'."
+        )
+    if (
+        isinstance(config.jepa_sigreg_example_count, bool)
+        or not isinstance(
+            config.jepa_sigreg_example_count,
+            (int, np.integer),
+        )
+        or config.jepa_sigreg_example_count < 0
+    ):
+        raise ValueError(
+            "jepa_sigreg_example_count must be a non-negative integer, "
+            f"found {config.jepa_sigreg_example_count!r}"
+        )
+    if (
+        config.jepa_sigreg_example_count > 0
+        and objective != "normalized"
+    ):
+        raise ValueError(
+            "Fixed-count SIGReg example sampling requires "
+            "--objective normalized."
         )
     if config.jepa_target_semantics not in ("online", "ema"):
         raise ValueError(
@@ -3296,11 +3374,23 @@ def build_research_resume_contract(
         ),
         "jepa_norm_loss_coeff": float(config.jepa_norm_loss_coeff),
         "jepa_sigreg_estimator": config.jepa_sigreg_estimator,
+        "jepa_sigreg_example_count": int(
+            config.jepa_sigreg_example_count
+        ),
         "target_sigreg_coeff": float(config.jepa_sigreg_coeff),
         "pred_sigreg_coeff": float(config.jepa_pred_sigreg_coeff),
         "target_sigreg_reference_count": float(sigreg_reference_count),
         "pred_sigreg_reference_count": float(sigreg_reference_count),
     }
+    if config.jepa_sigreg_example_count > 0:
+        objective_contract["jepa_sigreg_sampling"] = {
+            "unit": "physical_batch_example",
+            "without_replacement": True,
+            "shared_target_prediction_indices": True,
+            "resampled_each_update": True,
+            "projection_rng_split_after_selection": True,
+            "full_batch_fast_path_when_equal": True,
+        }
     if config.jepa_target_variance_hinge_coeff != 0.0:
         objective_contract["jepa_target_variance_hinge"] = {
             "coefficient": float(
@@ -4114,6 +4204,16 @@ def parse_args(
         ),
     )
     parser.add_argument(
+        "--sigreg-example-count",
+        type=int,
+        help=(
+            "Randomly sample this many physical-batch examples for both "
+            "target and prediction SIGReg; zero uses the full batch. "
+            "Use a fixed positive count to keep estimator scale and cost "
+            "portable across physical batches."
+        ),
+    )
+    parser.add_argument(
         "--jepa-norm-loss-coeff",
         type=float,
         help=(
@@ -4303,6 +4403,11 @@ def apply_config_overrides(
             if args.sigreg_estimator is None
             else args.sigreg_estimator
         ),
+        jepa_sigreg_example_count=(
+            config.jepa_sigreg_example_count
+            if args.sigreg_example_count is None
+            else args.sigreg_example_count
+        ),
         jepa_norm_loss_coeff=(
             config.jepa_norm_loss_coeff
             if args.jepa_norm_loss_coeff is None
@@ -4477,12 +4582,16 @@ def checkpoint_evaluation_contract(
         "jepa_target_stop_gradient": bool(config.jepa_target_stop_gradient),
         "jepa_norm_loss_coeff": float(config.jepa_norm_loss_coeff),
         "jepa_sigreg_estimator": config.jepa_sigreg_estimator,
+        "jepa_sigreg_example_count": int(
+            config.jepa_sigreg_example_count
+        ),
         "target_sigreg_coeff": float(config.jepa_sigreg_coeff),
         "pred_sigreg_coeff": float(config.jepa_pred_sigreg_coeff),
     }
     legacy_objective_defaults = {
         "jepa_norm_loss_coeff": 1.0,
         "jepa_sigreg_estimator": "v_stat",
+        "jepa_sigreg_example_count": 0,
     }
     mismatches = {
         key: (
