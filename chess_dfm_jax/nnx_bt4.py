@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from typing import NamedTuple
 
 import flax.nnx as nnx
 import jax
@@ -197,6 +198,26 @@ class Smolgen(nnx.Module):
         return s.reshape((batch, self.headcount, 64, 64))
 
 
+class EncoderLayerCapture(NamedTuple):
+    """Normative BT4 tensors at one published sparse-replacement boundary."""
+
+    hook_attn_in: jax.Array
+    hook_attn_out: jax.Array
+    resid_mid_after_ln: jax.Array
+    hook_mlp_out: jax.Array
+    resid_post_after_ln: jax.Array
+
+
+class BT4EncoderCaptures(NamedTuple):
+    """Five normative hooks stacked as ``[layer, batch, square, width]``."""
+
+    hook_attn_in: jax.Array
+    hook_attn_out: jax.Array
+    resid_mid_after_ln: jax.Array
+    hook_mlp_out: jax.Array
+    resid_post_after_ln: jax.Array
+
+
 class EncoderLayer(nnx.Module):
     def __init__(
         self,
@@ -271,11 +292,30 @@ class EncoderLayer(nnx.Module):
             self.qk_gain = TrainableParam(jnp.array(1.0 / np.sqrt(self.head_dim), dtype=self.param_dtype))
 
     def __call__(self, x: jnp.ndarray, alpha: float | None = None) -> jnp.ndarray:
+        output, _capture = self.forward_with_capture(x, alpha)
+        return output
+
+    def forward_with_capture(
+        self,
+        x: jnp.ndarray,
+        alpha: float | None = None,
+        *,
+        attention_output_override: jnp.ndarray | None = None,
+        mlp_output_override: jnp.ndarray | None = None,
+    ) -> tuple[jnp.ndarray, EncoderLayerCapture]:
+        """Apply one layer and expose raw pre-``alpha`` replacement tensors.
+
+        Overrides replace the corresponding raw branch after its final output
+        projection and before residual scaling. They are primarily a strict
+        boundary for later sparse-replacement tests; the ordinary
+        :meth:`__call__` path supplies no override.
+        """
+
         x = jnp.asarray(x, dtype=self.compute_dtype)
-        res = x
+        hook_attn_in = x
         batch, seq_len, _ = x.shape
         alpha_val = alpha if alpha is not None else 1.0
-        
+
         # Attention
         q = x @ jnp.asarray(self.wq[...], dtype=self.compute_dtype)
         if hasattr(self, "wq_b"):
@@ -315,22 +355,34 @@ class EncoderLayer(nnx.Module):
             attn = jax.nn.softmax(logits, axis=-1)
             out = jnp.matmul(attn, v)
         out = out.transpose(0, 2, 1, 3).reshape((batch * seq_len, self.width))
-        
-        if hasattr(self, "wo_b"): # Trainable version
-             out = (
-                 out @ jnp.asarray(self.wo[...], dtype=self.compute_dtype)
-                 + jnp.asarray(self.wo_b[...], dtype=self.compute_dtype)
-             )
-        else: # Fixed version
-             out = self.wo(out)
-        
-        out = out.reshape((batch, seq_len, self.width)) * alpha_val
-        x = self.ln_attn(out + res)
-        
+
+        if hasattr(self, "wo_b"):  # Trainable version
+            out = (
+                out @ jnp.asarray(self.wo[...], dtype=self.compute_dtype)
+                + jnp.asarray(self.wo_b[...], dtype=self.compute_dtype)
+            )
+        else:  # Fixed version
+            out = self.wo(out)
+
+        hook_attn_out = out.reshape((batch, seq_len, self.width))
+        if attention_output_override is not None:
+            replacement = jnp.asarray(
+                attention_output_override,
+                dtype=self.compute_dtype,
+            )
+            if replacement.shape != hook_attn_out.shape:
+                raise ValueError(
+                    "attention_output_override must have shape "
+                    f"{hook_attn_out.shape}, got {replacement.shape}"
+                )
+            hook_attn_out = replacement
+        resid_mid_after_ln = self.ln_attn(
+            hook_attn_out * alpha_val + hook_attn_in
+        )
+
         # FFN
-        res = x
-        x_flat = x.reshape((batch * seq_len, self.width))
-        if hasattr(self, "ffn1_b"): # Trainable JEPA version
+        x_flat = resid_mid_after_ln.reshape((batch * seq_len, self.width))
+        if hasattr(self, "ffn1_b"):  # Trainable JEPA version
             h = mish(
                 x_flat @ jnp.asarray(self.ffn1[...], dtype=self.compute_dtype)
                 + jnp.asarray(self.ffn1_b[...], dtype=self.compute_dtype)
@@ -339,11 +391,34 @@ class EncoderLayer(nnx.Module):
                 h @ jnp.asarray(self.ffn2[...], dtype=self.compute_dtype)
                 + jnp.asarray(self.ffn2_b[...], dtype=self.compute_dtype)
             )
-        else: # Fixed BT4 version
+        else:  # Fixed BT4 version
             out_flat = self.ffn2(mish(self.ffn1(x_flat)))
-            
-        out = out_flat.reshape((batch, seq_len, self.width)) * alpha_val
-        return self.ln_ffn(out + res)
+
+        hook_mlp_out = out_flat.reshape((batch, seq_len, self.width))
+        if mlp_output_override is not None:
+            replacement = jnp.asarray(
+                mlp_output_override,
+                dtype=self.compute_dtype,
+            )
+            if replacement.shape != hook_mlp_out.shape:
+                raise ValueError(
+                    "mlp_output_override must have shape "
+                    f"{hook_mlp_out.shape}, got {replacement.shape}"
+                )
+            hook_mlp_out = replacement
+        resid_post_after_ln = self.ln_ffn(
+            hook_mlp_out * alpha_val + resid_mid_after_ln
+        )
+        return (
+            resid_post_after_ln,
+            EncoderLayerCapture(
+                hook_attn_in=hook_attn_in,
+                hook_attn_out=hook_attn_out,
+                resid_mid_after_ln=resid_mid_after_ln,
+                hook_mlp_out=hook_mlp_out,
+                resid_post_after_ln=resid_post_after_ln,
+            ),
+        )
 
 
 def exclusive_self_attention_output(
@@ -652,6 +727,60 @@ class BT4Model(nnx.Module):
             x = layer(x, alpha)
         return x
 
+    def encode_tokens_with_captures(
+        self,
+        planes: jnp.ndarray,
+        alpha: float | None = None,
+    ) -> tuple[jnp.ndarray, BT4EncoderCaptures]:
+        """Encode once and stack every normative sparse-replacement hook."""
+
+        if alpha is None:
+            alpha = (
+                float(math.pow(2.0 * len(self.layers), -0.25))
+                if len(self.layers) > 0
+                else 1.0
+            )
+        x, batch = self.embedding(planes, alpha)
+        x = x.reshape((batch, 64, self.embedding_size))
+        layer_captures: list[EncoderLayerCapture] = []
+        for layer in self.layers:
+            x, capture = layer.forward_with_capture(x, alpha)
+            layer_captures.append(capture)
+        if not layer_captures:
+            empty = jnp.empty(
+                (0, batch, 64, self.embedding_size),
+                dtype=x.dtype,
+            )
+            return x, BT4EncoderCaptures(
+                hook_attn_in=empty,
+                hook_attn_out=empty,
+                resid_mid_after_ln=empty,
+                hook_mlp_out=empty,
+                resid_post_after_ln=empty,
+            )
+        return x, BT4EncoderCaptures(
+            hook_attn_in=jnp.stack(
+                [capture.hook_attn_in for capture in layer_captures],
+                axis=0,
+            ),
+            hook_attn_out=jnp.stack(
+                [capture.hook_attn_out for capture in layer_captures],
+                axis=0,
+            ),
+            resid_mid_after_ln=jnp.stack(
+                [capture.resid_mid_after_ln for capture in layer_captures],
+                axis=0,
+            ),
+            hook_mlp_out=jnp.stack(
+                [capture.hook_mlp_out for capture in layer_captures],
+                axis=0,
+            ),
+            resid_post_after_ln=jnp.stack(
+                [capture.resid_post_after_ln for capture in layer_captures],
+                axis=0,
+            ),
+        )
+
     def __call__(self, planes: jnp.ndarray, alpha: float | None = None):
         x = self.encode_tokens(planes, alpha)
         # Heads receive full state or pooled state
@@ -679,6 +808,14 @@ def jit_bt4_forward(model: BT4Model, planes: jnp.ndarray):
 @nnx.jit
 def jit_encode_tokens(model: BT4Model, planes: jnp.ndarray):
     return model.encode_tokens(planes)
+
+
+@nnx.jit
+def jit_encode_tokens_with_captures(
+    model: BT4Model,
+    planes: jnp.ndarray,
+) -> tuple[jax.Array, BT4EncoderCaptures]:
+    return model.encode_tokens_with_captures(planes)
 
 
 def _encoder_surrogate_loss(model: BT4Model, planes: jnp.ndarray) -> jnp.ndarray:
@@ -761,9 +898,11 @@ def muon_adamw(learning_rate, weight_decay):
 
 
 __all__ = [
+    "BT4EncoderCaptures",
     "BT4Model",
     "BT4TrainableParam",
     "EncoderLayer",
+    "EncoderLayerCapture",
     "TrainableParam",
     "TrainableLayerNorm",
     "TrainableRMSNorm",
@@ -774,6 +913,7 @@ __all__ = [
     "bt4_forward_fp32",
     "jit_bt4_forward",
     "jit_encode_tokens",
+    "jit_encode_tokens_with_captures",
     "jit_encoder_loss_and_grad",
     "make_bt4_model",
     "mish",
