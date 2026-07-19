@@ -23,7 +23,12 @@ historical TPU implementation is preserved on
 `legacy/tpu-joint-latent-sasa`. The detailed contract and measured evidence are
 in `docs/local_gpu_autoresearch_plan.md` and
 `docs/local_gpu_baseline.md`; the relative-strength evaluator contract is
-`docs/local_relative_arena.md`.
+`docs/local_relative_arena.md`. The exact BT4 activation ABI and staged
+dense-alignment, frozen-transcoder/LoRSA transfer, causal, and matched-refit
+work are in the
+[sparse-replacement and representation study](docs/sae_representation_plan.md).
+Those published artifacts replace raw MLP or attention branches; they are not
+final-trunk SAEs.
 
 Unattended autoresearch is not enabled: `AUTORESEARCH_READY = False`,
 `research/results.tsv` remains header-only, and no continuation checkpoint has

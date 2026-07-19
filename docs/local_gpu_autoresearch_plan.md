@@ -659,6 +659,14 @@ Initial experiment order:
 
 ## Phase 6: representation and SAE study
 
+The exact tensor, hook, source-parity, metric, and intervention contract is
+[the BT4 sparse-replacement and representation study](sae_representation_plan.md).
+The published Leela artifacts are MLP transcoders and LoRSA attention branch
+replacements, not final-trunk SAEs. They operate on raw pre-`alpha` branch
+outputs and their corresponding inputs. Source-model FP32 reconstruction and
+cross-framework hook parity must pass before they can support claims about
+backbone drift.
+
 Use an identical fixed board/trajectory corpus and consistent hook semantics for:
 
 - original self-play BT4;
@@ -687,6 +695,17 @@ Then apply the published BT4 transcoders/Lorsa dictionaries:
 Published dictionaries are transfer probes. A degradation in reconstruction
 after backbone training is itself a result, but a fair final comparison also
 requires matched dictionaries trained separately for each backbone.
+
+The first pass therefore progresses from dense alignment, to fixed published
+artifact transfer, to causal branch replacement, and only then to matched
+refits. The representation contract freezes input-plane bytes, square order,
+layer/hook semantics, residual scale and epsilon, dtype, sparse normalization,
+corpus, and game-level resampling. It also records the unresolved mismatch
+between the upstream BT4 config epsilon and the custom layer's default.
+
+The current `z_pred` is not an input to DFM action inference. Representation
+results may explain how JEPA gradients reshape the shared BT4/DFM system, but
+must not be described as evidence for future-latent-conditioned action choice.
 
 Save checkpoints on a log-spaced schedule so representation changes can be
 aligned with validation loss, relative Elo, collapse recovery, and feature
