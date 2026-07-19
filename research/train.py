@@ -2085,6 +2085,14 @@ def create_joint_components(
             ],
             boundaries=[config.lr_warmup_steps],
         )
+    else:
+        # Keep the same stateful schedule ABI as the restored warmup
+        # transform. This lets model-only initialization use a truly constant
+        # local LR while still preflighting the source optimizer tree.
+        learning_rate = optax.constant_schedule(config.learning_rate)
+        bt4_learning_rate = optax.constant_schedule(
+            config.bt4_learning_rate
+        )
     if config.use_muon:
         from chess_dfm_jax.nnx_bt4 import muon_adamw
 

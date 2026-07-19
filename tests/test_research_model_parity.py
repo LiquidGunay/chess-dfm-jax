@@ -776,6 +776,33 @@ def test_local_component_builder_matches_legacy_model_and_optimizer(monkeypatch)
     _assert_trees_exact(local_optimizer_state, legacy_optimizer_state)
 
 
+def test_zero_warmup_constant_schedule_preserves_optimizer_abi(monkeypatch):
+    def make_dummy_encoder(*_args, **_kwargs):
+        return DummyEncoder()
+
+    monkeypatch.setattr(local, "make_bt4_model", make_dummy_encoder)
+    kwargs = _config_kwargs()
+    _, warmup_optimizer = local.create_joint_components(
+        {},
+        local.JointLatentSASAConfig(**kwargs),
+        seed=31,
+    )
+    _, constant_optimizer = local.create_joint_components(
+        {},
+        local.JointLatentSASAConfig(
+            **(kwargs | {"lr_warmup_steps": 0})
+        ),
+        seed=31,
+    )
+
+    warmup_state = _pure_optimizer(warmup_optimizer)
+    constant_state = _pure_optimizer(constant_optimizer)
+    assert local.research_state_abi(
+        constant_state
+    ) == local.research_state_abi(warmup_state)
+    _assert_trees_exact(constant_state, warmup_state)
+
+
 def test_local_optimizer_updates_match_legacy_exactly(monkeypatch):
     def make_dummy_encoder(*_args, **_kwargs):
         return DummyEncoder()
