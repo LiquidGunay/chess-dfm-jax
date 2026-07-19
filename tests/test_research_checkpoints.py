@@ -13,14 +13,20 @@ from flax import nnx
 from chess_dfm_jax.nnx_bt4 import TrainableParam
 from research.prepare import REPO_ROOT
 from research.train import (
+    JointLatentSASAConfig,
     assert_research_state_compatible,
+    checkpoint_evaluation_contract,
     completed_research_checkpoints,
     extract_research_train_state,
     latest_research_checkpoint,
     load_research_checkpoint,
+    load_research_checkpoint_for_evaluation,
+    research_checkpoints_for_evaluation,
     research_state_abi,
     save_research_checkpoint,
+    serialized_model_config,
     strict_restore_research_payload,
+    summarize_checkpoint_evaluation_records,
 )
 
 
@@ -244,3 +250,118 @@ def test_latest_prune_contract_and_checksum_guards(workspace_tmp: Path):
             optimizer=untouched_optimizer,
             expected_resume_contract=contract,
         )
+
+
+def test_checkpoint_evaluation_discovery_and_model_only_restore(
+    workspace_tmp: Path,
+):
+    checkpoint_root = workspace_tmp / "run" / "checkpoints"
+    source_model, source_optimizer = make_components()
+    train_one(source_model, source_optimizer, data_cursor=0)
+    checkpoint = save_research_checkpoint(
+        checkpoint_root,
+        model=source_model,
+        optimizer=source_optimizer,
+        research_update=1,
+        next_data_cursor=1,
+        resume_contract={"test": "checkpoint-evaluation"},
+        lineage={},
+        max_to_keep=0,
+    )
+    (checkpoint_root / ".update00000002.partial-test").mkdir()
+    assert research_checkpoints_for_evaluation(checkpoint_root.parent) == (
+        checkpoint_root,
+        [checkpoint],
+    )
+
+    target_model, target_optimizer = make_components()
+    train_one(target_model, target_optimizer, data_cursor=7)
+    optimizer_before = jax.tree.map(
+        np.asarray,
+        nnx.state(target_optimizer.opt_state),
+    )
+    manifest = load_research_checkpoint_for_evaluation(
+        checkpoint,
+        model=target_model,
+    )
+    expected_model = extract_research_train_state(
+        source_model,
+        source_optimizer,
+    )["model_trainable"]
+    assert manifest["checkpoint_dir"] == str(checkpoint)
+    for expected, actual in zip(
+        jax.tree.leaves(expected_model),
+        jax.tree.leaves(nnx.state(target_model, TrainableParam)),
+        strict=True,
+    ):
+        np.testing.assert_array_equal(np.asarray(expected), np.asarray(actual))
+    for before, after in zip(
+        jax.tree.leaves(optimizer_before),
+        jax.tree.leaves(nnx.state(target_optimizer.opt_state)),
+        strict=True,
+    ):
+        np.testing.assert_array_equal(np.asarray(before), np.asarray(after))
+
+    malformed = checkpoint_root / "update00000003"
+    malformed.mkdir()
+    with pytest.raises(ValueError, match="Malformed published checkpoint"):
+        research_checkpoints_for_evaluation(checkpoint_root)
+
+
+def test_checkpoint_evaluation_contract_and_summary(workspace_tmp: Path):
+    config = JointLatentSASAConfig()
+    contract = {
+        "model_config": serialized_model_config(config),
+        "objective": {
+            "name": "normalized",
+            "jepa_target_semantics": config.jepa_target_semantics,
+            "jepa_target_stop_gradient": config.jepa_target_stop_gradient,
+            "target_sigreg_coeff": config.jepa_sigreg_coeff,
+            "pred_sigreg_coeff": config.jepa_pred_sigreg_coeff,
+            "target_sigreg_reference_count": 1.0,
+            "pred_sigreg_reference_count": 1.0,
+        },
+    }
+    model, optimizer = make_components()
+    checkpoints = [
+        save_research_checkpoint(
+            workspace_tmp / "checkpoints",
+            model=model,
+            optimizer=optimizer,
+            research_update=update,
+            next_data_cursor=update,
+            resume_contract=contract,
+            lineage={},
+            max_to_keep=0,
+        )
+        for update in (1, 2)
+    ]
+    restored = checkpoint_evaluation_contract(checkpoints)
+    assert restored[:4] == (config, "normalized", 1.0, contract)
+
+    records = [
+        {
+            "research_update": update,
+            "optimizer_step": update,
+            "next_data_cursor": update,
+            "checkpoint_dir": str(checkpoints[update - 1]),
+            "state_sha256": f"state-{update}",
+            "validation_seed": seed,
+            "validation_seconds": 0.25,
+            "validation": {"dfm_ce_loss": ce},
+        }
+        for update, seed, ce in (
+            (1, 10_000, 4.6),
+            (1, 20_000, 4.4),
+            (2, 10_000, 4.3),
+            (2, 20_000, 4.5),
+        )
+    ]
+    summary = summarize_checkpoint_evaluation_records(records)
+    assert summary["checkpoint_count"] == 2
+    assert summary["evaluation_count"] == 4
+    assert summary["best_checkpoint"]["research_update"] == 2
+    assert summary["best_checkpoint"]["mean"] == pytest.approx(4.4)
+    assert summary["by_checkpoint"][1][
+        "dfm_ce_loss_delta_from_first"
+    ] == pytest.approx(-0.1)

@@ -2669,6 +2669,63 @@ def completed_research_checkpoints(checkpoint_root: Path) -> list[Path]:
     return [path for _, path in sorted(completed)]
 
 
+def research_checkpoints_for_evaluation(path: Path) -> tuple[Path, list[Path]]:
+    """Resolve one checkpoint or every completed checkpoint in a run/root.
+
+    Unlike routine latest-checkpoint discovery, an evaluation sweep fails on a
+    visible malformed ``update*`` directory. Hidden partial directories remain
+    ignored because they are never published checkpoints.
+    """
+
+    candidate = require_within_workspace(path)
+    if _research_checkpoint_update(candidate) is not None:
+        _read_research_manifest(candidate)
+        if not (candidate / "state.npz").is_file():
+            raise ValueError(
+                f"Research checkpoint is missing state.npz: {candidate}"
+            )
+        return candidate.parent, [candidate]
+
+    checkpoint_root = (
+        require_within_workspace(candidate / "checkpoints")
+        if (candidate / "checkpoints").is_dir()
+        else candidate
+    )
+    if not checkpoint_root.is_dir():
+        raise FileNotFoundError(
+            f"Research checkpoint path is not a directory: {checkpoint_root}"
+        )
+
+    malformed: list[str] = []
+    for child in checkpoint_root.iterdir():
+        if child.name.startswith("."):
+            continue
+        if RESEARCH_CHECKPOINT_PATTERN.fullmatch(child.name) is None:
+            continue
+        if not child.is_dir():
+            malformed.append(f"{child.name} (not a directory)")
+            continue
+        try:
+            _read_research_manifest(child)
+        except ValueError as exc:
+            malformed.append(f"{child.name} ({exc})")
+            continue
+        if not (child / "state.npz").is_file():
+            malformed.append(f"{child.name} (missing state.npz)")
+    if malformed:
+        raise ValueError(
+            "Malformed published checkpoint(s) in evaluation root: "
+            + "; ".join(malformed)
+        )
+
+    checkpoints = completed_research_checkpoints(checkpoint_root)
+    if not checkpoints:
+        raise FileNotFoundError(
+            f"No completed research checkpoint under {checkpoint_root}"
+        )
+    return checkpoint_root, checkpoints
+
+
 def latest_research_checkpoint(checkpoint_root: Path) -> Path | None:
     checkpoints = completed_research_checkpoints(checkpoint_root)
     return checkpoints[-1] if checkpoints else None
@@ -2876,6 +2933,143 @@ def load_research_checkpoint(
         optimizer,
         ema_target,
     )
+    restored = dict(manifest)
+    restored["checkpoint_dir"] = str(checkpoint_dir)
+    return restored
+
+
+def load_research_checkpoint_for_evaluation(
+    path: Path,
+    *,
+    model: nnx.Module,
+    ema_target: EmaTargetModel | None = None,
+) -> dict[str, Any]:
+    """Verify a checkpoint and restore only state used by evaluation.
+
+    Optimizer payloads remain unopened. The enclosing state file is still
+    checksum-verified, and the model/EMA trees are ABI-preflighted before any
+    in-memory mutation. This keeps a multi-checkpoint sweep read-only and avoids
+    transferring unused optimizer moments to the accelerator.
+    """
+
+    checkpoint_dir = resolve_research_checkpoint(path)
+    manifest = _read_research_manifest(checkpoint_dir)
+    state = manifest.get("state")
+    if not isinstance(state, dict) or state.get("filename") != "state.npz":
+        raise ValueError(f"Invalid state record in {checkpoint_dir / 'manifest.json'}")
+    state_path = require_within_workspace(checkpoint_dir / "state.npz")
+    if state_path.stat().st_size != int(state.get("size_bytes", -1)):
+        raise ValueError(f"Research checkpoint state size mismatch: {state_path}")
+    if sha256_file(state_path) != state.get("sha256"):
+        raise ValueError(f"Research checkpoint state checksum mismatch: {state_path}")
+
+    contract = manifest.get("resume_contract")
+    if _json_sha256(contract) != manifest.get("resume_contract_sha256"):
+        raise ValueError(
+            f"Research checkpoint resume contract checksum mismatch {checkpoint_dir}"
+        )
+
+    required_keys = {"step", "model_trainable", "optimizer_state"}
+    if ema_target is not None:
+        required_keys.add("ema_target")
+    with np.load(state_path, allow_pickle=True) as data:
+        observed_keys = set(data.files)
+        if observed_keys != required_keys:
+            raise ValueError(
+                "Research state payload keys differ: "
+                f"missing={sorted(required_keys - observed_keys)}, "
+                f"extra={sorted(observed_keys - required_keys)}"
+            )
+
+        step_array = np.asarray(data["step"])
+        if step_array.shape != () or not np.issubdtype(step_array.dtype, np.integer):
+            raise ValueError(
+                "Research optimizer step must be an integer scalar, got "
+                f"shape={step_array.shape}, dtype={step_array.dtype}"
+            )
+        optimizer_step = int(step_array)
+        if optimizer_step != int(manifest.get("optimizer_step", -1)):
+            raise ValueError(
+                "Research optimizer step mismatch: "
+                f"manifest={manifest.get('optimizer_step')}, "
+                f"payload={optimizer_step}"
+            )
+
+        model_value = data["model_trainable"]
+        model_payload = (
+            model_value.item()
+            if model_value.shape == () and model_value.dtype == object
+            else model_value
+        )
+        ema_payload: Any | None = None
+        if ema_target is not None:
+            ema_value = data["ema_target"]
+            ema_payload = (
+                ema_value.item()
+                if ema_value.shape == () and ema_value.dtype == object
+                else ema_value
+            )
+
+    if research_state_abi(model_payload) != manifest.get("model_abi"):
+        raise ValueError(f"Research checkpoint model ABI manifest mismatch: {checkpoint_dir}")
+    model_state = nnx.state(model, TrainableParam)
+    assert_research_state_compatible(
+        dict(nnx.to_pure_dict(model_state)),
+        model_payload,
+        label="model",
+    )
+
+    ema_states: dict[str, Any] | None = None
+    if ema_target is None:
+        if "ema_target_abi" in manifest:
+            raise ValueError(
+                "Research checkpoint contains EMA target state but no EMA "
+                "target model was supplied."
+            )
+    else:
+        if ema_payload is None:
+            raise ValueError(
+                "Research checkpoint is missing required EMA target state."
+            )
+        if research_state_abi(ema_payload) != manifest.get("ema_target_abi"):
+            raise ValueError(
+                f"Research checkpoint EMA target ABI manifest mismatch: {checkpoint_dir}"
+            )
+        ema_states = ema_checkpoint_state(ema_target)
+        assert_research_state_compatible(
+            {
+                name: dict(nnx.to_pure_dict(component_state))
+                for name, component_state in ema_states.items()
+            },
+            ema_payload,
+            label="EMA target",
+        )
+        assert_ema_encoder_compute_structure(ema_target)
+
+    nnx.replace_by_pure_dict(model_state, model_payload)
+    nnx.update(model, model_state)
+    if ema_states is not None:
+        assert ema_payload is not None
+        for name, component_state in ema_states.items():
+            nnx.replace_by_pure_dict(
+                component_state,
+                ema_payload[name],
+            )
+        nnx.update(
+            ema_target.encoder_master,
+            ema_states["encoder_master"],
+        )
+        nnx.update(
+            ema_target.jepa_state_norm,
+            ema_states["jepa_state_norm"],
+        )
+        nnx.update(
+            ema_target.state_projector,
+            ema_states["state_projector"],
+        )
+        refresh_ema_encoder_compute(ema_target)
+        validate_ema_encoder_compute(ema_target)
+
     restored = dict(manifest)
     restored["checkpoint_dir"] = str(checkpoint_dir)
     return restored
@@ -3680,6 +3874,15 @@ def parse_args(
         type=Path,
         help="Strictly continue a completed local research checkpoint or checkpoint root.",
     )
+    parser.add_argument(
+        "--eval-checkpoints",
+        type=Path,
+        help=(
+            "Read-only evaluation sweep over one research checkpoint, a "
+            "checkpoint root, or a run containing checkpoints/. The "
+            "checkpoint contract defines the model and objective."
+        ),
+    )
     parser.add_argument("--models-dir", type=Path, default=DEFAULT_MODELS_DIR)
     parser.add_argument("--data-root", type=Path, default=DEFAULT_DATA_ROOT)
     parser.add_argument(
@@ -3787,6 +3990,16 @@ def parse_args(
     )
     parser.add_argument("--eval-only", action="store_true")
     parser.add_argument("--eval-batches", type=int, default=1)
+    parser.add_argument(
+        "--eval-checkpoint-seeds",
+        type=int,
+        nargs="+",
+        help=(
+            "Validation seeds for --eval-checkpoints. Each seed fixes both "
+            "the global validation positions and objective RNG; defaults to "
+            "--val-seed."
+        ),
+    )
     parser.add_argument(
         "--eval-batch-size",
         type=int,
@@ -3977,6 +4190,177 @@ def validate_no_inert_config_overrides(
         )
 
 
+def checkpoint_evaluation_contract(
+    checkpoints: list[Path],
+) -> tuple[JointLatentSASAConfig, str, float, dict[str, Any], str]:
+    """Return the homogeneous, checkpoint-authoritative evaluation contract."""
+
+    if not checkpoints:
+        raise ValueError("Checkpoint evaluation requires at least one checkpoint")
+    manifests = [_read_research_manifest(path) for path in checkpoints]
+    contract = manifests[0].get("resume_contract")
+    contract_sha256 = manifests[0].get("resume_contract_sha256")
+    if not isinstance(contract, dict) or not isinstance(contract_sha256, str):
+        raise ValueError(f"Missing research resume contract in {checkpoints[0]}")
+    if _json_sha256(contract) != contract_sha256:
+        raise ValueError(
+            f"Research checkpoint resume contract checksum mismatch {checkpoints[0]}"
+        )
+    for path, manifest in zip(checkpoints[1:], manifests[1:], strict=True):
+        incoming = manifest.get("resume_contract")
+        incoming_sha256 = manifest.get("resume_contract_sha256")
+        if not isinstance(incoming, dict) or _json_sha256(incoming) != incoming_sha256:
+            raise ValueError(
+                f"Research checkpoint resume contract checksum mismatch {path}"
+            )
+        if incoming_sha256 != contract_sha256:
+            raise ValueError(
+                "Checkpoint evaluation root mixes resume contracts: "
+                f"{checkpoints[0].name}={contract_sha256}, "
+                f"{path.name}={incoming_sha256}"
+            )
+
+    raw_config = contract.get("model_config")
+    if not isinstance(raw_config, dict):
+        raise ValueError("Checkpoint evaluation contract is missing model_config")
+    fields = {field.name for field in dataclasses.fields(JointLatentSASAConfig)}
+    unknown = sorted(set(raw_config) - fields)
+    if unknown:
+        raise ValueError(
+            "Checkpoint model_config contains unsupported field(s): "
+            + ", ".join(unknown)
+        )
+    config = JointLatentSASAConfig(**raw_config)
+    validate_no_inert_config_overrides(config)
+
+    objective_contract = contract.get("objective")
+    if not isinstance(objective_contract, dict):
+        raise ValueError("Checkpoint evaluation contract is missing objective")
+    objective = objective_contract.get("name")
+    if objective not in {"legacy", "normalized"}:
+        raise ValueError(f"Unsupported checkpoint objective {objective!r}")
+    expected_values = {
+        "jepa_target_semantics": config.jepa_target_semantics,
+        "jepa_target_stop_gradient": bool(config.jepa_target_stop_gradient),
+        "target_sigreg_coeff": float(config.jepa_sigreg_coeff),
+        "pred_sigreg_coeff": float(config.jepa_pred_sigreg_coeff),
+    }
+    mismatches = {
+        key: (objective_contract.get(key), expected)
+        for key, expected in expected_values.items()
+        if objective_contract.get(key) != expected
+    }
+    if mismatches:
+        raise ValueError(
+            "Checkpoint model/objective contract mismatch: "
+            + ", ".join(
+                f"{key}={observed!r} (model_config {expected!r})"
+                for key, (observed, expected) in mismatches.items()
+            )
+        )
+    target_reference = objective_contract.get("target_sigreg_reference_count")
+    pred_reference = objective_contract.get("pred_sigreg_reference_count")
+    if (
+        isinstance(target_reference, bool)
+        or not isinstance(target_reference, (int, float))
+        or not math.isfinite(float(target_reference))
+        or float(target_reference) <= 0.0
+    ):
+        raise ValueError(
+            "Checkpoint target SIGReg reference count must be finite and positive"
+        )
+    if pred_reference != target_reference:
+        raise ValueError(
+            "The local evaluator requires equal target/pred SIGReg reference "
+            f"counts, got {target_reference!r} and {pred_reference!r}"
+        )
+    validate_objective_config(objective=str(objective), config=config)
+    return config, str(objective), float(target_reference), contract, contract_sha256
+
+
+def summarize_checkpoint_evaluation_records(
+    records: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Aggregate per-seed validation records and select minimum DFM CE."""
+
+    grouped: dict[int, list[dict[str, Any]]] = {}
+    for record in records:
+        validation = record.get("validation")
+        if not isinstance(validation, dict):
+            raise ValueError("Checkpoint evaluation record has no validation metrics")
+        grouped.setdefault(int(record["research_update"]), []).append(record)
+
+    by_checkpoint: list[dict[str, Any]] = []
+    for update in sorted(grouped):
+        update_records = sorted(
+            grouped[update],
+            key=lambda record: int(record["validation_seed"]),
+        )
+        metric_names = sorted(
+            set.intersection(
+                *(set(record["validation"]) for record in update_records)
+            )
+        )
+        mean_validation = {
+            name: float(
+                np.mean(
+                    [float(record["validation"][name]) for record in update_records],
+                    dtype=np.float64,
+                )
+            )
+            for name in metric_names
+        }
+        by_checkpoint.append(
+            {
+                "research_update": update,
+                "optimizer_step": int(update_records[0]["optimizer_step"]),
+                "next_data_cursor": int(update_records[0]["next_data_cursor"]),
+                "checkpoint_dir": update_records[0]["checkpoint_dir"],
+                "state_sha256": update_records[0]["state_sha256"],
+                "validation_seeds": [
+                    int(record["validation_seed"]) for record in update_records
+                ],
+                "validation_seconds_total": float(
+                    sum(float(record["validation_seconds"]) for record in update_records)
+                ),
+                "mean_validation": mean_validation,
+            }
+        )
+
+    best: dict[str, Any] | None = None
+    comparable = [
+        item for item in by_checkpoint if "dfm_ce_loss" in item["mean_validation"]
+    ]
+    if comparable:
+        selected = min(
+            comparable,
+            key=lambda item: (
+                float(item["mean_validation"]["dfm_ce_loss"]),
+                int(item["research_update"]),
+            ),
+        )
+        best = {
+            "metric": "dfm_ce_loss",
+            "mode": "min",
+            "research_update": selected["research_update"],
+            "checkpoint_dir": selected["checkpoint_dir"],
+            "mean": selected["mean_validation"]["dfm_ce_loss"],
+        }
+        first_value = float(by_checkpoint[0]["mean_validation"]["dfm_ce_loss"])
+        for item in by_checkpoint:
+            if "dfm_ce_loss" in item["mean_validation"]:
+                item["dfm_ce_loss_delta_from_first"] = (
+                    float(item["mean_validation"]["dfm_ce_loss"]) - first_value
+                )
+
+    return {
+        "checkpoint_count": len(by_checkpoint),
+        "evaluation_count": len(records),
+        "by_checkpoint": by_checkpoint,
+        "best_checkpoint": best,
+    }
+
+
 def git_commit() -> str:
     result = subprocess.run(
         ["git", "rev-parse", "HEAD"],
@@ -4056,6 +4440,237 @@ def evaluate(
         for key, value in metrics.items():
             totals[key] = totals.get(key, 0.0) + value
     return {key: value / count for key, value in totals.items()}, time.perf_counter() - started
+
+
+def run_checkpoint_evaluation(
+    args: argparse.Namespace,
+    *,
+    commit: str,
+    timestamp: str,
+) -> int:
+    """Evaluate a checkpoint series read-only with one model/JIT cache."""
+
+    requested_path = require_within_workspace(args.eval_checkpoints)
+    checkpoint_root, checkpoints = research_checkpoints_for_evaluation(
+        requested_path
+    )
+    (
+        config,
+        objective,
+        sigreg_reference_count,
+        checkpoint_contract,
+        checkpoint_contract_sha256,
+    ) = checkpoint_evaluation_contract(checkpoints)
+
+    data_contract = checkpoint_contract.get("data")
+    if not isinstance(data_contract, dict):
+        raise ValueError("Checkpoint evaluation contract is missing data metadata")
+    training_batch_size = int(data_contract.get("batch_size", 0))
+    if training_batch_size < 1:
+        raise ValueError("Checkpoint training batch size must be positive")
+    eval_batch_size = (
+        training_batch_size
+        if args.eval_batch_size is None
+        else args.eval_batch_size
+    )
+    validation_seeds = (
+        [args.val_seed]
+        if args.eval_checkpoint_seeds is None
+        else list(args.eval_checkpoint_seeds)
+    )
+    if len(set(validation_seeds)) != len(validation_seeds):
+        raise ValueError("--eval-checkpoint-seeds must not contain duplicates")
+    for seed in validation_seeds:
+        if seed < 0 or seed > np.iinfo(np.uint32).max:
+            raise ValueError(
+                f"Validation seeds must be in [0, 2**32 - 1], got {seed}"
+            )
+
+    source_label_path = (
+        requested_path.parent
+        if requested_path.name == "checkpoints"
+        else requested_path
+    )
+    source_label = re.sub(
+        r"[^A-Za-z0-9_.-]+", "-", source_label_path.name
+    ).strip("-") or "checkpoints"
+    run_id = args.run_id or f"checkpoint-eval-{source_label}-{timestamp}"
+    output_dir = require_within_workspace(
+        args.output_dir
+        or REPO_ROOT / "research" / "runs" / run_id
+    )
+    if output_dir == requested_path or output_dir.is_relative_to(requested_path):
+        raise ValueError(
+            "--output-dir for --eval-checkpoints must be outside the "
+            f"evaluated checkpoint/run tree: {requested_path}"
+        )
+
+    assets = checkpoint_contract.get("assets")
+    if not isinstance(assets, dict):
+        raise ValueError("Checkpoint evaluation contract is missing asset metadata")
+    models_dir = require_within_workspace(args.models_dir)
+    exported_model = require_within_workspace(
+        models_dir / "BT4_exported.pb.gz"
+    )
+    expected_export_sha256 = assets.get("bt4_exported_sha256")
+    observed_export_sha256 = sha256_file(exported_model)
+    if observed_export_sha256 != expected_export_sha256:
+        raise ValueError(
+            "BT4 asset checksum differs from checkpoint contract: "
+            f"expected {expected_export_sha256}, observed {observed_export_sha256}"
+        )
+    trajectory_asset = load_asset_manifest()["trajectory_v3"]["archive"]
+    expected_trajectory_sha256 = data_contract.get("source_archive_sha256")
+    if trajectory_asset["sha256"] != expected_trajectory_sha256:
+        raise ValueError(
+            "Trajectory asset checksum differs from checkpoint contract: "
+            f"expected {expected_trajectory_sha256}, "
+            f"observed {trajectory_asset['sha256']}"
+        )
+
+    data_root = require_within_workspace(args.data_root)
+    validation_batches = {
+        seed: FixedTrajectoryBatches(
+            data_root / "val",
+            batch_size=eval_batch_size,
+            horizon=config.horizon,
+            seed=seed,
+            shuffle_files=True,
+            batch_schedule="global_permutation",
+        )
+        for seed in validation_seeds
+    }
+    model_params = load_mapped_bt4_params(models_dir=models_dir)
+    model, unused_optimizer = create_joint_components(
+        model_params, config, seed=args.seed
+    )
+    del unused_optimizer
+    gc.collect()
+    ema_target = (
+        EmaTargetModel(model)
+        if config.jepa_target_semantics == "ema"
+        else None
+    )
+
+    output_dir.mkdir(parents=True, exist_ok=False)
+    args_payload = {
+        key: str(value) if isinstance(value, Path) else value
+        for key, value in (
+            vars(args) | {"output_dir": str(output_dir)}
+        ).items()
+    }
+    run_config = {
+        "format": "chess-dfm-checkpoint-evaluation-v1",
+        "autoresearch_ready": AUTORESEARCH_READY,
+        "architecture_source": ARCHITECTURE_SOURCE,
+        "git_commit": commit,
+        "run_id": run_id,
+        "timestamp_utc": timestamp,
+        "mode": "read_only_checkpoint_evaluation",
+        "checkpoint_contract_authoritative": True,
+        "checkpoint_root": str(checkpoint_root),
+        "checkpoints": [str(path) for path in checkpoints],
+        "checkpoint_count": len(checkpoints),
+        "checkpoint_resume_contract": checkpoint_contract,
+        "checkpoint_resume_contract_sha256": checkpoint_contract_sha256,
+        "model_config": serialized_model_config(config),
+        "objective": objective,
+        "sigreg_reference_count": sigreg_reference_count,
+        "training_batch_size": training_batch_size,
+        "eval_batch_size": eval_batch_size,
+        "eval_batches": args.eval_batches,
+        "validation_examples_per_seed": eval_batch_size * args.eval_batches,
+        "validation_seeds": validation_seeds,
+        "validation_schedule": (
+            "one global permutation per seed; batch indexes "
+            "[0, eval_batches) reused for every checkpoint"
+        ),
+        "compilation_reuse": (
+            "one model object and one nnx.jit cache for the entire process; "
+            "the first evaluation may include compilation"
+        ),
+        "checkpoint_mutation": "none",
+        "optimizer_state_restored": False,
+        "args": args_payload,
+        "val_data_by_seed": {
+            str(seed): batches.provenance()
+            for seed, batches in validation_batches.items()
+        },
+    }
+    write_json(output_dir / "run_config.json", run_config)
+
+    records: list[dict[str, Any]] = []
+    metrics_path = output_dir / "checkpoint_metrics.jsonl"
+    wall_started = time.perf_counter()
+    with metrics_path.open("x", encoding="utf-8") as metrics_log:
+        for checkpoint in checkpoints:
+            restore_started = time.perf_counter()
+            manifest = load_research_checkpoint_for_evaluation(
+                checkpoint,
+                model=model,
+                ema_target=ema_target,
+            )
+            restore_seconds = time.perf_counter() - restore_started
+            for validation_seed in validation_seeds:
+                validation, validation_seconds = evaluate(
+                    model,
+                    validation_batches[validation_seed],
+                    count=args.eval_batches,
+                    seed=validation_seed,
+                    deterministic_t=args.val_deterministic_t,
+                    objective=objective,
+                    sigreg_reference_count=sigreg_reference_count,
+                    collapse_diagnostics=args.collapse_diagnostics,
+                    ema_target=ema_target,
+                )
+                record = {
+                    "checkpoint_dir": str(checkpoint),
+                    "manifest_sha256": sha256_file(
+                        checkpoint / "manifest.json"
+                    ),
+                    "state_sha256": manifest["state"]["sha256"],
+                    "research_update": int(manifest["research_update"]),
+                    "optimizer_step": int(manifest["optimizer_step"]),
+                    "next_data_cursor": int(manifest["next_data_cursor"]),
+                    "restore_seconds": restore_seconds,
+                    "validation_seed": validation_seed,
+                    "eval_batch_size": eval_batch_size,
+                    "eval_batches": args.eval_batches,
+                    "validation_examples": (
+                        eval_batch_size * args.eval_batches
+                    ),
+                    "validation_seconds": validation_seconds,
+                    "validation": validation,
+                }
+                records.append(record)
+                metrics_log.write(json.dumps(record, sort_keys=True) + "\n")
+                metrics_log.flush()
+                os.fsync(metrics_log.fileno())
+
+    aggregate = summarize_checkpoint_evaluation_records(records)
+    summary = {
+        **run_config,
+        **aggregate,
+        "wall_seconds": time.perf_counter() - wall_started,
+        "metrics_path": str(metrics_path),
+        "gpu_memory": gpu_memory_stats(),
+    }
+    write_json(output_dir / "checkpoint_summary.json", summary)
+    print(
+        json.dumps(
+            {
+                "run_id": run_id,
+                "output_dir": str(output_dir),
+                "checkpoint_count": summary["checkpoint_count"],
+                "evaluation_count": summary["evaluation_count"],
+                "best_checkpoint": summary["best_checkpoint"],
+                "wall_seconds": summary["wall_seconds"],
+            },
+            indent=2,
+            sort_keys=True,
+        )
+    )
+    return 0
 
 
 def should_continue(*, updates: int, steps: int, deadline: float | None) -> bool:
@@ -4672,6 +5287,7 @@ def main() -> int:
     if (
         not args.eval_only
         and not args.gradient_audit
+        and args.eval_checkpoints is None
         and args.steps == 0
         and args.train_seconds <= 0
     ):
@@ -4696,6 +5312,10 @@ def main() -> int:
         raise ValueError("--gpu-monitor-interval-ms must be 0 or at least 50")
     if args.gradient_audit and args.eval_only:
         raise ValueError("--gradient-audit and --eval-only are mutually exclusive")
+    if args.gradient_audit and args.eval_checkpoints is not None:
+        raise ValueError(
+            "--gradient-audit and --eval-checkpoints are mutually exclusive"
+        )
     if args.gradient_audit and args.objective != "normalized":
         raise ValueError("--gradient-audit requires --objective normalized")
     if not 0.0 <= args.val_deterministic_t <= 1.0:
@@ -4706,6 +5326,31 @@ def main() -> int:
         raise ValueError("--max-checkpoints must be non-negative")
     if args.resume_from is not None and args.init != "exact":
         raise ValueError("--resume-from is an exact continuation and cannot use --init model-only")
+    if args.resume_from is not None and args.eval_checkpoints is not None:
+        raise ValueError(
+            "--resume-from and --eval-checkpoints are mutually exclusive"
+        )
+    if args.eval_checkpoints is not None:
+        if args.eval_batches < 1:
+            raise ValueError("--eval-checkpoints requires --eval-batches > 0")
+        if args.train_seconds > 0:
+            raise ValueError(
+                "--eval-checkpoints cannot be combined with --train-seconds"
+            )
+        if args.save_every > 0 or args.save_final:
+            raise ValueError(
+                "--eval-checkpoints cannot save or prune checkpoints"
+            )
+        if args.compile_ahead:
+            raise ValueError(
+                "--compile-ahead is a training option and cannot be combined "
+                "with --eval-checkpoints"
+            )
+        if args.gpu_monitor_interval_ms > 0:
+            raise ValueError(
+                "--gpu-monitor-interval-ms is a training option and cannot "
+                "be combined with --eval-checkpoints"
+            )
 
     run_root = require_within_workspace(args.run_root)
     checkpoint_dir = require_within_workspace(args.checkpoint_dir)
@@ -4718,6 +5363,12 @@ def main() -> int:
     data_root = require_within_workspace(args.data_root)
     commit = git_commit()
     timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    if args.eval_checkpoints is not None:
+        return run_checkpoint_evaluation(
+            args,
+            commit=commit,
+            timestamp=timestamp,
+        )
     run_id = args.run_id or f"compat-step265k-b{args.batch_size}-{timestamp}"
     output_dir = require_within_workspace(
         args.output_dir or REPO_ROOT / "research" / "runs" / run_id

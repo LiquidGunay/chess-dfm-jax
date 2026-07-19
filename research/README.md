@@ -62,6 +62,23 @@ The final effective configuration is written to the report and bound into the
 resume contract. Unknown keys, wrong types, and non-default legacy knobs that
 the local graph cannot honor fail before training.
 
+Evaluate every retained checkpoint from one run without rebuilding or
+recompiling the model for each checkpoint:
+
+```bash
+research/run_gpu.sh .venv/bin/python research/train.py \
+  --eval-checkpoints research/runs/<training-run> \
+  --eval-batches 64 --eval-batch-size 64 \
+  --eval-checkpoint-seeds 10000 20000 \
+  --run-id <training-run>-checkpoint-eval
+```
+
+This mode takes the model and objective from the checkpoint contract, reuses
+the same validation positions and RNG for every checkpoint, and never restores
+optimizer moments or writes beneath the evaluated run. Incremental results go
+to `checkpoint_metrics.jsonl`; the aggregate and minimum-DFM-CE checkpoint go
+to `checkpoint_summary.json`.
+
 The paired evaluator now has a real 16-pair source-vs-source A10G correctness
 artifact, bounded model batches, and an official-formulation normalized-Elo
 promotion GSPRT. The harness remains intentionally marked
