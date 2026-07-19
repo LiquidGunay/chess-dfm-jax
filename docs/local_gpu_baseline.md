@@ -301,14 +301,42 @@ starting scale is intentional.
 The complete audit is
 `research/runs/gradient-audit-step265k-b64-v3/gradient_audit.json`.
 
-## First normalized-objective stability run
+## Validation-sampling correction
 
-The first 100-update acceptance run used physical batch 64, target SIGReg
+All objective studies below that predate commit `8c2dcb6` used a shard-major
+validation iterator with `shuffle_files=false`. The nominal validation seed was
+therefore inert: `eval_batches=2` at batch 64 always selected the first 128
+rows of `val/chunk_000000.npz`, while the later `eval_batches=16` expansion
+covered all 1,024 rows of that same shard. The batch-16 collapse audit also
+started from this shard.
+
+These results remain useful as paired calibration and forensic evidence:
+they found scale contraction, tested gradient semantics, checked collapse
+instrumentation, and measured hardware cost on identical inputs. They are not
+representative validation estimates and must not be used to freeze an
+objective, claim a quality improvement, or authorize promotion. The smaller
+loss fingerprints above remain valid parity oracles, not quality estimates.
+Accordingly, terms such as “best,” “rejected,” and “improved” in the
+pre-correction sections below describe only that controlled first-shard slice.
+
+Commit `8c2dcb6` adds a deterministic `global_permutation` schedule over every
+`(shard, batch_in_shard)` slot and makes it the validation default. The
+schedule is seeded, stateless across calls and resume, covers every slot
+exactly once per epoch, records its semantics in provenance/resume contracts,
+and fails closed if global permutation is requested without shuffling.
+Training retains its cache-friendly shard-major schedule. The first corrected
+comparison uses 32 globally permuted batch-64 slots (2,048 examples) from the
+1,524-shard validation split; it is reported under
+[Fixed unit-RMS and corrected global validation](#fixed-unit-rms-and-corrected-global-validation).
+
+## First normalized-objective calibration run
+
+The first 100-update calibration run used physical batch 64, target SIGReg
 coefficient `0.40`, prediction SIGReg coefficient `0.0`, and fixed reference
 count one. It strictly resumed the step-265,000 model and optimizer and trained
 on 6,400 examples. Initial and final validation used the same two deterministic
 held-out batches (128 examples), so the before/after delta is exact for that
-slice but is not yet a population-quality estimate.
+first-shard slice but is not a population-quality estimate.
 
 The run was numerically and operationally stable:
 
@@ -354,7 +382,7 @@ The complete report is
 This compatibility run did not save final weights, so strict final checkpoint
 save/resume is a gate before any 30-minute experiment.
 
-### Target-SIGReg 1.32 stability point
+### Target-SIGReg 1.32 calibration point
 
 The calibrated 10%-gradient point also fails the scale gate. A second
 batch-64, 100-update run used target coefficient `1.32`, prediction coefficient
@@ -383,7 +411,7 @@ The next justified calibration point is `3.96`, whose initial target-SIGReg
 gradient is approximately 30% of the JEPA-positive gradient. The report is
 `research/runs/target132-smoke-b64-100/report.json`.
 
-### Target-SIGReg 3.96 and 5.76 stability points
+### Target-SIGReg 3.96 and 5.76 calibration points
 
 The same paired run at coefficient `3.96` slowed target contraction but did not
 stop it. Mean target RMS ended at `0.8943`, mean prediction RMS at `0.9149`,
@@ -395,7 +423,7 @@ worsened to `5.1425`. This point also fails the scale gate. Its report is
 
 Coefficient `5.76` is the normalized equivalent of the original coefficient
 `0.01` for a fully valid local batch of 64 (`64 * 9 * 0.01`). It produced the
-best policy-side result in this calibration:
+best policy-side result on this first-shard calibration slice:
 
 | Fixed validation metric | Initial | Final |
 |---|---:|---:|
@@ -468,7 +496,7 @@ prediction rank/variance collapse, and marginal prediction Gaussianity is not
 the main bottleneck. The report is
 `research/runs/target576-pred1885-smoke-b64-100/report.json`.
 
-### Controlled EMA-target ablation
+### Controlled EMA-target ablation (first-shard calibration)
 
 Commits `2667829`, `4ca012d`, and `fce9783` add an explicit EMA target
 semantics without changing the default online path. The positive JEPA target is
@@ -537,7 +565,7 @@ comparison below. The complete report is
 `research/runs/ema-target099-target576-b64-100-v1/report.json` (SHA-256
 `e0020ccd1395a8d6c5b4faa8db30f6323eb1bddabcc3d833951be56d80872fd3`).
 
-### Per-horizon target variance hinge
+### Per-horizon target variance hinge (first-shard calibration)
 
 Commit `134b074` adds a default-off variance hinge on attached online projected
 future targets. For each horizon independently, it computes weighted FP32
@@ -627,16 +655,126 @@ The four reports and SHA-256 digests are:
 - `research/runs/variance-hinge-g085-c375-target576-b64-100-v1/report.json`:
   `90a4b4329f9e409b4b93517ba5e2c1f967c2f5308a460793102bca4f57f58b3c`.
 
-All measured objectives have `jepa_state_rmsnorm=false`. The reported inactive
-state-scale value consequently remains `0.986831` while actual target and
-prediction RMS can contract. The first next ablation should be a default-off,
-fixed unit-RMS normalization of each target and prediction state, with no
-trainable scale and no batch statistics. This removes uniform shrinkage as a
-solution while retaining SIGReg and rank gates because unit norm alone does
-not prevent rank collapse. If shared-backbone policy interference persists,
-the secondary path is projector-local or staged scale-control gradients;
-revisiting the distribution-shape regularizer is preferable to further tuning
-this hinge coefficient.
+All of those objectives have `jepa_state_rmsnorm=false`. The reported inactive
+state-scale value remains `0.986831` while actual target and prediction RMS can
+contract. This motivated the fixed-unit-RMS ablation below.
+
+### Fixed unit-RMS and corrected global validation
+
+Commit `8257881` adds a default-off, non-trainable JEPA state manifold:
+
+```text
+unit_rms(z) = z / sqrt(mean_d(z^2) + 1e-6)
+```
+
+Statistics are computed in FP32 and the result returns to the model compute
+dtype. Normalization is applied to the projected current state, every projected
+future target, and every recurrent JEPA prediction. The historical scale
+parameter remains in the checkpoint ABI but is not read and has exactly zero
+loss gradient. Initial experiments require online attached targets and reject
+combinations with EMA, target detachment, the variance hinge, or the old
+trainable RMSNorm. Tests cover exact disabled-path compatibility, all three
+application sites in BF16, scale invariance with attached gradients, zero scale
+gradient with nonzero model gradients, fail-closed combinations, CLI
+serialization, and the resume contract.
+
+The source checkpoint then has target/prediction RMS within `0.00004` of one at
+every horizon and latent norms approximately `32`, as expected for 1,024
+features. The zero-update report is
+`research/runs/fixed-unit-rms-target576-b64-eval-v1/report.json` (SHA-256
+`bd9ce52e891d02f456537e6e903ffbf16b2b4172c2ddf9c3011c57d87972f201`).
+
+On the same batch-64 gradient audit, target-SIGReg coefficients
+`0.150/0.450/1.499/4.497` correspond to approximately 1%/3%/10%/30% of the
+JEPA-positive gradient on the JEPA parameter group. The calibration rounded
+these to a target-SIGReg grid of `0`, `1.50`, `4.50`, and the compatibility
+point `5.76`. Its audit is
+`research/runs/gradient-audit-fixed-unit-rms-target576-b64-v1/gradient_audit.json`
+(SHA-256
+`7ac290852141deb7fc689c5848a67ad887dd9f9817c478507740dee4b0bfd1bd`).
+
+The original two-batch first-shard screen was:
+
+| Target SIGReg | Target RMS ratio | Pred RMS ratio | DFM CE delta | Accuracy delta | Legal-mass delta | Pos/zero final | Action/pos final |
+|---:|---:|---:|---:|---:|---:|---:|---:|
+| 0.00 | 100.00% | 100.00% | +0.2650 | +0.0107 | +0.0420 | 0.406 | 4.38 |
+| 1.50 | 100.00% | 100.00% | +0.0358 | +0.0049 | +0.0695 | 0.427 | 4.17 |
+| 4.50 | 100.00% | 100.00% | +0.0828 | +0.0059 | +0.0275 | 0.428 | 4.17 |
+| 5.76 | 100.00% | 100.00% | +0.1353 | +0.0195 | +0.0790 | 0.406 | 4.40 |
+
+This selected `1.50` only as the least policy-disruptive calibration point.
+Expanding it to 16 batches changed DFM CE by `+0.6554`, accuracy by `-0.0272`,
+and legal mass by `-0.1442`, revealing strong within-shard heterogeneity but
+still sampling only `chunk_000000.npz`. Neither screen is promotion evidence.
+Their report hashes are:
+
+- target `0`: `research/runs/fixed-unit-rms-target000-b64-100-v1/report.json`,
+  SHA-256
+  `16359fc943ea8991af4e681b0fb3211eed498c89e261daf6af365d796216e32c`;
+- target `1.50`: `research/runs/fixed-unit-rms-target150-b64-100-v1/report.json`,
+  SHA-256
+  `23c36a7d04f92aadc932a89ec04995b9eb41071bf34983bf83d73def873f1018`;
+- target `4.50`: `research/runs/fixed-unit-rms-target450-b64-100-v1/report.json`,
+  SHA-256
+  `dd0b8ea57e7fd8bee84557cc4726f56a71c64172abd7cf1652a68b747df86633`;
+- target `5.76`: `research/runs/fixed-unit-rms-target576-b64-100-v1/report.json`,
+  SHA-256
+  `2ef43adfb61041050a5098853e0757a1e561816a7f36b94e28bba8540de76905`;
+- target `1.50`, 16 batches:
+  `research/runs/fixed-unit-rms-target150-b64-100-val16-v1/report.json`,
+  SHA-256
+  `9cbf05fd53978604b1750aa32ec6b0be4d4cdfc7cf698e827d090e503aef1fee`.
+
+After the schedule correction in `8c2dcb6`, online target-SIGReg `5.76` and
+fixed-unit-RMS target-SIGReg `1.50` were rerun from the same source checkpoint
+through the same 100 training updates. Both use the same seed and 32 globally
+permuted validation batches before and after training. Policy metrics therefore
+share an exact initial value:
+
+| Global validation metric | Common initial | Online 5.76 final (delta) | Unit RMS + 1.50 final (delta) |
+|---|---:|---:|---:|
+| DFM CE | 4.655153 | 5.151332 (+0.496179) | 5.159355 (+0.504202) |
+| Accuracy | 0.101868 | 0.065613 (-0.036255) | 0.065857 (-0.036011) |
+| First legal mass | 0.618943 | 0.515743 (-0.103201) | 0.514597 (-0.104347) |
+
+The latent comparison is:
+
+| Global validation metric | Online 5.76 initial → final | Unit RMS + 1.50 initial → final |
+|---|---:|---:|
+| JEPA positive loss | 0.405311 → 0.369331 | 0.386153 → 0.371684 |
+| Target SIGReg | 0.044931 → 0.048551 | 0.045329 → 0.048077 |
+| Mean target RMS | 0.993857 → 0.903679 | 1.000011 → 0.999991 |
+| Mean prediction RMS | 0.951802 → 0.909740 | 0.999999 → 0.999995 |
+| Mean prediction effective rank | 30.702 → 31.350 | 30.679 → 30.939 |
+| Mean prediction-target cosine | 0.814093 → 0.803727 | 0.807066 → 0.814280 |
+| Positive MSE / zero MSE | 0.351044 → 0.386967 | 0.385864 → 0.371439 |
+| Action-shuffled / positive MSE | 4.74477 → 4.48086 | 4.61511 → 4.76239 |
+
+Fixed unit RMS removes uniform scale contraction and ends with better cosine
+and coupling ratios than the online control. It does not improve the matched
+global policy result: final DFM CE is `0.0080` worse, legal mass is `0.00115`
+worse, and accuracy is only `0.00024` higher. Its final JEPA positive loss is
+`0.00235` higher, although that raw value is scale-confounded across the two
+manifolds. Both configurations substantially regress global DFM CE, accuracy,
+and legal mass over these 100 updates, overturning the apparent policy
+improvement on the old two-batch slice.
+
+Throughput is effectively equal (`39.70` versus `39.55` examples/s), and peak
+JAX memory is `6,089,154,304` versus `6,043,895,552` bytes. The corrected
+reports are:
+
+- `research/runs/online-target576-b64-100-globalval32-v1/report.json`
+  (SHA-256
+  `50f99c2c60241f154d46f4d9391f83584cae0a4cb6e1e271cffd85eceeda3fdf`);
+- `research/runs/fixed-unit-rms-target150-b64-100-globalval32-v1/report.json`
+  (SHA-256
+  `c5ee7c4234fabbf6757675a8c7fd249c923e436ad38db3eef33d1dff00a0fa82`).
+
+The 32-batch result is a corrected deterministic calibration sample, not a
+promotion tier. It rejects fixed unit RMS `+1.50` as the new baseline, but it
+also shows that online `5.76` cannot be frozen from the available evidence.
+No normalized objective is frozen, `autoresearch_ready=false`, and the next
+objective comparison must use matched global validation from its first run.
 
 ## Strict local checkpoint/resume
 
@@ -924,6 +1062,8 @@ knobs that the local graph cannot honor fail closed.
 
 The remaining acceptance work is to:
 
-- test fixed unit-RMS JEPA states without a trainable scale or batch statistics;
-- freeze a target-scale-stable objective only after it also preserves policy
-  and legal-mass metrics.
+- explain or remove the matched global policy regression shared by online
+  `5.76` and fixed-unit-RMS `1.50`;
+- establish comparison noise with the corrected global sampler; and
+- freeze an objective only after scale, policy, and legal-mass gates pass
+  together on representative validation.

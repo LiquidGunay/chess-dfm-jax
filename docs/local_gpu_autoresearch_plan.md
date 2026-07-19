@@ -305,14 +305,25 @@ of target RMS, while `3.75` fully stabilizes scale and coupling. Both regress
 DFM CE and legal mass, so neither is promoted. Measured details are in
 `docs/local_gpu_baseline.md`.
 
-All of these runs leave `jepa_state_rmsnorm=false`; the inactive scale
-diagnostic stays fixed while the actual latent RMS changes. The first next
-ablation should normalize each target and prediction state to fixed unit RMS,
-without a trainable scale or batch statistics. This directly removes uniform
-shrinkage while retaining SIGReg and rank gates for non-scale collapse.
-Projector-local or staged scale-control gradients are secondary options if
-regularizing the shared backbone continues to damage policy learning. More
-hinge-coefficient tuning is not the next step.
+Those EMA and hinge comparisons used the original first-shard validation
+slice. They remain mechanistic calibration evidence, but not representative
+quality or promotion evidence after the validation-schedule audit.
+
+Fixed unit-RMS states are now implemented as a default-off ablation with FP32
+per-state statistics, no batch statistics, and no trainable scale. They remove
+uniform target/prediction shrinkage without rank collapse or measurable
+throughput cost. On the corrected matched 32-batch global validation sample,
+however, unit RMS `+1.50` does not improve policy over online `5.76`; both
+configurations substantially regress DFM CE, accuracy, and legal mass over 100
+updates. Neither is the clean baseline.
+
+Commit `8c2dcb6` fixes validation selection by deterministically permuting all
+`(shard, batch_in_shard)` slots. Before this commit, two-batch studies always
+read the first 128 examples of the first validation shard, and the 16-batch
+expansion only exhausted that same shard. Those studies are now explicitly
+forensic/calibration-only. Every new objective comparison must use the same
+seeded global validation slots for control and candidate; a sampler or metric
+change requires a matched control rerun.
 
 This scale/shape split is also motivated by
 [VISReg](https://arxiv.org/abs/2606.02572), which argues that sketching
@@ -335,6 +346,8 @@ Collapse measurements are computed per horizon before aggregation:
 ### Gate
 
 - Loss and gradients are invariant to batch layout within numerical tolerance.
+- Quality comparisons use seeded globally permuted validation slots; a
+  first-shard slice is only a correctness/calibration instrument.
 - Predicted latents retain nontrivial variance and effective rank.
 - JEPA beats trivial baselines at useful horizons.
 - Legal probability mass is accumulated in FP32 and bounded to `[0, 1]`; the
@@ -416,7 +429,8 @@ candidate-ranking benefit still requires paired-arena validation.
 
 ### Frequent offline evaluation
 
-- fixed validation DFM cross-entropy;
+- fixed globally permuted validation DFM cross-entropy, with the schedule and
+  effective seed recorded in the report;
 - first-move and per-horizon top-1/top-k accuracy;
 - legal mass;
 - JEPA positive and collapse metrics;
@@ -672,19 +686,24 @@ sweeps, held-out data, and repeated seeds.
 - [x] Run and reject calibrated 10%-gradient prediction SIGReg: prediction
   rank was already healthy and policy quality regressed.
 - [x] Implement, exact-parity test, and profile the controlled EMA target; it
-  passes scale/rank gates but is not promoted because policy/coupling metrics
-  regress and A10G throughput falls about `17%`.
+  passes scale/rank gates, regresses policy/coupling on the forensic
+  first-shard slice, and costs about `17%` A10G throughput; it is not promoted.
 - [x] Implement, calibrate, and compare a per-horizon variance hinge. It can
   stabilize scale and coupling without measurable throughput cost, but every
-  scale-passing point regresses DFM CE or legal mass and is not promoted.
+  scale-passing point regresses DFM CE or legal mass on the forensic
+  first-shard slice and is not promoted.
+- [x] Replace first-shard validation selection with a seeded stateless global
+  batch-slot permutation, exact epoch coverage, and recorded provenance;
+  reclassify every earlier first-shard result as calibration/forensic only.
 - [x] Make effective experiment overrides explicit and reject silent no-op
   configuration before enabling unattended autoresearch.
 - [x] Remove always-zero legacy placeholders from experiment reports while
   preserving the exact parity oracle and failing closed on metric drift.
-- [ ] Test default-off fixed unit-RMS target/prediction states without a
-  trainable scale or batch statistics, retaining SIGReg and rank gates.
+- [x] Implement and calibrate default-off fixed unit-RMS target/prediction
+  states. They stabilize scale and coupling but do not improve the matched
+  global policy result, so they are not promoted.
 - [ ] Freeze a corrected baseline objective only after scale stability and
-  policy/legal metrics pass together.
+  policy/legal metrics pass together on matched global validation.
 - [x] Implement and golden-test separate legacy-absolute and board-aware LC0
   canonical 1,858 action codecs.
 - [x] Implement deterministic paired-arena foundations, audit the real

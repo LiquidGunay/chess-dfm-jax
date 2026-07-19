@@ -65,5 +65,6 @@ the local graph cannot honor fail before training.
 The paired evaluator now has a real 16-pair source-vs-source A10G correctness
 artifact, bounded model batches, and an official-formulation normalized-Elo
 promotion GSPRT. The harness remains intentionally marked
-`autoresearch_ready=false` only while the target-scale-stable objective is
-being selected. See the plan and baseline report for the measured results.
+`autoresearch_ready=false` while the target-scale-stable objective and its
+representative global-validation baseline remain unresolved. See the plan and
+baseline report for the measured results.

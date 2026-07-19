@@ -31,7 +31,8 @@ baseline version.
 
 ## Primary result
 
-Optimize fixed validation DFM cross-entropy. Also report:
+Optimize fixed, seeded, globally permuted validation DFM cross-entropy. Also
+report:
 
 - first-action and per-horizon accuracy;
 - legal mass;
@@ -41,6 +42,11 @@ Optimize fixed validation DFM cross-entropy. Also report:
 - examples processed and examples/s;
 - compile time and peak HBM; and
 - initialization lineage.
+
+First-shard slices are correctness and calibration instruments only. Every
+quality comparison must use identical `global_permutation` validation slots
+for control and candidate, with the effective seed and schedule recorded.
+A validation sampler or metric change requires rerunning the matched control.
 
 The weighted training loss is not by itself a promotion metric.
 
@@ -56,7 +62,7 @@ Reject a run if:
 - the model fails to beat the trivial JEPA baselines;
 - legality regresses beyond the fixed tolerance;
 - the run writes outside the workspace; or
-- validation data order or metric code changed.
+- validation data order or metric code changed without a matched control rerun.
 
 ## Experiment loop
 
