@@ -3740,6 +3740,31 @@ def parse_args(
     parser.add_argument("--sigreg-reference-count", type=float, default=1.0)
     parser.add_argument("--batch-size", type=int, default=1)
     parser.add_argument(
+        "--learning-rate",
+        type=float,
+        help=(
+            "Override the restored main-model learning rate. Omit to preserve "
+            "the source checkpoint configuration."
+        ),
+    )
+    parser.add_argument(
+        "--bt4-learning-rate",
+        type=float,
+        help=(
+            "Override the restored BT4 learning rate. Omit to preserve the "
+            "source checkpoint configuration."
+        ),
+    )
+    parser.add_argument(
+        "--train-batch-schedule",
+        choices=("shard_major", "global_permutation"),
+        default="shard_major",
+        help=(
+            "Use cache-friendly consecutive batches within shuffled shards, "
+            "or globally permute all shard/batch slots each epoch."
+        ),
+    )
+    parser.add_argument(
         "--steps",
         type=int,
         default=1,
@@ -3848,6 +3873,16 @@ def apply_config_overrides(
             config.jepa_state_fixed_unit_rms
             if args.jepa_state_fixed_unit_rms is None
             else args.jepa_state_fixed_unit_rms
+        ),
+        learning_rate=(
+            config.learning_rate
+            if args.learning_rate is None
+            else args.learning_rate
+        ),
+        bt4_learning_rate=(
+            config.bt4_learning_rate
+            if args.bt4_learning_rate is None
+            else args.bt4_learning_rate
         ),
     )
 
@@ -4627,6 +4662,12 @@ def main() -> int:
         raise ValueError("--train-seconds must be non-negative")
     if args.sigreg_reference_count <= 0:
         raise ValueError("--sigreg-reference-count must be positive")
+    for flag, value in (
+        ("--learning-rate", args.learning_rate),
+        ("--bt4-learning-rate", args.bt4_learning_rate),
+    ):
+        if value is not None and (not math.isfinite(value) or value < 0.0):
+            raise ValueError(f"{flag} must be finite and non-negative")
     if args.gpu_monitor_interval_ms < 0:
         raise ValueError("--gpu-monitor-interval-ms must be non-negative")
     if 0 < args.gpu_monitor_interval_ms < 50:
@@ -4683,6 +4724,7 @@ def main() -> int:
         horizon=config.horizon,
         seed=args.seed,
         shuffle_files=True,
+        batch_schedule=args.train_batch_schedule,
     )
     val_batches = FixedTrajectoryBatches(
         data_root / "val",

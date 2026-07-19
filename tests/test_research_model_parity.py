@@ -226,6 +226,9 @@ def test_experiment_then_cli_override_precedence_and_resume_contract(
 
     default_args = local.parse_args([])
     assert default_args.jepa_target_stop_gradient is None
+    assert default_args.learning_rate is None
+    assert default_args.bt4_learning_rate is None
+    assert default_args.train_batch_schedule == "shard_major"
     default_config = local.apply_config_overrides(
         experiment_config,
         default_args,
@@ -238,6 +241,12 @@ def test_experiment_then_cli_override_precedence_and_resume_contract(
             "--no-jepa-target-stop-gradient",
             "--target-sigreg-coeff",
             "0.5",
+            "--learning-rate",
+            "2.5e-5",
+            "--bt4-learning-rate",
+            "1e-6",
+            "--train-batch-schedule",
+            "global_permutation",
         ]
     )
     disabled_config = local.apply_config_overrides(
@@ -246,6 +255,9 @@ def test_experiment_then_cli_override_precedence_and_resume_contract(
     )
     assert disabled_config.jepa_target_stop_gradient is False
     assert disabled_config.jepa_sigreg_coeff == 0.5
+    assert disabled_config.learning_rate == 2.5e-5
+    assert disabled_config.bt4_learning_rate == 1e-6
+    assert disabled_args.train_batch_schedule == "global_permutation"
 
     monkeypatch.setattr(
         local,
