@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import gc
 from pathlib import Path
 
 import chess
@@ -12,12 +13,13 @@ import pytest
 import research.raw_bt4_policy as raw_policy
 from chess_dfm_jax.analysis.profile_targets import load_mapped_bt4_params
 from chess_dfm_jax.encoding import encode_board as real_encode_board
-from chess_dfm_jax.nnx_bt4 import make_bt4_model
+from chess_dfm_jax.nnx_bt4 import jit_bt4_forward, make_bt4_model
 from chess_dfm_jax.policy import (
     ACTION_CODEC_LC0_CANONICAL_1858,
     encode_action,
     legal_action_mask,
 )
+from chess_dfm_jax.reference_bt4 import bt4_forward as reference_bt4_forward
 from research.arena import (
     CANONICAL_ACTION_CODEC_CAPABILITY,
     action_codec_capability,
@@ -218,3 +220,65 @@ def test_real_raw_bt4_adapter_matches_direct_canonical_policy_argmax():
     assert all(board.is_legal(move) for board, move in zip(boards, result.moves, strict=True))
     assert int(masks[0].sum()) == boards[0].legal_moves.count()
     assert int(masks[1].sum()) == boards[1].legal_moves.count()
+
+
+@pytest.mark.skipif(
+    os.environ.get("CHESS_DFM_RUN_RAW_BT4_INTEGRATION") != "1",
+    reason="requires the local raw BT4 asset and accelerator",
+)
+def test_real_raw_bt4_nnx_logits_match_the_reference_forward():
+    repo_root = Path(__file__).resolve().parents[1]
+    models_dir = repo_root / "models" / "source" / "extracted"
+    params = load_mapped_bt4_params(models_dir=str(models_dir))
+    boards = (
+        _history()[-1],
+        _history("e2e4")[-1],
+    )
+    planes = jnp.asarray(
+        np.stack(
+            [
+                real_encode_board(
+                    board,
+                    [],
+                    input_format="INPUT_CLASSICAL_112_PLANE",
+                )
+                for board in boards
+            ]
+        ),
+        dtype=jnp.float32,
+    )
+    reference_forward = jax.jit(
+        lambda encoded_planes: reference_bt4_forward(params, encoded_planes)
+    )
+    reference_outputs = jax.device_get(
+        jax.block_until_ready(reference_forward(planes))
+    )
+    del reference_forward
+    jax.clear_caches()
+    gc.collect()
+
+    model = make_bt4_model(params, dtype=jnp.float32)
+    nnx_outputs = jax.device_get(
+        jax.block_until_ready(jit_bt4_forward(model, planes))
+    )
+
+    max_differences = [
+        float(np.max(np.abs(nnx_value - reference_value)))
+        for nnx_value, reference_value in zip(
+            nnx_outputs,
+            reference_outputs,
+            strict=True,
+        )
+    ]
+    assert max(max_differences) < 5e-4, max_differences
+
+    for row, board in enumerate(boards):
+        mask = legal_action_mask(
+            board,
+            codec_id=ACTION_CODEC_LC0_CANONICAL_1858,
+        )
+        nnx_action = int(np.argmax(np.where(mask, nnx_outputs[0][row], -np.inf)))
+        reference_action = int(
+            np.argmax(np.where(mask, reference_outputs[0][row], -np.inf))
+        )
+        assert nnx_action == reference_action
