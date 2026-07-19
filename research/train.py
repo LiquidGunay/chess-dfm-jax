@@ -70,6 +70,8 @@ EXPERIMENT_OVERRIDES: dict[str, Any] = {
     # "jepa_target_stop_gradient": True,
     # "jepa_target_semantics": "ema",
     # "jepa_target_ema_decay": 0.99,
+    # "jepa_target_variance_hinge_coeff": 1.0,
+    # "jepa_target_variance_hinge_gamma": 0.9,
 }
 
 DEFAULT_RUN_ROOT = REPO_ROOT / "checkpoints" / "source" / "step0265000"
@@ -87,7 +89,9 @@ GRADIENT_COMPONENT_NAMES = (
     "pred_sigreg",
     "fp32_legality",
 )
+TARGET_VARIANCE_HINGE_COMPONENT = "target_variance_hinge"
 GRADIENT_GROUP_NAMES = ("backbone", "dfm", "jepa", "other", "all")
+TARGET_VARIANCE_HINGE_EPSILON = 1e-4
 
 UNEVALUATED_LEGACY_AUX_METRICS = frozenset(
     {
@@ -146,6 +150,8 @@ class JointLatentSASAConfig:
     jepa_target_stop_gradient: bool = False
     jepa_target_semantics: str = "online"
     jepa_target_ema_decay: float = 0.99
+    jepa_target_variance_hinge_coeff: float = 0.0
+    jepa_target_variance_hinge_gamma: float = 0.9
     jepa_target_sample_count: int = 0
     jepa_gamma: float = 1.0
     jepa_sigreg_coeff: float = 0.1
@@ -210,6 +216,91 @@ def _weighted_horizon_mean(
     mask: jnp.ndarray,
 ) -> jnp.ndarray:
     return jnp.sum(sample_values * mask) / jnp.maximum(jnp.sum(mask), 1.0)
+
+
+class TargetVarianceHingeResult(NamedTuple):
+    loss: jax.Array
+    valid_count_by_horizon: jax.Array
+    eligible_by_horizon: jax.Array
+    feature_std_mean_by_horizon: jax.Array
+    feature_std_p05_by_horizon: jax.Array
+    feature_std_median_by_horizon: jax.Array
+    active_fraction_by_horizon: jax.Array
+    hinge_by_horizon: jax.Array
+
+
+def per_horizon_target_variance_hinge(
+    target_z: jax.Array,
+    valid: jax.Array,
+    *,
+    gamma: float,
+) -> TargetVarianceHingeResult:
+    """Penalize low online-target feature variance independently per horizon."""
+
+    target = jnp.asarray(target_z, dtype=jnp.float32)
+    weight = jnp.maximum(jnp.asarray(valid, dtype=jnp.float32), 0.0)
+    if target.ndim != 3:
+        raise ValueError(
+            "target_z must have shape [batch, horizon, feature], "
+            f"got {target.shape}"
+        )
+    if weight.shape != target.shape[:2]:
+        raise ValueError(
+            f"valid must have shape {target.shape[:2]}, got {weight.shape}"
+        )
+    if not math.isfinite(gamma) or gamma <= 0.0:
+        raise ValueError(f"gamma must be finite and positive, got {gamma}")
+
+    active_sample = weight > 0.0
+    safe_target = jnp.where(active_sample[..., None], target, 0.0)
+    count = jnp.sum(weight, axis=0)
+    denominator = jnp.maximum(count, 1.0)
+    mean = (
+        jnp.sum(safe_target * weight[..., None], axis=0)
+        / denominator[:, None]
+    )
+    centered = jnp.where(
+        active_sample[..., None],
+        safe_target - mean[None, :, :],
+        0.0,
+    )
+    variance = (
+        jnp.sum(jnp.square(centered) * weight[..., None], axis=0)
+        / denominator[:, None]
+    )
+    feature_std = jnp.sqrt(
+        jnp.maximum(variance, 0.0)
+        + jnp.asarray(TARGET_VARIANCE_HINGE_EPSILON, dtype=jnp.float32)
+    )
+    gamma_array = jnp.asarray(gamma, dtype=jnp.float32)
+    per_feature_hinge = jax.nn.relu(gamma_array - feature_std)
+    hinge_by_horizon = jnp.mean(per_feature_hinge, axis=-1)
+    eligible = (count >= 2.0).astype(jnp.float32)
+    loss = (
+        jnp.sum(hinge_by_horizon * eligible)
+        / jnp.maximum(jnp.sum(eligible), 1.0)
+    )
+    return TargetVarianceHingeResult(
+        loss=loss,
+        valid_count_by_horizon=count,
+        eligible_by_horizon=eligible,
+        feature_std_mean_by_horizon=jnp.mean(feature_std, axis=-1),
+        feature_std_p05_by_horizon=jnp.quantile(
+            feature_std,
+            0.05,
+            axis=-1,
+        ),
+        feature_std_median_by_horizon=jnp.quantile(
+            feature_std,
+            0.50,
+            axis=-1,
+        ),
+        active_fraction_by_horizon=jnp.mean(
+            (feature_std < gamma_array).astype(jnp.float32),
+            axis=-1,
+        ),
+        hinge_by_horizon=hinge_by_horizon,
+    )
 
 
 def _sigreg_moments_loss(
@@ -1676,6 +1767,15 @@ def joint_stage1_loss_fn(
             else:
                 raise ValueError(f"Unsupported jepa_sigreg_kind: {model.config.jepa_sigreg_kind!r}")
 
+    target_variance_hinge: TargetVarianceHingeResult | None = None
+    if model.config.jepa_target_variance_hinge_coeff != 0.0:
+        with jax.named_scope("joint_jepa_target_variance_hinge"):
+            target_variance_hinge = per_horizon_target_variance_hinge(
+                target_z,
+                valid[:, None] * future_valid,
+                gamma=model.config.jepa_target_variance_hinge_gamma,
+            )
+
     value_loss = jnp.asarray(0.0, dtype=jnp.float32)
     wdl_loss = jnp.asarray(0.0, dtype=jnp.float32)
     value_pred_mean = jnp.asarray(0.0, dtype=jnp.float32)
@@ -1746,6 +1846,12 @@ def joint_stage1_loss_fn(
         + model.config.wdl_coeff * wdl_loss
         + model.config.jepa_action_contrast_coeff * action_contrast_loss
     )
+    if target_variance_hinge is not None:
+        unclipped_loss = (
+            unclipped_loss
+            + model.config.jepa_target_variance_hinge_coeff
+            * target_variance_hinge.loss
+        )
     loss, loss_clip_scale = _clip_loss_preserve_gradient(unclipped_loss, model.config.loss_clip_value)
 
     preds = jnp.argmax(logits, axis=-1)
@@ -1816,6 +1922,35 @@ def joint_stage1_loss_fn(
         "mask_prob": jnp.mean(1.0 - t),
         "loss_horizon": jnp.asarray(loss_horizon, dtype=jnp.float32),
     }
+    if target_variance_hinge is not None:
+        aux.update(
+            {
+                "jepa_target_variance_hinge_loss": (
+                    target_variance_hinge.loss
+                ),
+                "jepa_target_variance_valid_count_by_horizon": (
+                    target_variance_hinge.valid_count_by_horizon
+                ),
+                "jepa_target_variance_eligible_by_horizon": (
+                    target_variance_hinge.eligible_by_horizon
+                ),
+                "jepa_target_feature_std_mean_by_horizon": (
+                    target_variance_hinge.feature_std_mean_by_horizon
+                ),
+                "jepa_target_feature_std_p05_by_horizon": (
+                    target_variance_hinge.feature_std_p05_by_horizon
+                ),
+                "jepa_target_feature_std_median_by_horizon": (
+                    target_variance_hinge.feature_std_median_by_horizon
+                ),
+                "jepa_target_variance_active_fraction_by_horizon": (
+                    target_variance_hinge.active_fraction_by_horizon
+                ),
+                "jepa_target_variance_hinge_by_horizon": (
+                    target_variance_hinge.hinge_by_horizon
+                ),
+            }
+        )
     if positive_target_override is not None:
         aux.update(
             {
@@ -2015,6 +2150,38 @@ def validate_objective_config(
                 "jepa_target_stop_gradient=False to avoid conflating "
                 "target semantics."
             )
+    variance_hinge_coeff = config.jepa_target_variance_hinge_coeff
+    variance_hinge_gamma = config.jepa_target_variance_hinge_gamma
+    if (
+        not math.isfinite(variance_hinge_coeff)
+        or variance_hinge_coeff < 0.0
+    ):
+        raise ValueError(
+            "jepa_target_variance_hinge_coeff must be finite and "
+            f"non-negative, found {variance_hinge_coeff}"
+        )
+    if (
+        not math.isfinite(variance_hinge_gamma)
+        or variance_hinge_gamma <= 0.0
+    ):
+        raise ValueError(
+            "jepa_target_variance_hinge_gamma must be finite and "
+            f"positive, found {variance_hinge_gamma}"
+        )
+    if (
+        variance_hinge_coeff == 0.0
+        and variance_hinge_gamma
+        != JointLatentSASAConfig.jepa_target_variance_hinge_gamma
+    ):
+        raise ValueError(
+            "jepa_target_variance_hinge_gamma is inert unless "
+            "jepa_target_variance_hinge_coeff is nonzero; keep its "
+            "default when the hinge is disabled."
+        )
+    if variance_hinge_coeff != 0.0 and objective != "normalized":
+        raise ValueError(
+            "Target variance hinge requires --objective normalized."
+        )
 
 
 def flatten_metrics(metrics: dict[str, Any]) -> dict[str, float]:
@@ -2614,6 +2781,18 @@ def load_research_checkpoint(
     return restored
 
 
+def serialized_model_config(
+    config: JointLatentSASAConfig,
+) -> dict[str, Any]:
+    """Serialize config without changing disabled-hinge legacy contracts."""
+
+    payload = dataclasses.asdict(config)
+    if config.jepa_target_variance_hinge_coeff == 0.0:
+        payload.pop("jepa_target_variance_hinge_coeff")
+        payload.pop("jepa_target_variance_hinge_gamma")
+    return payload
+
+
 def build_research_resume_contract(
     *,
     config: Any,
@@ -2647,6 +2826,20 @@ def build_research_resume_contract(
         "target_sigreg_reference_count": float(sigreg_reference_count),
         "pred_sigreg_reference_count": float(sigreg_reference_count),
     }
+    if config.jepa_target_variance_hinge_coeff != 0.0:
+        objective_contract["jepa_target_variance_hinge"] = {
+            "coefficient": float(
+                config.jepa_target_variance_hinge_coeff
+            ),
+            "gamma": float(config.jepa_target_variance_hinge_gamma),
+            "epsilon": TARGET_VARIANCE_HINGE_EPSILON,
+            "source": "attached_online_projected_future_targets",
+            "sample_axis": "batch_independently_per_future_horizon",
+            "variance_denominator": "weighted_population_count",
+            "validity": "valid*future_valid",
+            "minimum_valid_count_per_horizon": 2.0,
+            "horizon_reduction": "equal_mean_over_eligible_horizons",
+        }
     if config.jepa_target_semantics == "ema":
         objective_contract["jepa_target_ema"] = {
             "decay": float(config.jepa_target_ema_decay),
@@ -2681,7 +2874,7 @@ def build_research_resume_contract(
         }
     return {
         "architecture_source": ARCHITECTURE_SOURCE,
-        "model_config": dataclasses.asdict(config),
+        "model_config": serialized_model_config(config),
         "objective": objective_contract,
         "data": {
             "batch_size": int(batch_size),
@@ -3122,15 +3315,33 @@ def gradient_component_vector(
         sigreg_reference_count,
         sigreg_reference_count,
     )
-    return jnp.stack(
-        [
-            jnp.asarray(aux["dfm_ce_loss"], dtype=jnp.float32),
-            jnp.asarray(aux["jepa_positive_loss"], dtype=jnp.float32),
-            jnp.asarray(aux["jepa_sigreg_loss"], dtype=jnp.float32),
-            jnp.asarray(aux["jepa_pred_sigreg_loss"], dtype=jnp.float32),
-            jnp.asarray(aux["first_legality_loss"], dtype=jnp.float32),
-        ]
-    )
+    components = [
+        jnp.asarray(aux["dfm_ce_loss"], dtype=jnp.float32),
+        jnp.asarray(aux["jepa_positive_loss"], dtype=jnp.float32),
+        jnp.asarray(aux["jepa_sigreg_loss"], dtype=jnp.float32),
+        jnp.asarray(aux["jepa_pred_sigreg_loss"], dtype=jnp.float32),
+        jnp.asarray(aux["first_legality_loss"], dtype=jnp.float32),
+    ]
+    if model.config.jepa_target_variance_hinge_coeff != 0.0:
+        components.append(
+            jnp.asarray(
+                aux["jepa_target_variance_hinge_loss"],
+                dtype=jnp.float32,
+            )
+        )
+    return jnp.stack(components)
+
+
+def gradient_component_names(
+    config: JointLatentSASAConfig,
+) -> tuple[str, ...]:
+    """Return the audit ABI, adding enabled-only research components."""
+
+    if config.jepa_target_variance_hinge_coeff != 0.0:
+        return GRADIENT_COMPONENT_NAMES + (
+            TARGET_VARIANCE_HINGE_COMPONENT,
+        )
+    return GRADIENT_COMPONENT_NAMES
 
 
 _normalized_loss_and_grad = nnx.value_and_grad(
@@ -3390,6 +3601,22 @@ def parse_args(
             "--jepa-target-semantics ema."
         ),
     )
+    parser.add_argument(
+        "--target-variance-hinge-coeff",
+        type=float,
+        help=(
+            "Coefficient for the attached, per-future-horizon target "
+            "feature-variance floor."
+        ),
+    )
+    parser.add_argument(
+        "--target-variance-hinge-gamma",
+        type=float,
+        help=(
+            "Target feature standard-deviation floor. Active only when "
+            "--target-variance-hinge-coeff is nonzero."
+        ),
+    )
     parser.add_argument("--sigreg-reference-count", type=float, default=1.0)
     parser.add_argument("--batch-size", type=int, default=1)
     parser.add_argument(
@@ -3486,6 +3713,16 @@ def apply_config_overrides(
             config.jepa_target_ema_decay
             if args.jepa_target_ema_decay is None
             else args.jepa_target_ema_decay
+        ),
+        jepa_target_variance_hinge_coeff=(
+            config.jepa_target_variance_hinge_coeff
+            if args.target_variance_hinge_coeff is None
+            else args.target_variance_hinge_coeff
+        ),
+        jepa_target_variance_hinge_gamma=(
+            config.jepa_target_variance_hinge_gamma
+            if args.target_variance_hinge_gamma is None
+            else args.target_variance_hinge_gamma
         ),
     )
 
@@ -3949,6 +4186,7 @@ def run_gradient_audit(
 ) -> dict[str, Any]:
     """Measure exact component-gradient Gram matrices from one fixed batch."""
 
+    component_names = gradient_component_names(model.config)
     graphdef, trainable_state, nondiff_state = nnx.split(model, TrainableParam, ...)
     path_leaves, _ = jax.tree_util.tree_flatten_with_path(trainable_state)
     leaf_groups = [gradient_group_for_path(path) for path, _ in path_leaves]
@@ -3978,7 +4216,7 @@ def run_gradient_audit(
             )
 
         components, pullback = jax.vjp(components_for_params, params)
-        component_count = len(GRADIENT_COMPONENT_NAMES)
+        component_count = len(component_names)
 
         def squared_group_norms(cotangent):
             gradient = pullback(cotangent)[0]
@@ -4059,7 +4297,7 @@ def run_gradient_audit(
     pair_q = np.asarray(pair_q_raw, dtype=np.float64)
     scales = np.asarray(scales_raw, dtype=np.float64)
 
-    component_count = len(GRADIENT_COMPONENT_NAMES)
+    component_count = len(component_names)
     grams = reconstruct_polarized_grams(diagonal_q, pair_q, scales)
 
     gradient_norms: dict[str, dict[str, float]] = {}
@@ -4072,15 +4310,15 @@ def run_gradient_audit(
         norm_floor = float(np.max(norms)) * 1e-8
         gradient_norms[group_name] = {
             component: float(norm)
-            for component, norm in zip(GRADIENT_COMPONENT_NAMES, norms, strict=True)
+            for component, norm in zip(component_names, norms, strict=True)
         }
         cosines: dict[str, float | None] = {}
         for left in range(component_count):
             for right in range(left + 1, component_count):
                 denom = norms[left] * norms[right]
                 key = (
-                    f"{GRADIENT_COMPONENT_NAMES[left]}"
-                    f"__{GRADIENT_COMPONENT_NAMES[right]}"
+                    f"{component_names[left]}"
+                    f"__{component_names[right]}"
                 )
                 cosines[key] = (
                     None
@@ -4095,9 +4333,14 @@ def run_gradient_audit(
             "maximum_asymmetry": float(np.max(np.abs(gram - gram.T))),
         }
 
-    primary_coefficients = np.asarray(
-        [1.0, 1.0, 0.0, 0.0, model.config.first_legality_coeff],
+    primary_coefficients = np.zeros(
+        (component_count,),
         dtype=np.float64,
+    )
+    primary_coefficients[component_names.index("dfm_ce")] = 1.0
+    primary_coefficients[component_names.index("jepa_positive")] = 1.0
+    primary_coefficients[component_names.index("fp32_legality")] = (
+        model.config.first_legality_coeff
     )
     fractions = (0.01, 0.03, 0.10, 0.30)
     suggested_coefficients: dict[str, dict[str, dict[str, float]]] = {}
@@ -4127,12 +4370,12 @@ def run_gradient_audit(
             }
         suggested_coefficients[component_name] = per_group
 
-    return {
-        "component_names": list(GRADIENT_COMPONENT_NAMES),
+    result = {
+        "component_names": list(component_names),
         "component_values": {
             name: float(value)
             for name, value in zip(
-                GRADIENT_COMPONENT_NAMES,
+                component_names,
                 component_values,
                 strict=True,
             )
@@ -4148,7 +4391,7 @@ def run_gradient_audit(
         "primary_gradient_coefficients": {
             name: float(value)
             for name, value in zip(
-                GRADIENT_COMPONENT_NAMES,
+                component_names,
                 primary_coefficients,
                 strict=True,
             )
@@ -4160,7 +4403,7 @@ def run_gradient_audit(
         "polarization_scales": {
             name: float(scale)
             for name, scale in zip(
-                GRADIENT_COMPONENT_NAMES,
+                component_names,
                 scales,
                 strict=True,
             )
@@ -4171,6 +4414,74 @@ def run_gradient_audit(
         "compiler_memory_analysis": compiler_memory,
         "gpu_memory": gpu_memory_stats(),
     }
+    if TARGET_VARIANCE_HINGE_COMPONENT in component_names:
+        hinge_index = component_names.index(
+            TARGET_VARIANCE_HINGE_COMPONENT
+        )
+        variance_reference_coefficients = np.zeros(
+            (component_count,),
+            dtype=np.float64,
+        )
+        variance_reference_coefficients[
+            component_names.index("jepa_positive")
+        ] = model.config.jepa_positive_coeff
+        variance_reference_coefficients[
+            component_names.index("target_sigreg")
+        ] = model.config.jepa_sigreg_coeff
+        variance_fractions = (0.03, 0.10, 0.30)
+        variance_suggestions: dict[
+            str,
+            dict[str, float],
+        ] = {}
+        for group_index, group_name in enumerate(GRADIENT_GROUP_NAMES):
+            gram = grams[group_index]
+            reference_norm = float(
+                np.sqrt(
+                    max(
+                        float(
+                            variance_reference_coefficients
+                            @ gram
+                            @ variance_reference_coefficients
+                        ),
+                        0.0,
+                    )
+                )
+            )
+            hinge_norm = float(
+                np.sqrt(
+                    max(
+                        float(gram[hinge_index, hinge_index]),
+                        0.0,
+                    )
+                )
+            )
+            if reference_norm == 0.0 or hinge_norm == 0.0:
+                continue
+            variance_suggestions[group_name] = {
+                f"{fraction:.2f}": (
+                    fraction * reference_norm / hinge_norm
+                )
+                for fraction in variance_fractions
+            }
+        result.update(
+            {
+                "target_variance_hinge_reference": (
+                    "configured_jepa_positive_plus_target_sigreg"
+                ),
+                "target_variance_hinge_reference_gradient_coefficients": {
+                    name: float(value)
+                    for name, value in zip(
+                        component_names,
+                        variance_reference_coefficients,
+                        strict=True,
+                    )
+                },
+                "suggested_target_variance_hinge_coefficients_by_gradient_fraction": (
+                    variance_suggestions
+                ),
+            }
+        )
+    return result
 
 
 def main() -> int:
@@ -4347,7 +4658,17 @@ def main() -> int:
     output_dir.mkdir(parents=True, exist_ok=False)
 
     if args.gradient_audit:
-        if config.jepa_sigreg_coeff == 0.0 or config.jepa_pred_sigreg_coeff == 0.0:
+        if config.jepa_target_variance_hinge_coeff != 0.0:
+            if config.jepa_sigreg_coeff == 0.0:
+                raise ValueError(
+                    "Target-variance-hinge --gradient-audit requires "
+                    "nonzero --target-sigreg-coeff for its configured "
+                    "JEPA-positive-plus-target-SIGReg reference."
+                )
+        elif (
+            config.jepa_sigreg_coeff == 0.0
+            or config.jepa_pred_sigreg_coeff == 0.0
+        ):
             raise ValueError(
                 "--gradient-audit requires nonzero --target-sigreg-coeff and "
                 "--pred-sigreg-coeff so both statistics are present in the graph"
@@ -4379,7 +4700,7 @@ def main() -> int:
                     vars(args) | {"output_dir": str(output_dir)}
                 ).items()
             },
-            "model_config": dataclasses.asdict(config),
+            "model_config": serialized_model_config(config),
             "checkpoint_step": checkpoint_step,
             "initial_optimizer_step": initial_optimizer_step,
             "initial_research_update": initial_research_update,
@@ -4393,18 +4714,28 @@ def main() -> int:
         }
         write_json(output_dir / "run_config.json", audit_config)
         write_json(output_dir / "gradient_audit.json", audit_config)
+        audit_summary = {
+            "run_id": run_id,
+            "output_dir": str(output_dir),
+            "component_values": audit["component_values"],
+            "gradient_norms": audit["gradient_norms"],
+            "suggested_sigreg_coefficients": audit[
+                "suggested_sigreg_coefficients_by_gradient_fraction"
+            ],
+            "wall_seconds": audit["wall_seconds"],
+        }
+        if (
+            "suggested_target_variance_hinge_coefficients_by_gradient_fraction"
+            in audit
+        ):
+            audit_summary["suggested_target_variance_hinge_coefficients"] = (
+                audit[
+                    "suggested_target_variance_hinge_coefficients_by_gradient_fraction"
+                ]
+            )
         print(
             json.dumps(
-                {
-                    "run_id": run_id,
-                    "output_dir": str(output_dir),
-                    "component_values": audit["component_values"],
-                    "gradient_norms": audit["gradient_norms"],
-                    "suggested_sigreg_coefficients": audit[
-                        "suggested_sigreg_coefficients_by_gradient_fraction"
-                    ],
-                    "wall_seconds": audit["wall_seconds"],
-                },
+                audit_summary,
                 indent=2,
                 sort_keys=True,
             )
@@ -4505,7 +4836,7 @@ def main() -> int:
         "run_id": run_id,
         "timestamp_utc": timestamp,
         "args": vars(args) | {"output_dir": str(output_dir)},
-        "model_config": dataclasses.asdict(config),
+        "model_config": serialized_model_config(config),
         "ema_target": ema_target_metadata,
         "checkpoint_step": checkpoint_step,
         "initial_optimizer_step": initial_optimizer_step,

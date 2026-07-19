@@ -351,6 +351,8 @@ def test_local_config_and_initialized_model_match_legacy_exactly():
             "jepa_target_stop_gradient",
             "jepa_target_semantics",
             "jepa_target_ema_decay",
+            "jepa_target_variance_hinge_coeff",
+            "jepa_target_variance_hinge_gamma",
         }
     ]
     legacy_fields = [
