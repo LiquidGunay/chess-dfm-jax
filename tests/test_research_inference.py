@@ -24,6 +24,7 @@ from chess_dfm_jax.training.dfm import (  # noqa: E402
 from research.inference import (  # noqa: E402
     _infer_dfm_from_current_impl,
     _refine_dfm_from_latents_impl,
+    infer_dfm_actions_from_current,
     infer_dfm_from_current,
     root_topk_turnover,
     validate_root_legal_mask,
@@ -177,6 +178,35 @@ def test_compiled_public_path_runs_with_more_passes_than_horizon():
     assert result.actions.shape == (1, 4)
     assert not np.any(np.asarray(result.actions) == model.config.action_vocab_size)
     assert result.trace.actions_after.shape == (6, 1, 4)
+
+
+@pytest.mark.parametrize("refinement_passes", [1, 2, 4, 6])
+def test_lean_action_only_path_exactly_matches_diagnostic_path(
+    refinement_passes: int,
+):
+    model = _CompiledDummyModel()
+    planes = np.zeros((2, 112, 8, 8), dtype=np.float32)
+    legal_mask = _legal_mask()
+    diagnostic = infer_dfm_from_current(
+        model,
+        planes,
+        legal_mask,
+        refinement_passes=refinement_passes,
+        trace_top_k=2,
+        action_codec_id=ACTION_CODEC_LEGACY_ABSOLUTE_1858,
+    )
+    lean = infer_dfm_actions_from_current(
+        model,
+        planes,
+        legal_mask,
+        refinement_passes=refinement_passes,
+        action_codec_id=ACTION_CODEC_LEGACY_ABSOLUTE_1858,
+    )
+
+    np.testing.assert_array_equal(
+        np.asarray(jax.block_until_ready(lean)),
+        np.asarray(jax.block_until_ready(diagnostic).actions),
+    )
 
 
 def test_final_actions_match_legacy_threshold_sampler_without_ties():

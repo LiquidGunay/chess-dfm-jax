@@ -24,6 +24,7 @@ inference.py      checked cached-BT4 multi-pass inference and profiling
 arena.py          frozen pools, paired outcomes, and arena statistics
 local_policy.py   strict current-only localized DFM arena adapter
 play_arena.py     bounded batched gameplay with exact history replay
+evaluate_arena.py strict in-process relative-Elo CLI and resumable blocks
 program.md        rules for automated research
 results.tsv       compact append-only experiment ledger
 ```
@@ -80,8 +81,13 @@ to `checkpoint_metrics.jsonl`; the aggregate and minimum-DFM-CE checkpoint go
 to `checkpoint_summary.json`.
 
 The paired evaluator now has a real 16-pair source-vs-source A10G correctness
-artifact, bounded model batches, and an official-formulation normalized-Elo
-promotion GSPRT. The harness remains intentionally marked
+artifact, strict source/research-checkpoint loading, frozen history validation,
+atomic resumable blocks, bounded model batches, a lean action-only inference
+path, and an official-formulation normalized-Elo promotion GSPRT. See
+`docs/local_relative_arena.md` for commands and limitations. The harness
+remains intentionally marked
 `autoresearch_ready=false` while the target-scale-stable objective and its
-representative global-validation baseline remain unresolved. See the plan and
-baseline report for the measured results.
+representative global-validation baseline remain unresolved. The promotion
+tier is additionally fail-closed until one claim-draw-terminal frozen history
+is replaced by a regenerated, repinned pool. See the plan and baseline report
+for the measured results.

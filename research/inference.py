@@ -322,6 +322,78 @@ def _refine_dfm_from_latents_impl(
     return DFMInferenceResult(actions=action_tokens, trace=trace)
 
 
+def _refine_dfm_actions_from_latents_impl(
+    model: LocalDFMInferenceModel,
+    z_dfm: jax.Array,
+    root_legal_mask: jax.Array,
+    *,
+    refinement_passes: int,
+) -> jax.Array:
+    """Return only final actions while preserving the checked refinement rule.
+
+    Arena gameplay consumes only the first final action.  Keeping this kernel
+    separate from the diagnostic path avoids constructing and transferring
+    entropy, top-k, and per-pass trace arrays for every played position.
+    """
+
+    batch_size = z_dfm.shape[0]
+    horizon = int(model.config.horizon)
+    mask_token = int(model.config.action_vocab_size)
+    action_tokens = jnp.full(
+        (batch_size, horizon),
+        mask_token,
+        dtype=jnp.int32,
+    )
+
+    for pass_index in range(refinement_passes):
+        t = jnp.full(
+            (batch_size,),
+            jnp.asarray(pass_index / refinement_passes, dtype=jnp.float32),
+            dtype=jnp.float32,
+        )
+        logits = jnp.asarray(
+            model.planner_from_latents(z_dfm, action_tokens, t),
+            dtype=jnp.float32,
+        )
+        root_logits = jnp.where(root_legal_mask, logits[:, 0, :], -jnp.inf)
+        if horizon == 1:
+            selection_logits = root_logits[:, None, :]
+        else:
+            selection_logits = jnp.concatenate(
+                (root_logits[:, None, :], logits[:, 1:, :]),
+                axis=1,
+            )
+        selection_log_probs = jax.nn.log_softmax(
+            selection_logits,
+            axis=-1,
+        )
+        predictions = jnp.argmax(selection_log_probs, axis=-1).astype(jnp.int32)
+        confidence = jnp.exp(jnp.max(selection_log_probs, axis=-1))
+        confidence = jnp.where(
+            action_tokens == mask_token,
+            confidence,
+            jnp.inf,
+        )
+
+        target_unmasked = (horizon * (pass_index + 1)) // refinement_passes
+        position_order = jnp.argsort(
+            -confidence,
+            axis=-1,
+            stable=True,
+        )
+        position_ranks = jnp.argsort(
+            position_order,
+            axis=-1,
+            stable=True,
+        )
+        action_tokens = jnp.where(
+            position_ranks < target_unmasked,
+            predictions,
+            action_tokens,
+        )
+    return action_tokens
+
+
 def _infer_dfm_from_current_impl(
     model: LocalDFMInferenceModel,
     current_planes: jax.Array,
@@ -343,9 +415,31 @@ def _infer_dfm_from_current_impl(
     )
 
 
+def _infer_dfm_actions_from_current_impl(
+    model: LocalDFMInferenceModel,
+    current_planes: jax.Array,
+    root_legal_mask: jax.Array,
+    *,
+    refinement_passes: int,
+) -> jax.Array:
+    bt4_tokens = model.encode_bt4_tokens(current_planes)
+    z_dfm = model.dfm_latents(bt4_tokens)
+    return _refine_dfm_actions_from_latents_impl(
+        model,
+        z_dfm,
+        root_legal_mask,
+        refinement_passes=refinement_passes,
+    )
+
+
 _compiled_infer_dfm_from_current = nnx.jit(
     _infer_dfm_from_current_impl,
     static_argnames=("refinement_passes", "trace_top_k"),
+)
+
+_compiled_infer_dfm_actions_from_current = nnx.jit(
+    _infer_dfm_actions_from_current_impl,
+    static_argnames=("refinement_passes",),
 )
 
 _compiled_refine_dfm_from_latents = nnx.jit(
@@ -415,6 +509,32 @@ def infer_dfm_from_current(
         legal_mask,
         refinement_passes=refinement_passes,
         trace_top_k=trace_top_k,
+    )
+
+
+def infer_dfm_actions_from_current(
+    model: LocalDFMInferenceModel,
+    current_planes: Any,
+    root_legal_mask: Any,
+    *,
+    refinement_passes: int,
+    action_codec_id: str,
+) -> jax.Array:
+    """Run the checked action-only kernel used by lean arena policies."""
+
+    planes, legal_mask = _validated_current_inputs(
+        model,
+        current_planes,
+        root_legal_mask,
+        refinement_passes=refinement_passes,
+        trace_top_k=1,
+        action_codec_id=action_codec_id,
+    )
+    return _compiled_infer_dfm_actions_from_current(
+        model,
+        planes,
+        legal_mask,
+        refinement_passes=refinement_passes,
     )
 
 
@@ -560,6 +680,7 @@ __all__ = [
     "DFMRefinementTrace",
     "LocalDFMInferenceModel",
     "benchmark_dfm_inference",
+    "infer_dfm_actions_from_current",
     "infer_dfm_from_current",
     "refine_dfm_from_latents",
     "root_topk_turnover",

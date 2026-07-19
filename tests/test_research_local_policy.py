@@ -81,8 +81,7 @@ def _valid_result(
 ) -> DFMInferenceResult:
     batch_size = root_legal_mask.shape[0]
     legal_indices = [
-        np.flatnonzero(root_legal_mask[row])[:trace_top_k]
-        for row in range(batch_size)
+        np.flatnonzero(root_legal_mask[row])[:trace_top_k] for row in range(batch_size)
     ]
     selected = np.asarray([indices[0] for indices in legal_indices], dtype=np.int32)
     actions = np.broadcast_to(selected[:, None], (batch_size, horizon)).copy()
@@ -114,8 +113,7 @@ def _valid_result(
     return DFMInferenceResult(
         actions=jnp.asarray(actions),
         trace=DFMRefinementTrace(
-            times=jnp.arange(refinement_passes, dtype=jnp.float32)
-            / refinement_passes,
+            times=jnp.arange(refinement_passes, dtype=jnp.float32) / refinement_passes,
             actions_before=jnp.asarray(actions_before),
             actions_after=jnp.asarray(actions_after),
             root_raw_entropy=jnp.full(pass_batch_shape, 4.0, dtype=jnp.float32),
@@ -224,16 +222,12 @@ def test_adapter_validates_full_histories_but_encodes_current_only(
     result = adapter.select_actions(boards, histories)
 
     assert adapter.action_codec_id == ACTION_CODEC_LEGACY_ABSOLUTE_1858
-    assert (
-        adapter.plane_history_mode
-        == PLANE_HISTORY_MODE_CURRENT_ONLY_AS_PREPROCESSED
-    )
+    assert adapter.plane_history_mode == PLANE_HISTORY_MODE_CURRENT_ONLY_AS_PREPROCESSED
     assert len(encode_calls) == 2
     assert all(history == () for _, history, _, _ in encode_calls)
     assert all(layout == "nchw" for _, _, layout, _ in encode_calls)
     assert all(
-        input_format == "INPUT_CLASSICAL_112_PLANE"
-        for _, _, _, input_format in encode_calls
+        input_format == "INPUT_CLASSICAL_112_PLANE" for _, _, _, input_format in encode_calls
     )
 
     assert len(calls) == 1
@@ -259,17 +253,36 @@ def test_adapter_validates_full_histories_but_encodes_current_only(
         "a7a5",
     ]
     assert result.action_indices.flags.writeable is False
+    assert result.diagnostics is not None
     assert result.diagnostics.encoded_planes_shape == (2, 112, 8, 8)
-    assert (
-        result.diagnostics.plane_history_mode
-        == PLANE_HISTORY_MODE_CURRENT_ONLY_AS_PREPROCESSED
-    )
+    assert result.diagnostics.plane_history_mode == PLANE_HISTORY_MODE_CURRENT_ONLY_AS_PREPROCESSED
     np.testing.assert_array_equal(result.diagnostics.legal_move_counts, [20, 20])
     np.testing.assert_array_equal(
         result.diagnostics.representable_legal_action_counts,
         [20, 20],
     )
     assert result.diagnostics.root_raw_entropy.flags.writeable is False
+
+
+def test_lean_adapter_returns_checked_actions_without_trace_diagnostics():
+    history = _push_history()
+    adapter = LocalDFMPolicy(
+        model=_CompiledModel(),
+        model_id="lean-candidate",
+        refinement_passes=4,
+        trace_top_k=2,
+        collect_diagnostics=False,
+    )
+
+    result = adapter.select_actions(
+        [history[-1]],
+        [history],
+    )
+
+    assert result.diagnostics is None
+    assert result.action_indices.shape == (1,)
+    assert result.moves == (chess.Move.from_uci("e2e4"),)
+    assert result.action_indices.flags.writeable is False
 
 
 def test_adapter_runs_through_real_compiled_inference_boundary():
@@ -295,10 +308,7 @@ def test_history_accepts_legal_fen_round_trip_that_drops_irrelevant_ep_square(
 ):
     raw_history = _push_history("e2e4")
     assert raw_history[-1].ep_square == chess.E3
-    sidecar_history = tuple(
-        chess.Board(board.fen(en_passant="legal"))
-        for board in raw_history
-    )
+    sidecar_history = tuple(chess.Board(board.fen(en_passant="legal")) for board in raw_history)
     assert sidecar_history[-1].ep_square is None
     current = chess.Board(raw_history[-1].fen(en_passant="legal"))
     calls = _install_fake_inference(monkeypatch)
@@ -418,9 +428,7 @@ def test_adapter_fails_when_no_legacy_action_is_representable(
         (
             lambda result: _replace_trace(
                 result,
-                root_raw_entropy=result.trace.root_raw_entropy.at[0, 0].set(
-                    jnp.nan
-                ),
+                root_raw_entropy=result.trace.root_raw_entropy.at[0, 0].set(jnp.nan),
             ),
             "nonfinite",
         ),
@@ -428,9 +436,7 @@ def test_adapter_fails_when_no_legacy_action_is_representable(
             lambda result: _replace_trace(
                 result,
                 root_legal_topk_probabilities=(
-                    result.trace.root_legal_topk_probabilities.at[0, 0, 0].set(
-                        jnp.inf
-                    )
+                    result.trace.root_legal_topk_probabilities.at[0, 0, 0].set(jnp.inf)
                 ),
             ),
             "nonfinite",

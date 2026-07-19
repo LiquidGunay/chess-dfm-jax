@@ -26,6 +26,7 @@ import operator
 import time
 from collections import Counter, defaultdict
 from collections.abc import Callable, Mapping, Sequence
+from pathlib import Path
 from typing import Any, Protocol
 
 import chess
@@ -44,10 +45,14 @@ from research.arena import (
     ArenaGameSpec,
     GameOutcome,
     classify_game_outcome,
+    make_color_reversed_pairs,
 )
+from research.prepare import require_within_workspace
 
 
 GAMEPLAY_SCHEMA = "chess-dfm-batched-arena-gameplay-v1"
+OPENING_HISTORY_SCHEMA = "chess-dfm-arena-opening-histories-v1"
+OPENING_HISTORY_CONVENTION = "chronological_standard_initial_through_root_inclusive"
 DEFAULT_POLICY_BATCH_SIZE_CAP = 64
 
 FAULT_NO_REPRESENTABLE_MOVE = "no_representable_move"
@@ -143,6 +148,17 @@ class ArenaOpeningHistory:
         }
         payload["history_sha256"] = hashlib.sha256(_canonical_json_bytes(payload)).hexdigest()
         return payload
+
+
+@dataclasses.dataclass(frozen=True)
+class LoadedOpeningHistories:
+    """Verified immutable history sidecar aligned to one opening pool."""
+
+    path: Path
+    file_sha256: str
+    manifest_sha256: str
+    pool_sha256: str
+    histories_by_opening_index: tuple[tuple[str, ...], ...]
 
 
 @dataclasses.dataclass
@@ -443,6 +459,150 @@ def _validate_opening_histories(
             raise TypeError("opening_histories values must be ArenaOpeningHistory.")
         validated[first.pair_id] = _replay_opening_history(first, history)
     return validated
+
+
+def _file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def load_opening_history_sidecar(
+    path: Path,
+    *,
+    opening_pool: Mapping[str, Any],
+    expected_manifest_sha256: str,
+) -> LoadedOpeningHistories:
+    """Load, digest-check, align, and replay every frozen opening history."""
+
+    source = require_within_workspace(path)
+    if not isinstance(expected_manifest_sha256, str) or len(expected_manifest_sha256) != 64:
+        raise ValueError("expected_manifest_sha256 must be a 64-character digest")
+    try:
+        payload = json.loads(source.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"Invalid arena opening-history sidecar: {source}") from exc
+    if not isinstance(payload, Mapping):
+        raise ValueError("Opening-history sidecar root must be an object.")
+    expected_keys = {
+        "schema_version",
+        "history_convention",
+        "pool_sha256",
+        "entries",
+        "manifest_sha256",
+    }
+    observed_keys = set(payload)
+    if observed_keys != expected_keys:
+        raise ValueError(
+            "Opening-history sidecar keys differ: "
+            f"missing={sorted(expected_keys - observed_keys)}, "
+            f"extra={sorted(observed_keys - expected_keys)}"
+        )
+    if payload["schema_version"] != OPENING_HISTORY_SCHEMA:
+        raise ValueError(f"Unsupported opening-history schema: {payload['schema_version']!r}")
+    if payload["history_convention"] != OPENING_HISTORY_CONVENTION:
+        raise ValueError(
+            f"Unsupported opening-history convention: {payload['history_convention']!r}"
+        )
+    pool_sha256 = opening_pool.get("pool_sha256")
+    if not isinstance(pool_sha256, str) or len(pool_sha256) != 64:
+        raise ValueError("Opening pool is missing its validated digest.")
+    if payload["pool_sha256"] != pool_sha256:
+        raise ValueError("Opening-history sidecar does not match the opening pool.")
+
+    digest_payload = dict(payload)
+    digest_payload.pop("manifest_sha256")
+    observed_manifest_sha256 = hashlib.sha256(_canonical_json_bytes(digest_payload)).hexdigest()
+    if payload["manifest_sha256"] != observed_manifest_sha256:
+        raise ValueError("Opening-history sidecar manifest digest mismatch.")
+    if observed_manifest_sha256 != expected_manifest_sha256:
+        raise ValueError(
+            "Opening-history sidecar does not match the pinned manifest "
+            f"digest: expected {expected_manifest_sha256}, found "
+            f"{observed_manifest_sha256}"
+        )
+
+    openings = opening_pool.get("openings")
+    entries = payload.get("entries")
+    if not isinstance(openings, list) or not isinstance(entries, list):
+        raise ValueError("Opening pool and history entries must be lists.")
+    if len(entries) != len(openings):
+        raise ValueError("Opening-history count does not match the opening pool.")
+
+    histories: list[tuple[str, ...]] = []
+    for position, (opening, entry) in enumerate(zip(openings, entries, strict=True)):
+        if not isinstance(opening, Mapping) or not isinstance(entry, Mapping):
+            raise ValueError(f"Opening/history entry {position} must be an object.")
+        if set(entry) != {"opening_index", "fen", "history_fens"}:
+            raise ValueError(f"Opening-history entry {position} has unexpected keys.")
+        if int(entry["opening_index"]) != position:
+            raise ValueError("Opening-history entries must be contiguous and ordered.")
+        fen = str(opening.get("fen", ""))
+        if entry["fen"] != fen:
+            raise ValueError(f"Opening-history entry {position} FEN does not match pool.")
+        history_values = entry["history_fens"]
+        if (
+            not isinstance(history_values, list)
+            or not history_values
+            or not all(isinstance(value, str) for value in history_values)
+        ):
+            raise ValueError(f"Opening-history entry {position} has invalid history_fens.")
+        expected_length = int(opening.get("ply", -1)) + 1
+        if len(history_values) != expected_length:
+            raise ValueError(
+                f"Opening-history entry {position} must contain "
+                f"{expected_length} positions, found {len(history_values)}."
+            )
+        spec = make_color_reversed_pairs(
+            [fen],
+            model_a="history-validator-a",
+            model_b="history-validator-b",
+            start_index=position,
+        )[0][0]
+        history = ArenaOpeningHistory(
+            pair_id=spec.pair_id,
+            fens=tuple(history_values),
+        )
+        try:
+            _replay_opening_history(spec, history)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                f"Opening-history entry {position} failed exact replay: {exc}"
+            ) from exc
+        histories.append(history.fens)
+
+    return LoadedOpeningHistories(
+        path=source,
+        file_sha256=_file_sha256(source),
+        manifest_sha256=observed_manifest_sha256,
+        pool_sha256=pool_sha256,
+        histories_by_opening_index=tuple(histories),
+    )
+
+
+def histories_for_pairs(
+    pairs: Sequence[tuple[ArenaGameSpec, ArenaGameSpec]],
+    loaded: LoadedOpeningHistories,
+) -> dict[str, ArenaOpeningHistory]:
+    """Bind verified ordered histories to an exact contiguous pair slice."""
+
+    result: dict[str, ArenaOpeningHistory] = {}
+    for first, _second in _validate_pair_specs(pairs):
+        try:
+            fens = loaded.histories_by_opening_index[first.opening_index]
+        except IndexError as exc:
+            raise ValueError(f"No frozen history for opening index {first.opening_index}.") from exc
+        if fens[-1] != first.fen:
+            raise ValueError(
+                f"Frozen history for opening {first.opening_index} has the wrong root FEN."
+            )
+        result[first.pair_id] = ArenaOpeningHistory(
+            pair_id=first.pair_id,
+            fens=fens,
+        )
+    return result
 
 
 def _validate_policies(
@@ -967,11 +1127,16 @@ __all__ = [
     "FAULT_NO_REPRESENTABLE_MOVE",
     "FAULT_TIMEOUT",
     "GAMEPLAY_SCHEMA",
+    "LoadedOpeningHistories",
+    "OPENING_HISTORY_CONVENTION",
+    "OPENING_HISTORY_SCHEMA",
     "ArenaGameRecord",
     "ArenaGameplayResult",
     "ArenaOpeningHistory",
     "BatchedActionSelection",
     "BatchedArenaPolicy",
     "ModelGameplayStats",
+    "histories_for_pairs",
+    "load_opening_history_sidecar",
     "play_arena_pairs",
 ]

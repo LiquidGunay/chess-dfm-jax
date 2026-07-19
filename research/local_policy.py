@@ -31,7 +31,11 @@ from chess_dfm_jax.policy import (
     move_to_policy_index,
     policy_index_to_move,
 )
-from research.inference import LocalDFMInferenceModel, infer_dfm_from_current
+from research.inference import (
+    LocalDFMInferenceModel,
+    infer_dfm_actions_from_current,
+    infer_dfm_from_current,
+)
 
 
 PLANE_HISTORY_MODE_CURRENT_ONLY_AS_PREPROCESSED = "current_only_as_preprocessed"
@@ -71,7 +75,7 @@ class LocalPolicyBatchResult:
 
     action_indices: np.ndarray
     moves: tuple[chess.Move, ...]
-    diagnostics: LocalPolicyDiagnostics
+    diagnostics: LocalPolicyDiagnostics | None
 
 
 @dataclasses.dataclass(frozen=True)
@@ -82,6 +86,7 @@ class LocalDFMPolicy:
     model_id: str
     refinement_passes: int = 8
     trace_top_k: int = 5
+    collect_diagnostics: bool = True
     action_codec_id: str = dataclasses.field(
         default=ACTION_CODEC_LEGACY_ABSOLUTE_1858,
         init=False,
@@ -95,6 +100,8 @@ class LocalDFMPolicy:
     def __post_init__(self) -> None:
         if not isinstance(self.model_id, str) or not self.model_id.strip():
             raise LocalPolicyError("model_id must be a non-empty string")
+        if not isinstance(self.collect_diagnostics, bool):
+            raise LocalPolicyError("collect_diagnostics must be boolean")
         _validate_policy_options(
             refinement_passes=self.refinement_passes,
             trace_top_k=self.trace_top_k,
@@ -118,6 +125,7 @@ class LocalDFMPolicy:
             histories,
             refinement_passes=passes,
             trace_top_k=top_k,
+            collect_diagnostics=self.collect_diagnostics,
         )
 
 
@@ -125,9 +133,7 @@ def _validate_policy_options(*, refinement_passes: int, trace_top_k: int) -> Non
     if isinstance(refinement_passes, bool) or not isinstance(refinement_passes, int):
         raise LocalPolicyError("refinement_passes must be an integer")
     if refinement_passes < 1:
-        raise LocalPolicyError(
-            f"refinement_passes must be >= 1, got {refinement_passes}"
-        )
+        raise LocalPolicyError(f"refinement_passes must be >= 1, got {refinement_passes}")
     if isinstance(trace_top_k, bool) or not isinstance(trace_top_k, int):
         raise LocalPolicyError("trace_top_k must be an integer")
     if not 1 <= trace_top_k <= ACTION_VOCAB_SIZE:
@@ -407,6 +413,7 @@ def select_local_dfm_actions(
     *,
     refinement_passes: int = 8,
     trace_top_k: int = 5,
+    collect_diagnostics: bool = True,
 ) -> LocalPolicyBatchResult:
     """Run strict batched localized-DFM policy inference.
 
@@ -428,8 +435,7 @@ def select_local_dfm_actions(
         )
 
     checked_boards = tuple(
-        _require_standard_board(item, name=f"boards[{row}]")
-        for row, item in enumerate(board_items)
+        _require_standard_board(item, name=f"boards[{row}]") for row, item in enumerate(board_items)
     )
     for row, (board, history) in enumerate(zip(checked_boards, history_items, strict=True)):
         _validate_history(board, history, row=row)
@@ -479,9 +485,7 @@ def select_local_dfm_actions(
                 f"({ACTION_VOCAB_SIZE},), got {mask.shape}"
             )
         if mask.dtype != np.dtype(np.bool_):
-            raise LocalPolicyError(
-                f"legacy root mask for row {row} must have boolean dtype"
-            )
+            raise LocalPolicyError(f"legacy root mask for row {row} must have boolean dtype")
         representable_count = int(np.count_nonzero(mask))
         if representable_count == 0:
             raise LocalPolicyError(
@@ -495,40 +499,62 @@ def select_local_dfm_actions(
     current_planes = np.stack(planes_list, axis=0)
     root_legal_mask = np.stack(masks, axis=0)
     try:
-        inference_result = infer_dfm_from_current(
-            model,
-            current_planes,
-            root_legal_mask,
-            refinement_passes=refinement_passes,
-            trace_top_k=trace_top_k,
-            action_codec_id=ACTION_CODEC_LEGACY_ABSOLUTE_1858,
-        )
-        inference_result = jax.block_until_ready(inference_result)
-    except TimeoutError:
-        raise
-    except Exception as exc:
-        raise LocalPolicyError("localized DFM inference failed closed") from exc
-
-    try:
         horizon = int(model.config.horizon)
     except (AttributeError, TypeError, ValueError) as exc:
         raise LocalPolicyError("model.config must expose an integer horizon") from exc
     if horizon < 1:
         raise LocalPolicyError(f"model.config.horizon must be >= 1, got {horizon}")
 
-    actions, trace_arrays = _validate_trace(
-        inference_result,
-        batch_size=len(checked_boards),
-        horizon=horizon,
-        refinement_passes=refinement_passes,
-        trace_top_k=trace_top_k,
-        root_legal_mask=root_legal_mask,
-    )
+    diagnostics: LocalPolicyDiagnostics | None
+    try:
+        if collect_diagnostics:
+            inference_result = infer_dfm_from_current(
+                model,
+                current_planes,
+                root_legal_mask,
+                refinement_passes=refinement_passes,
+                trace_top_k=trace_top_k,
+                action_codec_id=ACTION_CODEC_LEGACY_ABSOLUTE_1858,
+            )
+            inference_result = jax.block_until_ready(inference_result)
+            actions, trace_arrays = _validate_trace(
+                inference_result,
+                batch_size=len(checked_boards),
+                horizon=horizon,
+                refinement_passes=refinement_passes,
+                trace_top_k=trace_top_k,
+                root_legal_mask=root_legal_mask,
+            )
+        else:
+            action_values = infer_dfm_actions_from_current(
+                model,
+                current_planes,
+                root_legal_mask,
+                refinement_passes=refinement_passes,
+                action_codec_id=ACTION_CODEC_LEGACY_ABSOLUTE_1858,
+            )
+            actions = np.asarray(jax.device_get(jax.block_until_ready(action_values)))
+            expected_shape = (len(checked_boards), horizon)
+            if actions.shape != expected_shape:
+                raise LocalPolicyError(
+                    f"lean inference actions must have shape {expected_shape}, got {actions.shape}"
+                )
+            _require_integer(actions, name="actions")
+            if np.any((actions < 0) | (actions >= ACTION_VOCAB_SIZE)):
+                raise LocalPolicyError(
+                    "lean inference actions contain a mask or out-of-range index"
+                )
+            trace_arrays = None
+    except TimeoutError:
+        raise
+    except LocalPolicyError:
+        raise
+    except Exception as exc:
+        raise LocalPolicyError("localized DFM inference failed closed") from exc
+
     selected_indices = np.asarray(actions[:, 0], dtype=np.int32)
     moves: list[chess.Move] = []
-    for row, (board, index) in enumerate(
-        zip(checked_boards, selected_indices, strict=True)
-    ):
+    for row, (board, index) in enumerate(zip(checked_boards, selected_indices, strict=True)):
         action_index = int(index)
         if not root_legal_mask[row, action_index]:
             raise LocalPolicyError(
@@ -544,32 +570,32 @@ def select_local_dfm_actions(
             ) from exc
         if round_trip_index != action_index or not board.is_legal(move):
             raise LocalPolicyError(
-                f"localized DFM action {action_index} decodes to an illegal move "
-                f"for row {row}"
+                f"localized DFM action {action_index} decodes to an illegal move for row {row}"
             )
         moves.append(move)
 
-    diagnostics = LocalPolicyDiagnostics(
-        input_format=POLICY_INPUT_FORMAT,
-        plane_history_mode=PLANE_HISTORY_MODE_CURRENT_ONLY_AS_PREPROCESSED,
-        action_codec_id=ACTION_CODEC_LEGACY_ABSOLUTE_1858,
-        refinement_passes=refinement_passes,
-        trace_top_k=trace_top_k,
-        encoded_planes_shape=tuple(current_planes.shape),
-        legal_move_counts=_readonly(legal_move_counts),
-        representable_legal_action_counts=_readonly(representable_counts),
-        times=_readonly(trace_arrays["times"]),
-        actions_before=_readonly(trace_arrays["actions_before"]),
-        actions_after=_readonly(trace_arrays["actions_after"]),
-        root_raw_entropy=_readonly(trace_arrays["root_raw_entropy"]),
-        root_raw_legal_mass=_readonly(trace_arrays["root_raw_legal_mass"]),
-        root_legal_entropy=_readonly(trace_arrays["root_legal_entropy"]),
-        root_legal_topk_indices=_readonly(trace_arrays["root_legal_topk_indices"]),
-        root_legal_topk_probabilities=_readonly(
-            trace_arrays["root_legal_topk_probabilities"]
-        ),
-        root_legal_topk_valid=_readonly(trace_arrays["root_legal_topk_valid"]),
-    )
+    if trace_arrays is None:
+        diagnostics = None
+    else:
+        diagnostics = LocalPolicyDiagnostics(
+            input_format=POLICY_INPUT_FORMAT,
+            plane_history_mode=PLANE_HISTORY_MODE_CURRENT_ONLY_AS_PREPROCESSED,
+            action_codec_id=ACTION_CODEC_LEGACY_ABSOLUTE_1858,
+            refinement_passes=refinement_passes,
+            trace_top_k=trace_top_k,
+            encoded_planes_shape=tuple(current_planes.shape),
+            legal_move_counts=_readonly(legal_move_counts),
+            representable_legal_action_counts=_readonly(representable_counts),
+            times=_readonly(trace_arrays["times"]),
+            actions_before=_readonly(trace_arrays["actions_before"]),
+            actions_after=_readonly(trace_arrays["actions_after"]),
+            root_raw_entropy=_readonly(trace_arrays["root_raw_entropy"]),
+            root_raw_legal_mass=_readonly(trace_arrays["root_raw_legal_mass"]),
+            root_legal_entropy=_readonly(trace_arrays["root_legal_entropy"]),
+            root_legal_topk_indices=_readonly(trace_arrays["root_legal_topk_indices"]),
+            root_legal_topk_probabilities=_readonly(trace_arrays["root_legal_topk_probabilities"]),
+            root_legal_topk_valid=_readonly(trace_arrays["root_legal_topk_valid"]),
+        )
     return LocalPolicyBatchResult(
         action_indices=_readonly(selected_indices, dtype=np.int32),
         moves=tuple(moves),
