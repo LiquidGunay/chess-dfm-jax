@@ -70,6 +70,7 @@ EXPERIMENT_OVERRIDES: dict[str, Any] = {
     "lr_warmup_steps": 0,
     # "jepa_norm_loss_coeff": 0.0,
     # "jepa_pred_sigreg_coeff": 1.0,
+    # "jepa_sigreg_estimator": "u_stat",
     # "jepa_target_stop_gradient": True,
     # "jepa_target_semantics": "ema",
     # "jepa_target_ema_decay": 0.99,
@@ -163,6 +164,7 @@ class JointLatentSASAConfig:
     jepa_sigreg_coeff: float = 0.1
     jepa_pred_sigreg_coeff: float = 0.0
     jepa_sigreg_kind: str = "le_jepa"
+    jepa_sigreg_estimator: str = "v_stat"
     jepa_sigreg_proj_dim: int = 1024
     value_coeff: float = 0.0
     wdl_coeff: float = 0.0
@@ -234,6 +236,13 @@ class TargetVarianceHingeResult(NamedTuple):
     feature_std_median_by_horizon: jax.Array
     active_fraction_by_horizon: jax.Array
     hinge_by_horizon: jax.Array
+
+
+class LeJepaSigRegStatistics(NamedTuple):
+    official: jax.Array
+    v_stat_discrepancy: jax.Array
+    u_stat_discrepancy: jax.Array
+    valid_count: jax.Array
 
 
 def per_horizon_target_variance_hinge(
@@ -343,7 +352,7 @@ def _sync_rng_for_pmap(
     return jax.lax.pmin(rng, axis_name=axis_name)
 
 
-def _official_le_jepa_sigreg_loss(
+def _le_jepa_sigreg_statistics(
     z: jnp.ndarray,
     *,
     proj_dim: int,
@@ -352,18 +361,25 @@ def _official_le_jepa_sigreg_loss(
     axis_name: str | None = None,
     t_max: float = 3.0,
     n_points: int = 17,
-) -> jnp.ndarray:
-    """LeJEPA Epps-Pulley SIGReg with random slices.
+    compute_u_stat: bool = False,
+) -> LeJepaSigRegStatistics:
+    """LeJEPA Epps-Pulley statistics with random slices.
 
     This follows the official structure:
       1. Project latents onto random unit directions.
       2. Match each projected empirical characteristic function to N(0, 1).
       3. Average the Epps-Pulley statistic over slices.
+
+    The optional U-statistic removes the diagonal self-pair term from the
+    squared empirical characteristic function. It is unbiased across
+    independently sampled batches, but unlike the V-statistic it is not
+    invariant to duplicating the same observations.
     """
     z = jnp.asarray(z, dtype=jnp.float32)
     sample_count, dim = z.shape
     if sample_count == 0:
-        return jnp.zeros((), dtype=jnp.float32)
+        zero = jnp.zeros((), dtype=jnp.float32)
+        return LeJepaSigRegStatistics(zero, zero, zero, zero)
 
     rng = _sync_rng_for_pmap(rng, axis_name)
     directions = jax.random.normal(
@@ -416,11 +432,74 @@ def _official_le_jepa_sigreg_loss(
 
     err = jnp.square(cos_mean - phi[None, :]) + jnp.square(sin_mean)
     per_slice = (err @ weights) * global_sample_count
-    return jnp.where(
+    official = jnp.where(
         global_sample_count > 0.0,
         jnp.mean(per_slice),
         jnp.zeros((), dtype=jnp.float32),
     )
+    v_stat_discrepancy = official / jnp.maximum(
+        global_sample_count,
+        1.0,
+    )
+
+    if compute_u_stat:
+        squared_weight_sum = jnp.sum(jnp.square(sample_weight))
+        if axis_name is not None:
+            squared_weight_sum = jax.lax.psum(
+                squared_weight_sum,
+                axis_name=axis_name,
+            )
+        pair_denominator = (
+            jnp.square(global_sample_count) - squared_weight_sum
+        )
+        off_diagonal_ecf_squared = (
+            jnp.square(cos_sum)
+            + jnp.square(sin_sum)
+            - squared_weight_sum
+        ) / jnp.maximum(pair_denominator, 1.0)
+        u_error = (
+            off_diagonal_ecf_squared
+            - 2.0 * phi[None, :] * cos_mean
+            + jnp.square(phi)[None, :]
+        )
+        u_stat_discrepancy = jnp.where(
+            pair_denominator > 0.0,
+            jnp.mean(u_error @ weights),
+            jnp.zeros((), dtype=jnp.float32),
+        )
+    else:
+        u_stat_discrepancy = jnp.zeros((), dtype=jnp.float32)
+
+    return LeJepaSigRegStatistics(
+        official,
+        v_stat_discrepancy,
+        u_stat_discrepancy,
+        global_sample_count,
+    )
+
+
+def _official_le_jepa_sigreg_loss(
+    z: jnp.ndarray,
+    *,
+    proj_dim: int,
+    rng: jnp.ndarray,
+    sample_weight: jnp.ndarray | None = None,
+    axis_name: str | None = None,
+    t_max: float = 3.0,
+    n_points: int = 17,
+) -> jnp.ndarray:
+    """Published valid-count-scaled LeJEPA Epps-Pulley statistic."""
+
+    return _le_jepa_sigreg_statistics(
+        z,
+        proj_dim=proj_dim,
+        rng=rng,
+        sample_weight=sample_weight,
+        axis_name=axis_name,
+        t_max=t_max,
+        n_points=n_points,
+        compute_u_stat=False,
+    ).official
 
 
 def _quantile_sigreg_loss(
@@ -1762,6 +1841,10 @@ def joint_stage1_loss_fn(
             jepa_mask,
         )
     jepa_sigreg_loss = jnp.asarray(0.0, dtype=jnp.float32)
+    jepa_sigreg_u_stat_discrepancy = jnp.asarray(
+        0.0,
+        dtype=jnp.float32,
+    )
     valid_all = jnp.concatenate([valid[:, None], valid[:, None] * future_valid], axis=1)
     sigreg_weight = valid_all.reshape((-1,))
     sigreg_valid_count = jnp.sum(sigreg_weight)
@@ -1777,16 +1860,34 @@ def joint_stage1_loss_fn(
                     rng=rng_sigreg,
                 )
             elif model.config.jepa_sigreg_kind == "le_jepa":
-                jepa_sigreg_loss = _official_le_jepa_sigreg_loss(
-                    sigreg_tokens,
-                    proj_dim=model.config.jepa_sigreg_proj_dim,
-                    rng=rng_sigreg,
-                    sample_weight=sigreg_weight,
-                    axis_name=sigreg_axis_name,
-                )
+                if model.config.jepa_sigreg_estimator == "u_stat":
+                    sigreg_statistics = _le_jepa_sigreg_statistics(
+                        sigreg_tokens,
+                        proj_dim=model.config.jepa_sigreg_proj_dim,
+                        rng=rng_sigreg,
+                        sample_weight=sigreg_weight,
+                        axis_name=sigreg_axis_name,
+                        compute_u_stat=True,
+                    )
+                    jepa_sigreg_loss = sigreg_statistics.official
+                    jepa_sigreg_u_stat_discrepancy = (
+                        sigreg_statistics.u_stat_discrepancy
+                    )
+                else:
+                    jepa_sigreg_loss = _official_le_jepa_sigreg_loss(
+                        sigreg_tokens,
+                        proj_dim=model.config.jepa_sigreg_proj_dim,
+                        rng=rng_sigreg,
+                        sample_weight=sigreg_weight,
+                        axis_name=sigreg_axis_name,
+                    )
             else:
                 raise ValueError(f"Unsupported jepa_sigreg_kind: {model.config.jepa_sigreg_kind!r}")
     jepa_pred_sigreg_loss = jnp.asarray(0.0, dtype=jnp.float32)
+    jepa_pred_sigreg_u_stat_discrepancy = jnp.asarray(
+        0.0,
+        dtype=jnp.float32,
+    )
     pred_sigreg_weight = (future_valid_for_loss * valid[:, None]).reshape((-1,))
     pred_sigreg_valid_count = jnp.sum(pred_sigreg_weight)
     if model.config.jepa_pred_sigreg_coeff != 0.0:
@@ -1801,13 +1902,31 @@ def joint_stage1_loss_fn(
                     rng=rng_sigreg,
                 )
             elif model.config.jepa_sigreg_kind == "le_jepa":
-                jepa_pred_sigreg_loss = _official_le_jepa_sigreg_loss(
-                    pred_sigreg_tokens,
-                    proj_dim=model.config.jepa_sigreg_proj_dim,
-                    rng=rng_sigreg,
-                    sample_weight=pred_sigreg_weight,
-                    axis_name=sigreg_axis_name,
-                )
+                if model.config.jepa_sigreg_estimator == "u_stat":
+                    pred_sigreg_statistics = _le_jepa_sigreg_statistics(
+                        pred_sigreg_tokens,
+                        proj_dim=model.config.jepa_sigreg_proj_dim,
+                        rng=rng_sigreg,
+                        sample_weight=pred_sigreg_weight,
+                        axis_name=sigreg_axis_name,
+                        compute_u_stat=True,
+                    )
+                    jepa_pred_sigreg_loss = (
+                        pred_sigreg_statistics.official
+                    )
+                    jepa_pred_sigreg_u_stat_discrepancy = (
+                        pred_sigreg_statistics.u_stat_discrepancy
+                    )
+                else:
+                    jepa_pred_sigreg_loss = (
+                        _official_le_jepa_sigreg_loss(
+                            pred_sigreg_tokens,
+                            proj_dim=model.config.jepa_sigreg_proj_dim,
+                            rng=rng_sigreg,
+                            sample_weight=pred_sigreg_weight,
+                            axis_name=sigreg_axis_name,
+                        )
+                    )
             else:
                 raise ValueError(f"Unsupported jepa_sigreg_kind: {model.config.jepa_sigreg_kind!r}")
 
@@ -2021,6 +2140,17 @@ def joint_stage1_loss_fn(
                 ),
             }
         )
+    if model.config.jepa_sigreg_estimator == "u_stat":
+        aux.update(
+            {
+                "jepa_sigreg_u_stat_discrepancy": (
+                    jepa_sigreg_u_stat_discrepancy
+                ),
+                "jepa_pred_sigreg_u_stat_discrepancy": (
+                    jepa_pred_sigreg_u_stat_discrepancy
+                ),
+            }
+        )
     if positive_target_override is not None:
         aux.update(
             {
@@ -2203,6 +2333,27 @@ def validate_objective_config(
             "exact compatibility; use --objective normalized for the "
             "no-norm ablation."
         )
+    if config.jepa_sigreg_estimator not in ("v_stat", "u_stat"):
+        raise ValueError(
+            "jepa_sigreg_estimator must be 'v_stat' or 'u_stat', found "
+            f"{config.jepa_sigreg_estimator!r}"
+        )
+    if (
+        config.jepa_sigreg_estimator == "u_stat"
+        and objective != "normalized"
+    ):
+        raise ValueError(
+            "jepa_sigreg_estimator='u_stat' requires "
+            "--objective normalized."
+        )
+    if (
+        config.jepa_sigreg_estimator == "u_stat"
+        and config.jepa_sigreg_kind != "le_jepa"
+    ):
+        raise ValueError(
+            "jepa_sigreg_estimator='u_stat' requires "
+            "jepa_sigreg_kind='le_jepa'."
+        )
     if config.jepa_target_semantics not in ("online", "ema"):
         raise ValueError(
             "jepa_target_semantics must be 'online' or 'ema', found "
@@ -2370,6 +2521,7 @@ class SigRegResult(NamedTuple):
     official: jax.Array
     valid_count: jax.Array
     discrepancy: jax.Array
+    u_stat_discrepancy: jax.Array
 
 
 def _json_default(value: Any) -> Any:
@@ -3143,6 +3295,7 @@ def build_research_resume_contract(
             config.jepa_target_stop_gradient
         ),
         "jepa_norm_loss_coeff": float(config.jepa_norm_loss_coeff),
+        "jepa_sigreg_estimator": config.jepa_sigreg_estimator,
         "target_sigreg_coeff": float(config.jepa_sigreg_coeff),
         "pred_sigreg_coeff": float(config.jepa_pred_sigreg_coeff),
         "target_sigreg_reference_count": float(sigreg_reference_count),
@@ -3256,13 +3409,18 @@ def normalized_le_jepa_sigreg(
     sample_weight: jax.Array | None = None,
     t_max: float = 3.0,
     n_points: int = 17,
+    estimator: str = "v_stat",
 ) -> SigRegResult:
-    """Batch-count-invariant LeJEPA ECF discrepancy.
+    """Fixed-reference LeJEPA ECF discrepancy.
 
     ``official`` preserves the published Epps-Pulley statistic
     ``valid_count * discrepancy`` for diagnostics. ``normalized`` replaces the
-    variable valid count with a fixed reference count, so duplicating or
-    zero-padding a batch does not change the optimized scalar.
+    variable valid count with a fixed reference count.
+
+    The default V-statistic is invariant to exact duplication and zero padding,
+    but retains a finite-sample self-pair bias. ``estimator="u_stat"`` removes
+    that diagonal term for independently sampled batches; it deliberately is
+    not invariant to duplicating the same observations.
 
     This function operates on one physical batch. Epps-Pulley is non-additive,
     so callers must not average independently evaluated microbatch results.
@@ -3274,39 +3432,37 @@ def normalized_le_jepa_sigreg(
         raise ValueError(f"reference_count must be positive, got {reference_count}")
     if n_points < 2:
         raise ValueError(f"n_points must be >= 2, got {n_points}")
+    if estimator not in ("v_stat", "u_stat"):
+        raise ValueError(
+            "estimator must be 'v_stat' or 'u_stat', found "
+            f"{estimator!r}"
+        )
 
-    z = jnp.asarray(z, dtype=jnp.float32)
-    sample_count, dim = z.shape
-    directions = jax.random.normal(rng, (dim, proj_dim), dtype=jnp.float32)
-    directions = directions / jnp.maximum(
-        jnp.linalg.norm(directions, axis=0, keepdims=True),
-        1e-12,
+    statistics = _le_jepa_sigreg_statistics(
+        z,
+        proj_dim=proj_dim,
+        rng=rng,
+        sample_weight=sample_weight,
+        t_max=t_max,
+        n_points=n_points,
+        compute_u_stat=True,
     )
-    if sample_weight is None:
-        sample_weight = jnp.ones((sample_count,), dtype=jnp.float32)
-    sample_weight = jnp.maximum(jnp.asarray(sample_weight, dtype=jnp.float32), 0.0)
-
-    projected = z @ directions
-    t = jnp.linspace(0.0, t_max, n_points, dtype=jnp.float32)
-    dt = jnp.asarray(t_max / (n_points - 1), dtype=jnp.float32)
-    quadrature = jnp.full((n_points,), 2.0 * dt, dtype=jnp.float32)
-    quadrature = quadrature.at[0].set(dt)
-    quadrature = quadrature.at[-1].set(dt)
-    normal_ecf = jnp.exp(-0.5 * jnp.square(t))
-    quadrature = quadrature * normal_ecf
-
-    xt = projected[:, :, None] * t[None, None, :]
-    weight = sample_weight[:, None, None]
-    valid_count = jnp.sum(sample_weight)
-    denom = jnp.maximum(valid_count, 1.0)
-    cos_mean = jnp.sum(jnp.cos(xt) * weight, axis=0) / denom
-    sin_mean = jnp.sum(jnp.sin(xt) * weight, axis=0) / denom
-    error = jnp.square(cos_mean - normal_ecf[None, :]) + jnp.square(sin_mean)
-    discrepancy = jnp.mean(error @ quadrature)
-    discrepancy = jnp.where(valid_count > 0.0, discrepancy, 0.0)
-    official = discrepancy * valid_count
-    normalized = discrepancy * jnp.asarray(reference_count, dtype=jnp.float32)
-    return SigRegResult(normalized, official, valid_count, discrepancy)
+    selected = (
+        statistics.v_stat_discrepancy
+        if estimator == "v_stat"
+        else statistics.u_stat_discrepancy
+    )
+    normalized = selected * jnp.asarray(
+        reference_count,
+        dtype=jnp.float32,
+    )
+    return SigRegResult(
+        normalized,
+        statistics.official,
+        statistics.valid_count,
+        statistics.v_stat_discrepancy,
+        statistics.u_stat_discrepancy,
+    )
 
 
 def legal_mass_fp32(
@@ -3552,11 +3708,11 @@ def normalized_stage1_loss_fn(
     pred_reference_count: float,
     positive_target_override: jax.Array | None = None,
 ) -> tuple[jax.Array, dict[str, jax.Array]]:
-    """Compatibility loss with corrected count scaling and legal bounds.
+    """Compatibility loss with finite-sample SIGReg and legal corrections.
 
-    The compatibility forward graph's official EP statistics are converted to
-    fixed-reference discrepancies algebraically, preserving their exact
-    gradients while removing valid-count scaling.
+    The V-statistic path converts the compatibility graph's official EP
+    statistic to a fixed-reference discrepancy algebraically. The U-statistic
+    path additionally removes the diagonal empirical-ECF self-pair term.
     """
 
     _, compatibility_aux = joint_stage1_loss_fn(
@@ -3583,12 +3739,26 @@ def normalized_stage1_loss_fn(
         dtype=jnp.float32,
     )
 
-    target_normalized = target_official * (
+    target_v_stat = target_official * (
         jnp.asarray(target_reference_count, dtype=jnp.float32) / jnp.maximum(target_count, 1.0)
     )
-    pred_normalized = pred_official * (
+    pred_v_stat = pred_official * (
         jnp.asarray(pred_reference_count, dtype=jnp.float32) / jnp.maximum(pred_count, 1.0)
     )
+    if model.config.jepa_sigreg_estimator == "u_stat":
+        target_normalized = jnp.asarray(
+            compatibility_aux["jepa_sigreg_u_stat_discrepancy"],
+            dtype=jnp.float32,
+        ) * jnp.asarray(target_reference_count, dtype=jnp.float32)
+        pred_normalized = jnp.asarray(
+            compatibility_aux[
+                "jepa_pred_sigreg_u_stat_discrepancy"
+            ],
+            dtype=jnp.float32,
+        ) * jnp.asarray(pred_reference_count, dtype=jnp.float32)
+    else:
+        target_normalized = target_v_stat
+        pred_normalized = pred_v_stat
 
     corrected_first_legality = jnp.asarray(
         compatibility_aux["first_legality_loss_fp32"],
@@ -3637,6 +3807,15 @@ def normalized_stage1_loss_fn(
             ),
         }
     )
+    if model.config.jepa_sigreg_estimator == "u_stat":
+        aux.update(
+            {
+                "jepa_sigreg_v_stat_loss": target_v_stat,
+                "jepa_pred_sigreg_v_stat_loss": pred_v_stat,
+                "jepa_sigreg_u_stat_loss": target_normalized,
+                "jepa_pred_sigreg_u_stat_loss": pred_normalized,
+            }
+        )
     return loss, aux
 
 
@@ -3926,6 +4105,15 @@ def parse_args(
     parser.add_argument("--target-sigreg-coeff", type=float)
     parser.add_argument("--pred-sigreg-coeff", type=float)
     parser.add_argument(
+        "--sigreg-estimator",
+        choices=("v_stat", "u_stat"),
+        help=(
+            "Finite-sample estimator for normalized LeJEPA SIGReg. "
+            "v_stat preserves duplication invariance; u_stat removes "
+            "the diagonal self-pair bias."
+        ),
+    )
+    parser.add_argument(
         "--jepa-norm-loss-coeff",
         type=float,
         help=(
@@ -4110,6 +4298,11 @@ def apply_config_overrides(
             if args.pred_sigreg_coeff is None
             else args.pred_sigreg_coeff
         ),
+        jepa_sigreg_estimator=(
+            config.jepa_sigreg_estimator
+            if args.sigreg_estimator is None
+            else args.sigreg_estimator
+        ),
         jepa_norm_loss_coeff=(
             config.jepa_norm_loss_coeff
             if args.jepa_norm_loss_coeff is None
@@ -4283,21 +4476,26 @@ def checkpoint_evaluation_contract(
         "jepa_target_semantics": config.jepa_target_semantics,
         "jepa_target_stop_gradient": bool(config.jepa_target_stop_gradient),
         "jepa_norm_loss_coeff": float(config.jepa_norm_loss_coeff),
+        "jepa_sigreg_estimator": config.jepa_sigreg_estimator,
         "target_sigreg_coeff": float(config.jepa_sigreg_coeff),
         "pred_sigreg_coeff": float(config.jepa_pred_sigreg_coeff),
+    }
+    legacy_objective_defaults = {
+        "jepa_norm_loss_coeff": 1.0,
+        "jepa_sigreg_estimator": "v_stat",
     }
     mismatches = {
         key: (
             objective_contract.get(
                 key,
-                1.0 if key == "jepa_norm_loss_coeff" else None,
+                legacy_objective_defaults.get(key),
             ),
             expected,
         )
         for key, expected in expected_values.items()
         if objective_contract.get(
             key,
-            1.0 if key == "jepa_norm_loss_coeff" else None,
+            legacy_objective_defaults.get(key),
         )
         != expected
     }

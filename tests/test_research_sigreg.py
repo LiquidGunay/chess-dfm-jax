@@ -77,6 +77,126 @@ def test_normalized_sigreg_ignores_zero_weight_padding() -> None:
     np.testing.assert_allclose(base.official, padded.official, rtol=1e-6, atol=1e-6)
 
 
+def test_u_stat_sigreg_matches_explicit_off_diagonal_pairs() -> None:
+    z = jax.random.normal(jax.random.PRNGKey(6), (5, 7))
+    rng = jax.random.PRNGKey(7)
+    proj_dim = 8
+    t_max = 3.0
+    n_points = 17
+    result = normalized_le_jepa_sigreg(
+        z,
+        proj_dim=proj_dim,
+        rng=rng,
+        reference_count=1.0,
+        t_max=t_max,
+        n_points=n_points,
+        estimator="u_stat",
+    )
+
+    directions = jax.random.normal(
+        rng,
+        (z.shape[1], proj_dim),
+        dtype=jnp.float32,
+    )
+    directions = directions / jnp.maximum(
+        jnp.linalg.norm(directions, axis=0, keepdims=True),
+        1e-12,
+    )
+    projected = jnp.asarray(z, dtype=jnp.float32) @ directions
+    t = jnp.linspace(0.0, t_max, n_points, dtype=jnp.float32)
+    dt = jnp.asarray(t_max / (n_points - 1), dtype=jnp.float32)
+    quadrature = jnp.full((n_points,), 2.0 * dt, dtype=jnp.float32)
+    quadrature = quadrature.at[0].set(dt)
+    quadrature = quadrature.at[-1].set(dt)
+    normal_ecf = jnp.exp(-0.5 * jnp.square(t))
+    quadrature = quadrature * normal_ecf
+
+    pair_delta = (
+        projected[:, None, :, None]
+        - projected[None, :, :, None]
+    ) * t[None, None, None, :]
+    off_diagonal = (
+        1.0
+        - jnp.eye(z.shape[0], dtype=jnp.float32)
+    )[:, :, None, None]
+    pair_ecf_squared = (
+        jnp.sum(jnp.cos(pair_delta) * off_diagonal, axis=(0, 1))
+        / (z.shape[0] * (z.shape[0] - 1))
+    )
+    cos_mean = jnp.mean(
+        jnp.cos(projected[:, :, None] * t[None, None, :]),
+        axis=0,
+    )
+    expected_error = (
+        pair_ecf_squared
+        - 2.0 * normal_ecf[None, :] * cos_mean
+        + jnp.square(normal_ecf)[None, :]
+    )
+    expected = jnp.mean(expected_error @ quadrature)
+
+    np.testing.assert_allclose(
+        result.u_stat_discrepancy,
+        expected,
+        rtol=2e-5,
+        atol=2e-6,
+    )
+    np.testing.assert_allclose(
+        result.normalized,
+        expected,
+        rtol=2e-5,
+        atol=2e-6,
+    )
+
+
+def test_u_stat_sigreg_ignores_zero_weight_padding() -> None:
+    z = jax.random.normal(jax.random.PRNGKey(8), (5, 9))
+    padding = jax.random.normal(jax.random.PRNGKey(9), (4, 9)) * 100.0
+    base = normalized_le_jepa_sigreg(
+        z,
+        proj_dim=16,
+        rng=jax.random.PRNGKey(10),
+        estimator="u_stat",
+    )
+    padded = normalized_le_jepa_sigreg(
+        jnp.concatenate([z, padding], axis=0),
+        proj_dim=16,
+        rng=jax.random.PRNGKey(10),
+        sample_weight=jnp.concatenate(
+            [jnp.ones((5,)), jnp.zeros((4,))]
+        ),
+        estimator="u_stat",
+    )
+
+    np.testing.assert_allclose(
+        base.normalized,
+        padded.normalized,
+        rtol=1e-6,
+        atol=1e-6,
+    )
+    np.testing.assert_allclose(
+        base.u_stat_discrepancy,
+        padded.u_stat_discrepancy,
+        rtol=1e-6,
+        atol=1e-6,
+    )
+
+
+def test_u_stat_sigreg_requires_two_positive_weight_samples() -> None:
+    z = jax.random.normal(jax.random.PRNGKey(11), (3, 5))
+    result = normalized_le_jepa_sigreg(
+        z,
+        proj_dim=8,
+        rng=jax.random.PRNGKey(12),
+        sample_weight=jnp.asarray([1.0, 0.0, 0.0]),
+        estimator="u_stat",
+    )
+
+    np.testing.assert_array_equal(
+        np.asarray(result.normalized),
+        np.asarray(0.0, dtype=np.float32),
+    )
+
+
 def test_legal_mass_is_fp32_and_bounded() -> None:
     probs = jnp.asarray([[0.6, 0.6, 0.0]], dtype=jnp.bfloat16)
     legal_idx = jnp.asarray([[0, 1, 2]], dtype=jnp.int32)

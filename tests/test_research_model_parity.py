@@ -236,6 +236,45 @@ def test_legacy_objective_requires_compatibility_norm_loss():
     )
 
 
+@pytest.mark.parametrize(
+    ("updates", "objective", "message"),
+    [
+        (
+            {"jepa_sigreg_estimator": "not-an-estimator"},
+            "normalized",
+            "must be 'v_stat' or 'u_stat'",
+        ),
+        (
+            {"jepa_sigreg_estimator": "u_stat"},
+            "legacy",
+            "requires --objective normalized",
+        ),
+        (
+            {
+                "jepa_sigreg_estimator": "u_stat",
+                "jepa_sigreg_kind": "moments",
+            },
+            "normalized",
+            "requires jepa_sigreg_kind='le_jepa'",
+        ),
+    ],
+)
+def test_invalid_sigreg_estimator_configs_fail_closed(
+    updates,
+    objective,
+    message,
+):
+    config = local.JointLatentSASAConfig(
+        **(_config_kwargs() | updates)
+    )
+
+    with pytest.raises(ValueError, match=message):
+        local.validate_objective_config(
+            objective=objective,
+            config=config,
+        )
+
+
 def test_experiment_then_cli_override_precedence_and_resume_contract(
     monkeypatch,
 ):
@@ -264,6 +303,7 @@ def test_experiment_then_cli_override_precedence_and_resume_contract(
     default_args = local.parse_args([])
     assert default_args.jepa_target_stop_gradient is None
     assert default_args.jepa_norm_loss_coeff is None
+    assert default_args.sigreg_estimator is None
     assert default_args.learning_rate is None
     assert default_args.bt4_learning_rate is None
     assert default_args.train_batch_schedule == "shard_major"
@@ -282,6 +322,8 @@ def test_experiment_then_cli_override_precedence_and_resume_contract(
             "0.5",
             "--jepa-norm-loss-coeff",
             "0",
+            "--sigreg-estimator",
+            "u_stat",
             "--learning-rate",
             "2.5e-5",
             "--bt4-learning-rate",
@@ -299,6 +341,7 @@ def test_experiment_then_cli_override_precedence_and_resume_contract(
     assert disabled_config.jepa_target_stop_gradient is False
     assert disabled_config.jepa_sigreg_coeff == 0.5
     assert disabled_config.jepa_norm_loss_coeff == 0.0
+    assert disabled_config.jepa_sigreg_estimator == "u_stat"
     assert disabled_config.learning_rate == 2.5e-5
     assert disabled_config.bt4_learning_rate == 1e-6
     assert disabled_args.train_batch_schedule == "global_permutation"
@@ -345,12 +388,14 @@ def test_experiment_then_cli_override_precedence_and_resume_contract(
     )
     assert contract["model_config"]["jepa_sigreg_coeff"] == 0.25
     assert contract["model_config"]["jepa_norm_loss_coeff"] == 1.0
+    assert contract["model_config"]["jepa_sigreg_estimator"] == "v_stat"
     assert (
         contract["objective"]["jepa_target_stop_gradient"]
         is True
     )
     assert contract["objective"]["target_sigreg_coeff"] == 0.25
     assert contract["objective"]["jepa_norm_loss_coeff"] == 1.0
+    assert contract["objective"]["jepa_sigreg_estimator"] == "v_stat"
     assert contract["data"]["schedule"] == train_provenance
 
 
@@ -416,6 +461,7 @@ def test_local_config_and_initialized_model_match_legacy_exactly():
             "jepa_target_semantics",
             "jepa_target_ema_decay",
             "jepa_norm_loss_coeff",
+            "jepa_sigreg_estimator",
             "jepa_target_variance_hinge_coeff",
             "jepa_target_variance_hinge_gamma",
             "jepa_state_fixed_unit_rms",
@@ -449,6 +495,12 @@ def test_local_config_and_initialized_model_match_legacy_exactly():
             "jepa_norm_loss_coeff"
         ].default
         == 1.0
+    )
+    assert (
+        local.JointLatentSASAConfig.__dataclass_fields__[
+            "jepa_sigreg_estimator"
+        ].default
+        == "v_stat"
     )
 
     kwargs = _config_kwargs()
@@ -770,6 +822,58 @@ def test_norm_coefficient_only_changes_its_positive_loss_contribution():
     np.testing.assert_allclose(
         np.asarray(compatibility_loss - no_norm_loss),
         np.asarray(compatibility_aux["jepa_norm_loss"]),
+        rtol=1e-6,
+        atol=1e-6,
+    )
+
+
+def test_normalized_objective_selects_u_stat_and_retains_v_diagnostic():
+    model = local.JointLatentSASAModel(
+        DummyEncoder(),
+        local.JointLatentSASAConfig(
+            **(
+                _config_kwargs()
+                | {
+                    "jepa_norm_loss_coeff": 0.0,
+                    "jepa_sigreg_estimator": "u_stat",
+                }
+            )
+        ),
+        rngs=nnx.Rngs(38),
+    )
+
+    loss, aux = local.normalized_stage1_loss_fn(
+        model,
+        _batch(),
+        jax.random.PRNGKey(108),
+        1.0,
+        1.0,
+    )
+
+    assert jnp.isfinite(loss)
+    _assert_trees_exact(
+        aux["jepa_sigreg_loss"],
+        aux["jepa_sigreg_u_stat_loss"],
+    )
+    _assert_trees_exact(
+        aux["jepa_pred_sigreg_loss"],
+        aux["jepa_pred_sigreg_u_stat_loss"],
+    )
+    np.testing.assert_allclose(
+        np.asarray(aux["jepa_sigreg_v_stat_loss"]),
+        np.asarray(
+            aux["jepa_sigreg_official_loss"]
+            / aux["jepa_sigreg_valid_count"]
+        ),
+        rtol=1e-6,
+        atol=1e-6,
+    )
+    np.testing.assert_allclose(
+        np.asarray(aux["jepa_pred_sigreg_v_stat_loss"]),
+        np.asarray(
+            aux["jepa_pred_sigreg_official_loss"]
+            / aux["jepa_pred_sigreg_valid_count"]
+        ),
         rtol=1e-6,
         atol=1e-6,
     )
