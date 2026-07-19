@@ -5,7 +5,10 @@ revised on 2026-07-19; unattended research remains disabled with
 `AUTORESEARCH_READY = False`. Compatibility v2/update 300 remains the
 repeat-qualified control. The no-norm target-SIGReg-5.76,
 prediction-SIGReg-1.0 v2/update-400 checkpoint is now the repeat-qualified
-corrected offline baseline for strength evaluation. It is not Elo-promoted.
+corrected baseline. Its 128-pair searchless strength anchors are complete: it
+is indistinguishable from the recovered DFM/JEPA source at this resolution,
+but substantially weaker in point estimate than the original raw BT4 policy.
+It is not Elo-promoted.
 
 The agreed critical path is now:
 
@@ -23,13 +26,18 @@ The agreed critical path is now:
 The A10G is single-tenant throughout this sequence. Training, profiling,
 arena evaluation, and SAE work do not run concurrently.
 
-Execution update, 2026-07-19: critical-path steps 1--4 are complete. The norm
+Execution update, 2026-07-19: critical-path steps 1--5 are complete. The norm
 coefficient is explicit, normalized SIGReg uses a fixed random example count,
 batch 128 is the selected throughput knee, and the matched objective screens
 and two 30-minute corrected repeats are complete. The corrected loss, physical
 batch, learning rates, validation population, and checkpoint-selection
-contract are frozen for the relative-Elo stage. Architecture autoresearch and
-SAE work remain gated on strength anchors.
+contract are frozen. The corrected checkpoint scored `49.61%` against the
+recovered source (`-2.7` descriptive logistic Elo, pair-aware 95% interval
+`[-88.0,+82.2]`) and `38.09%` against raw BT4 (`-84.4`, interval
+`[-181.0,+0.6]`). The representation-study strength precondition is therefore
+satisfied. Stage-0/1 read-only representation work may begin, sequentially on
+the A10G; unattended architecture search remains disabled until checkpoint
+retention and free-space policy are frozen.
 
 This document is the implementation contract for turning the existing
 TPU/cloud-oriented BT4 + DFM + JEPA experiment into a fast, measurable,
@@ -790,6 +798,27 @@ second comparison as evidence. Use the correctness tier first, then the
 128-pair screen for checkpoints that pass the offline gates. The broad 16-pair
 interval is pipeline evidence only.
 
+The first two strength anchors completed on 2026-07-19:
+
+| Opponent | Candidate score | Logistic relative Elo | Pair-aware 95% interval | Pentanomial | Cap draws |
+| --- | ---: | ---: | ---: | --- | ---: |
+| Recovered step 265,000 DFM/JEPA | 49.61% | -2.7 | [-88.0, +82.2] | [0, 4, 122, 2, 0] | 3/256 |
+| Original raw BT4 | 38.09% | -84.4 | [-181.0, +0.6] | [10, 42, 75, 1, 0] | 0/256 |
+
+These are model-pool-relative descriptive estimates, not human, Lichess, or
+absolute Elo. The source comparison is unresolved at 128 pairs. The raw-BT4
+point estimate is large and nearly excludes equality under the deliberately
+conservative bounded-pair interval, but the upper endpoint remains slightly
+positive, so it is not a formal superiority claim.
+
+The raw-BT4 run had no raw-adapter fault and complete canonical-codec
+coverage. The corrected DFM had two fail-closed `no_representable_move` losses.
+Both exact final positions were black to move with only four legal promotion
+moves, confirming the preregistered legacy-codec limitation rather than an
+inference failure. Converting both fault losses to draws changes the raw-BT4
+comparison point estimate only to about `-81.5` logistic Elo. The result is
+retained with the actual fail-closed scoring.
+
 Arena tiers:
 
 1. 16 opening pairs for correctness only;
@@ -891,6 +920,12 @@ checkpoint and the raw BT4 anchor. Do not run SAE training concurrently with
 model training, profiling, or arena evaluation; the single A10G performs one
 of these workloads at a time. Elo-aligned checkpoints, rather than merely the
 lowest-loss checkpoint, determine the first representation comparison set.
+
+That precondition was satisfied on 2026-07-19. The first frozen comparison set
+is now original raw BT4, recovered step 265,000, compatibility v2/update 300,
+and corrected v2/update 400. Begin with the read-only Stage-0 hook/parity gate
+and dense Stage-1 drift measurements. Do not download or train sparse
+replacements until the source hook ABI and FP32 parity gate pass.
 
 Use an identical fixed board/trajectory corpus and consistent hook semantics for:
 
@@ -1095,15 +1130,20 @@ sweeps, held-out data, and repeated seeds.
   first pilot-valid limit.
 - [x] Add the sealed O(1) trusted-history arena path in commit `c2d5efb` and
   establish exact CPU gameplay-payload parity across 83 focused tests.
-- [ ] Establish real-checkpoint GPU parity and timing for the sealed-history
-  path, then run full fault-free 128-pair screens at cap 256 against the
-  recovered DFM/JEPA checkpoint and, after adapter validation, raw BT4. The
-  pre-optimization pilot timings are not evidence of optimized speed.
+- [x] Establish real-checkpoint GPU parity and timing for the sealed-history
+  path and run both 128-pair cap-256 screens. The recovered-source result is
+  `-2.7` logistic Elo with interval `[-88.0,+82.2]`; the raw-BT4 result is
+  `-84.4` with interval `[-181.0,+0.6]`. Raw BT4 had complete coverage and no
+  faults. Three source-run cap draws and the corrected DFM's known legacy-codec
+  promotion faults are reported rather than hidden.
 - [x] Regenerate and repin the promotion pool after exact replay found entry
   1,245 claim-draw terminal. Two v3 source regenerations were byte-identical,
   all 2,048 final histories pass the production replay loader, selected
   validation/test overlap is zero, and the evaluator is reopened on the
   immutable v3 pins.
-- [ ] Keep SAE training and representation interventions deferred until those
-  relative-Elo anchors exist; thereafter schedule all SAE GPU work
-  sequentially after training and arena jobs.
+- [x] Keep SAE training and representation interventions deferred until both
+  relative-Elo anchors exist.
+- [ ] Implement the read-only representation Stage-0 hook/parity gate, then
+  run dense Stage-1 drift on the frozen four-model comparison set. Schedule all
+  representation GPU work sequentially; sparse downloads/training remain
+  gated on source parity.

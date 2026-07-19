@@ -1,7 +1,9 @@
 # BT4 Sparse-Replacement and Representation Study
 
-Status: design and compatibility contract. No published sparse artifact has
-yet passed the source-model parity gate described below.
+Status: implementation may begin at the read-only Stage-0/1 gates. The
+corrected checkpoint now has 128-pair strength anchors against both the
+recovered DFM/JEPA source and original raw BT4. No published sparse artifact
+has yet passed the source-model parity gate described below.
 
 This document defines how to compare the original BT4 backbone with the
 recovered step-265,000 backbone, promoted intermediate checkpoints, and a final
@@ -41,9 +43,18 @@ The minimum comparison set is:
 
 - the original local self-play/policy-tuned BT4 source;
 - the recovered step-265,000 joint checkpoint;
-- log-spaced checkpoints from promoted local runs;
-- the final selected BT4 + DFM + JEPA checkpoint; and
+- compatibility v2/update 300 as the norm-on local control;
+- corrected no-norm v2/update 400 as the first selected BT4 + DFM + JEPA
+  checkpoint;
+- preregistered log-spaced checkpoints from later promoted local runs; and
 - scratch or alternative-pretraining controls when those experiments begin.
+
+The corrected checkpoint state SHA-256 is
+`cbeb1bafa74d0983ae4c0cad2a33c405c3507b2428c5bcebbe4fb7f8df44aa61`.
+At 128 paired openings it scored `49.61%` against the recovered joint source
+and `38.09%` against raw BT4. Those results select the comparison set; they do
+not claim promotion, absolute Elo, or that lower validation loss improved
+chess strength.
 
 For every model, record the repository commit, complete effective training
 configuration, parameter digest, checkpoint step, parameter dtype, compute
@@ -443,6 +454,9 @@ separate paired ablation, not an undocumented performance optimization.
 ## Staged experiment plan
 
 The stages are ordered. Later stages cannot repair a failed earlier ABI gate.
+The strength precondition is complete; Stage 0 is the current implementation
+target. The GPU remains single-tenant, so capture/parity jobs must not overlap
+training or arena jobs.
 
 ### Stage 0: capture and source-parity gate
 

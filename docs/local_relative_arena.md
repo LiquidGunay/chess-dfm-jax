@@ -1,9 +1,9 @@
 # Local relative-strength arena
 
 `research/evaluate_arena.py` is the checked, in-process evaluator for the
-localized JointLatentSASA/DFM policy. It reports checkpoint-versus-checkpoint
-strength only. Its logistic and normalized Elo values are not human, Lichess,
-or absolute Elo.
+localized JointLatentSASA/DFM policy and the original raw BT4 policy head. It
+reports model-pool-relative strength only. Its logistic and normalized Elo
+values are not human, Lichess, or absolute Elo.
 
 The evaluator does not use Stockfish, an opening book, or a puzzle dataset. It
 uses the pinned ply-12 validation/test pools and exact standard-game history
@@ -21,6 +21,13 @@ training preprocessing.
   partial gameplay batches;
 - root legality in the recovered `legacy_absolute_1858` codec; and
 - normal `python-chess` outcomes or a symmetric additional-ply-cap draw.
+
+With `--opponent-raw-bt4`, the opponent instead uses the immutable original
+BF16 BT4 policy head and the complete board-aware
+`lc0_canonical_1858` codec. Both models still receive current-only classical
+planes under the frozen preprocessing contract. The evaluator records a
+separate codec capability for each side; logits and masks are never remapped
+between codecs.
 
 JEPA prediction is a training auxiliary and is not executed or fed back into
 actions in this baseline. Illegal actions, timeouts, exceptions, nonfinite
@@ -125,6 +132,31 @@ strength.
 
 ## Current empirical status
 
+Corrected no-norm target-SIGReg-5.76/prediction-SIGReg-1.0 v2/update 400 has
+completed both 128-pair development anchors at cap 256:
+
+- versus recovered step 265,000: score `0.49609375`, descriptive logistic Elo
+  `-2.714`, pair-aware 95% interval `[-87.959,+82.198]`, three cap draws, and
+  one source-side legacy-codec fault;
+- versus original raw BT4: score `0.380859375`, descriptive logistic Elo
+  `-84.410`, pair-aware 95% interval `[-180.965,+0.625]`, no cap draws, no
+  raw-BT4 fault, and two candidate-side legacy-codec promotion faults.
+
+The two raw-anchor faults occurred only after the game reached a black pawn
+promotion position with no non-promotion legal move. Treating both as draws
+would change the point estimate only to about `-81.5` Elo; immutable scoring
+retains the preregistered fail-closed losses. These screens establish the
+initial strength anchors, not promotion or absolute strength.
+
+The state files are
+`artifacts/arena/corrected-nonorm-target5p76-pred1-v2-u400-vs-source-development-128pairs-cap256-v1/state.json`
+(SHA-256
+`5ba9efa4593806d538a038be86669e9a439b7d3ae8380d78a8ef2b4c9b183e92`)
+and
+`artifacts/arena/corrected-nonorm-target5p76-pred1-v2-u400-vs-raw-bt4-development-128pairs-cap256-v1/state.json`
+(SHA-256
+`0bb0ef97628364da76970d7247f66d58d9cfef25d94fdd58b648f10b0334fc13`).
+
 V2/update 300 versus source completed the 16-pair correctness tier with zero
 faults, a representable fraction of `1.0` for both models, and no incomplete
 coverage position. All 32 games reached the 16-ply additional cap, so the run
@@ -173,6 +205,17 @@ research/run_gpu.sh .venv/bin/python research/evaluate_arena.py \
   --tier development \
   --additional-ply-cap 128 \
   --output-dir artifacts/arena/EXPERIMENT-vs-INCUMBENT-development
+```
+
+Use the original BT4 policy anchor without supplying a DFM checkpoint:
+
+```bash
+research/run_gpu.sh .venv/bin/python research/evaluate_arena.py \
+  --candidate research/runs/EXPERIMENT/checkpoints/update00000500 \
+  --opponent-raw-bt4 \
+  --tier development \
+  --additional-ply-cap 256 \
+  --output-dir artifacts/arena/EXPERIMENT-vs-raw-bt4-development
 ```
 
 Resume the exact same contract after interruption:

@@ -1860,6 +1860,62 @@ the warmed profile is
 `artifacts/profiles/inference-step265k-a10g-steady-v2.json` (file SHA-256
 `e457d95d7be97bbb0a264cd8a8a1a944ebd884337c30519485e35991f7cbe237`).
 
+### Corrected relative-strength anchors
+
+Commit `2d1fbc5` adds a separate raw-BT4 arena policy. It runs the original
+frozen policy head in BF16 with current-only classical planes, uses the
+board-aware `lc0_canonical_1858` codec, requires full legal-move coverage, and
+shares the arena's frozen static-batch and sealed-history contracts. It never
+remaps logits into the recovered DFM's legacy codec. The opt-in real-asset GPU
+test matches direct BF16 canonical policy selection on white- and black-to-move
+positions. The independent FP32 NNX/reference forward agrees within the
+existing `5e-4` BT4 tolerance and chooses the same masked legal actions.
+
+Corrected v2/update 400 then completed both frozen 128-pair development
+anchors at additional-ply cap 256:
+
+| Opponent | Score | W-D-L | Logistic Elo | Pair-aware 95% interval | Normalized-Elo diagnostic | Cap draws |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Recovered step 265,000 DFM/JEPA | 49.61% | 2-250-4 | -2.7 | [-88.0, +82.2] | -17.8 | 3 |
+| Original raw BT4 | 38.09% | 1-193-62 | -84.4 | [-181.0, +0.6] | -180.4 | 0 |
+
+The source pentanomial is `[0,4,122,2,0]`; raw BT4 is
+`[10,42,75,1,0]`. These are descriptive model-pool-relative statistics, not
+human or absolute Elo. The source comparison is unresolved. The raw-BT4 point
+estimate is large, but its conservative interval still extends `0.6` Elo
+above equality and is not reported as a formal significance or promotion
+claim.
+
+The source run recorded one source-side `no_representable_move` loss and three
+cap draws. The raw-BT4 run recorded zero opponent faults, complete canonical
+coverage, and no cap draw. Its two candidate faults were both exact
+black-to-move positions where the only legal actions were the four promotion
+moves:
+
+- `5k2/8/4QB2/2K4P/8/P1P2PP1/p2RR3/8 b - - 0 62`;
+- `3k1bR1/1P6/2K5/1B1NQ3/8/P7/P1Pp1P2/8 b - - 0 51`.
+
+In both positions, the legal moves are exactly the queen, rook, bishop, and
+knight promotions from the advanced black pawn. This is the preregistered
+`legacy_absolute_1858` coverage limitation, not a raw-adapter or model
+exception. A draw-for-both-faults sensitivity changes the raw comparison only
+to about `-81.5` logistic Elo; the immutable arena retains fail-closed losses.
+
+The source and raw development states have SHA-256 digests
+`5ba9efa4593806d538a038be86669e9a439b7d3ae8380d78a8ef2b4c9b183e92`
+and
+`0bb0ef97628364da76970d7247f66d58d9cfef25d94fdd58b648f10b0334fc13`.
+Their corresponding 16-pair correctness states have SHA-256
+`d0da60e8497313869b9c0c84ecb937e171f4e85c07d9048f712fe47bde872954`
+and
+`3947d57c4415f85893a74e57f1f0c9d7b42de54eb0ecc274207ffe5bcc5f6770`.
+
+At physical batch 16, the raw development run used `33.35 ms` per raw-BT4
+policy call versus `43.11 ms` per corrected eight-pass DFM call. Gameplay took
+`138.81 s` for raw BT4 and `199.64 s` for the recovered-source comparison;
+game lengths differ, so total wall-time is reported rather than treated as a
+head-to-head throughput benchmark.
+
 ## Next acceptance point
 
 The corrected loss is now frozen for strength evaluation:
@@ -1875,18 +1931,20 @@ The corrected loss is now frozen for strength evaluation:
 
 Corrected v1/update 300 and v2/update 400 reproduce the same offline policy and
 representation tradeoff. V2/update 400 is the selected corrected baseline;
-compatibility v2/update 300 remains the norm-on control. The next acceptance
-work is to:
+compatibility v2/update 300 remains the norm-on control. Both initial strength
+anchors now exist, so the next acceptance work is to:
 
-- run real-checkpoint GPU payload parity and timing for the corrected
-  checkpoint on the sealed-history arena path;
-- complete fault-free 128-pair relative-strength screens at the pilot-valid
-  cap 256 against the recovered DFM/JEPA source and, after adapter validation,
-  raw BT4;
-- report pair-aware confidence intervals and inference cost without relabeling
-  relative model-pool Elo as human or Lichess Elo; and
-- calibrate a strength-valid long-game cap if cap adjudication reappears.
+- implement the read-only five-hook BT4 capture path and prove that capture
+  leaves the unmodified FP32 source forward unchanged;
+- run dense representation drift on the frozen raw/source/compatibility/
+  corrected comparison set before loading a sparse artifact;
+- freeze a checkpoint-retention and disk-space policy before another
+  30-minute training run; and
+- preregister the first post-baseline architecture experiment and its
+  checkpoint schedule.
 
-Until those strength anchors exist, `AUTORESEARCH_READY = False`,
-`research/results.tsv` remains header-only, architecture search stays closed,
-and SAE work remains deferred.
+`AUTORESEARCH_READY` remains `False` and `research/results.tsv` remains
+header-only while those operational contracts are settled. This no longer
+blocks read-only Stage-0/1 representation work. Sparse-artifact download,
+causal replacement, and SAE/TC/LoRSA training remain gated on source hook and
+FP32 parity.
