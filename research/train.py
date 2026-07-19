@@ -72,6 +72,7 @@ EXPERIMENT_OVERRIDES: dict[str, Any] = {
     # "jepa_target_ema_decay": 0.99,
     # "jepa_target_variance_hinge_coeff": 1.0,
     # "jepa_target_variance_hinge_gamma": 0.9,
+    # "jepa_state_fixed_unit_rms": True,
 }
 
 DEFAULT_RUN_ROOT = REPO_ROOT / "checkpoints" / "source" / "step0265000"
@@ -92,6 +93,7 @@ GRADIENT_COMPONENT_NAMES = (
 TARGET_VARIANCE_HINGE_COMPONENT = "target_variance_hinge"
 GRADIENT_GROUP_NAMES = ("backbone", "dfm", "jepa", "other", "all")
 TARGET_VARIANCE_HINGE_EPSILON = 1e-4
+JEPA_STATE_RMS_EPSILON = 1e-6
 
 UNEVALUATED_LEGACY_AUX_METRICS = frozenset(
     {
@@ -176,6 +178,7 @@ class JointLatentSASAConfig:
     unfreeze_bt4_encoder: bool = True
     bt4_encode_chunk_size: int = 0
     jepa_state_rmsnorm: bool = False
+    jepa_state_fixed_unit_rms: bool = False
     jepa_state_rms_scale_max: float = 2.0
     jepa_teacher_forcing_steps: int = 0
     jepa_delta_rms_clip: float = 0.5
@@ -866,6 +869,7 @@ class JointLatentSASAModel(nnx.Module):
             config.z_dim,
             param_dtype=param_dtype,
             compute_dtype=compute_dtype,
+            eps=JEPA_STATE_RMS_EPSILON,
         )
         self.value_wdl_head = VectorValueWDLHead(
             config.z_dim,
@@ -1030,6 +1034,20 @@ class JointLatentSASAModel(nnx.Module):
     def normalize_jepa_state(self, z: jnp.ndarray) -> jnp.ndarray:
         """Shared bounded RMSNorm for the JEPA state manifold."""
 
+        if self.config.jepa_state_fixed_unit_rms:
+            stats_z = jnp.asarray(z, dtype=jnp.float32)
+            inv_rms = jax.lax.rsqrt(
+                jnp.mean(
+                    jnp.square(stats_z),
+                    axis=-1,
+                    keepdims=True,
+                )
+                + self.jepa_state_norm.eps
+            )
+            return jnp.asarray(
+                stats_z * inv_rms,
+                dtype=self.compute_dtype,
+            )
         z = jnp.asarray(z, dtype=self.compute_dtype)
         if not self.config.jepa_state_rmsnorm:
             return z
@@ -1288,6 +1306,20 @@ class EmaTargetModel(nnx.Module):
         )
 
     def normalize_jepa_state(self, z: jnp.ndarray) -> jnp.ndarray:
+        if self.config.jepa_state_fixed_unit_rms:
+            stats_z = jnp.asarray(z, dtype=jnp.float32)
+            inv_rms = jax.lax.rsqrt(
+                jnp.mean(
+                    jnp.square(stats_z),
+                    axis=-1,
+                    keepdims=True,
+                )
+                + self.jepa_state_norm.eps
+            )
+            return jnp.asarray(
+                stats_z * inv_rms,
+                dtype=self.compute_dtype,
+            )
         z = jnp.asarray(z, dtype=self.compute_dtype)
         if not self.config.jepa_state_rmsnorm:
             return z
@@ -1826,15 +1858,28 @@ def joint_stage1_loss_fn(
     shuffled_jepa_cosine_loss = jnp.asarray(0.0, dtype=jnp.float32)
     shuffled_mean_token_cosine = jnp.asarray(0.0, dtype=jnp.float32)
     action_contrast_loss = jnp.asarray(0.0, dtype=jnp.float32)
-    jepa_state_rms_scale_raw = jnp.asarray(model.jepa_state_norm.scale[...], dtype=jnp.float32)
-    jepa_state_rms_scale = jepa_state_rms_scale_raw
-    if model.config.jepa_state_rms_scale_max > 0.0:
-        jepa_state_rms_scale_cap = jnp.asarray(model.config.jepa_state_rms_scale_max, dtype=jnp.float32)
-        jepa_state_rms_scale = jnp.clip(
-            jepa_state_rms_scale_raw,
-            1.0 / jepa_state_rms_scale_cap,
-            jepa_state_rms_scale_cap,
+    if model.config.jepa_state_fixed_unit_rms:
+        jepa_state_rms_scale_raw = jnp.ones(
+            (model.config.z_dim,),
+            dtype=jnp.float32,
         )
+        jepa_state_rms_scale = jepa_state_rms_scale_raw
+    else:
+        jepa_state_rms_scale_raw = jnp.asarray(
+            model.jepa_state_norm.scale[...],
+            dtype=jnp.float32,
+        )
+        jepa_state_rms_scale = jepa_state_rms_scale_raw
+        if model.config.jepa_state_rms_scale_max > 0.0:
+            jepa_state_rms_scale_cap = jnp.asarray(
+                model.config.jepa_state_rms_scale_max,
+                dtype=jnp.float32,
+            )
+            jepa_state_rms_scale = jnp.clip(
+                jepa_state_rms_scale_raw,
+                1.0 / jepa_state_rms_scale_cap,
+                jepa_state_rms_scale_cap,
+            )
 
     unclipped_loss = (
         model.config.dfm_ce_coeff * dfm_ce_loss
@@ -1948,6 +1993,19 @@ def joint_stage1_loss_fn(
                 ),
                 "jepa_target_variance_hinge_by_horizon": (
                     target_variance_hinge.hinge_by_horizon
+                ),
+            }
+        )
+    if model.config.jepa_state_fixed_unit_rms:
+        aux.update(
+            {
+                "jepa_state_fixed_unit_rms": jnp.asarray(
+                    1.0,
+                    dtype=jnp.float32,
+                ),
+                "jepa_state_trainable_scale_used": jnp.asarray(
+                    0.0,
+                    dtype=jnp.float32,
                 ),
             }
         )
@@ -2182,6 +2240,39 @@ def validate_objective_config(
         raise ValueError(
             "Target variance hinge requires --objective normalized."
         )
+    if config.jepa_state_fixed_unit_rms:
+        if objective != "normalized":
+            raise ValueError(
+                "Fixed-unit-RMS JEPA state requires --objective normalized."
+            )
+        if config.jepa_state_rmsnorm:
+            raise ValueError(
+                "Fixed-unit-RMS JEPA state cannot be combined with the "
+                "legacy trainable jepa_state_rmsnorm."
+            )
+        if config.jepa_target_semantics != "online":
+            raise ValueError(
+                "Fixed-unit-RMS JEPA state initially requires online "
+                "targets and cannot be combined with EMA targets."
+            )
+        if config.jepa_target_stop_gradient:
+            raise ValueError(
+                "Fixed-unit-RMS JEPA state cannot be combined with "
+                "target stop-gradient."
+            )
+        if variance_hinge_coeff != 0.0:
+            raise ValueError(
+                "Fixed-unit-RMS JEPA state cannot be combined with the "
+                "target variance hinge."
+            )
+        if (
+            config.jepa_state_rms_scale_max
+            != JointLatentSASAConfig.jepa_state_rms_scale_max
+        ):
+            raise ValueError(
+                "jepa_state_rms_scale_max is inert in fixed-unit-RMS "
+                "mode; keep its default."
+            )
 
 
 def flatten_metrics(metrics: dict[str, Any]) -> dict[str, float]:
@@ -2784,12 +2875,14 @@ def load_research_checkpoint(
 def serialized_model_config(
     config: JointLatentSASAConfig,
 ) -> dict[str, Any]:
-    """Serialize config without changing disabled-hinge legacy contracts."""
+    """Serialize config without changing disabled-ablation contracts."""
 
     payload = dataclasses.asdict(config)
     if config.jepa_target_variance_hinge_coeff == 0.0:
         payload.pop("jepa_target_variance_hinge_coeff")
         payload.pop("jepa_target_variance_hinge_gamma")
+    if not config.jepa_state_fixed_unit_rms:
+        payload.pop("jepa_state_fixed_unit_rms")
     return payload
 
 
@@ -2839,6 +2932,24 @@ def build_research_resume_contract(
             "validity": "valid*future_valid",
             "minimum_valid_count_per_horizon": 2.0,
             "horizon_reduction": "equal_mean_over_eligible_horizons",
+        }
+    if config.jepa_state_fixed_unit_rms:
+        objective_contract["jepa_state_manifold"] = {
+            "kind": "fixed_unit_rms",
+            "formula": "z/sqrt(mean(z^2)+epsilon)",
+            "epsilon": JEPA_STATE_RMS_EPSILON,
+            "statistics_dtype": "float32",
+            "output_dtype": config.compute_dtype,
+            "application_scope": [
+                "projected_current_state",
+                "projected_future_targets",
+                "each_recurrent_jepa_prediction",
+            ],
+            "stored_scale_parameter": (
+                "retained_for_checkpoint_abi_only"
+            ),
+            "stored_scale_parameter_read_by_objective": False,
+            "stored_scale_parameter_loss_gradient": "exact_zero",
         }
     if config.jepa_target_semantics == "ema":
         objective_contract["jepa_target_ema"] = {
@@ -3617,6 +3728,15 @@ def parse_args(
             "--target-variance-hinge-coeff is nonzero."
         ),
     )
+    parser.add_argument(
+        "--jepa-state-fixed-unit-rms",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help=(
+            "Project every JEPA state onto a fixed unit-RMS manifold "
+            "using FP32 statistics and no trainable scale."
+        ),
+    )
     parser.add_argument("--sigreg-reference-count", type=float, default=1.0)
     parser.add_argument("--batch-size", type=int, default=1)
     parser.add_argument(
@@ -3723,6 +3843,11 @@ def apply_config_overrides(
             config.jepa_target_variance_hinge_gamma
             if args.target_variance_hinge_gamma is None
             else args.target_variance_hinge_gamma
+        ),
+        jepa_state_fixed_unit_rms=(
+            config.jepa_state_fixed_unit_rms
+            if args.jepa_state_fixed_unit_rms is None
+            else args.jepa_state_fixed_unit_rms
         ),
     )
 
