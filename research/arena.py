@@ -23,6 +23,10 @@ import chess
 import numpy as np
 
 from chess_dfm_jax.data.trajectory_v3 import TRAJECTORY_V3
+from chess_dfm_jax.policy import (
+    ACTION_CODEC_LC0_CANONICAL_1858,
+    ACTION_CODEC_LEGACY_ABSOLUTE_1858,
+)
 from research.prepare import require_within_workspace
 
 
@@ -33,7 +37,7 @@ LEGACY_INCOMPLETE_PROMOTION_COVERAGE_LIMITATION = (
     "legacy_lc0_1858_codec_has_incomplete_promotion_coverage"
 )
 LEGACY_ACTION_CODEC_CAPABILITY = {
-    "action_codec_id": "legacy_absolute_1858",
+    "action_codec_id": ACTION_CODEC_LEGACY_ABSOLUTE_1858,
     "complete_legal_move_coverage": False,
     "unrepresentable_move_classes": [
         "white_knight_promotion",
@@ -47,6 +51,28 @@ LEGACY_ACTION_CODEC_CAPABILITY = {
         "selected_action_is_a_loss"
     ),
 }
+CANONICAL_ACTION_CODEC_CAPABILITY = {
+    "action_codec_id": ACTION_CODEC_LC0_CANONICAL_1858,
+    "complete_legal_move_coverage": True,
+    "unrepresentable_move_classes": [],
+    "unrepresentable_policy": (
+        "board_aware_unique_legal_decode; no_remap_or_fallback"
+    ),
+}
+
+
+def action_codec_capability(codec_id: str) -> dict[str, Any]:
+    """Return a detached, persisted capability record for one policy codec."""
+
+    capabilities = {
+        ACTION_CODEC_LEGACY_ABSOLUTE_1858: LEGACY_ACTION_CODEC_CAPABILITY,
+        ACTION_CODEC_LC0_CANONICAL_1858: CANONICAL_ACTION_CODEC_CAPABILITY,
+    }
+    try:
+        capability = capabilities[codec_id]
+    except KeyError as exc:
+        raise ValueError(f"Unsupported arena action codec: {codec_id!r}") from exc
+    return json.loads(json.dumps(capability))
 
 NORMAL_TERMINATION = "normal"
 PLY_CAP_TERMINATION = "ply_cap"
@@ -100,6 +126,9 @@ def arena_foundation_contract() -> dict[str, Any]:
         },
         "legacy_action_codec": json.loads(
             json.dumps(LEGACY_ACTION_CODEC_CAPABILITY)
+        ),
+        "canonical_action_codec": json.loads(
+            json.dumps(CANONICAL_ACTION_CODEC_CAPABILITY)
         ),
         "known_limitations": [
             {
@@ -1565,6 +1594,7 @@ class GSPRTState:
 
 __all__ = [
     "ArenaGameSpec",
+    "CANONICAL_ACTION_CODEC_CAPABILITY",
     "DRAW_RESULT",
     "FAILURE_TERMINATIONS",
     "GAME_TERMINATIONS",
@@ -1587,6 +1617,7 @@ __all__ = [
     "PLY_CAP_TERMINATION",
     "PentanomialStats",
     "ScoreEloInterval",
+    "action_codec_capability",
     "arena_foundation_contract",
     "build_opening_pool",
     "canonicalize_fen",

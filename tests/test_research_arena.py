@@ -550,3 +550,7 @@ def test_foundation_contract_records_adapters_promotion_and_codec_handicap():
     assert "black_knight_promotion" in codec[
         "unrepresentable_move_classes"
     ]
+    canonical_codec = contract["canonical_action_codec"]
+    assert canonical_codec["action_codec_id"] == "lc0_canonical_1858"
+    assert canonical_codec["complete_legal_move_coverage"] is True
+    assert canonical_codec["unrepresentable_move_classes"] == []

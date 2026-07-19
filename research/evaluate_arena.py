@@ -36,11 +36,15 @@ from flax import nnx
 
 from chess_dfm_jax.analysis.profile_targets import load_mapped_bt4_params
 from chess_dfm_jax.nnx_bt4 import make_bt4_model
-from chess_dfm_jax.policy import legal_action_mask
+from chess_dfm_jax.policy import (
+    ACTION_CODEC_LC0_CANONICAL_1858,
+    ACTION_CODEC_LEGACY_ABSOLUTE_1858,
+    legal_action_mask,
+)
 from research.arena import (
     GSPRTConfig,
     GSPRTState,
-    LEGACY_ACTION_CODEC_CAPABILITY,
+    action_codec_capability,
     load_opening_pool,
     make_color_reversed_pairs,
     pair_aware_score_elo_interval,
@@ -55,9 +59,14 @@ from research.arena_history_trust import (
 )
 from research.import_legacy import import_legacy_checkpoint
 from research.local_policy import (
+    PLANE_HISTORY_MODE_CURRENT_ONLY_AS_PREPROCESSED,
     STATIC_INFERENCE_BATCHING_SCHEMA,
     STATIC_INFERENCE_PADDING_MODE,
     LocalDFMPolicy,
+)
+from research.raw_bt4_policy import (
+    RAW_BT4_POLICY_COMPUTE_DTYPE,
+    LocalBT4Policy,
 )
 from research.play_arena import (
     ArenaGameplayResult,
@@ -245,6 +254,7 @@ def _code_provenance() -> dict[str, Any]:
         "research/train.py",
         "research/inference.py",
         "research/local_policy.py",
+        "research/raw_bt4_policy.py",
         "research/arena_history_trust.py",
         "research/arena.py",
         "research/play_arena.py",
@@ -324,6 +334,8 @@ def research_checkpoint_descriptor(
         raise ValueError("Research checkpoint BT4 constructor digest mismatch.")
     descriptor = {
         "kind": "research",
+        "action_codec_id": ACTION_CODEC_LEGACY_ABSOLUTE_1858,
+        "plane_history_mode": PLANE_HISTORY_MODE_CURRENT_ONLY_AS_PREPROCESSED,
         "checkpoint_dir": str(checkpoint_dir),
         "manifest_path": str(manifest_path),
         "manifest_sha256": sha256_file(manifest_path),
@@ -373,6 +385,8 @@ def source_checkpoint_descriptor(
     model_path = require_within_workspace(models_dir / "BT4_exported.pb.gz")
     descriptor = {
         "kind": "source",
+        "action_codec_id": ACTION_CODEC_LEGACY_ABSOLUTE_1858,
+        "plane_history_mode": PLANE_HISTORY_MODE_CURRENT_ONLY_AS_PREPROCESSED,
         "run_root": str(run_root),
         "checkpoint_step": step,
         "state": {
@@ -388,6 +402,29 @@ def source_checkpoint_descriptor(
         },
     }
     return config, descriptor
+
+
+def raw_bt4_descriptor(
+    *,
+    models_dir: Path,
+) -> dict[str, Any]:
+    """Describe the immutable original BT4 policy checkpoint and semantics."""
+
+    model_path = require_within_workspace(models_dir / "BT4_exported.pb.gz")
+    if not model_path.is_file():
+        raise ValueError(f"Raw BT4 asset does not exist: {model_path}")
+    return {
+        "kind": "raw_bt4",
+        "action_codec_id": ACTION_CODEC_LC0_CANONICAL_1858,
+        "plane_history_mode": PLANE_HISTORY_MODE_CURRENT_ONLY_AS_PREPROCESSED,
+        "compute_dtype": RAW_BT4_POLICY_COMPUTE_DTYPE,
+        "search": "none_deterministic_greedy_policy_head",
+        "bt4_checkpoint": {
+            "path": str(model_path),
+            "size_bytes": model_path.stat().st_size,
+            "sha256": sha256_file(model_path),
+        },
+    }
 
 
 def _dtype(name: str) -> Any:
@@ -516,6 +553,37 @@ def load_source_policy(
             "source_step": imported.source_step,
             "source_sha256": imported.source_sha256,
             "optimizer_restored": imported.optimizer_restored,
+        },
+    )
+
+
+def load_raw_bt4_policy(
+    *,
+    bt4_params: dict[str, Any],
+    model_id: str,
+    inference_batch_size: int,
+) -> tuple[LocalBT4Policy, dict[str, Any]]:
+    """Construct the immutable BF16 raw-BT4 policy-head opponent."""
+
+    started = time.perf_counter()
+    model = make_bt4_model(
+        bt4_params,
+        dtype=jnp.bfloat16,
+        train_encoder=False,
+    )
+    elapsed = time.perf_counter() - started
+    return (
+        LocalBT4Policy(
+            model=model,
+            model_id=model_id,
+            inference_batch_size=inference_batch_size,
+            history_validation_mode=HISTORY_VALIDATION_TRUSTED_ARENA_ENDPOINT,
+        ),
+        {
+            "load_seconds": elapsed,
+            "compute_dtype": RAW_BT4_POLICY_COMPUTE_DTYPE,
+            "policy_head": "original_bt4",
+            "checkpoint_restore": "constructor_asset_weights",
         },
     )
 
@@ -1268,6 +1336,11 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Explicitly select source step 265000 (the default).",
     )
+    opponent.add_argument(
+        "--opponent-raw-bt4",
+        action="store_true",
+        help="Use the original board-aware canonical BT4 policy head.",
+    )
     parser.add_argument(
         "--tier",
         choices=tuple(FROZEN_TIERS),
@@ -1364,7 +1437,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         models_dir=models_dir,
     )
     candidate_id = "candidate-" + candidate_descriptor.descriptor["state"]["sha256"][:12]
-    if args.opponent_checkpoint is None:
+    if args.opponent_raw_bt4:
+        opponent_descriptor = raw_bt4_descriptor(models_dir=models_dir)
+        opponent_config = None
+        opponent_id = (
+            "raw-bt4-" + opponent_descriptor["bt4_checkpoint"]["sha256"][:12]
+        )
+    elif args.opponent_checkpoint is None:
         opponent_config, opponent_descriptor = source_checkpoint_descriptor(
             source_run_root=args.source_run_root,
             models_dir=models_dir,
@@ -1446,7 +1525,14 @@ def main(argv: Sequence[str] | None = None) -> int:
             if tier.promotion_eligible
             else None
         ),
-        "codec_capability": LEGACY_ACTION_CODEC_CAPABILITY,
+        "codec_capabilities": {
+            "candidate": action_codec_capability(
+                str(candidate_descriptor.descriptor["action_codec_id"])
+            ),
+            "opponent": action_codec_capability(
+                str(opponent_descriptor["action_codec_id"])
+            ),
+        },
         "code": _code_provenance(),
     }
 
@@ -1469,7 +1555,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         collect_diagnostics=args.collect_diagnostics,
         inference_batch_size=inference_batch_size,
     )
-    if args.opponent_checkpoint is None:
+    if args.opponent_raw_bt4:
+        opponent_policy, opponent_load = load_raw_bt4_policy(
+            bt4_params=bt4_params,
+            model_id=opponent_id,
+            inference_batch_size=inference_batch_size,
+        )
+    elif args.opponent_checkpoint is None:
         opponent_policy, opponent_load = load_source_policy(
             config=opponent_config,
             descriptor=opponent_descriptor,
