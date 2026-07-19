@@ -8,6 +8,12 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from chess_dfm_jax.data.trajectory import build_synthetic_trajectory_shard
+import chess_dfm_jax.data.trajectory_v3 as trajectory_v3_module
+from chess_dfm_jax.data.trajectory_v3 import (
+    trajectory_v3_from_v2_npz,
+    trajectory_v3_to_batch,
+)
 import research.prepare as prepare
 from research.prepare import (
     ASSET_MANIFEST_PATH,
@@ -19,6 +25,79 @@ from research.prepare import (
     load_asset_manifest,
     require_within_workspace,
 )
+
+
+def write_trajectory_split(
+    tmp_path: Path,
+    monkeypatch,
+    *,
+    shard_count: int = 2,
+    samples_per_shard: int = 6,
+    horizon: int = 4,
+) -> Path:
+    split_dir = tmp_path / (
+        f"trajectory-split-{len(list(tmp_path.glob('trajectory-split-*'))):03d}"
+    )
+    split_dir.mkdir()
+    for shard_index in range(shard_count):
+        shard = build_synthetic_trajectory_shard(
+            batch_size=samples_per_shard,
+            horizon=horizon,
+        )
+        payload = {
+            "schema_version": np.asarray("trajectory-v2"),
+            "planes_t": shard.planes_t,
+            "actions": shard.actions,
+            "planes_future": shard.planes_future,
+            "future_valid": shard.future_valid,
+            "legal_masks": shard.legal_masks,
+            "value_targets": (
+                shard.value_targets
+                + np.float32(shard_index)
+            ),
+            "wdl_targets": shard.wdl_targets,
+        }
+        compact = trajectory_v3_from_v2_npz(
+            payload,
+            legal_lmax=128,
+        )
+        np.savez_compressed(
+            split_dir / f"shard-{shard_index:03d}.npz",
+            **compact,
+        )
+    monkeypatch.setattr(
+        prepare,
+        "require_within_workspace",
+        lambda path: Path(path).resolve(),
+    )
+    return split_dir
+
+
+def full_decoded_shard(
+    path: Path,
+    *,
+    horizon: int,
+) -> dict[str, np.ndarray]:
+    with np.load(path, allow_pickle=False) as payload:
+        return trajectory_v3_to_batch(
+            payload,
+            view="joint_latent_sasa",
+            horizon=horizon,
+            include_metadata=False,
+        )
+
+
+def assert_batch_equal(
+    observed: dict[str, np.ndarray],
+    expected: dict[str, np.ndarray],
+) -> None:
+    assert observed.keys() == expected.keys()
+    for key in observed:
+        np.testing.assert_array_equal(
+            observed[key],
+            expected[key],
+            err_msg=key,
+        )
 
 
 def make_batch_schedule(
@@ -75,6 +154,25 @@ def make_batch_schedule(
         schedule,
         "_load_shard",
         load_identity_shard,
+    )
+
+    def decode_identity_rows(
+        path: Path,
+        *,
+        row_slice: slice | None,
+    ) -> dict[str, np.ndarray]:
+        batch = load_identity_shard(path)
+        if row_slice is None:
+            return batch
+        return {
+            key: value[row_slice]
+            for key, value in batch.items()
+        }
+
+    monkeypatch.setattr(
+        schedule,
+        "_decode_shard",
+        decode_identity_rows,
     )
     return schedule
 
@@ -290,3 +388,103 @@ def test_global_permutation_invalid_combinations_fail_closed(
             shuffle_files=True,
             batch_schedule="not-a-schedule",
         )
+
+
+def test_shard_major_default_decodes_and_caches_one_full_shard(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    split_dir = write_trajectory_split(tmp_path, monkeypatch)
+    schedule = FixedTrajectoryBatches(
+        split_dir,
+        batch_size=2,
+        horizon=3,
+        seed=7,
+        shuffle_files=False,
+    )
+    real_decoder = trajectory_v3_module.trajectory_v3_to_batch
+    row_slices = []
+
+    def record_decoder(data, **kwargs):
+        row_slices.append(kwargs.get("row_slice"))
+        return real_decoder(data, **kwargs)
+
+    monkeypatch.setattr(
+        trajectory_v3_module,
+        "trajectory_v3_to_batch",
+        record_decoder,
+    )
+
+    full = full_decoded_shard(schedule.paths[0], horizon=3)
+    first = schedule.batch_at(0)
+    second = schedule.batch_at(1)
+
+    assert schedule.batch_schedule == "shard_major"
+    assert row_slices == [None]
+    assert schedule._cached_path == schedule.paths[0]
+    assert schedule._cached_batch is not None
+    assert_batch_equal(
+        first,
+        {key: value[0:2] for key, value in full.items()},
+    )
+    assert_batch_equal(
+        second,
+        {key: value[2:4] for key, value in full.items()},
+    )
+
+
+def test_global_permutation_decodes_only_requested_rows(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    split_dir = write_trajectory_split(tmp_path, monkeypatch)
+    schedule = FixedTrajectoryBatches(
+        split_dir,
+        batch_size=2,
+        horizon=3,
+        seed=19,
+        shuffle_files=True,
+        batch_schedule="global_permutation",
+    )
+    real_decoder = trajectory_v3_module.trajectory_v3_to_batch
+    row_slices = []
+
+    def record_decoder(data, **kwargs):
+        row_slices.append(kwargs.get("row_slice"))
+        return real_decoder(data, **kwargs)
+
+    monkeypatch.setattr(
+        trajectory_v3_module,
+        "trajectory_v3_to_batch",
+        record_decoder,
+    )
+
+    for step in (0, 1):
+        shard_index, batch_in_shard = schedule._slot_for_step(step)
+        start = batch_in_shard * schedule.batch_size
+        end = start + schedule.batch_size
+        full = full_decoded_shard(
+            schedule.paths[shard_index],
+            horizon=3,
+        )
+        observed = schedule.batch_at(step)
+        assert_batch_equal(
+            observed,
+            {
+                key: value[start:end]
+                for key, value in full.items()
+            },
+        )
+
+    assert row_slices == [
+        slice(
+            schedule._slot_for_step(step)[1] * schedule.batch_size,
+            (
+                schedule._slot_for_step(step)[1] + 1
+            )
+            * schedule.batch_size,
+        )
+        for step in (0, 1)
+    ]
+    assert schedule._cached_path is None
+    assert schedule._cached_batch is None

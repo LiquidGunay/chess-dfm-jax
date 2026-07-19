@@ -4987,7 +4987,9 @@ def main() -> int:
             ),
             "update_order": "after_online_optimizer",
             "hard_acceptance_metrics": [
-                "steady_examples_per_second",
+                "steady_end_to_end_examples_per_second",
+                "training_wall_examples_per_second",
+                "steady_device_examples_per_second",
                 "steady_encoded_boards_per_second",
                 "gpu_memory.peak_bytes_in_use",
                 "gpu_monitor.memory_used_mib_max",
@@ -5062,8 +5064,11 @@ def main() -> int:
 
     updates = 0
     examples = 0
+    first_fetch_seconds: float | None = None
     first_update_seconds: float | None = None
+    steady_fetch_seconds: list[float] = []
     steady_update_seconds: list[float] = []
+    steady_iteration_seconds: list[float] = []
     final_train_metrics: dict[str, float] = {}
     deadline: float | None = float("inf") if args.train_seconds > 0 else None
     training_wall_started = time.perf_counter()
@@ -5131,11 +5136,16 @@ def main() -> int:
                 next_data_cursor += 1
                 examples += args.batch_size
                 if first_update_seconds is None:
+                    first_fetch_seconds = fetch_seconds
                     first_update_seconds = update_seconds
                     if args.train_seconds > 0:
                         deadline = time.perf_counter() + args.train_seconds
                 else:
+                    steady_fetch_seconds.append(fetch_seconds)
                     steady_update_seconds.append(update_seconds)
+                    steady_iteration_seconds.append(
+                        fetch_seconds + update_seconds
+                    )
 
                 final_train_metrics = {
                     "loss": float(loss),
@@ -5150,6 +5160,10 @@ def main() -> int:
                     "fetch_seconds": fetch_seconds,
                     "update_seconds": update_seconds,
                     "examples_per_second": args.batch_size / max(update_seconds, 1e-12),
+                    "end_to_end_examples_per_second": (
+                        args.batch_size
+                        / max(fetch_seconds + update_seconds, 1e-12)
+                    ),
                     **final_train_metrics,
                 }
                 metrics_log.write(json.dumps(record, sort_keys=True) + "\n")
@@ -5192,6 +5206,36 @@ def main() -> int:
         if steady_update_seconds
         else None
     )
+    steady_fetch_seconds_mean = (
+        float(np.mean(steady_fetch_seconds))
+        if steady_fetch_seconds
+        else None
+    )
+    steady_fetch_seconds_p50 = (
+        float(np.quantile(steady_fetch_seconds, 0.50))
+        if steady_fetch_seconds
+        else None
+    )
+    steady_fetch_seconds_p95 = (
+        float(np.quantile(steady_fetch_seconds, 0.95))
+        if steady_fetch_seconds
+        else None
+    )
+    steady_iteration_seconds_mean = (
+        float(np.mean(steady_iteration_seconds))
+        if steady_iteration_seconds
+        else None
+    )
+    steady_iteration_seconds_p50 = (
+        float(np.quantile(steady_iteration_seconds, 0.50))
+        if steady_iteration_seconds
+        else None
+    )
+    steady_iteration_seconds_p95 = (
+        float(np.quantile(steady_iteration_seconds, 0.95))
+        if steady_iteration_seconds
+        else None
+    )
     performance_seconds = steady_update_seconds_mean or first_update_seconds
     compiler_cost_analysis = compiler_cost_summary(compiler_cost_analysis_raw)
     performance = compiler_performance(compiler_cost_analysis, performance_seconds)
@@ -5204,10 +5248,47 @@ def main() -> int:
         )
     )
     throughput = {
+        "throughput_semantics": {
+            "steady_device_examples_per_second": (
+                "batch_size / accelerator update time; excludes host fetch"
+            ),
+            "steady_end_to_end_examples_per_second": (
+                "batch_size / (host fetch + accelerator update)"
+            ),
+            "training_wall_examples_per_second": (
+                "all examples / measured training-loop wall time; includes "
+                "first update, monitoring, and checkpoint saves"
+            ),
+            "steady_examples_per_second": (
+                "backward-compatible alias for "
+                "steady_device_examples_per_second"
+            ),
+        },
         "steady_examples_per_second": (
             None
             if steady_update_seconds_mean is None
             else args.batch_size / steady_update_seconds_mean
+        ),
+        "steady_device_examples_per_second": (
+            None
+            if steady_update_seconds_mean is None
+            else args.batch_size / steady_update_seconds_mean
+        ),
+        "steady_end_to_end_examples_per_second": (
+            None
+            if steady_iteration_seconds_mean is None
+            else args.batch_size / steady_iteration_seconds_mean
+        ),
+        "training_wall_examples_per_second": (
+            None
+            if training_wall_seconds <= 0.0
+            else examples / training_wall_seconds
+        ),
+        "steady_data_stall_fraction": (
+            None
+            if steady_fetch_seconds_mean is None
+            or steady_iteration_seconds_mean is None
+            else steady_fetch_seconds_mean / steady_iteration_seconds_mean
         ),
         "steady_encoded_boards_per_second": (
             None
@@ -5238,6 +5319,7 @@ def main() -> int:
             str(last_checkpoint_path) if last_checkpoint_path is not None else None
         ),
         "explicit_compile_seconds": explicit_compile_seconds,
+        "first_fetch_seconds": first_fetch_seconds,
         "first_update_seconds": first_update_seconds,
         "compile_and_first_update_seconds": (
             None
@@ -5247,6 +5329,12 @@ def main() -> int:
         "steady_update_seconds_mean": steady_update_seconds_mean,
         "steady_update_seconds_p50": steady_update_seconds_p50,
         "steady_update_seconds_p95": steady_update_seconds_p95,
+        "steady_fetch_seconds_mean": steady_fetch_seconds_mean,
+        "steady_fetch_seconds_p50": steady_fetch_seconds_p50,
+        "steady_fetch_seconds_p95": steady_fetch_seconds_p95,
+        "steady_iteration_seconds_mean": steady_iteration_seconds_mean,
+        "steady_iteration_seconds_p50": steady_iteration_seconds_p50,
+        "steady_iteration_seconds_p95": steady_iteration_seconds_p95,
         "compiler_cost_analysis": compiler_cost_analysis,
         "compiler_memory_analysis": compiler_memory_analysis,
         "gpu_monitor": gpu_monitor_summary,
@@ -5280,7 +5368,15 @@ def main() -> int:
                 "explicit_compile_seconds": explicit_compile_seconds,
                 "first_update_seconds": first_update_seconds,
                 "steady_update_seconds_mean": report["steady_update_seconds_mean"],
-                "steady_examples_per_second": report["steady_examples_per_second"],
+                "steady_device_examples_per_second": report[
+                    "steady_device_examples_per_second"
+                ],
+                "steady_end_to_end_examples_per_second": report[
+                    "steady_end_to_end_examples_per_second"
+                ],
+                "training_wall_examples_per_second": report[
+                    "training_wall_examples_per_second"
+                ],
                 "compiler_estimated_achieved_tflops": report[
                     "compiler_estimated_achieved_tflops"
                 ],

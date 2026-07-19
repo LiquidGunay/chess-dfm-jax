@@ -127,8 +127,9 @@ class FixedTrajectoryBatches:
     validation samples coverage across shards and row blocks.
 
     ``batch_at(step)`` is stateless with respect to earlier calls, so resuming
-    at a global data step yields the same examples. One decoded shard is cached
-    to avoid re-reading it for every small GPU batch.
+    at a global data step yields the same examples. ``shard_major`` caches one
+    fully decoded shard to avoid re-reading it for every small GPU batch;
+    ``global_permutation`` decodes only the requested row batch.
     """
 
     def __init__(
@@ -219,10 +220,12 @@ class FixedTrajectoryBatches:
         shard_index = self._order_for_epoch(epoch)[file_position]
         return shard_index, batch_in_file
 
-    def _load_shard(self, path: Path) -> dict[str, Any]:
-        if self._cached_path == path and self._cached_batch is not None:
-            return self._cached_batch
-
+    def _decode_shard(
+        self,
+        path: Path,
+        *,
+        row_slice: slice | None,
+    ) -> dict[str, Any]:
         import numpy as np
 
         from chess_dfm_jax.data.trajectory_v3 import trajectory_v3_to_batch
@@ -244,10 +247,18 @@ class FixedTrajectoryBatches:
                     view=self.view,
                     horizon=self.horizon,
                     include_metadata=False,
+                    row_slice=row_slice,
                 )
         except Exception as exc:
             raise RuntimeError(f"Failed to decode required trajectory shard {path}") from exc
 
+        return batch
+
+    def _load_shard(self, path: Path) -> dict[str, Any]:
+        if self._cached_path == path and self._cached_batch is not None:
+            return self._cached_batch
+
+        batch = self._decode_shard(path, row_slice=None)
         self._cached_path = path
         self._cached_batch = batch
         return batch
@@ -256,16 +267,31 @@ class FixedTrajectoryBatches:
         import numpy as np
 
         shard_index, batch_in_file = self._slot_for_step(step)
-        shard_batch = self._load_shard(self.paths[shard_index])
+        path = self.paths[shard_index]
         start = batch_in_file * self.batch_size
         end = start + self.batch_size
+        if self.batch_schedule == "global_permutation":
+            row_batch = self._decode_shard(
+                path,
+                row_slice=slice(start, end),
+            )
+            for key, value in row_batch.items():
+                array = np.asarray(value)
+                if array.ndim == 0 or array.shape[0] != self.batch_size:
+                    raise ValueError(
+                        f"Unexpected batch leaf {key!r} with shape {array.shape} in "
+                        f"{path}"
+                    )
+            return row_batch
+
+        shard_batch = self._load_shard(path)
         sliced: dict[str, Any] = {}
         for key, value in shard_batch.items():
             array = np.asarray(value)
             if array.ndim == 0 or array.shape[0] != self.samples_per_shard:
                 raise ValueError(
                     f"Unexpected batch leaf {key!r} with shape {array.shape} in "
-                    f"{self.paths[shard_index]}"
+                    f"{path}"
                 )
             sliced[key] = array[start:end]
         return sliced

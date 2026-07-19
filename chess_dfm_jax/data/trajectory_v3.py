@@ -201,23 +201,66 @@ def trajectory_v3_to_batch(
     view: str = "full",
     horizon: int | None = None,
     include_metadata: bool = False,
+    row_slice: slice | None = None,
 ) -> dict[str, np.ndarray]:
-    """Decode a trajectory-v3 shard to the existing training batch contract."""
+    """Decode a trajectory-v3 shard to the existing training batch contract.
+
+    When ``row_slice`` is provided, encoded arrays are sliced before expanding
+    planes or legal masks. This keeps random small-batch reads from decoding a
+    full shard while preserving the exact legacy behavior when it is omitted.
+    """
+    if row_slice is not None:
+        if not isinstance(row_slice, slice):
+            raise TypeError(
+                f"row_slice must be a slice or None, got {type(row_slice).__name__}."
+            )
+        if row_slice.step == 0:
+            raise ValueError("row_slice step cannot be zero.")
+
+    def select_rows(value: np.ndarray, *, source_batch_size: int) -> np.ndarray:
+        array = np.asarray(value)
+        if row_slice is None or array.ndim == 0:
+            return array
+        if array.shape[0] == source_batch_size:
+            return array[row_slice]
+        return array
+
     schema = str(np.asarray(data["schema_version"]).item())
     if schema != TRAJECTORY_V3:
         raise ValueError(f"Expected {TRAJECTORY_V3}, got {schema}.")
-    actions = np.asarray(data["actions_u16"], dtype=np.int32)
+    encoded_actions = np.asarray(data["actions_u16"])
+    source_batch_size = encoded_actions.shape[0]
+    actions = np.asarray(
+        select_rows(encoded_actions, source_batch_size=source_batch_size),
+        dtype=np.int32,
+    )
     shard_horizon = actions.shape[1]
     view_horizon = shard_horizon if horizon is None or horizon <= 0 else min(horizon, shard_horizon)
     actions = actions[:, :view_horizon]
-    future_valid = np.asarray(data["future_valid_u8"], dtype=np.float32)[:, :view_horizon]
+    future_valid = np.asarray(
+        select_rows(
+            data["future_valid_u8"],
+            source_batch_size=source_batch_size,
+        ),
+        dtype=np.float32,
+    )[:, :view_horizon]
     batch_size = actions.shape[0]
 
     plane_codec = str(np.asarray(data.get("plane_codec", "uint8")).item())
     if plane_codec == "packbits":
-        current_planes = unpack_planes(data["planes_t_pack"])
+        current_planes = unpack_planes(
+            select_rows(
+                data["planes_t_pack"],
+                source_batch_size=source_batch_size,
+            )
+        )
     elif plane_codec == "uint8":
-        current_planes = decode_planes_u8(data["planes_t_u8"])
+        current_planes = decode_planes_u8(
+            select_rows(
+                data["planes_t_u8"],
+                source_batch_size=source_batch_size,
+            )
+        )
     else:
         raise ValueError(f"Unsupported trajectory-v3 plane codec: {plane_codec}")
 
@@ -234,34 +277,86 @@ def trajectory_v3_to_batch(
     if view == "joint_latent_sasa":
         if not has_compact_legal:
             raise KeyError("joint_latent_sasa view requires legal_idx_u16 and legal_count_u16.")
-        batch["legal_idx"] = np.asarray(data["legal_idx_u16"][:, :view_horizon], dtype=np.int32)
-        batch["legal_count"] = np.asarray(data["legal_count_u16"][:, :view_horizon], dtype=np.int32)
+        batch["legal_idx"] = np.asarray(
+            select_rows(
+                data["legal_idx_u16"],
+                source_batch_size=source_batch_size,
+            )[:, :view_horizon],
+            dtype=np.int32,
+        )
+        batch["legal_count"] = np.asarray(
+            select_rows(
+                data["legal_count_u16"],
+                source_batch_size=source_batch_size,
+            )[:, :view_horizon],
+            dtype=np.int32,
+        )
     elif view != "jepa_latent" and has_compact_legal:
         legal_masks = legal_indices_to_masks(
-            np.asarray(data["legal_idx_u16"][:, :view_horizon], dtype=np.uint16),
-            np.asarray(data["legal_count_u16"][:, :view_horizon], dtype=np.uint16),
+            np.asarray(
+                select_rows(
+                    data["legal_idx_u16"],
+                    source_batch_size=source_batch_size,
+                )[:, :view_horizon],
+                dtype=np.uint16,
+            ),
+            np.asarray(
+                select_rows(
+                    data["legal_count_u16"],
+                    source_batch_size=source_batch_size,
+                )[:, :view_horizon],
+                dtype=np.uint16,
+            ),
         )
         batch["legal_masks"] = legal_masks
         batch["legal_mask"] = legal_masks[:, 0]
     elif view != "jepa_latent":
         batch["legal_mask"] = np.ones((batch_size, ACTION_VOCAB_SIZE), dtype=np.float32)
     if view != "jepa_latent" and "legal_valid_u8" in data:
-        batch["legal_masks_valid"] = np.asarray(data["legal_valid_u8"], dtype=np.float32)[:, :view_horizon]
+        batch["legal_masks_valid"] = np.asarray(
+            select_rows(
+                data["legal_valid_u8"],
+                source_batch_size=source_batch_size,
+            ),
+            dtype=np.float32,
+        )[:, :view_horizon]
 
     if view in {"full", "jepa_latent", "joint_latent_sasa"}:
         if plane_codec == "packbits":
-            future_planes = unpack_planes(data["planes_future_pack"][:, :view_horizon])
+            future_planes = unpack_planes(
+                select_rows(
+                    data["planes_future_pack"],
+                    source_batch_size=source_batch_size,
+                )[:, :view_horizon]
+            )
         else:
-            future_planes = decode_planes_u8(data["planes_future_u8"][:, :view_horizon])
+            future_planes = decode_planes_u8(
+                select_rows(
+                    data["planes_future_u8"],
+                    source_batch_size=source_batch_size,
+                )[:, :view_horizon]
+            )
         terminal_idx = batch["terminal_target_index"]
         batch["future_planes"] = future_planes
         batch["next_planes"] = future_planes[np.arange(batch_size), terminal_idx]
         if "value_targets" in data:
-            value_targets = np.asarray(data["value_targets"][:, :view_horizon], dtype=np.float32)
+            value_targets = np.asarray(
+                select_rows(
+                    data["value_targets"],
+                    source_batch_size=source_batch_size,
+                )[:, :view_horizon],
+                dtype=np.float32,
+            )
             batch["value_targets"] = value_targets
             batch["value_target"] = value_targets[np.arange(batch_size), terminal_idx]
         if "wdl_targets" in data:
-            wdl_targets = np.asarray(data["wdl_targets"][:, :view_horizon], dtype=np.float32)
+            wdl_targets = np.asarray(
+                select_rows(
+                    data["wdl_targets"],
+                    source_batch_size=source_batch_size,
+                )[:, :view_horizon],
+                dtype=np.float32,
+            )
             batch["wdl_targets"] = wdl_targets
             batch["wdl_target"] = wdl_targets[np.arange(batch_size), terminal_idx]
     elif view != "dfm_action":
@@ -270,7 +365,10 @@ def trajectory_v3_to_batch(
     if include_metadata:
         for key in ("source", "game_id", "ply", "result", "fen_t", "input_format", "actions_uci"):
             if key in data:
-                batch[key] = np.asarray(data[key])
+                batch[key] = select_rows(
+                    data[key],
+                    source_batch_size=source_batch_size,
+                )
     return batch
 
 
