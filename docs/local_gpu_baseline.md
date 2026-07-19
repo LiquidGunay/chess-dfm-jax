@@ -532,10 +532,111 @@ action-shuffle separation on this slice; the online/EMA target MSE also grows
 from zero to `0.04584` as intended. The 100-update run sustained `33.28`
 examples/s with `91.1%` mean GPU utilization and `7,116,167,680` bytes peak
 JAX memory. EMA is therefore a valid target-semantics experiment, but it is not
-promoted or frozen on its own. The per-horizon variance-hinge comparison
-remains the next objective decision. The complete report is
+promoted or frozen on its own. This motivated the per-horizon variance-hinge
+comparison below. The complete report is
 `research/runs/ema-target099-target576-b64-100-v1/report.json` (SHA-256
 `e0020ccd1395a8d6c5b4faa8db30f6323eb1bddabcc3d833951be56d80872fd3`).
+
+### Per-horizon target variance hinge
+
+Commit `134b074` adds a default-off variance hinge on attached online projected
+future targets. For each horizon independently, it computes weighted FP32
+population variance across the batch with `valid * future_valid`, then applies
+
+```text
+std[h,d] = sqrt(max(var[h,d], 0) + 1e-4)
+hinge[h] = mean_d relu(gamma - std[h,d])
+```
+
+Only horizons with at least two valid examples are eligible, and eligible
+horizons receive equal weight. The population denominator makes the loss
+exactly invariant to duplicating a batch. Enabled-only diagnostics record
+counts, eligibility, mean/fifth-percentile/median feature standard deviation,
+active-feature fraction, and hinge per horizon. The gradient remains attached
+to both the BT4 backbone and state projector. Focused tests cover the formula,
+NaN padding and ineligible horizons, duplication invariance, masked gradients,
+backbone/projector connectivity, metrics and gradient-audit ABI, fail-closed
+configuration, and disabled serialization compatibility.
+
+A zero-update batch-64 screen selected `gamma=0.85`: it initially activates
+`20.5–24.9%` of features at each horizon, within the predefined 25% ceiling.
+`gamma=0.90` activates `31.3–34.9%` and fails. Active fraction is monotone in
+gamma, so `0.95` and `1.00` are ruled out without redundant runs. The reports
+are:
+
+- `research/runs/variance-hinge-gamma085-b64-eval-v1/report.json`
+  (SHA-256
+  `735ad5d190527f2c7ccf3b5f760f1301678f5a94c71a2e9a68988a56cf02638d`);
+- `research/runs/variance-hinge-gamma090-b64-eval-v1/report.json`
+  (SHA-256
+  `9d4213fed558975539059cd827f3af5ff559733b0db193627b634e804801d081`).
+
+The batch-64 gradient audit calibrated the hinge against the configured
+JEPA-positive plus `5.76` target-SIGReg gradient. On the JEPA group, 3%, 10%,
+and 30% fractions suggest coefficients `0.373`, `1.243`, and `3.728`;
+all-parameter and backbone suggestions are nearly identical at
+`0.385/1.284/3.851`. The run grid rounded these to `0.38`, `1.25`, and `3.75`,
+then added `1.75` to locate the scale-gate boundary. The audit is
+`research/runs/gradient-audit-variance-hinge-gamma085-target576-b64-v1/gradient_audit.json`
+(SHA-256
+`36f2cb0d6425a84ff8c72b8d9981a4144f6c166b67da61b16c57cf8cf4be5f3c`).
+
+Each hinge run used online targets, `gamma=0.85`, target SIGReg `5.76`,
+prediction SIGReg zero, batch 64, the same 6,400 training examples, and the
+same two fixed validation batches. RMS and rank columns are final/initial
+ratios. The two coupling columns are final positive-MSE/zero-MSE (lower is
+better) and action-shuffled-MSE/positive-MSE (higher is better); their common
+initial values are `0.418` and `3.90`.
+
+| Objective | Target RMS | Pred RMS | Pred rank | DFM CE delta | Accuracy delta | Legal-mass delta | Pos/zero | Action/pos |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| Online 5.76 | 89.84% | 95.58% | 101.95% | -0.0366 | +0.0146 | +0.0491 | 0.428 | 4.00 |
+| EMA 0.99 + 5.76 | 97.62% | 98.71% | 101.94% | +0.0747 | -0.0088 | -0.0416 | 0.437 | 3.79 |
+| Hinge 0.38 + 5.76 | 91.18% | 96.76% | 99.24% | +0.2347 | +0.0039 | -0.0125 | 0.414 | 4.13 |
+| Hinge 1.25 + 5.76 | 94.11% | 98.11% | 99.59% | +0.0805 | +0.0088 | +0.0543 | 0.395 | 4.28 |
+| Hinge 1.75 + 5.76 | 95.52% | 98.65% | 99.24% | +0.2351 | +0.0049 | -0.0196 | 0.392 | 4.25 |
+| Hinge 3.75 + 5.76 | 100.05% | 100.33% | 100.26% | +0.0511 | +0.0068 | -0.0518 | 0.384 | 4.26 |
+
+| Objective | Examples/s | Peak JAX bytes |
+|---|---:|---:|
+| Online 5.76 | 38.94 | 6,036,286,464 |
+| EMA 0.99 + 5.76 | 33.28 | 7,116,167,680 |
+| Hinge 0.38 + 5.76 | 39.40 | 5,948,592,896 |
+| Hinge 1.25 + 5.76 | 39.12 | 5,948,717,056 |
+| Hinge 1.75 + 5.76 | 39.58 | 5,979,598,592 |
+| Hinge 3.75 + 5.76 | 39.53 | 5,945,558,272 |
+
+Coefficient `0.38` is too weak. `1.25` improves both coupling ratios and policy
+accuracy/legal mass, but just misses the 95% target-scale gate. `1.75` is the
+smallest measured coefficient that passes the scale gate, yet its DFM CE and
+legal mass regress. `3.75` fully stabilizes target/prediction scale and rank
+and retains strong action coupling, but also loses DFM CE and legal mass
+relative to the attached-online point. The hinge has no measurable training
+cost, but no coefficient passes scale, coupling, and policy/legal gates
+together. None is promoted or frozen, and the harness remains
+`autoresearch_ready=false`.
+
+The four reports and SHA-256 digests are:
+
+- `research/runs/variance-hinge-g085-c038-target576-b64-100-v1/report.json`:
+  `68c5713962e96ccfd20bb42d578c6d33f382ae98f3314fc9780478642a02fb22`;
+- `research/runs/variance-hinge-g085-c125-target576-b64-100-v1/report.json`:
+  `584f859379b0b2e9424567e1e45a996a863ff1a2f567d78cc459fb9cd40f0343`;
+- `research/runs/variance-hinge-g085-c175-target576-b64-100-v1/report.json`:
+  `1bfd6798756320a2493abd316db886959a735291cddecb5222cb78abc7aa7b8b`;
+- `research/runs/variance-hinge-g085-c375-target576-b64-100-v1/report.json`:
+  `90a4b4329f9e409b4b93517ba5e2c1f967c2f5308a460793102bca4f57f58b3c`.
+
+All measured objectives have `jepa_state_rmsnorm=false`. The reported inactive
+state-scale value consequently remains `0.986831` while actual target and
+prediction RMS can contract. The first next ablation should be a default-off,
+fixed unit-RMS normalization of each target and prediction state, with no
+trainable scale and no batch statistics. This removes uniform shrinkage as a
+solution while retaining SIGReg and rank gates because unit norm alone does
+not prevent rank collapse. If shared-backbone policy interference persists,
+the secondary path is projector-local or staged scale-control gradients;
+revisiting the distribution-shape regularizer is preferable to further tuning
+this hinge coefficient.
 
 ## Strict local checkpoint/resume
 
@@ -823,5 +924,6 @@ knobs that the local graph cannot honor fail closed.
 
 The remaining acceptance work is to:
 
-- freeze a target-scale-stable normalized objective after the per-horizon
-  variance-hinge comparison.
+- test fixed unit-RMS JEPA states without a trainable scale or batch statistics;
+- freeze a target-scale-stable objective only after it also preserves policy
+  and legal-mass metrics.

@@ -299,9 +299,20 @@ ablations; do not silently change target-gradient semantics while calibrating
 SIGReg. The controlled EMA `0.99` implementation now passes the provisional
 scale/rank gates, but it regresses fixed-slice policy and coupling metrics and
 costs about `17%` throughput, so it remains an available ablation rather than
-the promoted baseline. The per-horizon variance hinge is still required before
-the objective decision; measured details are in
+the promoted baseline. The per-horizon variance-hinge comparison is also
+complete: coefficient `1.75` is the smallest measured point that retains 95%
+of target RMS, while `3.75` fully stabilizes scale and coupling. Both regress
+DFM CE and legal mass, so neither is promoted. Measured details are in
 `docs/local_gpu_baseline.md`.
+
+All of these runs leave `jepa_state_rmsnorm=false`; the inactive scale
+diagnostic stays fixed while the actual latent RMS changes. The first next
+ablation should normalize each target and prediction state to fixed unit RMS,
+without a trainable scale or batch statistics. This directly removes uniform
+shrinkage while retaining SIGReg and rank gates for non-scale collapse.
+Projector-local or staged scale-control gradients are secondary options if
+regularizing the shared backbone continues to damage policy learning. More
+hinge-coefficient tuning is not the next step.
 
 This scale/shape split is also motivated by
 [VISReg](https://arxiv.org/abs/2606.02572), which argues that sketching
@@ -663,14 +674,17 @@ sweeps, held-out data, and repeated seeds.
 - [x] Implement, exact-parity test, and profile the controlled EMA target; it
   passes scale/rank gates but is not promoted because policy/coupling metrics
   regress and A10G throughput falls about `17%`.
-- [ ] Compare a per-horizon variance hinge before deciding whether
-  target-scale stability warrants a semantic change.
+- [x] Implement, calibrate, and compare a per-horizon variance hinge. It can
+  stabilize scale and coupling without measurable throughput cost, but every
+  scale-passing point regresses DFM CE or legal mass and is not promoted.
 - [x] Make effective experiment overrides explicit and reject silent no-op
   configuration before enabling unattended autoresearch.
 - [x] Remove always-zero legacy placeholders from experiment reports while
   preserving the exact parity oracle and failing closed on metric drift.
-- [ ] Freeze a corrected baseline objective after the per-horizon
-  variance-hinge comparison.
+- [ ] Test default-off fixed unit-RMS target/prediction states without a
+  trainable scale or batch statistics, retaining SIGReg and rank gates.
+- [ ] Freeze a corrected baseline objective only after scale stability and
+  policy/legal metrics pass together.
 - [x] Implement and golden-test separate legacy-absolute and board-aware LC0
   canonical 1,858 action codecs.
 - [x] Implement deterministic paired-arena foundations, audit the real
