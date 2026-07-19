@@ -1291,6 +1291,90 @@ The matched baseline-v2/u400 collapse artifacts have SHA-256:
 - its `checkpoint_summary.json`:
   `d77a7c4c1bb28b544536893ed15211b25e9fd8e2b5d769cebfdf82924045e014`.
 
+### No-norm objective, fixed-count SIGReg, and A10G screen
+
+Commits `702c727`, `60a06e4`, and `5a8abbb` make the JEPA RMS-matching
+coefficient removable, add the exact off-diagonal U-statistic correction, and
+add shared fixed-count sampling for target and prediction SIGReg. Defaults
+preserve the historical graph. The selected research contract uses the
+normalized V-statistic on 64 randomly selected physical examples. This fixes
+the estimator count and compute across training batches; it does not claim
+that independently sampled batches have identical empirical statistics.
+
+The U-statistic correction changed paired V-statistic discrepancies by only
+about 3--4%, so diagonal self-pairs did not explain the much larger
+batch-128/batch-256 variation. The fixed-count path, full-batch path, padding,
+disabled-loss, estimator, shared-sample, contract, and checkpoint behavior
+pass 83 focused objective tests.
+
+The initial no-norm graph fit physical batches 64, 128, 192, and 256. The
+fixed-64-statistic endpoint reprofile selected batch 128 as the throughput
+knee:
+
+| Physical batch | Device examples/s | End-to-end examples/s | Input stall | Peak JAX bytes | Mean GPU util. |
+|---:|---:|---:|---:|---:|---:|
+| 128 | 44.8384 | 41.4120 | 7.64% | 9,705,893,376 | 88.52% |
+| 256 | 47.9588 | 43.7228 | 8.83% | 15,845,526,016 | 88.84% |
+
+Batch 256 gains 7.0% device and 5.6% end-to-end throughput but consumes 63%
+more live memory and produces half as many optimizer updates at fixed examples.
+It remains available for throughput-oriented runs; batch 128 is the
+architecture-research default. The two report SHA-256 digests are
+`848ddd304e62d6eb031bf181c186d196ff20bed3db576af4fe74041a7e26ae37`
+and
+`83bb34befe3c7b71139eac1d707f8dcb30dd64bc6316b04d03fc09e15e9ac3c1`.
+
+Three batch-128 audits with fixed statistic count 64 calibrated the no-norm
+graph. The JEPA-group coefficients for a 10%-of-positive-JEPA gradient were:
+
+| Seed | Target SIGReg | Prediction SIGReg |
+|---:|---:|---:|
+| 0 | 1.050 | 1.008 |
+| 1 | 2.535 | 1.309 |
+| 2 | 1.292 | 1.051 |
+| Median | 1.292 | 1.051 |
+
+JEPA-group cosine ranges were `0.09..0.23` for
+positive-JEPA/target-SIGReg, `-0.06..0.09` for
+positive-JEPA/prediction-SIGReg, and `0.05..0.09` between the two SIGReg
+terms. The shared-backbone matrices show mild negative policy-CE cosines for
+both auxiliary terms. Coefficient `1.0` was selected as the conservative first
+screen: on seed 0, raw JEPA MSE, target SIGReg, and prediction SIGReg were
+`0.3049`, `0.0321`, and `0.0401`. The three audit SHA-256 digests are
+`7008cf39a5c9c9c27ef0bf0b744f617960e1cef6e5e1b77e75e78c42502d3996`,
+`18341284c61121c0b701970cff8386f356615eb7d4c91e5ac388cf579c472008`,
+and
+`e1259f82401d967af7aab51cbaf98eefc6069d2a1d694fd767f5b22ffeb8cd75`.
+
+The matched causal screen then held target SIGReg at `1.0` and changed only
+the norm and prediction-SIGReg switches. Every run used 100 updates, batch
+128, the same global training permutation, and the same 4,096 validation
+positions in batches of 64:
+
+| Norm / prediction SIGReg | DFM CE delta | Accuracy delta | Legal-mass delta | Target RMS retention | Prediction RMS retention | Prediction-rank retention | p05-std retention | Final pos/zero | Final action/pos |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1 / 0 | -0.011105 | -0.001221 | -0.001033 | 89.96% | 94.42% | 100.51% | 95.03% | 0.326 | 5.34 |
+| 0 / 0 | -0.010501 | -0.000977 | -0.001786 | 89.72% | 93.69% | 100.37% | 94.30% | 0.322 | 5.36 |
+| 0 / 1 | -0.009146 | -0.000610 | -0.002702 | 89.98% | 94.46% | 100.82% | 95.14% | 0.326 | 5.33 |
+
+The prediction-SIGReg replacement recovers the norm control's prediction RMS,
+rank, low-tail variance, cosine, and action sensitivity. Its final CE is
+`0.001959` worse than the norm control and `0.001355` worse than no norm/no
+prediction SIGReg, both within the measured `0.00394` short-run CE dispersion.
+Its validation prediction-SIGReg discrepancy changes only
+`0.05255 → 0.05104`; it does not instantly vanish. Absolute target contraction
+is common to all three conditions because the attached online target retains a
+joint scale shortcut. The historical 95% threshold is therefore a diagnostic,
+not grounds for rejecting only the replacement.
+
+The no-norm target-1.0/prediction-1.0 objective advances provisionally to a
+checkpointed 30-minute comparison, but is not frozen. The three report
+SHA-256 digests, in table order, are
+`2e68c6ff2c86c46631c9f250638c2f9a454904de403bcca399fb82387ddb92ec`,
+`918febac04a62c51151c18c2a1bb44e61bd684a7aa3c5b48b5bff41608dec892`,
+and
+`262626953540ecd8fce6615e817d1ca7a0c98626f37abc81225eb5224a21ebae`.
+
 ### Resumable arena foundation and promotion-pool repair
 
 Commit `a2ea5ed` adds the checked local relative-strength command described in

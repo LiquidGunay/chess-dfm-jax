@@ -22,6 +22,13 @@ The agreed critical path is now:
 The A10G is single-tenant throughout this sequence. Training, profiling,
 arena evaluation, and SAE work do not run concurrently.
 
+Execution update, 2026-07-19: critical-path steps 1--3 are complete at the
+short-screen level. The norm coefficient is explicit, normalized SIGReg can use
+a fixed random example count, batch 128 is the selected throughput knee, and
+the three matched 100-update screens are complete. The no-norm,
+target-SIGReg-1.0, prediction-SIGReg-1.0 objective is the provisional candidate
+for the 30-minute qualification run; it is not frozen or promoted.
+
 This document is the implementation contract for turning the existing
 TPU/cloud-oriented BT4 + DFM + JEPA experiment into a fast, measurable,
 single-A10G research loop.
@@ -268,6 +275,16 @@ batches. Measure that effect across physical batch sizes before freezing the
 loss; if material, compare the unbiased U-statistic correction as a controlled
 follow-up.
 
+The measured U-statistic correction removes the diagonal self-pair term but
+changes the observed batch-128/batch-256 discrepancies by only about 3--4%.
+The larger difference came from evaluating a nonlinear empirical statistic on
+different numbers and mixtures of examples. The training implementation now
+supports a shared fixed random example count for target and prediction
+SIGReg. The selected contract uses 64 physical examples regardless of training
+batch, while validation remains partitioned into full batches of 64. This
+keeps estimator count and cost fixed without claiming invariance across
+independently sampled data.
+
 Required tests:
 
 - duplicating every example leaves normalized loss and gradient unchanged;
@@ -387,6 +404,29 @@ throughput cost. On the corrected matched 32-batch global validation sample,
 however, unit RMS `+1.50` does not improve policy over online `5.76`; both
 configurations substantially regress DFM CE, accuracy, and legal mass over 100
 updates. Neither is the clean baseline.
+
+The first corrected-objective screen used target and prediction coefficients
+`1.0`. Across three fixed-count batch-128 gradient audits, the JEPA-group
+coefficient corresponding to a 10% auxiliary gradient had medians `1.29` for
+target SIGReg and `1.05` for prediction SIGReg. At coefficient one, the
+unweighted target and prediction terms begin near one tenth of raw JEPA MSE.
+JEPA-group cosine ranges were `0.09..0.23` for positive-JEPA/target-SIGReg,
+`-0.06..0.09` for positive-JEPA/prediction-SIGReg, and `0.05..0.09` between
+the two SIGReg terms. The full shared-backbone matrices show mild opposition
+to policy CE, so larger coefficients are not justified before a longer matched
+run.
+
+All three matched 100-update screens used batch 128, a fixed 64-example SIGReg
+sample, target coefficient `1.0`, validation seed 10,000, and the same 4,096
+held-out positions. Relative to the norm-on control, the no-norm plus
+prediction-SIGReg candidate is inside the previously measured `0.00394`
+short-run CE dispersion, retains slightly more prediction effective rank and
+low-tail feature variance, and preserves the action-shuffle gap. Absolute
+target scale contracts similarly in every condition; the old 95% threshold is
+therefore recorded as a mechanism diagnostic rather than used to reject only
+the corrected candidate. The candidate advances provisionally to a
+checkpointed 30-minute comparison, where policy, legality, scale, rank, and
+coupling must be repeat-qualified.
 
 Commit `8c2dcb6` fixes validation selection by deterministically permuting all
 `(shard, batch_in_shard)` slots. Before this commit, two-batch studies always
@@ -552,6 +592,15 @@ validation fixed at 64-example batches over identical positions and finite
 sample partitions. Exact SIGReg coefficients are calibrated only after this
 physical batch is selected; a representative nonzero coefficient is sufficient
 to include the correct work in the hardware profile.
+
+The active no-norm graph was measured at physical batches 64, 128, 192, and
+256. After fixing SIGReg to 64 examples, the decisive cached endpoints were:
+batch 128 at `44.84` device and `41.41` end-to-end examples/s with `9.71 GB`
+peak JAX live memory, and batch 256 at `47.96` and `43.72` examples/s with
+`15.85 GB`. Batch 256 buys only 7.0% device and 5.6% end-to-end throughput for
+63% more live memory and half as many optimizer updates per example budget.
+Batch 128 is therefore the selected autoresearch knee; batch 256 remains a
+supported throughput mode rather than the default.
 
 Optimization sequence:
 
@@ -981,21 +1030,22 @@ sweeps, held-out data, and repeated seeds.
   Its best checkpoint loses primary two-pool CE to v2/u300, and a
   checkpoint-age-matched u400 audit trades policy/legal/JEPA regressions for
   only tiny diversity gains.
-- [ ] Make the per-state RMS norm term explicitly configurable, preserve exact
+- [x] Make the per-state RMS norm term explicitly configurable, preserve exact
   compatibility behavior when enabled, and test the no-norm raw-MSE path.
-- [ ] Validate the no-norm target-plus-prediction-SIGReg objective, including
+- [x] Validate the no-norm target-plus-prediction-SIGReg objective, including
   disabled-path parity, duplication/padding invariance, finite-sample metrics,
   and per-horizon collapse/coupling diagnostics.
-- [ ] Profile physical batches 64, 128, 192, and 256 on the active no-norm
+- [x] Profile physical batches 64, 128, 192, and 256 on the active no-norm
   target-plus-prediction-SIGReg graph; choose the A10G throughput knee before
   fixing the training batch, while retaining validation batch 64.
-- [ ] Re-audit target and prediction SIGReg scalar contributions, gradient
+- [x] Re-audit target and prediction SIGReg scalar contributions, gradient
   norms, and gradient cosines on the selected graph and physical batch. Do not
   transfer target `5.76` or prediction `0.57` blindly.
-- [ ] Run matched short screens for norm-on/pred-SIGReg-off,
+- [x] Run matched short screens for norm-on/pred-SIGReg-off,
   norm-off/pred-SIGReg-off, and norm-off/pred-SIGReg-on. Advance only the
   corrected objective that passes policy, legality, action-coupling, and
-  representation-health checks.
+  representation-health checks. The coefficient-1.0 replacement is the
+  provisional 30-minute candidate; it remains unfrozen.
 - [ ] Repeat-qualify a 30-minute corrected baseline and freeze its loss,
   physical batch, learning rate, validation contract, and noise envelope
   before enabling unattended architecture research.
