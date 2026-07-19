@@ -2,9 +2,10 @@
 
 Status: implementation in progress. The plan was approved on 2026-07-18 and
 revised on 2026-07-19; unattended research remains disabled with
-`AUTORESEARCH_READY = False`. V2/update 300 is the repeat-qualified
-compatibility control, not a frozen objective. GPU execution is available
-again.
+`AUTORESEARCH_READY = False`. Compatibility v2/update 300 remains the
+repeat-qualified control. The no-norm target-SIGReg-5.76,
+prediction-SIGReg-1.0 v2/update-400 checkpoint is now the repeat-qualified
+corrected offline baseline for strength evaluation. It is not Elo-promoted.
 
 The agreed critical path is now:
 
@@ -22,12 +23,13 @@ The agreed critical path is now:
 The A10G is single-tenant throughout this sequence. Training, profiling,
 arena evaluation, and SAE work do not run concurrently.
 
-Execution update, 2026-07-19: critical-path steps 1--3 are complete at the
-short-screen level. The norm coefficient is explicit, normalized SIGReg can use
-a fixed random example count, batch 128 is the selected throughput knee, and
-the three matched 100-update screens are complete. The no-norm,
-target-SIGReg-1.0, prediction-SIGReg-1.0 objective is the provisional candidate
-for the 30-minute qualification run; it is not frozen or promoted.
+Execution update, 2026-07-19: critical-path steps 1--4 are complete. The norm
+coefficient is explicit, normalized SIGReg uses a fixed random example count,
+batch 128 is the selected throughput knee, and the matched objective screens
+and two 30-minute corrected repeats are complete. The corrected loss, physical
+batch, learning rates, validation population, and checkpoint-selection
+contract are frozen for the relative-Elo stage. Architecture autoresearch and
+SAE work remain gated on strength anchors.
 
 This document is the implementation contract for turning the existing
 TPU/cloud-oriented BT4 + DFM + JEPA experiment into a fast, measurable,
@@ -424,9 +426,30 @@ short-run CE dispersion, retains slightly more prediction effective rank and
 low-tail feature variance, and preserves the action-shuffle gap. Absolute
 target scale contracts similarly in every condition; the old 95% threshold is
 therefore recorded as a mechanism diagnostic rather than used to reject only
-the corrected candidate. The candidate advances provisionally to a
-checkpointed 30-minute comparison, where policy, legality, scale, rank, and
-coupling must be repeat-qualified.
+the corrected candidate.
+
+The checkpointed target-1.0 run then exposed the distinction that the short
+screen could not: its selected update 300 is policy-competitive, but mean
+target RMS is `0.868` versus `0.935` for the compatibility incumbent and its
+low-tail prediction feature standard deviation is also lower. This lies
+outside the incumbent representation-health envelope even though prediction
+rank and action coupling remain healthy. Target coefficient `1.0` is therefore
+rejected as the frozen objective.
+
+Matched 100-update follow-ups at target coefficients `3.9` and `5.76`, with
+norm off and prediction coefficient fixed at `1.0`, bracket the tradeoff.
+`3.9` gives the best short CE; `5.76` gives the best target/prediction scale,
+legal mass, and coupling while remaining inside the measured CE dispersion.
+The scalar-balanced `5.76` point was advanced to two checkpointed 30-minute
+runs.
+
+V1 selected update 300 and v2 selected update 400 after four fixed 4,096-position
+validation pools. Their aggregate CEs are `4.529851` and `4.529214`, only
+`0.000637` apart; both improve on the source checkpoint. Their selected latent
+audits also agree: target RMS `0.932/0.928`, prediction RMS `0.902/0.901`,
+mean prediction rank `31.36/31.24`, and low-tail feature standard deviation
+`0.653/0.652`, with positive prediction beating zero and action-shuffled
+controls. Corrected v2/update 400 is the frozen offline baseline for Elo.
 
 Commit `8c2dcb6` fixes validation selection by deterministically permuting all
 `(shard, batch_in_shard)` slots. Before this commit, two-batch studies always
@@ -1044,11 +1067,12 @@ sweeps, held-out data, and repeated seeds.
 - [x] Run matched short screens for norm-on/pred-SIGReg-off,
   norm-off/pred-SIGReg-off, and norm-off/pred-SIGReg-on. Advance only the
   corrected objective that passes policy, legality, action-coupling, and
-  representation-health checks. The coefficient-1.0 replacement is the
-  provisional 30-minute candidate; it remains unfrozen.
-- [ ] Repeat-qualify a 30-minute corrected baseline and freeze its loss,
+  representation-health checks. Target `1.0` failed the longer representation
+  envelope; target `5.76` with prediction `1.0` advanced.
+- [x] Repeat-qualify a 30-minute corrected baseline and freeze its loss,
   physical batch, learning rate, validation contract, and noise envelope
-  before enabling unattended architecture research.
+  before strength evaluation. V1/update 300 and v2/update 400 agree within
+  `0.000637` four-pool CE; v2/update 400 is the corrected offline baseline.
 - [x] Implement and golden-test separate legacy-absolute and board-aware LC0
   canonical 1,858 action codecs.
 - [x] Implement deterministic paired-arena foundations, audit the real

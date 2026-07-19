@@ -1367,13 +1367,107 @@ is common to all three conditions because the attached online target retains a
 joint scale shortcut. The historical 95% threshold is therefore a diagnostic,
 not grounds for rejecting only the replacement.
 
-The no-norm target-1.0/prediction-1.0 objective advances provisionally to a
-checkpointed 30-minute comparison, but is not frozen. The three report
-SHA-256 digests, in table order, are
+The no-norm target-1.0/prediction-1.0 objective advanced provisionally to a
+checkpointed 30-minute comparison. Its longer representation audit rejected it
+as the frozen objective; the next subsection records that result. The three
+short-screen report SHA-256 digests, in table order, are
 `2e68c6ff2c86c46631c9f250638c2f9a454904de403bcca399fb82387ddb92ec`,
 `918febac04a62c51151c18c2a1bb44e61bd684a7aa3c5b48b5bff41608dec892`,
 and
 `262626953540ecd8fce6615e817d1ca7a0c98626f37abc81225eb5224a21ebae`.
+
+### Corrected 30-minute objective qualification
+
+The target-1.0 run completed 552 updates and selected update 300 on validation
+seeds 10,000 and 20,000. Across four validation pools it is policy-competitive:
+DFM CE `4.528521`, accuracy `0.108040`, and legal mass `0.646473`. Its full
+seed-10,000 audit nevertheless shows mean target RMS `0.867674`, prediction
+RMS `0.885878`, and low-tail prediction feature standard deviation `0.641210`,
+versus compatibility-incumbent values `0.935079`, `0.921361`, and `0.664447`.
+Effective rank and action conditioning remain healthy, so this is a uniform
+scale shortcut rather than rank collapse. Target coefficient `1.0` is rejected
+as the frozen loss.
+
+Two matched 100-update follow-ups kept norm off and prediction SIGReg at `1.0`
+while raising target SIGReg:
+
+| Target coefficient | DFM CE delta | Accuracy delta | Legal-mass delta | Target RMS retention | Prediction RMS retention | Final action/positive MSE |
+|---:|---:|---:|---:|---:|---:|---:|
+| 1.00 | -0.009146 | -0.000610 | -0.002702 | 89.98% | 94.46% | 5.33 |
+| 3.90 | -0.010481 | +0.000610 | -0.002907 | 92.93% | 94.86% | 5.41 |
+| 5.76 | -0.008231 | +0.000305 | -0.000966 | 93.82% | 95.11% | 5.41 |
+
+Target `3.9` gives the best short CE. Target `5.76` gives the strongest scale,
+legality, low-tail variance, and coupling while its CE remains inside the
+measured short-run dispersion. It is also the first scalar-balanced point:
+at initialization, weighted target SIGReg is about `0.247`, prediction SIGReg
+about `0.053`, and raw JEPA MSE about `0.347`. Target `5.76` therefore advanced
+to two checkpointed 30-minute runs. The `3.9` and `5.76` short-screen report
+digests are
+`4774cf4a6ac0c1f7b3c26b8407387878f3c4d5cb13bb4184a6b066ec3f91c8de`
+and
+`3a3fe01725b38f37fdc59cdd2d8dfd47d961a53c7ce97cdb08e5733022c7cdb3`.
+
+Both target-5.76 runs sustain the same hardware rate as the target-1.0 graph:
+v1 completes 554 updates at `41.31` end-to-end examples/s and v2 completes 555
+at `41.35`. Fixed-pool checkpoint selection chooses v1/update 300 and
+v2/update 400:
+
+| Model | Selected update | Four-pool DFM CE | Accuracy | Legal mass | CE delta from source |
+|---|---:|---:|---:|---:|---:|
+| Source step 265,000 | — | 4.550008 | 0.106750 | 0.642927 | — |
+| Compatibility v2 | 300 | 4.529473 | 0.108810 | 0.646496 | -0.020535 |
+| Corrected v1 | 300 | 4.529851 | 0.108078 | 0.644363 | -0.020157 |
+| Corrected v2 | 400 | 4.529214 | 0.107346 | 0.644985 | -0.020794 |
+
+The corrected repeats differ by only `0.000637` CE and both improve source CE,
+accuracy, and legal mass. Relative to the compatibility incumbent, corrected
+v2 improves CE by `0.000259` but gives back `0.001465` accuracy and `0.001512`
+legal mass. Offline policy evidence is therefore tied rather than a strength
+claim.
+
+The selected seed-10,000 latent audits repeat closely:
+
+| Diagnostic | Compatibility v2/u300 | Corrected v1/u300 | Corrected v2/u400 |
+|---|---:|---:|---:|
+| Mean target RMS | 0.935079 | 0.931806 | 0.927888 |
+| Mean prediction RMS | 0.921361 | 0.902416 | 0.901442 |
+| Mean prediction effective rank | 31.0318 | 31.3634 | 31.2436 |
+| Minimum-horizon effective rank | 29.1529 | 29.5379 | 29.3476 |
+| Mean prediction feature-std p05 | 0.664447 | 0.653374 | 0.652299 |
+| Minimum-horizon feature-std p05 | 0.651541 | 0.639441 | 0.637600 |
+| Prediction/target RMS ratio | 0.985329 | 0.968459 | 0.971498 |
+| Positive/zero MSE | 0.2831 | 0.2799 | 0.2740 |
+| Action-shuffled/positive MSE | 6.01 | 5.98 | 6.11 |
+
+Target `5.76` prevents the severe target-1.0 contraction and preserves healthy
+rank and action conditioning without the relative RMS-matching loss. The
+remaining small absolute-scale and low-tail differences from the compatibility
+control are recorded as the frozen corrected baseline's representation
+envelope, not hidden by the aggregate SIGReg value.
+
+Corrected v2/update 400 is the repeat-qualified offline baseline for strength
+evaluation. Its checkpoint state SHA-256 is
+`cbeb1bafa74d0983ae4c0cad2a33c405c3507b2428c5bcebbe4fb7f8df44aa61`
+and manifest SHA-256 is
+`6e2a9449eea5aa1a77c5dc9b24f0da0e8b2d44d40a79b387c4da6d09bd9e380b`.
+The v1/v2 training reports have SHA-256
+`c83030106c1bd2664fcb1939daa7cb52b9123d9ea4197f179d10683240fa477d`
+and
+`2b6b8922eadafc42eb33241d8e52e8367acd81d1887b2c3ae329fe8dadce599c`;
+the two checkpoint summaries have SHA-256
+`e3a73a17b985398d8f485ac21eb87ed625af0df9382299777e17b623f0f1c712`
+and
+`c8b7197a5b43d38ecb4f40368fddb6220542f29776d1489bc1ede5eb90934377`;
+and the selected latent-audit metric files have SHA-256
+`ad0b7d0e21af3a881448b6d5bc014a805d63a0034e2aebb1cfea8fac1c41eb52`
+and
+`cb3dc1c6bd1c3778c0d87d5e82927565b3b7a46468a157da04b106e6b1c4782b`.
+
+This freezes the corrected loss, batch, optimizer rates, validation contract,
+and offline noise envelope for the arena stage. It does not set
+`AUTORESEARCH_READY`, append a promotion ledger row, claim Elo superiority, or
+start SAE work.
 
 ### Resumable arena foundation and promotion-pool repair
 
@@ -1768,33 +1862,31 @@ the warmed profile is
 
 ## Next acceptance point
 
-The compatibility harness is not yet open to unattended autoresearch. A
-checked-in `EXPERIMENT_OVERRIDES` block now applies after checkpoint metadata
-and before explicit CLI flags; the final effective configuration is
-resume-bound and recorded. Unknown keys, wrong types, and non-default legacy
-knobs that the local graph cannot honor fail closed.
+The corrected loss is now frozen for strength evaluation:
 
-The continuation study explains a large part of the earlier policy regression:
-the exact source optimizer and learning rates came from global batch `8,192`,
-the recovered source checkpoint was already past its best recorded validation
-point, and local batch 64 restarted the data/RNG stream. A fresh lower-rate
-optimizer removes the large short-run regression. Both completed 30-minute
-runs independently select update 300. V2/u300 is the repeat-qualified offline
-baseline: across four matched validation pools it improves aggregate DFM CE,
-accuracy, legal mass, and every per-horizon CE relative to source, and its CE
-gain is within `0.000210253` of v1/u300.
+- norm coefficient `0.0`;
+- normalized V-statistic SIGReg on a shared fixed sample of 64 physical
+  examples;
+- target/prediction coefficients `5.76/1.0`;
+- physical/evaluation batches `128/64`;
+- model-only initialization with constant main/BT4 learning rates
+  `3e-5/1e-6`; and
+- globally permuted training plus four fixed 4,096-position selection pools.
 
-The remaining acceptance work is to:
+Corrected v1/update 300 and v2/update 400 reproduce the same offline policy and
+representation tradeoff. V2/update 400 is the selected corrected baseline;
+compatibility v2/update 300 remains the norm-on control. The next acceptance
+work is to:
 
-- retain prediction-SIGReg `0.0`; the `0.57` baseline-length experiment is
-  rejected on primary CE and matched policy/JEPA metrics;
-- run real-checkpoint GPU payload parity and timing for commit `c2d5efb` once
-  elevated execution is available;
-- complete the fault-free 128-pair strength screen at the pilot-valid cap 256;
-- decide how absolute target-scale contraction enters the frozen objective
-  without undoing the repeat-qualified policy improvement;
-- calibrate a strength-valid long-game cap before any Elo result.
+- run real-checkpoint GPU payload parity and timing for the corrected
+  checkpoint on the sealed-history arena path;
+- complete fault-free 128-pair relative-strength screens at the pilot-valid
+  cap 256 against the recovered DFM/JEPA source and, after adapter validation,
+  raw BT4;
+- report pair-aware confidence intervals and inference cost without relabeling
+  relative model-pool Elo as human or Lichess Elo; and
+- calibrate a strength-valid long-game cap if cap adjudication reappears.
 
-Until then `AUTORESEARCH_READY = False`, `research/results.tsv` remains
-header-only, and neither the objective nor the optimizer/batch configuration
-is frozen.
+Until those strength anchors exist, `AUTORESEARCH_READY = False`,
+`research/results.tsv` remains header-only, architecture search stays closed,
+and SAE work remains deferred.
