@@ -67,6 +67,7 @@ ARCHITECTURE_SOURCE = "research_train_local_model_and_loss"
 # AUTORESEARCH EDIT SURFACE: change model/objective knobs here. Checkpoint
 # metadata is loaded first, then these values, then explicit CLI overrides.
 EXPERIMENT_OVERRIDES: dict[str, Any] = {
+    "lr_warmup_steps": 0,
     # "jepa_target_stop_gradient": True,
     # "jepa_target_semantics": "ema",
     # "jepa_target_ema_decay": 0.99,
