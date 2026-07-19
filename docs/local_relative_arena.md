@@ -35,7 +35,7 @@ legal/representable actions, and positions with incomplete coverage.
 - `development`: up to all 128 validation openings. There is deliberately no
   default ply cap: pass one explicitly and interpret the reported cap-draw
   rate.
-- `promotion`: the disjoint, history-hardened 2,048-opening test pool. The
+- `promotion`: the disjoint, history-sidecar-backed 2,048-opening test pool. The
   official normalized-Elo GSPRT uses `H0=0`, `H1=+20`,
   `alpha=beta=0.05`, and at most 2,048 complete color-reversed pairs.
 

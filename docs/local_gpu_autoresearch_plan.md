@@ -338,13 +338,27 @@ Policy-only was reverted.
 
 The leading initialization candidate is therefore model-only import with a
 fresh optimizer, constant main/BT4 rates `3e-5`/`1e-6`, and zero warmup.
-This is not a frozen baseline. At batch 64 its CE gain is less than `0.001` on
-each of two 4,096-position validation seeds and target RMS retention is only
-`94.30%`. At batch 128, two nominal repeats differ by `0.00394` final CE,
-legal mass regresses on both validation seeds, and target RMS retention is
-`94.76%`. These results establish a provisional efficiency candidate and a
-repeatability/noise problem, not permission to start architecture search.
-They have no `research/results.tsv` row, Elo result, or promotion decision.
+The short batch-128 repeats first exposed `0.00394` final-CE dispersion and a
+target-scale miss. A completed 30-minute v1 then produced 557 updates and six
+saved checkpoints. A read-only scan on seeds 10,000 and 20,000 selected update
+300 over the near-tied update 400 by primary CE; updates 500 and 557
+regressed.
+
+Two additional pools at seeds 30,000 and 40,000 preserve that tie-break.
+Across all four pools, update 300 changes DFM CE
+`4.550008280 → 4.529262789` (`-0.020745492`), accuracy
+`0.106750488 → 0.107345581`, and legal mass
+`0.642926642 → 0.644614464`. CE improves at every horizon. Update 400 is
+`0.000801284` worse in aggregate CE but better on aggregate accuracy/legal
+mass, and update 300's action metrics do not improve on every individual pool.
+Update 300 is therefore provisional, not frozen.
+
+The v1 endpoint retains only `94.21%` of mean target RMS despite improving
+prediction rank-independent diagnostics. An identical v2 run is in progress;
+its partial state is not evidence. Until the completed repeat and matched
+checkpoint scan establish training noise and the selected checkpoint clears
+the latent gate, these results do not authorize architecture search. They have
+no `research/results.tsv` row, Elo result, or promotion decision.
 
 This scale/shape split is also motivated by
 [VISReg](https://arxiv.org/abs/2606.02572), which argues that sketching
@@ -534,9 +548,17 @@ full-history reconstruction audit found another 36 test roots whose preceding
 game was nonstandard even though the ply-12 root itself parsed as standard.
 Those complete histories are excluded too, leaving 10,787 promotion candidates.
 The development pool is 128 validation FENs; its first 16 form the correctness
-tier. The history-hardened promotion pool contains 2,048 test FENs after
+tier. The initial promotion pool contains 2,048 test FENs after
 excluding every valid validation candidate and all 36 nonstandard histories,
 not merely the selected development subset.
+
+Exact replay subsequently found a distinct root-state defect that the original
+root-FEN terminality check could not see: selected promotion entry 1,245 is
+already claim-draw terminal by threefold repetition. The promotion pool is
+therefore not currently valid for a sequential strength test. It must be
+regenerated from the remaining candidates, re-audited with exact histories,
+and repinned; silently skipping the entry would change the ordered pool and
+GSPRT.
 
 Every arena root has a full standard-initial-position-to-root history sidecar.
 The gameplay runner replays it exactly so repetition and draw-claim state are
@@ -564,6 +586,14 @@ The promotion implementation uses the official Fishtest
 constrained-multinomial normalized-Elo likelihood, including the pentanomial
 pair-to-game `sqrt(2)` conversion. It is distinct from descriptive logistic Elo
 and is the only state allowed to report `promotion_eligible=true`.
+
+Commit `a2ea5ed` adds the resumable checkpoint-versus-checkpoint command with
+strict checkpoint/code/pool/history contracts, immutable checksummed
+pair-blocks, atomic state publication, pair-boundary stopping, codec/fault
+accounting, and a lean diagnostics-off inference path. Correctness and
+development remain available. Promotion is explicitly `available=false` and
+fails before model loading until the root-threefold defect is repaired. A
+strength-valid long-game cap also remains to be calibrated.
 
 Inconclusive is not evidence of equality. Small improvements should be combined
 through validation and repeated training runs before paying for a promotion
@@ -597,6 +627,9 @@ the same 4,096 globally permuted positions for matched comparisons. Seed
 10,000 is the development slice and seed 20,000 is the first independent
 confirmation slice. A change to training batch size must not silently change
 validation batch size, count, positions, or finite-sample partition.
+Checkpoint selection now uses the mean of those two pools; when updates 300
+and 400 were nearly tied, seeds 30,000 and 40,000 were added as an explicitly
+matched tie-break rather than consulted one candidate at a time.
 
 Promotion policy:
 
@@ -760,16 +793,21 @@ sweeps, held-out data, and repeated seeds.
 - [x] Reject linear learning-rate scaling at batch 128 and record the full
   collapse/coupling diagnostics plus an independent validation seed for the
   unscaled-rate checkpoint.
-- [ ] Establish a repeatable/noise-qualified batch-128 baseline. Nominally
-  identical runs currently diverge after update one, their CE spread is
-  comparable to the observed gain, legal mass regresses on both validation
-  seeds, and target RMS narrowly misses the 95% retention gate.
+- [x] Complete the first 30-minute fresh-optimizer batch-128 run and evaluate
+  every saved checkpoint read-only on seeds 10,000 and 20,000.
+- [x] Tie-break updates 300 and 400 on new seeds 30,000 and 40,000. Select
+  update 300 provisionally: its four-pool CE improves by `0.020745492`, all
+  horizons improve, and aggregate accuracy/legal mass also improve.
+- [ ] Complete and scan the identical v2 repeat, quantify checkpoint-selection
+  noise, and run the full latent gate on the selected repeat checkpoint.
+  Partial v2 state is not evidence, and v1's endpoint still misses 95% target
+  RMS retention.
 - [ ] Freeze a corrected baseline objective only after scale stability and
   policy/legal metrics pass together on matched global validation.
 - [x] Implement and golden-test separate legacy-absolute and board-aware LC0
   canonical 1,858 action codecs.
 - [x] Implement deterministic paired-arena foundations, audit the real
-  held-out FEN universe, and freeze disjoint development/promotion pools.
+  held-out FEN universe, and construct disjoint development/promotion pools.
 - [x] Implement and profile cached-BT4 batched multi-pass DFM inference.
 - [x] Implement the fail-closed persistent batched paired-opening arena, strict
   localized checkpoint policy adapter, and bounded GPU policy batches.
@@ -777,3 +815,9 @@ sweeps, held-out data, and repeated seeds.
   Fishtest likelihood numerically.
 - [x] Run the 16-pair source-vs-source A10G correctness tier with identical
   move traces, zero faults, and exact 50/50 paired scoring.
+- [x] Add the resumable relative-strength command with immutable pair blocks,
+  strict resume contracts, pair-boundary GSPRT stopping, and fail-closed model
+  and codec accounting.
+- [ ] Regenerate and repin the promotion pool: exact replay found entry 1,245
+  already claim-draw terminal by root threefold repetition. Promotion remains
+  unavailable until the replacement pool and history sidecar pass re-audit.

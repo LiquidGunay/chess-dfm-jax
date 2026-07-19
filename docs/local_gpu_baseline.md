@@ -992,11 +992,167 @@ and
 `5af4e4246f9151b67000bff8b6ef7491a3821f4617ec43d16ba6a1c288aa12dc`,
 respectively.
 
-No run in this section has reached the fixed 30-minute acceptance tier, no Elo
-arena was run, and no checkpoint was promoted. `research/results.tsv` remains
-header-only. The code-level readiness flag remains
-`AUTORESEARCH_READY = False`: the next gate is a matched longer control with
-repeats sufficient to estimate noise, not unattended architecture search.
+### Completed 30-minute v1
+
+The first full baseline-qualification run used the provisional configuration:
+model-only source import, fresh optimizer, zero warmup, batch 128, main/BT4
+rates `3e-5`/`1e-6`, online target SIGReg `5.76`, globally permuted training,
+and fixed validation batches of 64. It ran for 1,800 configured training
+seconds and saved every 100 updates plus the final update.
+
+| Run property | Value |
+|---|---:|
+| Updates / examples | 557 / 71,296 |
+| Measured training-loop wall time | 1,819.51 s |
+| Device / fetch-inclusive examples/s | 44.69 / 41.31 |
+| Whole-loop examples/s | 39.18 |
+| Input-stall fraction | 7.58% |
+| Explicit compile | 17.35 s |
+| Synchronous checkpoint saves | 85.10 s |
+| Mean sampled GPU utilization / power | 85.41% / 251.20 W |
+| Peak JAX live memory | 9,703,864,832 bytes |
+
+The update-557 endpoint is not the selected checkpoint. On the seed-10,000
+validation pool, its DFM CE changes from `4.557536` to `4.549606`, while
+accuracy changes from `0.105713` to `0.104950` and legal mass from `0.641367`
+to `0.632197`. The endpoint improves scale-independent JEPA diagnostics but
+still misses the target-scale gate:
+
+| Diagnostic | Initial | Update 557 |
+|---|---:|---:|
+| Mean target RMS | 0.995286 | 0.937633 (94.21%) |
+| Mean prediction RMS | 0.955479 | 0.925837 (96.90%) |
+| Mean prediction effective rank | 31.429 | 30.657 (97.54%) |
+| Mean prediction-target cosine | 0.814534 | 0.860854 |
+| Positive MSE / zero MSE | 0.350225 | 0.265803 |
+| Action-shuffled MSE / positive MSE | 4.79731 | 6.39821 |
+
+This is target-scale contraction without prediction rank collapse or loss of
+action conditioning. The complete report is
+`research/runs/baseline-freshopt-online-target576-b128-lr3e5-bt4lr1e6-30m-v1/report.json`
+(SHA-256
+`c52b4ef8368ed73d6d9ba194647acce275d3d8a9a19dff757eaec87a444ee6d4`).
+
+### Read-only checkpoint scan
+
+Commit `ec58c63` adds one-process, read-only evaluation of a checkpoint series.
+It validates the authoritative resume contract and state digest, restores only
+evaluation state, never restores or mutates optimizer state, and reuses one
+model object/JIT cache. Every saved v1 checkpoint was evaluated on the same
+two independently seeded pools, each 64 batches × 64 examples. The source row
+is the mean of the matched source evaluations at seeds 10,000 and 20,000:
+
+| Update | Mean DFM CE | Accuracy | Legal mass | CE delta from source |
+|---:|---:|---:|---:|---:|
+| Source | 4.530784944 | 0.106887817 | 0.638989463 | — |
+| 100 | 4.519870488 | 0.107345581 | 0.639392403 | -0.010914456 |
+| 200 | 4.516547283 | 0.108047485 | 0.640690137 | -0.014237661 |
+| 300 | **4.512040799** | 0.108215332 | 0.642176097 | **-0.018744145** |
+| 400 | 4.512268856 | **0.108352661** | **0.644024267** | -0.018516088 |
+| 500 | 4.516230294 | 0.107864380 | 0.634826829 | -0.014554650 |
+| 557 | 4.516885983 | 0.107650757 | 0.635045255 | -0.013898961 |
+
+The scan finds a real intermediate optimum: update 300 has the lowest primary
+CE, update 400 is only `0.000228057` worse and has better secondary
+accuracy/legal mass, and updates 500 and 557 both lose CE and legal mass. The
+scan artifacts under
+`research/runs/baseline-freshopt-online-target576-b128-30m-checkpoint-scan-seeds10000-20000-v1/`
+are:
+
+- `checkpoint_metrics.jsonl`, SHA-256
+  `235bd4626417d1f2d352586e16b61b15da0e46c933cbdf8f17bacdbac4abb8d2`;
+- `checkpoint_summary.json`, SHA-256
+  `305e72f927eff1deb4ab75959682a56eb89d95eaad4e5fdc0236ddf5816fc06f`.
+
+### Extra-pool tie-break and provisional update 300
+
+Updates 300 and 400 were then evaluated on two new global-permutation pools,
+seeds 30,000 and 40,000, again with 4,096 examples per seed and the same
+batch-64 partition. New matched source reports have SHA-256:
+
+- `research/runs/source-eval-b64-globalval64-seed30000-v1/report.json`:
+  `4f395663955e55e4a6c423748a6ddecf82b7e087011800a864c75f8a3619c692`;
+- `research/runs/source-eval-b64-globalval64-seed40000-v1/report.json`:
+  `949350447b9fe108da2cc095cfc82efe9d6d8f7982375e48eb45cd85b66f1fd2`.
+
+| Seed | Source CE | Update-300 CE (delta) | Update-400 CE (delta) |
+|---:|---:|---:|---:|
+| 30,000 | 4.541255090 | 4.520179298 (-0.021075793) | 4.522099853 (-0.019155238) |
+| 40,000 | 4.597208142 | 4.572790258 (-0.024417885) | 4.573618725 (-0.023589417) |
+
+Update 300 wins CE on both tie-break pools. Across all four independent pools
+(16,384 validation examples for each model), the aggregate is:
+
+| Model | DFM CE | Accuracy | First legal mass |
+|---|---:|---:|---:|
+| Source | 4.550008280 | 0.106750488 | 0.642926642 |
+| Update 300 | **4.529262789** | 0.107345581 | 0.644614464 |
+| Delta | **-0.020745492** | +0.000595093 | +0.001687822 |
+| Update 400 | 4.530064072 | **0.107704163** | **0.645898934** |
+| Delta | -0.019944208 | +0.000953674 | +0.002972292 |
+
+Update 300 is `0.000801284` better in aggregate CE; update 400 remains better
+on aggregate accuracy and legal mass. Update 300 improves DFM CE at every
+horizon, not only in the aggregate:
+
+| Horizon | Source CE | Update-300 CE | Delta |
+|---:|---:|---:|---:|
+| 1 | 2.931054348 | 2.889833486 | -0.041220862 |
+| 2 | 3.361853272 | 3.334500283 | -0.027352989 |
+| 3 | 4.238529742 | 4.222269058 | -0.016260684 |
+| 4 | 4.677275896 | 4.653810143 | -0.023465753 |
+| 5 | 4.985557675 | 4.973970413 | -0.011587262 |
+| 6 | 5.220019460 | 5.200613737 | -0.019405723 |
+| 7 | 5.407092810 | 5.394062519 | -0.013030291 |
+| 8 | 5.578682899 | 5.565042496 | -0.013640404 |
+
+The action-metric improvement is not unanimous per pool: update 300 loses
+legal mass on seeds 10,000 and 30,000 and loses a small amount of accuracy on
+seed 40,000. It is therefore selected only provisionally by the declared
+primary metric. Its state payload is `1,851,704,172` bytes with SHA-256
+`0cd9e538381baf154fa9491aa67239228ccc550fb2b256b55435fb9bd3274b06`;
+the manifest SHA-256 is
+`12e77e1f7a0ffc2a5eac2747f1b822a77d06879bd244f1501d14a8f1a1e3680c`.
+
+The extra-pool evidence digests under the corresponding
+`research/runs/baseline-b128-u{300,400}-checkpoint-scan-seeds30000-40000-v1/`
+directories are:
+
+| Evaluation | `checkpoint_metrics.jsonl` | `checkpoint_summary.json` |
+|---|---|---|
+| Update 300, seeds 30k/40k | `0522512d16cba9ccb1e14ca80a0372d00d9aeb775abd335d2ae45b4d996daa8d` | `2bfba7366fe0e6bfc72c21c56459f9635a56876dfed04c0dc9ce83596d64a804` |
+| Update 400, seeds 30k/40k | `3f4540825d070f4dc81765be358987630c07518e98d5270f464e63c8e239aa2b` | `5a98e926aa7870f94e836b7809d3a41379c6fffcafb783b80f23e9cc09d289cf` |
+
+An identical v2 30-minute baseline is currently running from the same source
+model, fresh optimizer, seed, data schedule, rates, batch sizes, checkpoint
+cadence, and objective. Partial v2 files are not evidence. Update 300 remains
+provisional until the completed repeat and matched checkpoint scan establish
+whether its improvement exceeds training nondeterminism.
+
+### Resumable arena foundation and promotion-pool defect
+
+Commit `a2ea5ed` adds the checked local relative-strength command described in
+`docs/local_relative_arena.md`. It strictly loads source or research
+checkpoints, runs deterministic cached-BT4 multi-pass DFM inference, accounts
+for codec coverage and fail-closed faults, plays exact color-reversed pairs,
+records pair-aware descriptive statistics, and maintains the official
+normalized-Elo GSPRT. Results are written as immutable checksummed pair blocks
+plus an atomically replaced state file. Resume binds checkpoints, code, pool,
+history, configuration, state, and every block digest.
+
+The new exact-history audit also found that promotion entry 1,245 is already
+claim-draw terminal by threefold repetition at its root, although the root FEN
+alone appears nonterminal. Promotion is consequently marked unavailable and
+fails before model loading. Silently dropping the entry would change the
+frozen ordered pool and sequential test; the promotion pool and history
+sidecar must be regenerated, re-audited, and repinned. The correctness and
+development tiers remain available, but a strength-valid long-game cap is not
+yet frozen.
+
+No u300 Elo match has been run, and no checkpoint has been promoted. The v1
+run is a baseline-qualification result, not an accepted autoresearch
+experiment, so `research/results.tsv` remains header-only. The code-level
+readiness flag remains `AUTORESEARCH_READY = False`.
 
 ## Strict local checkpoint/resume
 
@@ -1153,7 +1309,7 @@ future implementation cannot silently inherit the old reporting semantics.
 Authoritative free-rollout collapse and action-dependence diagnostics remain
 separately computed and reported.
 
-## Frozen arena and promotion foundation
+## Arena and initial promotion foundation
 
 Commit `c65f77f` adds the engine-agnostic persistent arena layer:
 
@@ -1183,16 +1339,17 @@ path:
 The normalized implementation includes Fishtest's pentanomial `sqrt(2)`
 conversion and matched the official implementation across 100 random count
 vectors with maximum absolute LLR error `1.11e-12`. This state, unlike the
-logistic diagnostic, is eligible to make a promotion decision.
+logistic diagnostic, can make a promotion decision only with a valid frozen
+pool.
 
-The real frozen artifacts are:
+The pinned artifacts constructed in the first audit are:
 
 - development: 128 validation FENs, pool digest
   `451784d106bc25b06a3891e910213220275d93eae434badddfe1a38b2e58138a`,
   ordered-FEN digest
   `f86f0fa9de93a8753d2d3b508af4f2479bf9d36f007cd45a378607603b9fb52b`;
   and
-- history-hardened promotion: 2,048 test FENs, pool digest
+- initial promotion: 2,048 test FENs, pool digest
   `8653033334e79c57f321dcdb0b5fd965ed10e4e4586b2826ec670876530ca80f`,
   ordered-FEN digest
   `81d8e0e158ded335899934d3f385b0b065702f469f520175e2fdb0f94e7aa60b`.
@@ -1213,12 +1370,17 @@ and
 `e72e62d85571476fccd69e2381ad96043b43ec52234547fec1b48404a78dc0d7`.
 The local JSON artifacts are under `artifacts/arena/`.
 
+The later exact-replay audit in commit `a2ea5ed` invalidates the promotion
+artifact for strength testing: entry 1,245 is already claim-draw terminal by
+root threefold repetition. The development artifact remains available, while
+promotion fails closed pending regeneration and repinning.
+
 ### Plane-history compatibility audit
 
 The trajectory source explicitly calls `encode_board(board, [])` for both
 current and future planes. A direct audit confirmed that current-only encoding
 exactly matches every stored root plane among all 128 development and 2,048
-history-hardened promotion positions. Conversely, adding reconstructed history
+initial promotion positions. Conversely, adding reconstructed history
 mismatched all 224 rows in the history-aware comparison slice.
 
 Arena histories are still mandatory for legal replay, repetition, and claim
@@ -1286,17 +1448,22 @@ The continuation study explains a large part of the earlier policy regression:
 the exact source optimizer and learning rates came from global batch `8,192`,
 the recovered source checkpoint was already past its best recorded validation
 point, and local batch 64 restarted the data/RNG stream. A fresh lower-rate
-optimizer removes the large short-run regression, but it does not yet clear
-the acceptance gate.
+optimizer removes the large short-run regression. The completed v1
+checkpoint scan provisionally selects update 300; across four matched
+validation pools it improves aggregate DFM CE, accuracy, legal mass, and every
+per-horizon CE relative to source.
 
 The remaining acceptance work is to:
 
-- measure or remove the observed batch-128 repeated-run nondeterminism;
-- repeat a matched longer fresh-optimizer baseline on the fixed 4,096-position
-  validation protocol and independent seed;
-- retain at least 95% target scale while improving CE beyond repeat noise
-  without regressing policy accuracy or legal mass; and
-- run Elo only after those offline gates select a real promotion candidate.
+- finish the identical v2 run and matched checkpoint scan without using its
+  partial state as evidence;
+- quantify selection noise and run the full collapse/scale gate on the
+  repeated selected checkpoint;
+- retain at least 95% target scale while confirming that the four-pool policy
+  improvement exceeds training noise;
+- regenerate and re-audit the promotion pool/history sidecar to remove the
+  claim-draw-terminal entry without changing the sequential test in place; and
+- calibrate a strength-valid long-game cap before any Elo result.
 
 Until then `AUTORESEARCH_READY = False`, `research/results.tsv` remains
 header-only, and neither the objective nor the optimizer/batch configuration

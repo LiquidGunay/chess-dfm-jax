@@ -9,6 +9,12 @@ architecture search, append calibration runs to `research/results.tsv`, run a
 promotion arena, or describe a checkpoint as promoted until a repeated,
 noise-qualified baseline passes the offline gates below.
 
+The current update-300 checkpoint is provisional pending the identical v2
+repeat and matched checkpoint scan. Promotion is independently unavailable:
+exact history replay found pinned promotion entry 1,245 already terminal by
+claimable threefold repetition. Regenerate, re-audit, and repin the pool and
+history sidecar; never skip the entry in place.
+
 ## Editable surface
 
 During automated architecture research, edit only `research/train.py`.
@@ -59,13 +65,17 @@ Before readiness is opened, the comparison protocol is 64 validation batches
 of 64 examples. Use seed 10,000 for development and seed 20,000 for the first
 independent confirmation. Training-batch changes must retain those same 4,096
 positions and partitions through `--eval-batch-size 64`.
+Select checkpoints on the matched mean of both pools. For a near tie, add new
+predeclared matched pools to every tied checkpoint; the current tie-break uses
+seeds 30,000 and 40,000. Never choose an extra seed after inspecting only one
+candidate.
 
 The weighted training loss is not by itself a promotion metric.
 
-The strength gate consumes complete color-reversed pairs from the frozen
-promotion pool. Only the normalized-Elo GSPRT may promote a checkpoint:
-`H0=0`, `H1=+20`, `alpha=beta=0.05`, checked after complete pairs and capped at
-2,048 pairs. Descriptive logistic Elo never authorizes promotion.
+Once repaired, the strength gate consumes complete color-reversed pairs from
+the repinned promotion pool. Only the normalized-Elo GSPRT may promote a
+checkpoint: `H0=0`, `H1=+20`, `alpha=beta=0.05`, checked after complete pairs
+and capped at 2,048 pairs. Descriptive logistic Elo never authorizes promotion.
 
 Reject a run if:
 

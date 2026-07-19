@@ -22,16 +22,22 @@ The clean A10G research path lives on `research/local-gpu-autoresearch`; the
 historical TPU implementation is preserved on
 `legacy/tpu-joint-latent-sasa`. The detailed contract and measured evidence are
 in `docs/local_gpu_autoresearch_plan.md` and
-`docs/local_gpu_baseline.md`.
+`docs/local_gpu_baseline.md`; the relative-strength evaluator contract is
+`docs/local_relative_arena.md`.
 
 Unattended autoresearch is not enabled: `AUTORESEARCH_READY = False`,
 `research/results.tsv` remains header-only, and no continuation checkpoint has
-received an Elo evaluation or promotion. The current provisional efficiency
-candidate imports the step-265,000 model only, starts a fresh zero-warmup
-optimizer at main/BT4 rates `3e-5`/`1e-6`, and trains at batch 128 while
-holding validation at 64 × 64 examples. Its small, noisy CE gain comes with
-legal-mass regression and a narrow target-scale gate failure, so it is a
-baseline candidate rather than a frozen result.
+received an Elo evaluation or promotion. The first 30-minute batch-128 run
+provisionally selects update 300: across four matched 4,096-position validation
+pools its DFM CE improves `4.550008280 → 4.529262789`, aggregate
+accuracy/legal mass improve, and all eight horizon CEs improve. Update 400 is
+close and better on the secondary aggregate action metrics, the v1 endpoint
+still misses the target-scale gate, and an identical v2 repeat is running.
+
+The resumable relative-strength arena is implemented, but its promotion tier
+fails closed before model loading. Exact history replay found pinned promotion
+entry 1,245 already terminal by claimable threefold repetition; the pool and
+history sidecar must be regenerated and repinned rather than silently edited.
 
 ## Layout
 
