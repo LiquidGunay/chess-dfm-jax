@@ -1,6 +1,8 @@
 # Local A10G baseline
 
-Date: 2026-07-18
+Started: 2026-07-18
+
+Last updated: 2026-07-19
 
 This records the first verified local-GPU baseline before any intentional model
 or objective change.
@@ -776,6 +778,226 @@ also shows that online `5.76` cannot be frozen from the available evidence.
 No normalized objective is frozen, `autoresearch_ready=false`, and the next
 objective comparison must use matched global validation from its first run.
 
+## Continuation audit and provisional local optimizer baseline
+
+The first corrected global-validation result exposed a second confound: the
+source optimizer was built for a TPU global batch of `8,192`, while the first
+local continuation used physical/global batch `64` with no accumulation. The
+local batch is therefore 128 times smaller. The source configuration used main
+and BT4 learning rates `3e-4` and `1e-5`; applying them unchanged to batch 64
+is not a batch-matched continuation.
+
+The word “exact” is also deliberately narrow at the legacy import boundary.
+`--init exact` restores the trainable model, optimizer state, and optimizer
+step `265,000`. The legacy payload has no input cursor or PRNG stream, so the
+local run starts at local cursor zero and derives randomness from the local
+seed and cursor. This is an exact state import, not a continuation of the TPU
+stochastic process. In contrast, a subsequent local research checkpoint
+records `next_data_cursor`; its RNG is derived from the resume-bound seed and
+that cursor.
+
+The source itself had already moved past its best recorded validation point.
+All nine validation records present in the source history span steps
+225,000–265,000:
+
+| Source step | Validation total | DFM CE | Accuracy | First legal mass |
+|---:|---:|---:|---:|---:|
+| 250,000 | **5.925633** | 4.508655 | 0.108962 | 0.640421 |
+| 255,000 | 5.938301 | **4.503008** | **0.109890** | **0.644553** |
+| 260,000 | 5.949284 | 4.509257 | 0.109631 | 0.644534 |
+| 265,000 | 6.106098 | 4.541201 | 0.107515 | 0.643071 |
+
+Thus step 265,000 is `+0.038193` CE beyond the recorded CE minimum, and
+accuracy/legal mass also peaked at step 255,000. Absolute source values are not
+compared to the corrected local validation protocol; the within-run history is
+used only to show that inheriting the last optimizer moments is not a neutral
+baseline choice. The source `run_config.json` and `metrics.jsonl` SHA-256
+digests are
+`f4f44c673322fbb04367db7b28fcc82c30f89fc12340e66322607d53bbf99555`
+and
+`bf62337ae6c74281fe790fbc743fe030dd8f0a28813f7590aa9e73716b8c67fc`.
+
+### Global training order and optimizer-isolation experiments
+
+Commit `42bf65c` exposed a seeded `global_permutation` training schedule and
+explicit main/BT4 learning-rate overrides. The following runs all trained on
+the same 6,400 examples and used the same 2,048-position, seed-10,000 global
+validation slice before and after. Deltas are final minus initial:
+
+| Initialization/objective | Main / BT4 LR | Total loss | DFM CE | Accuracy | Legal mass | Disposition |
+|---|---:|---:|---:|---:|---:|---|
+| Exact optimizer, full objective | `3e-4` / `1e-5` | +0.725222 | +0.472953 | -0.029663 | -0.139341 | reject |
+| Exact optimizer, full objective | `3e-5` / `1e-6` | -0.016040 | +0.014015 | -0.002930 | -0.007042 | reject |
+| Exact optimizer, policy only | `3e-5` / `1e-6` | +0.050695 | +0.025827 | -0.004822 | -0.012434 | reject |
+| Fresh optimizer, full objective | `3e-5` / `1e-6` | -0.080489 | -0.005833 | -0.000671 | +0.004513 | provisional |
+
+The policy-only total uses a different objective and is comparable only
+within that row, not to the full-objective totals.
+
+The source-rate run shows that merely correcting training order does not
+remove the policy collapse. Reducing both rates by ten is close to square-root
+batch scaling for the 128-fold batch reduction, but the inherited optimizer
+still makes policy CE, accuracy, and legal mass worse even while the mutable
+weighted loss improves. This is direct evidence that training loss alone
+cannot select the baseline.
+
+Commit `1fca0f0` then disabled both JEPA positive loss and target SIGReg to
+isolate policy-only continuation. It regressed every policy-side metric more
+than the matched lower-rate full objective and was reverted by `5e8e7b1`.
+Policy-only continuation is therefore rejected, not retained as the clean
+baseline.
+
+Commits `d8ab42c` and `0803f06` isolate local optimization instead. Model-only
+initialization still validates the complete source optimizer ABI but starts a
+new optimizer at step zero. `lr_warmup_steps=0` uses constant stateful
+schedules, preserving optimizer-tree compatibility without spending the first
+local updates near zero learning rate. At batch 64, the fresh-optimizer
+candidate was then evaluated on 4,096 positions at two validation seeds:
+
+| Validation seed | DFM CE delta | Accuracy delta | Legal-mass delta |
+|---:|---:|---:|---:|
+| 10,000 | -0.000766 | -0.000610 | +0.001746 |
+| 20,000 | -0.000672 | +0.001221 | +0.004401 |
+
+The CE direction repeats, but its magnitude is tiny. The same run retains
+`94.30%` of mean target RMS after 100 updates, below the provisional 95% scale
+gate, although prediction rank, cosine, and action coupling remain healthy.
+Fresh local optimizer state is the best initialization candidate found here;
+the batch-64 endpoint is not a frozen objective or promoted checkpoint.
+
+### Row-sliced random loading and honest throughput
+
+Commit `bf18a5b` slices encoded trajectory rows before plane expansion and
+legal-mask construction for globally permuted batches. It also separates
+accelerator-only update throughput from fetch-inclusive and whole-loop
+throughput:
+
+```text
+device examples/s = batch / update time
+end-to-end examples/s = batch / (fetch + update time)
+training-wall examples/s = all examples / measured loop wall time
+```
+
+An isolated B64-from-B1024 loader benchmark measured about `245 MiB` less peak
+host RSS and roughly 17% lower decode time than expanding the full shard.
+This is not compressed random access: NumPy still inflates an accessed NPZ
+member before slicing, but the expensive plane conversion and legal-mask
+expansion now operate only on the selected rows.
+
+The old `steady_examples_per_second` excluded host input time and could hide a
+large stall. Reconstructing the new definitions from old JSONL records and
+comparing them with post-change reports gives:
+
+| Loader/run | Batch | Device ex/s | End-to-end ex/s | Input stall | Fetch p95 |
+|---|---:|---:|---:|---:|---:|
+| Pre-slice, source LR | 64 | 39.69 | 32.58 | 17.9% | 0.429 s |
+| Pre-slice, lower LR | 64 | 39.17 | 20.50 | 47.7% | 3.137 s |
+| Row-sliced, three runs | 64 | 39.52–39.75 | 32.88–33.07 | 16.7–16.9% | 0.348–0.355 s |
+| Row-sliced, three runs | 128 | 44.68–44.77 | 41.30–41.42 | 7.48–7.57% | 0.240–0.248 s |
+
+The pre-slice lower-rate run demonstrates why update-only throughput is not a
+hardware-utilization result: it reported `39.17` examples/s while delivering
+only `20.50` examples/s across fetch plus update. Post-change batch-64 results
+are stable near `33.0` end-to-end examples/s. Batch 128 raises that to about
+`41.4` examples/s, a roughly 25% gain, raises mean sampled GPU utilization
+from about 77.6% to 89.0%, and reduces the measured input-stall fraction by
+more than half. Its cost is roughly `9.70 GB` peak JAX live memory versus
+`6.01 GB` at batch 64.
+
+### Fixed validation population and batch-128 learning rate
+
+Commit `455a806` adds `--eval-batch-size`, decoupling validation partitioning
+from physical training batch. Every batch-128 comparison below therefore uses
+exactly 64 validation batches of 64 examples: the same 4,096 seed-10,000
+positions and the same finite-batch partition as the batch-64 control. This is
+required because normalized SIGReg is duplication-invariant but remains a
+non-additive finite-sample statistic; changing evaluation batch partition
+would change the reported statistic even at fixed positions.
+
+All batch-128 runs consume the same 6,400-example budget as 100 updates at
+batch 64. Because changing batch size changes the global slot partition, this
+is a fixed-example-count comparison, not a claim that batch 64 and batch 128
+read identical training rows:
+
+| Batch-128 run | Main / BT4 LR | DFM CE delta | Accuracy delta | Legal-mass delta | Decision |
+|---|---:|---:|---:|---:|---|
+| Linear-scaled LR | `6e-5` / `2e-6` | +0.021454 | -0.003479 | -0.016390 | reject |
+| Unscaled LR, repeat A | `3e-5` / `1e-6` | -0.005654 | -0.000793 | -0.003962 | provisional |
+| Unscaled LR, repeat B + diagnostics | `3e-5` / `1e-6` | -0.001716 | -0.000885 | -0.005235 | provisional |
+
+Doubling the learning rates with batch size is decisively rejected. The two
+unscaled runs have the same model initialization, optimizer, seed, training
+slots, example count, and fixed validation positions. Their first update
+metrics are identical, but their training metrics diverge at update two and
+their final DFM CE differs by `0.003938`. The only intentional computational
+difference was whether read-only collapse diagnostics were computed during
+validation. This proves that the current comparison procedure is not
+bit-for-bit repeatable under that perturbation, but it does not isolate
+accelerator nondeterminism from a hidden state, compilation/cache effect, or
+another cause. The two metrics-log hashes are respectively
+`01c674f2e0c84084ebb0b40321b9fee26c697151484e5570260c27886750f582`
+and
+`580225d322108231ee16dbc18bb01968737d63dbd13573882803962d6a913dac`.
+The final CE spread is comparable to the apparent CE improvement, so it is the
+current empirical noise floor rather than evidence for ranking the repeats.
+
+The diagnostic repeat gives the complete latent gate:
+
+| Gate metric | Initial | Final | Result |
+|---|---:|---:|---|
+| Mean target RMS | 0.995286 | 0.943101 (94.76%) | misses 95% retention |
+| Mean prediction RMS | 0.955479 | 0.932835 (97.63%) | pass |
+| Mean prediction effective rank | 31.429 | 31.559 (100.41%) | pass |
+| Mean prediction feature std. | 0.909275 | 0.889949 (97.87%) | pass |
+| Minimum horizon prediction std. p05 | 0.679048 | 0.662265 | pass |
+| Mean prediction-target cosine | 0.814534 | 0.829621 | improves |
+| Positive MSE / zero MSE | 0.350225 | 0.329258 | improves |
+| Action-shuffled MSE / positive MSE | 4.79731 | 5.21775 | improves |
+
+Final raw positive MSE is `0.292969`, versus zero `0.889786`, identity
+`1.580654`, shuffled-target `1.668545`, and action-shuffled `1.528640`.
+Prediction collapse and loss of action conditioning are not the failure modes.
+Target scale narrowly fails, while policy accuracy and legal mass regress.
+
+An independent seed-20,000 evaluation of the saved batch-128 checkpoint finds
+DFM CE `-0.001443`, accuracy `+0.000397`, and legal mass `-0.001741` relative
+to the source on the same 4,096 positions. Legal mass therefore regresses at
+both seeds, and the CE gain remains small relative to repeated-run spread.
+Batch 128 with fresh optimizer and unscaled lower learning rates is only the
+provisional efficiency candidate for a longer matched baseline; it is not an
+accepted quality baseline.
+
+### Evidence hashes and disposition
+
+The report SHA-256 digests for this continuation study are:
+
+| Run | `report.json` SHA-256 |
+|---|---|
+| `online-target576-b64-100-globaltrain-globalval32-v1` | `28e719d5914a250102a53b375478e9db40fd92bed60b3836eef977bca45609a2` |
+| `online-target576-b64-lr3e5-bt4lr1e6-100-globaltrain-globalval32-v1` | `8e5a6a85acce21e06b1fb1a8f435fcb1f5e9a4ebe3521bd5f075937cc92487f1` |
+| `policy-only-b64-lr3e5-bt4lr1e6-100-globaltrain-globalval32-v1` | `6c624e007db07dbd14dcb624657985ff37959f11a15dcba33114265cde98a64f` |
+| `freshopt-online-target576-b64-lr3e5-bt4lr1e6-100-globaltrain-globalval32-v1` | `4afb2fa947a823a08c67e837d9d0aca6b42b1f5f27987d2e635bcb820191cfa5` |
+| `freshopt-online-target576-b64-lr3e5-bt4lr1e6-100-globaltrain-globalval64-collapse-v1` | `2155946e408a8afc951063dce5c9e3627d3fa9466e4aa6e23ee0719a6d00308b` |
+| `source-eval-b64-globalval64-seed20000-v1` | `2b6b6a32871857c017bcc60ba811a2c039f742af15debd553837389f188e4420` |
+| `candidate100-eval-b64-globalval64-seed20000-v1` | `73f0510f0af0a0f3953757efda9938cde01a32d9886fdb2310aa37eb9d70396c` |
+| `freshopt-online-target576-b128-lr6e5-bt4lr2e6-50-globaltrain-fixedval4096-v1` | `ec575ae6a7b49344a259f4c77d098b9eef0c244e1da6f5ab3050331ae76767ef` |
+| `freshopt-online-target576-b128-lr3e5-bt4lr1e6-50-globaltrain-fixedval4096-v1` | `0b366e7610cd0ecb50af27c814d2d782f466fe4844818983fea3adaa56b77727` |
+| `freshopt-online-target576-b128-lr3e5-bt4lr1e6-50-globaltrain-fixedval4096-collapse-v1` | `a7c39bd33fc07d9ebc45bb09d7188764cdb947be7abab5372e7ec24a0142980f` |
+| `candidate-b128-u50-eval-fixedval4096-seed20000-v1` | `c39d68c93bd65984a86445481c60c51529f6f902102d785f1b8051aaf94d7a20` |
+
+The saved batch-64/update-100 and batch-128/update-50 state payloads have
+SHA-256
+`760272ff8230a1c8039c3c6a2933158108b82b621ac18f52a06e0da701fb4694`
+and
+`5af4e4246f9151b67000bff8b6ef7491a3821f4617ec43d16ba6a1c288aa12dc`,
+respectively.
+
+No run in this section has reached the fixed 30-minute acceptance tier, no Elo
+arena was run, and no checkpoint was promoted. `research/results.tsv` remains
+header-only. The code-level readiness flag remains
+`AUTORESEARCH_READY = False`: the next gate is a matched longer control with
+repeats sufficient to estimate noise, not unattended architecture search.
+
 ## Strict local checkpoint/resume
 
 Commit `f6b9c40` adds a research checkpoint format with:
@@ -1060,10 +1282,22 @@ and before explicit CLI flags; the final effective configuration is
 resume-bound and recorded. Unknown keys, wrong types, and non-default legacy
 knobs that the local graph cannot honor fail closed.
 
+The continuation study explains a large part of the earlier policy regression:
+the exact source optimizer and learning rates came from global batch `8,192`,
+the recovered source checkpoint was already past its best recorded validation
+point, and local batch 64 restarted the data/RNG stream. A fresh lower-rate
+optimizer removes the large short-run regression, but it does not yet clear
+the acceptance gate.
+
 The remaining acceptance work is to:
 
-- explain or remove the matched global policy regression shared by online
-  `5.76` and fixed-unit-RMS `1.50`;
-- establish comparison noise with the corrected global sampler; and
-- freeze an objective only after scale, policy, and legal-mass gates pass
-  together on representative validation.
+- measure or remove the observed batch-128 repeated-run nondeterminism;
+- repeat a matched longer fresh-optimizer baseline on the fixed 4,096-position
+  validation protocol and independent seed;
+- retain at least 95% target scale while improving CE beyond repeat noise
+  without regressing policy accuracy or legal mass; and
+- run Elo only after those offline gates select a real promotion candidate.
+
+Until then `AUTORESEARCH_READY = False`, `research/results.tsv` remains
+header-only, and neither the objective nor the optimizer/batch configuration
+is frozen.

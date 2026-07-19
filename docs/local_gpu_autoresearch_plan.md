@@ -1,6 +1,8 @@
 # Local GPU Autoresearch Plan
 
-Status: approved for implementation on 2026-07-18.
+Status: implementation in progress. The plan was approved on 2026-07-18;
+unattended research remains disabled with `AUTORESEARCH_READY = False` as of
+2026-07-19.
 
 This document is the implementation contract for turning the existing
 TPU/cloud-oriented BT4 + DFM + JEPA experiment into a fast, measurable,
@@ -325,6 +327,25 @@ forensic/calibration-only. Every new objective comparison must use the same
 seeded global validation slots for control and candidate; a sampler or metric
 change requires a matched control rerun.
 
+The continuation audit adds two further constraints. The source TPU optimizer
+was trained at global batch `8,192`; local batch 64 is 128 times smaller, and
+legacy `--init exact` restores model/optimizer state but not the source input
+cursor or PRNG stream. The source history also places step 265,000 after the
+best of its nine recorded validation points. Exact-optimizer continuation at
+the source learning rates, a ten-times-lower exact-optimizer continuation, and
+a policy-only continuation all regress matched global policy metrics.
+Policy-only was reverted.
+
+The leading initialization candidate is therefore model-only import with a
+fresh optimizer, constant main/BT4 rates `3e-5`/`1e-6`, and zero warmup.
+This is not a frozen baseline. At batch 64 its CE gain is less than `0.001` on
+each of two 4,096-position validation seeds and target RMS retention is only
+`94.30%`. At batch 128, two nominal repeats differ by `0.00394` final CE,
+legal mass regresses on both validation seeds, and target RMS retention is
+`94.76%`. These results establish a provisional efficiency candidate and a
+repeatability/noise problem, not permission to start architecture search.
+They have no `research/results.tsv` row, Elo result, or promotion decision.
+
 This scale/shape split is also motivated by
 [VISReg](https://arxiv.org/abs/2606.02572), which argues that sketching
 regularizers can have weak gradients near collapse and retains a separate
@@ -406,6 +427,16 @@ Optimization sequence:
 The main expected lever is avoiding nine trainable BT4 encodes per sample on
 every step. Future-horizon sampling must be unbiased and compared at fixed
 wall-clock and fixed-example budgets.
+
+The first host-path optimization is complete. Commit `bf18a5b` slices encoded
+rows before plane/legal expansion for globally permuted batches and reports
+device-only, fetch-inclusive, and whole-loop throughput separately. On the
+A10G, batch 64 sustains about `33.0` fetch-inclusive examples/s with a
+`16.7–16.9%` input-stall fraction. Batch 128 sustains about `41.4`
+examples/s, roughly 25% faster, at a `7.5%` input-stall fraction and about
+`9.70 GB` peak JAX live memory. Commit `455a806` decouples validation batch
+size so training-batch experiments can retain the same positions and
+finite-sample partition.
 
 ## Phase 4: inference and relative Elo
 
@@ -561,13 +592,22 @@ Every result records:
 - peak HBM; and
 - keep/reject/confirm disposition.
 
+Until a baseline is frozen, use `eval_batch_size=64`, `eval_batches=64`, and
+the same 4,096 globally permuted positions for matched comparisons. Seed
+10,000 is the development slice and seed 20,000 is the first independent
+confirmation slice. A change to training batch size must not silently change
+validation batch size, count, positions, or finite-sample partition.
+
 Promotion policy:
 
 1. smoke compile and short correctness run;
-2. one 30-minute run;
-3. repeat or extend ideas exceeding baseline noise without failing a gate;
-4. batched relative-Elo evaluation; and
-5. full-data run only for confirmed candidates.
+2. repeat the candidate baseline until validation noise is measured;
+3. complete a matched 30-minute baseline-qualification run;
+4. open readiness only if its repeats pass every offline gate;
+5. give each subsequent quick experiment one 30-minute run;
+6. repeat or extend ideas exceeding baseline noise without failing a gate;
+7. run batched relative-Elo evaluation; and
+8. run full-data training only for confirmed candidates.
 
 Primary optimization signal is held-out DFM CE, with action metrics and hard
 JEPA-collapse gates. The mutable weighted training loss is not by itself a
@@ -702,6 +742,28 @@ sweeps, held-out data, and repeated seeds.
 - [x] Implement and calibrate default-off fixed unit-RMS target/prediction
   states. They stabilize scale and coupling but do not improve the matched
   global policy result, so they are not promoted.
+- [x] Audit source continuation semantics: record the TPU global-batch/local
+  batch mismatch, show that the recovered checkpoint is past its best recorded
+  validation point, and distinguish exact model/optimizer import from source
+  cursor/PRNG continuation.
+- [x] Reject source-rate exact-optimizer continuation, ten-times-lower
+  exact-optimizer continuation, and policy-only continuation on matched global
+  validation.
+- [x] Isolate model-only initialization with a fresh constant-rate optimizer
+  and zero warmup; retain it only as a provisional local initialization.
+- [x] Slice globally permuted encoded batches before expansion and expose
+  accelerator-only, fetch-inclusive, and whole-loop throughput. Benchmark
+  batch 64 and 128 on the active A10G graph.
+- [x] Decouple evaluation batch size from training batch size and rerun the
+  batch-128 learning-rate comparison on the same 4,096-position,
+  batch-64-partitioned validation population.
+- [x] Reject linear learning-rate scaling at batch 128 and record the full
+  collapse/coupling diagnostics plus an independent validation seed for the
+  unscaled-rate checkpoint.
+- [ ] Establish a repeatable/noise-qualified batch-128 baseline. Nominally
+  identical runs currently diverge after update one, their CE spread is
+  comparable to the observed gain, legal mass regresses on both validation
+  seeds, and target RMS narrowly misses the 95% retention gate.
 - [ ] Freeze a corrected baseline objective only after scale stability and
   policy/legal metrics pass together on matched global validation.
 - [x] Implement and golden-test separate legacy-absolute and board-aware LC0

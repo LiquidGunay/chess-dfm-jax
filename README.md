@@ -16,6 +16,23 @@ point for:
 - Latent-SASA joint DFM+JEPA pretraining
 - dataset QA/deduplication and run monitoring through marimo notebooks
 
+## Local GPU autoresearch status
+
+The clean A10G research path lives on `research/local-gpu-autoresearch`; the
+historical TPU implementation is preserved on
+`legacy/tpu-joint-latent-sasa`. The detailed contract and measured evidence are
+in `docs/local_gpu_autoresearch_plan.md` and
+`docs/local_gpu_baseline.md`.
+
+Unattended autoresearch is not enabled: `AUTORESEARCH_READY = False`,
+`research/results.tsv` remains header-only, and no continuation checkpoint has
+received an Elo evaluation or promotion. The current provisional efficiency
+candidate imports the step-265,000 model only, starts a fresh zero-warmup
+optimizer at main/BT4 rates `3e-5`/`1e-6`, and trains at batch 128 while
+holding validation at 64 × 64 examples. Its small, noisy CE gain comes with
+legal-mass regression and a narrow target-scale gate failure, so it is a
+baseline candidate rather than a frozen result.
+
 ## Layout
 
 - `chess_dfm_jax/`: local package with encoder, policy map, weights loader, BT4 reference forward, NNX BT4 encoder/model, chunk loader, PGN sequence loader, roofline helpers, raw NumPy checkpoints, TPU controller helpers, and W&B utilities.

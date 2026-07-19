@@ -4,6 +4,11 @@ The goal is to improve the fixed held-out chess metrics of the local-GPU
 BT4/DFM/JEPA model while preserving latent diversity and making training and
 inference faster.
 
+Current gate: `AUTORESEARCH_READY = False`. Do not launch unattended
+architecture search, append calibration runs to `research/results.tsv`, run a
+promotion arena, or describe a checkpoint as promoted until a repeated,
+noise-qualified baseline passes the offline gates below.
+
 ## Editable surface
 
 During automated architecture research, edit only `research/train.py`.
@@ -27,6 +32,7 @@ baseline version.
 - Measure compilation separately.
 - Give each accepted quick experiment 30 minutes of steady-state training.
 - Fix seeds and data order for the first comparison.
+- Fix validation batch size independently of physical training batch size.
 - Default to local JSONL/TSV logging; external tracking is opt-in.
 
 ## Primary result
@@ -45,8 +51,14 @@ report:
 
 First-shard slices are correctness and calibration instruments only. Every
 quality comparison must use identical `global_permutation` validation slots
-for control and candidate, with the effective seed and schedule recorded.
-A validation sampler or metric change requires rerunning the matched control.
+for control and candidate, with the effective seed, schedule, batch size, batch
+count, and finite-sample partition recorded. A validation sampler, batch
+partition, or metric change requires rerunning the matched control.
+
+Before readiness is opened, the comparison protocol is 64 validation batches
+of 64 examples. Use seed 10,000 for development and seed 20,000 for the first
+independent confirmation. Training-batch changes must retain those same 4,096
+positions and partitions through `--eval-batch-size 64`.
 
 The weighted training loss is not by itself a promotion metric.
 
@@ -61,6 +73,7 @@ Reject a run if:
 - prediction variance or effective rank crosses the collapse threshold;
 - the model fails to beat the trivial JEPA baselines;
 - legality regresses beyond the fixed tolerance;
+- an apparent improvement does not exceed repeated-run noise;
 - the run writes outside the workspace; or
 - validation data order or metric code changed without a matched control rerun.
 
@@ -70,11 +83,15 @@ Reject a run if:
 2. State one testable hypothesis.
 3. Make one coherent change to `research/train.py`.
 4. Run correctness and short GPU smoke tests.
-5. Run the fixed 30-minute experiment.
-6. Append exactly one row to `research/results.tsv`.
-7. Keep improvements that exceed baseline noise and pass every gate.
-8. Revert rejected changes without rewriting the result history.
-9. Promote only confirmed candidates to repeated runs and relative Elo.
+5. Repeat the baseline/candidate when bitwise repeatability is absent.
+6. Outside the unattended loop, complete a matched 30-minute baseline
+   qualification and open readiness only if its repeats pass every gate.
+7. Once readiness is open, run the fixed 30-minute experiment.
+8. Append exactly one row to `research/results.tsv` for that accepted
+   30-minute experiment; leave smoke and pre-baseline calibration runs out.
+9. Keep improvements that exceed baseline noise and pass every gate.
+10. Revert rejected changes without rewriting the result history.
+11. Promote only confirmed candidates to relative Elo.
 
 Prefer simple changes whose effects can be explained. Record surprises and
 negative results; they are part of the research output.
