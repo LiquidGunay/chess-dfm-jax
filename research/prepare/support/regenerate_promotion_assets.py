@@ -426,7 +426,51 @@ def _trajectory_archive_sha256() -> str:
     manifest = json.loads(
         (REPO_ROOT / "research" / "assets.json").read_text(encoding="utf-8")
     )
-    return str(manifest["trajectory_v3"]["archive"]["sha256"])
+    archive = manifest["trajectory_v3"]["archive"]
+    archive_path = require_within_workspace(
+        REPO_ROOT / "data" / "source" / str(archive["name"])
+    )
+    expected_size = int(archive["size_bytes"])
+    if archive_path.stat().st_size != expected_size:
+        raise ValueError(
+            f"Trajectory archive size mismatch for {archive_path}: "
+            f"expected {expected_size}, found {archive_path.stat().st_size}."
+        )
+    expected_sha256 = str(archive["sha256"])
+    observed_sha256 = sha256_file(archive_path)
+    if observed_sha256 != expected_sha256:
+        raise ValueError(
+            f"Trajectory archive digest mismatch for {archive_path}: "
+            f"expected {expected_sha256}, found {observed_sha256}."
+        )
+    return observed_sha256
+
+
+def _require_split_directory(path: Path, *, expected_split: str) -> Path:
+    split_dir = require_within_workspace(path)
+    if split_dir.name != expected_split:
+        raise ValueError(
+            f"Expected the {expected_split!r} split directory, got {split_dir}."
+        )
+    return split_dir
+
+
+def _validate_output_names(*names: str) -> tuple[str, ...]:
+    validated: list[str] = []
+    for name in names:
+        if (
+            not isinstance(name, str)
+            or not name
+            or Path(name).name != name
+            or not name.endswith(".json")
+        ):
+            raise ValueError(
+                "Promotion asset output names must be distinct .json basenames."
+            )
+        validated.append(name)
+    if len(set(validated)) != len(validated):
+        raise ValueError("Promotion asset output names must be distinct.")
+    return tuple(validated)
 
 
 def regenerate(
@@ -442,9 +486,14 @@ def regenerate(
     histories_name: str = DEFAULT_HISTORIES_NAME,
     contract_name: str = DEFAULT_CONTRACT_NAME,
 ) -> dict[str, Any]:
-    val_dir = require_within_workspace(val_dir)
-    test_dir = require_within_workspace(test_dir)
+    val_dir = _require_split_directory(val_dir, expected_split="val")
+    test_dir = _require_split_directory(test_dir, expected_split="test")
     output_dir = require_within_workspace(output_dir)
+    pool_name, histories_name, contract_name = _validate_output_names(
+        pool_name,
+        histories_name,
+        contract_name,
+    )
     val_paths = tuple(sorted(val_dir.glob("*.npz")))
     test_paths = tuple(sorted(test_dir.glob("*.npz")))
     if not val_paths or not test_paths:

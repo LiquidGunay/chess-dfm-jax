@@ -16,7 +16,7 @@ from chess_dfm_jax.policy import (
     ACTION_VOCAB_SIZE,
     legal_action_mask,
 )
-from research.arena import build_opening_pool, make_color_reversed_pairs
+from research.arena import build_opening_pool, load_opening_pool, make_color_reversed_pairs
 from research.arena_history_trust import (
     HISTORY_VALIDATION_FULL_REPLAY,
     HISTORY_VALIDATION_SCHEMA,
@@ -463,15 +463,27 @@ def test_promotion_state_advances_at_one_complete_pair_boundary(
     assert state["candidate_promoted"] is False
 
 
-def test_pinned_promotion_tier_fails_before_running_terminal_history():
+def test_pinned_promotion_tier_resolves_and_loads_verified_v3_assets():
     args = type(
         "Args",
         (),
         {
             "pair_count": None,
             "block_pairs": None,
-            "additional_ply_cap": 128,
+            "additional_ply_cap": 256,
         },
     )()
-    with pytest.raises(ValueError, match="entry 1245"):
-        _resolved_run_options(args, FROZEN_TIERS["promotion"])
+    tier = FROZEN_TIERS["promotion"]
+    assert _resolved_run_options(args, tier) == (2048, 1, 256)
+
+    pool = load_opening_pool(
+        tier.pool_path,
+        expected_pool_sha256=tier.pool_sha256,
+    )
+    loaded = load_opening_history_sidecar(
+        tier.histories_path,
+        opening_pool=pool,
+        expected_manifest_sha256=tier.history_manifest_sha256,
+    )
+    assert len(pool["openings"]) == 2048
+    assert len(loaded.histories_by_opening_index) == 2048

@@ -136,25 +136,26 @@ FROZEN_TIERS = {
     ),
     "promotion": FrozenTier(
         name="promotion",
-        pool_path=REPO_ROOT / "artifacts" / "arena" / "promotion-ply12-n2048-history-v2.json",
-        pool_sha256=("8653033334e79c57f321dcdb0b5fd965ed10e4e4586b2826ec670876530ca80f"),
-        histories_path=REPO_ROOT
-        / "artifacts"
+        pool_path=REPO_ROOT
+        / "research"
+        / "assets"
         / "arena"
-        / "promotion-ply12-n2048-histories-v2.json",
+        / "promotion-ply12-n2048-v3.json",
+        pool_sha256=("e750e87643c482d28b4201668bd355234fe1fb27f2a690bf784706b1ddd37459"),
+        histories_path=REPO_ROOT
+        / "research"
+        / "assets"
+        / "arena"
+        / "promotion-ply12-n2048-histories-v3.json",
         history_manifest_sha256=(
-            "35e9cb69c1ed8c263bc05e61faf99ec95319112b91872f5a2063f0f9c27dd168"
+            "d8781efb5d76066bcf2ce2e9ab2897f3261b20f7c4488c90992a8eadcc918a4b"
         ),
         default_pair_count=2048,
         default_block_pairs=1,
         default_additional_ply_cap=None,
         promotion_eligible=True,
-        available=False,
-        unavailable_reason=(
-            "pinned promotion history entry 1245 is claim-draw terminal "
-            "under exact replay; regenerate and repin the promotion pool "
-            "instead of silently skipping it"
-        ),
+        available=True,
+        unavailable_reason=None,
     ),
 }
 

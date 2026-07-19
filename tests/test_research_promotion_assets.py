@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import sys
+import tempfile
 from pathlib import Path
 
 import chess
@@ -28,6 +29,14 @@ assert _SPEC is not None and _SPEC.loader is not None
 promotion_assets = importlib.util.module_from_spec(_SPEC)
 sys.modules[_SPEC.name] = promotion_assets
 _SPEC.loader.exec_module(promotion_assets)
+
+
+@pytest.fixture
+def workspace_tmp() -> Path:
+    root = REPO_ROOT / ".local" / "tmp" / "promotion-assets-tests"
+    root.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(dir=root) as directory:
+        yield Path(directory)
 
 
 def _trajectory(*moves: str) -> tuple[list[str], list[str]]:
@@ -63,7 +72,9 @@ def _write_shard(
     )
 
 
-def test_reader_reconstructs_across_provenance_contiguous_shards(tmp_path: Path):
+def test_reader_reconstructs_across_provenance_contiguous_shards(
+    workspace_tmp: Path,
+):
     moves = (
         "e2e4",
         "e7e5",
@@ -79,7 +90,7 @@ def test_reader_reconstructs_across_provenance_contiguous_shards(tmp_path: Path)
         "b7b5",
     )
     fens, actions = _trajectory(*moves)
-    split = tmp_path / "test"
+    split = workspace_tmp / "test"
     _write_shard(
         split / "chunk_000000.npz",
         plies=list(range(8)),
@@ -106,7 +117,7 @@ def test_reader_reconstructs_across_provenance_contiguous_shards(tmp_path: Path)
 
 
 def test_reader_rejects_exact_threefold_root_that_fen_alone_hides(
-    tmp_path: Path,
+    workspace_tmp: Path,
 ):
     moves = (
         "d2d4",
@@ -123,7 +134,7 @@ def test_reader_rejects_exact_threefold_root_that_fen_alone_hides(
         "h5f6",
     )
     fens, actions = _trajectory(*moves)
-    split = tmp_path / "test"
+    split = workspace_tmp / "test"
     _write_shard(
         split / "chunk_000000.npz",
         plies=list(range(13)),
@@ -148,7 +159,7 @@ def test_reader_rejects_exact_threefold_root_that_fen_alone_hides(
 
 
 def test_sidecar_uses_runtime_canonical_manifest_and_pool_alignment(
-    tmp_path: Path,
+    workspace_tmp: Path,
 ):
     first = _trajectory(
         "e2e4",
@@ -178,7 +189,7 @@ def test_sidecar_uses_runtime_canonical_manifest_and_pool_alignment(
         "g1f3",
         "h7h6",
     )
-    split = tmp_path / "test"
+    split = workspace_tmp / "test"
     plies = list(range(13)) + list(range(13))
     fens = first[0] + second[0]
     actions = first[1] + second[1]
@@ -213,3 +224,30 @@ def test_sidecar_uses_runtime_canonical_manifest_and_pool_alignment(
         opening["fen"] for opening in pool["openings"]
     ]
     assert json.loads(json.dumps(sidecar, allow_nan=False)) == sidecar
+
+
+def test_regeneration_requires_named_split_directories(workspace_tmp: Path):
+    wrong_split = workspace_tmp / "validation"
+    wrong_split.mkdir()
+
+    with pytest.raises(ValueError, match="'val' split directory"):
+        promotion_assets._require_split_directory(
+            wrong_split,
+            expected_split="val",
+        )
+
+
+@pytest.mark.parametrize(
+    "names",
+    [
+        ("../pool.json", "histories.json", "contract.json"),
+        ("pool.txt", "histories.json", "contract.json"),
+        ("pool.json", "pool.json", "contract.json"),
+    ],
+)
+def test_regeneration_rejects_unsafe_or_colliding_output_names(names):
+    with pytest.raises(
+        ValueError,
+        match="distinct .json basenames|must be distinct",
+    ):
+        promotion_assets._validate_output_names(*names)
