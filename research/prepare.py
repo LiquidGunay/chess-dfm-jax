@@ -120,11 +120,15 @@ class WorkspacePaths:
 class FixedTrajectoryBatches:
     """Strict, restartable trajectory-v3 batch schedule.
 
-    File order is a deterministic permutation for each epoch and row order
-    inside a shard is unchanged. ``batch_at(step)`` is stateless with respect to
-    earlier calls, so resuming at a global data step yields the same examples.
-    One decoded shard is cached to avoid re-reading it for every small GPU
-    batch.
+    ``shard_major`` preserves the cache-friendly legacy traversal: file order
+    may be permuted per epoch, while row batches within each shard remain
+    contiguous. ``global_permutation`` instead permutes every
+    ``(shard, batch_in_shard)`` slot per epoch, which gives small deterministic
+    validation samples coverage across shards and row blocks.
+
+    ``batch_at(step)`` is stateless with respect to earlier calls, so resuming
+    at a global data step yields the same examples. One decoded shard is cached
+    to avoid re-reading it for every small GPU batch.
     """
 
     def __init__(
@@ -135,6 +139,7 @@ class FixedTrajectoryBatches:
         horizon: int,
         seed: int,
         shuffle_files: bool,
+        batch_schedule: str = "shard_major",
         view: str = "joint_latent_sasa",
     ):
         self.split_dir = require_within_workspace(split_dir)
@@ -147,6 +152,24 @@ class FixedTrajectoryBatches:
         self.horizon = int(horizon)
         self.seed = int(seed)
         self.shuffle_files = bool(shuffle_files)
+        if batch_schedule not in (
+            "shard_major",
+            "global_permutation",
+        ):
+            raise ValueError(
+                "batch_schedule must be 'shard_major' or "
+                f"'global_permutation', got {batch_schedule!r}"
+            )
+        self.batch_schedule = batch_schedule
+        if (
+            self.batch_schedule == "global_permutation"
+            and not self.shuffle_files
+        ):
+            raise ValueError(
+                "batch_schedule='global_permutation' requires "
+                "shuffle_files=True so its seeded permutation semantics "
+                "are explicit."
+            )
         self.view = view
 
         self.samples_per_shard = self._read_sample_count(self.paths[0])
@@ -175,6 +198,26 @@ class FixedTrajectoryBatches:
         if self.shuffle_files:
             random.Random(self.seed + int(epoch)).shuffle(order)
         return order
+
+    def _slot_for_step(self, step: int) -> tuple[int, int]:
+        if step < 0:
+            raise ValueError(f"step must be non-negative, got {step}")
+        epoch, step_in_epoch = divmod(
+            int(step),
+            self.steps_per_epoch,
+        )
+        if self.batch_schedule == "global_permutation":
+            slots = list(range(self.steps_per_epoch))
+            random.Random(self.seed + epoch).shuffle(slots)
+            slot = slots[step_in_epoch]
+            return divmod(slot, self.batches_per_shard)
+
+        file_position, batch_in_file = divmod(
+            step_in_epoch,
+            self.batches_per_shard,
+        )
+        shard_index = self._order_for_epoch(epoch)[file_position]
+        return shard_index, batch_in_file
 
     def _load_shard(self, path: Path) -> dict[str, Any]:
         if self._cached_path == path and self._cached_batch is not None:
@@ -212,11 +255,7 @@ class FixedTrajectoryBatches:
     def batch_at(self, step: int) -> dict[str, Any]:
         import numpy as np
 
-        if step < 0:
-            raise ValueError(f"step must be non-negative, got {step}")
-        epoch, step_in_epoch = divmod(int(step), self.steps_per_epoch)
-        file_position, batch_in_file = divmod(step_in_epoch, self.batches_per_shard)
-        shard_index = self._order_for_epoch(epoch)[file_position]
+        shard_index, batch_in_file = self._slot_for_step(step)
         shard_batch = self._load_shard(self.paths[shard_index])
         start = batch_in_file * self.batch_size
         end = start + self.batch_size
@@ -246,6 +285,8 @@ class FixedTrajectoryBatches:
             "steps_per_epoch": self.steps_per_epoch,
             "seed": self.seed,
             "shuffle_files": self.shuffle_files,
+            "seed_effective": self.shuffle_files,
+            "batch_schedule": self.batch_schedule,
             "file_manifest_sha256": digest,
         }
 

@@ -4689,7 +4689,8 @@ def main() -> int:
         batch_size=args.batch_size,
         horizon=config.horizon,
         seed=args.val_seed,
-        shuffle_files=False,
+        shuffle_files=True,
+        batch_schedule="global_permutation",
     )
     resume_contract = build_research_resume_contract(
         config=config,

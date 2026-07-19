@@ -269,13 +269,17 @@ def test_experiment_then_cli_override_precedence_and_resume_contract(
         "sha256_file",
         lambda _path: "test-digest",
     )
+    train_provenance = {
+        "kind": "test",
+        "batch_schedule": "shard_major",
+    }
     contract = local.build_research_resume_contract(
         config=default_config,
         objective="legacy",
         sigreg_reference_count=1.0,
         batch_size=2,
         train_seed=7,
-        train_provenance={"kind": "test"},
+        train_provenance=train_provenance,
         models_dir=REPO_ROOT / "models",
     )
     assert (
@@ -288,6 +292,7 @@ def test_experiment_then_cli_override_precedence_and_resume_contract(
         is True
     )
     assert contract["objective"]["target_sigreg_coeff"] == 0.25
+    assert contract["data"]["schedule"] == train_provenance
 
 
 def test_experiment_overrides_reject_unknown_keys_and_wrong_types():
