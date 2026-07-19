@@ -1291,7 +1291,7 @@ The matched baseline-v2/u400 collapse artifacts have SHA-256:
 - its `checkpoint_summary.json`:
   `d77a7c4c1bb28b544536893ed15211b25e9fd8e2b5d769cebfdf82924045e014`.
 
-### Resumable arena foundation and promotion-pool defect
+### Resumable arena foundation and promotion-pool repair
 
 Commit `a2ea5ed` adds the checked local relative-strength command described in
 `docs/local_relative_arena.md`. It strictly loads source or research
@@ -1302,14 +1302,21 @@ normalized-Elo GSPRT. Results are written as immutable checksummed pair blocks
 plus an atomically replaced state file. Resume binds checkpoints, code, pool,
 history, configuration, state, and every block digest.
 
-The new exact-history audit also found that promotion entry 1,245 is already
-claim-draw terminal by threefold repetition at its root, although the root FEN
-alone appears nonterminal. Promotion is consequently marked unavailable and
-fails before model loading. Silently dropping the entry would change the
-frozen ordered pool and sequential test; the promotion pool and history
-sidecar must be regenerated, re-audited, and repinned. The correctness and
-development tiers remain available, but a strength-valid long-game cap is not
-yet frozen.
+The new exact-history audit also found that v2 promotion entry 1,245 was
+already claim-draw terminal by threefold repetition at its root, although the
+root FEN alone appeared nonterminal. Promotion correctly failed before model
+loading rather than silently changing the frozen ordered pool.
+
+Commit `5a49df9` then rebuilt the promotion assets from the immutable shards.
+Across two history-filter passes it rejected eight selected candidates: four
+histories that did not begin at the standard initial position, three invalid
+standard-history FENs, and the threefold-terminal root. The final 2,048-entry
+v3 pool differs from v2 by exactly one selected removal and one source-derived
+replacement. Two complete regenerations were byte-identical, selected
+validation/test overlap is zero, and the production loader exactly replays
+every history. Commit `12147e8` pins those assets and reopens the promotion
+tier. This repairs the pool; a strength-valid full screen and promotion result
+remain pending.
 
 The v2/u300-versus-source correctness run completed 16 pairs with zero faults,
 full representable coverage on every evaluated position, and no incomplete
@@ -1592,10 +1599,27 @@ and
 `e72e62d85571476fccd69e2381ad96043b43ec52234547fec1b48404a78dc0d7`.
 The local JSON artifacts are under `artifacts/arena/`.
 
-The later exact-replay audit in commit `a2ea5ed` invalidates the promotion
-artifact for strength testing: entry 1,245 is already claim-draw terminal by
-root threefold repetition. The development artifact remains available, while
-promotion fails closed pending regeneration and repinning.
+The later exact-replay audit in commit `a2ea5ed` invalidated that initial
+promotion artifact: entry 1,245 was already claim-draw terminal by root
+threefold repetition. Commits `5a49df9` and `12147e8` replace and repin it as
+v3:
+
+- pool SHA-256 `e750e87643c482d28b4201668bd355234fe1fb27f2a690bf784706b1ddd37459`,
+  ordered-FEN SHA-256
+  `013778d027d919da9e6a25957e1439c8351081b9cbadf28e29df1c5c7b06b0f2`,
+  and file SHA-256
+  `5632cc726112c2ab700e0f4d935fa83d58418b406fc100262f3aa19ce3befe2e`;
+- history manifest SHA-256
+  `d8781efb5d76066bcf2ce2e9ab2897f3261b20f7c4488c90992a8eadcc918a4b`
+  and file SHA-256
+  `bac58cc7380d9a4173e7618a765917aa0990355e1f8e460196affbe28580ed37`;
+  and
+- canonical contract SHA-256
+  `b3b282d454bfa332af5634c0eb735814335f84528d6fc0c63cd099e2c10fd3c0`.
+
+The tracked v3 assets live under `research/assets/arena/`; regeneration verifies
+the source archive, shard identities, split names, output containment, exact
+history replay, terminality, and validation/test disjointness.
 
 ### Plane-history compatibility audit
 
@@ -1685,8 +1709,6 @@ The remaining acceptance work is to:
 - complete the fault-free 128-pair strength screen at the pilot-valid cap 256;
 - decide how absolute target-scale contraction enters the frozen objective
   without undoing the repeat-qualified policy improvement;
-- regenerate and re-audit the promotion pool/history sidecar to remove the
-  claim-draw-terminal entry without changing the sequential test in place; and
 - calibrate a strength-valid long-game cap before any Elo result.
 
 Until then `AUTORESEARCH_READY = False`, `research/results.tsv` remains

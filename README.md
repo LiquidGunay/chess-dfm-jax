@@ -40,14 +40,14 @@ improves `0.106750488 → 0.108810425`, legal mass improves
 `0.642926642 → 0.646496401`, and all eight horizon CEs improve. Its CE gain is
 within `0.000210253` of the independently trained v1/u300 gain.
 
-The resumable relative-strength arena is implemented, but its promotion tier
-fails closed before model loading. Exact history replay found pinned promotion
-entry 1,245 already terminal by claimable threefold repetition; the pool and
-history sidecar must be regenerated and repinned rather than silently edited.
-A 16-pair correctness run had zero faults and full evaluated-action coverage,
-but all games were short-cap draws. The first cap-64 development pilot is
-invalid because shrinking JAX batch shapes caused 29 timeout faults; commit
-`72af918` freezes the physical inference shape, and its rerun is pending.
+The resumable relative-strength arena is implemented. Commits `5a49df9` and
+`12147e8` replace the draw-terminal promotion root with a deterministic
+source-derived opening, pin the resulting v3 pool and histories, and replay
+all 2,048 histories before model loading. Promotion assets are available
+again, but no strength claim is open: the first fault-free cap-256 pilot ended
+in 32 normal draws with a wide 16-pair interval, and real-checkpoint GPU timing
+plus the full 128-pair screen remain blocked by the elevated-execution account
+limit.
 
 ## Layout
 

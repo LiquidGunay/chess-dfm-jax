@@ -109,12 +109,14 @@ completed-pair boundary. `accept_h1` is the only promoted outcome;
 `accept_h0`, `max_pairs`, and an exhausted shorter requested slice are not
 promotion.
 
-Promotion is currently fail-closed before model loading. Exact replay found
-that pinned promotion entry 1,245 is claim-draw terminal by threefold
-repetition, although its root FEN alone appears nonterminal. Silently dropping
-that position would change the frozen ordered pool and sequential test. The
-pool and its history sidecar must be regenerated, re-audited, and repinned
-before the command will open this tier.
+Exact replay found that the old v2 promotion entry 1,245 was claim-draw
+terminal by threefold repetition, although its root FEN alone appeared
+nonterminal. Commit `5a49df9` regenerates the pool from the source shards
+instead of skipping that position at runtime; commit `12147e8` repins and
+reopens the evaluator on the v3 assets. The loader verifies the pinned pool
+and history digests and exactly replays all 2,048 histories before model
+loading. This repairs asset validity; it does not by itself authorize a
+promotion run or an Elo claim.
 
 The evaluator correctness path has been exercised on the A10G, but a
 strength-valid long-game cap has not been frozen. Calibrate it with a pilot and

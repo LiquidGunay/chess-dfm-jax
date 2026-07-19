@@ -32,10 +32,12 @@ post-optimization timing, and the full 128-pair screen are still required.
 Elevated GPU execution is blocked by the reported account usage limit until
 2026-07-25; do not infer GPU parity or speedup from the CPU evidence.
 
-Promotion is independently unavailable: exact history replay found pinned
-promotion entry 1,245 already terminal by claimable threefold repetition.
-Regenerate, re-audit, and repin the pool and history sidecar; never skip the
-entry in place.
+The promotion assets are repaired and available. The source-derived v3 pool
+replaces the old claimable-threefold root before selection is frozen, has zero
+selected validation/test overlap, and passes production replay for all 2,048
+histories. Runtime skipping or substitution remains forbidden. This asset
+repair does not open readiness: real-checkpoint GPU parity, a full fault-free
+strength screen, and a strength-valid cap are still required.
 
 ## Editable surface
 
@@ -94,10 +96,10 @@ candidate.
 
 The weighted training loss is not by itself a promotion metric.
 
-Once repaired, the strength gate consumes complete color-reversed pairs from
-the repinned promotion pool. Only the normalized-Elo GSPRT may promote a
-checkpoint: `H0=0`, `H1=+20`, `alpha=beta=0.05`, checked after complete pairs
-and capped at 2,048 pairs. Descriptive logistic Elo never authorizes promotion.
+The strength gate consumes complete color-reversed pairs from the repinned
+promotion pool. Only the normalized-Elo GSPRT may promote a checkpoint:
+`H0=0`, `H1=+20`, `alpha=beta=0.05`, checked after complete pairs and capped
+at 2,048 pairs. Descriptive logistic Elo never authorizes promotion.
 
 Reject a run if:
 

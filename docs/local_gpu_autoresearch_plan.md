@@ -583,12 +583,15 @@ excluding every valid validation candidate and all 36 nonstandard histories,
 not merely the selected development subset.
 
 Exact replay subsequently found a distinct root-state defect that the original
-root-FEN terminality check could not see: selected promotion entry 1,245 is
-already claim-draw terminal by threefold repetition. The promotion pool is
-therefore not currently valid for a sequential strength test. It must be
-regenerated from the remaining candidates, re-audited with exact histories,
-and repinned; silently skipping the entry would change the ordered pool and
-GSPRT.
+root-FEN terminality check could not see: selected v2 promotion entry 1,245 was
+already claim-draw terminal by threefold repetition. Commit `5a49df9`
+regenerates the ordered pool from the immutable shards, rejecting eight
+hash-ranked roots during exact-history filtering: four histories that do not
+start from standard chess, three with invalid standard-history FENs, and the
+threefold-terminal root. V3 differs from v2 by exactly one selected removal
+and one source-derived replacement. Commit `12147e8` pins the repaired pool
+and sidecar in the evaluator; no position is skipped or substituted at arena
+runtime.
 
 Every arena root has a full standard-initial-position-to-root history sidecar.
 The gameplay runner replays it exactly so repetition and draw-claim state are
@@ -886,6 +889,8 @@ sweeps, held-out data, and repeated seeds.
   path, then run the full fault-free 128-pair screen at cap 256. Elevated GPU
   execution is unavailable under the reported account limit until 2026-07-25;
   the pre-optimization pilot timings are not evidence of optimized speed.
-- [ ] Regenerate and repin the promotion pool: exact replay found entry 1,245
-  already claim-draw terminal by root threefold repetition. Promotion remains
-  unavailable until the replacement pool and history sidecar pass re-audit.
+- [x] Regenerate and repin the promotion pool after exact replay found entry
+  1,245 claim-draw terminal. Two v3 source regenerations were byte-identical,
+  all 2,048 final histories pass the production replay loader, selected
+  validation/test overlap is zero, and the evaluator is reopened on the
+  immutable v3 pins.
