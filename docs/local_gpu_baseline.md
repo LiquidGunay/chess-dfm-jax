@@ -1931,16 +1931,18 @@ The corrected loss is now frozen for strength evaluation:
 
 Corrected v1/update 300 and v2/update 400 reproduce the same offline policy and
 representation tradeoff. V2/update 400 is the selected corrected baseline;
-compatibility v2/update 300 remains the norm-on control. Both initial strength
-anchors now exist, so the next acceptance work is to:
+compatibility v2/update 300 remains the norm-on control. The 2026-07-20
+retention pass removed all other research states and verified source staging
+archives, while preserving compact run evidence and the original source
+history. `research/storage_retention.json` now pins the exact durable set and
+`research/storage_audit.py` enforces it. Both initial strength anchors now
+exist, so the next acceptance work is to:
 
 - implement the read-only five-hook BT4 capture path and prove that capture
   leaves the unmodified FP32 source forward unchanged (the local JAX portion
   passed in commit `7c896a8`; upstream cross-framework parity remains);
 - run dense representation drift on the frozen raw/source/compatibility/
   corrected comparison set before loading a sparse artifact;
-- freeze a checkpoint-retention and disk-space policy before another
-  30-minute training run; and
 - preregister the first post-baseline architecture experiment and its
   checkpoint schedule.
 

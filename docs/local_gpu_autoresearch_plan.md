@@ -26,7 +26,7 @@ The agreed critical path is now:
 The A10G is single-tenant throughout this sequence. Training, profiling,
 arena evaluation, and SAE work do not run concurrently.
 
-Execution update, 2026-07-19: critical-path steps 1--5 are complete. The norm
+Execution update, 2026-07-20: critical-path steps 1--5 are complete. The norm
 coefficient is explicit, normalized SIGReg uses a fixed random example count,
 batch 128 is the selected throughput knee, and the matched objective screens
 and two 30-minute corrected repeats are complete. The corrected loss, physical
@@ -36,8 +36,9 @@ recovered source (`-2.7` descriptive logistic Elo, pair-aware 95% interval
 `[-88.0,+82.2]`) and `38.09%` against raw BT4 (`-84.4`, interval
 `[-181.0,+0.6]`). The representation-study strength precondition is therefore
 satisfied. Stage-0/1 read-only representation work may begin, sequentially on
-the A10G; unattended architecture search remains disabled until checkpoint
-retention and free-space policy are frozen.
+the A10G. The checkpoint-retention and free-space policy is now frozen and
+machine-audited; unattended architecture search remains disabled pending the
+remaining representation parity and experiment-preregistration gates.
 
 This document is the implementation contract for turning the existing
 TPU/cloud-oriented BT4 + DFM + JEPA experiment into a fast, measurable,
@@ -145,8 +146,49 @@ The default local layout is:
   research/
 ```
 
-Downloaded source archives and source checkpoints are immutable. Recovery and
-conversion always write a new copy.
+Downloaded source archives are immutable staging inputs, and source
+checkpoints are immutable durable assets. Recovery and conversion always write
+a new copy; verified staging archives are then removable under the retention
+contract below.
+
+## Storage retention contract
+
+The durable local set is intentionally small:
+
+- the extracted trajectory-v3 train/validation/test shards and their
+  completion manifest;
+- the three raw-BT4 files needed for construction, raw-policy evaluation, and
+  cross-framework representation parity;
+- the recovered step-265,000 source state, metadata, run configuration, and
+  original metrics history;
+- compatibility v2/update 300 as the norm-on control;
+- corrected v2/update 400 as the no-norm baseline; and
+- compact run metrics, reports, profiles, arena evidence, and provenance
+  sidecars.
+
+Downloaded tar files and split checkpoint parts are staging objects, not
+durable assets. Delete them after extraction and digest verification; their
+Drive IDs, source locations, sizes, and digests remain in
+`research/assets.json` and the source sidecars. During a run,
+`--max-checkpoints` bounds temporary selection candidates. Once fixed-pool
+selection is complete, retain one state for each accepted comparison role and
+delete states from rejected runs. Metrics and reports remain because they are
+the evidence needed to interpret later phase transitions and scaling curves.
+
+`research/storage_retention.json` is the exact current allowlist.
+`research/storage_audit.py` checks required sizes, dataset shard counts and
+payload bytes, extra `state.npz` files, redundant staging archives, and a
+4-GiB JAX compilation-cache ceiling. `research/env.sh` configures the same
+cache limit. Run the fast audit before every GPU job and after checkpoint
+selection/pruning, and run its `--verify-hashes` mode after restoring or
+moving an immutable asset. The command is read-only and all declared paths
+resolve below this repository in `/mountpoint/.exp`.
+
+Initial enforcement on 2026-07-20 reduced 28 research states to the two
+selected states, removed the redundant data/model/checkpoint archives and
+split parts, and cleared the rebuildable JAX compilation cache. Available
+filesystem space increased from 3.7 GiB to 68 GiB. The complete retained-file
+hash audit passed after cleanup.
 
 ## Known baseline assets
 
@@ -1147,6 +1189,10 @@ sweeps, held-out data, and repeated seeds.
   replacement boundaries in commit `7c896a8`. Real-source FP32 capture is
   bit-identical to the ordinary local tokens and matches the independent JAX
   reference within `5e-4` at every hook/layer.
+- [x] Freeze and enforce the storage-retention contract. Keep only the source,
+  selected norm-on control, and selected corrected states; remove verified
+  staging archives and unselected weights; retain compact experimental
+  evidence; and enforce the contract with `research/storage_audit.py`.
 - [ ] Run dense Stage-1 drift on the frozen four-model comparison set.
   Schedule all representation GPU work sequentially; sparse
   downloads/training remain gated on source parity.

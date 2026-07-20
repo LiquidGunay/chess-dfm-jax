@@ -1,0 +1,118 @@
+{
+  "allowed_state_files": [
+    "checkpoints/source/step0265000/checkpoints/step0265000/state.npz",
+    "research/runs/baseline-freshopt-online-target576-b128-lr3e5-bt4lr1e6-30m-v2/checkpoints/update00000300/state.npz",
+    "research/runs/corrected-nonorm-target5p76-pred1-fixed64-b128-30m-v2/checkpoints/update00000400/state.npz"
+  ],
+  "cache_budgets_bytes": {
+    ".local/cache/jax": 4294967296
+  },
+  "dataset": {
+    "chunks_written": {
+      "test": 1523,
+      "train": 27679,
+      "val": 1524
+    },
+    "manifest_path": "data/trajectory_v3/manifest.json",
+    "payload_size_bytes": 11507846723,
+    "root": "data/trajectory_v3",
+    "schema_version": "trajectory-v3"
+  },
+  "must_be_absent": [
+    "checkpoints/source/step0265000_archive",
+    "checkpoints/source/step0265000_parts",
+    "data/source/trajectory_v3_lc0_test80_h8_sets1_3_20260430.tar",
+    "models/source/models.tar"
+  ],
+  "required_files": [
+    {
+      "path": "data/trajectory_v3/manifest.json",
+      "role": "trajectory_manifest",
+      "sha256": "07696d8a7091c6d4f81d884b89a08cb825e2e2d2ef77c53667d49e1dd2d93f88",
+      "size_bytes": 1163
+    },
+    {
+      "path": "data/trajectory_v3/status.json",
+      "role": "trajectory_completion_record",
+      "sha256": "07696d8a7091c6d4f81d884b89a08cb825e2e2d2ef77c53667d49e1dd2d93f88",
+      "size_bytes": 1163
+    },
+    {
+      "path": "models/source/extracted/BT4_exported.pb.gz",
+      "role": "raw_bt4_constructor_and_policy",
+      "sha256": "61e43e98d2c4cb747498c6bc13a5bbb3b07e985d3f5d87f0351a4db855fa0651",
+      "size_bytes": 335916563
+    },
+    {
+      "path": "models/source/extracted/BT4-1024x15x32h-swa-6147500-policytune-332.pb.gz",
+      "role": "published_bt4_identity_and_parity",
+      "sha256": "e6ada9d6c4a769bfab3aa0848d82caeb809aa45f83e6c605fc58a31d21bdd618",
+      "size_bytes": 382645315
+    },
+    {
+      "path": "models/source/extracted/BT4.onnx",
+      "role": "cross_framework_representation_parity",
+      "sha256": "4206710c9adf00137f6592f7d5de8991ba1603be72716612caa43977a930bcb0",
+      "size_bytes": 741143413
+    },
+    {
+      "path": "checkpoints/source/step0265000/archive_manifest.json",
+      "role": "source_checkpoint_provenance",
+      "sha256": "ba7078ca41cae04619df7a962c5fc6b3bc6f724047048fef2fee6d2c9592eb5b",
+      "size_bytes": 510
+    },
+    {
+      "path": "checkpoints/source/step0265000/checkpoint_state.json",
+      "role": "source_checkpoint_metadata",
+      "sha256": "6b672bfdc34b35b8f3cc0f53e951d0c29abc82589a847f22be2bd9e4ec603b4f",
+      "size_bytes": 18029
+    },
+    {
+      "path": "checkpoints/source/step0265000/run_config.json",
+      "role": "source_run_configuration",
+      "sha256": "f4f44c673322fbb04367db7b28fcc82c30f89fc12340e66322607d53bbf99555",
+      "size_bytes": 4956
+    },
+    {
+      "path": "checkpoints/source/step0265000/metrics.jsonl",
+      "role": "source_training_history",
+      "sha256": "bf62337ae6c74281fe790fbc743fe030dd8f0a28813f7590aa9e73716b8c67fc",
+      "size_bytes": 273048283
+    },
+    {
+      "path": "checkpoints/source/step0265000/checkpoints/step0265000/state.npz",
+      "role": "recovered_dfm_jepa_source",
+      "sha256": "16a3c7e77e411a8a7577ff04dac1ca5173ce24ecb343b5fa4938e2d2b5fb8906",
+      "size_bytes": 1851704172
+    },
+    {
+      "path": "research/runs/baseline-freshopt-online-target576-b128-lr3e5-bt4lr1e6-30m-v2/checkpoints/update00000300/manifest.json",
+      "role": "norm_on_control_manifest",
+      "sha256": "6872ab05f240cef5dbc3c0f87e5150ccea20cd5b1f46690a2dd80e585e365cb2",
+      "size_bytes": 5965501
+    },
+    {
+      "path": "research/runs/baseline-freshopt-online-target576-b128-lr3e5-bt4lr1e6-30m-v2/checkpoints/update00000300/state.npz",
+      "role": "norm_on_control",
+      "sha256": "491da32259be4669e8824a7a06dc06401483f1d98febdb860e65bbae2f63c1ba",
+      "size_bytes": 1851704172
+    },
+    {
+      "path": "research/runs/corrected-nonorm-target5p76-pred1-fixed64-b128-30m-v2/checkpoints/update00000400/manifest.json",
+      "role": "corrected_baseline_manifest",
+      "sha256": "6e2a9449eea5aa1a77c5dc9b24f0da0e8b2d44d40a79b387c4da6d09bd9e380b",
+      "size_bytes": 5966135
+    },
+    {
+      "path": "research/runs/corrected-nonorm-target5p76-pred1-fixed64-b128-30m-v2/checkpoints/update00000400/state.npz",
+      "role": "corrected_no_norm_baseline",
+      "sha256": "cbeb1bafa74d0983ae4c0cad2a33c405c3507b2428c5bcebbe4fb7f8df44aa61",
+      "size_bytes": 1851704172
+    }
+  ],
+  "schema_version": 1,
+  "state_search_roots": [
+    "checkpoints",
+    "research/runs"
+  ]
+}

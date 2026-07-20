@@ -18,6 +18,7 @@ The intended stable interface is:
 
 ```text
 prepare.py        fixed data and asset validation
+storage_audit.py  exact retained-state, dataset, archive, and cache audit
 import_legacy.py  checksummed, restricted source-checkpoint boundary
 train.py          single editable model/objective/training surface
 inference.py      checked cached-BT4 multi-pass inference and profiling
@@ -36,6 +37,17 @@ warmup executable instead of compiling new batch shapes.
 
 All mutable state, including Python and JAX caches, remains below
 `/mountpoint/.exp`.
+
+Check the lightweight storage contract before and after an experiment:
+
+```bash
+.venv/bin/python research/storage_audit.py
+```
+
+Use `--verify-hashes` after moving or restoring an immutable asset. The
+default audit avoids rereading multi-gigabyte weights but still checks their
+sizes, requires exactly the selected state files, validates the extracted
+dataset, rejects redundant source archives, and enforces the JAX cache budget.
 
 The parity oracle is run separately:
 
