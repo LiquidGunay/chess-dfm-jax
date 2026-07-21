@@ -97,14 +97,11 @@ optimizer moments or writes beneath the evaluated run. Incremental results go
 to `checkpoint_metrics.jsonl`; the aggregate and minimum-DFM-CE checkpoint go
 to `checkpoint_summary.json`.
 
-The paired evaluator now has a real 16-pair source-vs-source A10G correctness
-artifact, strict source/research-checkpoint loading, frozen history validation,
-atomic resumable blocks, bounded model batches, a lean action-only inference
-path, and an official-formulation normalized-Elo promotion GSPRT. See
-`docs/local_relative_arena.md` for commands and limitations. The harness
-remains intentionally marked
-`autoresearch_ready=false` while the target-scale-stable objective and its
-representative global-validation baseline remain unresolved. The promotion
-tier is additionally fail-closed until one claim-draw-terminal frozen history
-is replaced by a regenerated, repinned pool. See the plan and baseline report
-for the measured results.
+The paired evaluator has strict source/research-checkpoint loading, frozen
+history validation, atomic resumable blocks, bounded model batches, a lean
+action-only inference path, and an official-formulation normalized-Elo
+promotion GSPRT. The repaired v3 promotion pool is open, and
+`AUTORESEARCH_READY = True`. The first accepted K=2 target-sampling checkpoint
+passes the offline gates and has an inconclusive-positive 128-pair incumbent
+screen; it is not promoted. See `docs/local_relative_arena.md`, the plan, and
+the baseline report for the exact contracts and measured results.

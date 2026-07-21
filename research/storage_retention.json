@@ -2,7 +2,8 @@
   "allowed_state_files": [
     "checkpoints/source/step0265000/checkpoints/step0265000/state.npz",
     "research/runs/baseline-freshopt-online-target576-b128-lr3e5-bt4lr1e6-30m-v2/checkpoints/update00000300/state.npz",
-    "research/runs/corrected-nonorm-target5p76-pred1-fixed64-b128-30m-v2/checkpoints/update00000400/state.npz"
+    "research/runs/corrected-nonorm-target5p76-pred1-fixed64-b128-30m-v2/checkpoints/update00000400/state.npz",
+    "research/runs/future-target-k2-b128-30m-v1/checkpoints/update00000800/state.npz"
   ],
   "cache_budgets_bytes": {
     ".local/cache/jax": 4294967296
@@ -107,6 +108,18 @@
       "path": "research/runs/corrected-nonorm-target5p76-pred1-fixed64-b128-30m-v2/checkpoints/update00000400/state.npz",
       "role": "corrected_no_norm_baseline",
       "sha256": "cbeb1bafa74d0983ae4c0cad2a33c405c3507b2428c5bcebbe4fb7f8df44aa61",
+      "size_bytes": 1851704172
+    },
+    {
+      "path": "research/runs/future-target-k2-b128-30m-v1/checkpoints/update00000800/manifest.json",
+      "role": "sampled_future_target_k2_offline_incumbent_manifest",
+      "sha256": "e8c58fcaa1730e8c2927fa8e8dd108592d57f28c33b95c66831a0a969bc95ab6",
+      "size_bytes": 5966688
+    },
+    {
+      "path": "research/runs/future-target-k2-b128-30m-v1/checkpoints/update00000800/state.npz",
+      "role": "sampled_future_target_k2_offline_incumbent",
+      "sha256": "f42af6bef64c532376e0532d2370b1cf2bd6356d494e08738355359bb506abd2",
       "size_bytes": 1851704172
     },
     {

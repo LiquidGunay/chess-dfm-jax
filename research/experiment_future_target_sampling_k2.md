@@ -1,7 +1,8 @@
 # Experiment 001: two sampled future targets
 
-Status: preregistered on 2026-07-21, before implementation or candidate
-training.
+Status: completed and accepted as the offline incumbent on 2026-07-21. The
+relative-strength screen is positive in point estimate but inconclusive; this
+checkpoint is not Elo-promoted.
 
 ## Question and hypothesis
 
@@ -139,3 +140,52 @@ Throughput success alone permits keeping the sampled-target implementation as
 a default-off research option, but not promoting its checkpoint. An offline
 winner proceeds to the frozen relative-strength screen before it is called a
 stronger model. Any pass-count sweep remains deferred until then.
+
+## Outcome
+
+Commits `afad342` and `c126e70` implement and test the frozen sampling
+contract. The one-update A10G smoke encoded exactly three boards per example,
+sampled exactly two future horizons without replacement, retained all eight
+prediction horizons, and reported target/prediction SIGReg valid counts of
+`576/512`. Runtime peak memory was `9,474,431,232` bytes. XLA's aggregate cost
+estimate did not expose the expected encoder-work reduction: it reported
+`13.5661e12` FLOPs/update versus `13.5223e12` for the control, while runtime
+memory was lower. The measured cached profile was therefore the decisive
+performance check.
+
+The 30-update profile reached `92.1149` end-to-end examples/s, versus the
+frozen `41.35` control rate: `2.23x` throughput and well above the `15%` gate.
+The fixed 1,800-second run processed `161,408` examples in `1,261` updates,
+sustained `92.9745` end-to-end examples/s, and peaked at `9,576,191,232` bytes
+of HBM. No update was skipped, every recorded metric was finite, and no loss
+clip activated.
+
+All four retained checkpoints were evaluated on the full eight-horizon seed
+10,000 and 20,000 pools. Update 800 won with:
+
+- mean DFM CE `4.5054920968`, improving the matched control by `0.0047771744`
+  or `7.50x` the `0.000637` repeat-noise threshold;
+- accuracy `0.1095886230`, versus control `0.1081848145`;
+- legal mass `0.6455246028`, versus control `0.6426193411`;
+- mean/minimum prediction effective rank `31.0497/29.1594`;
+- mean/minimum prediction feature-standard-deviation fifth percentile
+  `0.65010/0.63620`;
+- mean target RMS `0.92656` and prediction/target RMS ratio `0.97114`; and
+- positive JEPA MSE below zero and action-shuffled prediction MSE at every
+  horizon. Its mean JEPA/identity MSE ratio is `0.145870`, the value recorded
+  in `research/results.tsv`.
+
+The eight-pass 128-pair cap-256 development arena against corrected
+v2/update 400 scored `0.505859375` for the candidate, with pentanomial counts
+`[0,1,123,4,0]`, descriptive logistic Elo `+4.0717`, and pair-aware 95%
+interval `[-80.7651,+89.4067]`. Ten of 256 games were cap draws. One
+candidate-side `no_representable_move` loss came from the already documented
+legacy promotion-codec limitation; the incumbent had no fault. This screen is
+consistent with the offline gain but does not resolve chess strength.
+
+Update 800 is accepted as the new offline incumbent. Its state SHA-256 is
+`f42af6bef64c532376e0532d2370b1cf2bd6356d494e08738355359bb506abd2`.
+Updates 400, 1200, and 1261 were deleted after selection, and the exact
+retained state/manifest pair is enforced by `research/storage_retention.json`.
+The pass-count and SAE-refit studies remain deferred until this improvement is
+repeat-qualified and its strength evidence is less ambiguous.

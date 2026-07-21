@@ -148,6 +148,21 @@ would change the point estimate only to about `-81.5` Elo; immutable scoring
 retains the preregistered fail-closed losses. These screens establish the
 initial strength anchors, not promotion or absolute strength.
 
+The first accepted autoresearch checkpoint, K=2 future-target sampling at
+update 800, completed a direct eight-pass 128-pair development screen against
+corrected v2/update 400 at cap 256. It scored `0.505859375`, descriptive
+logistic Elo `+4.0717`, pair-aware 95% interval `[-80.7651,+89.4067]`, and
+pentanomial `[0,1,123,4,0]`. Ten of 256 games were cap draws. The candidate
+had one fail-closed `no_representable_move` legacy-codec promotion fault; the
+incumbent had none. Mean policy-call time was `40.70 ms` for the candidate and
+`44.04 ms` for the incumbent at physical batch 16. This is an
+inconclusive-positive model-pool-relative screen, not promotion.
+
+The completed state is
+`artifacts/arena/future-target-k2-u800-vs-corrected-u400-development-128pairs-cap256-v1/state.json`
+(SHA-256
+`7e8de65e39f77d79fae3c9846ea5c727bfa48cfae2f15e16a47e59161fb7c997`).
+
 The state files are
 `artifacts/arena/corrected-nonorm-target5p76-pred1-v2-u400-vs-source-development-128pairs-cap256-v1/state.json`
 (SHA-256

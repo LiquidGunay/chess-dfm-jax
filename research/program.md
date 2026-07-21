@@ -5,11 +5,21 @@ BT4/DFM/JEPA model while preserving latent diversity and making training and
 inference faster.
 
 Current gate: `AUTORESEARCH_READY = True`. The dense source-parity gate and
-first-experiment preregistration are complete, so the frozen 30-minute
-autoresearch loop may begin. Promotion still requires every offline and arena
+first-experiment preregistration are complete, and the frozen 30-minute
+autoresearch loop is active. Promotion still requires every offline and arena
 gate below; readiness alone is not a strength claim.
 
-The current offline baseline is v2/update 300. An identical v1 run also
+The first accepted experiment samples two of eight future BT4 targets during
+training while preserving all eight DFM/JEPA prediction horizons and
+full-horizon evaluation. Its update-800 checkpoint improves two-pool DFM CE
+from `4.5102692712` to `4.5054920968`, improves accuracy and legal mass, passes
+every latent gate, and raises fixed-time throughput from `41.35` to `92.97`
+examples/s. It is the current offline incumbent. Its direct 128-pair arena
+against corrected v2/update 400 scored `50.586%` (`+4.1` descriptive logistic
+Elo, pair-aware 95% interval `[-80.8,+89.4]`), which is positive but
+inconclusive. It is neither repeat-qualified nor Elo-promoted.
+
+The repeat-qualified norm-on compatibility baseline is v2/update 300. An identical v1 run also
 selected update 300, and their four-pool DFM CE gains differ by only
 `0.000210253`; the selected v2 checkpoint also passes the recorded
 effective-rank, low-variance-tail, prediction/target RMS-ratio, and
@@ -32,9 +42,11 @@ BT4. These are descriptive model-pool-relative results, not promotion or
 absolute Elo. The fixed four-model representation comparison may proceed.
 
 Keep searchless inference fixed at eight DFM refinement passes during the
-initial stronger-model experiments. Pass-count ablation is deferred until a
-checkpoint improves the frozen offline gates; changing refinement compute
-must not be mixed into an architecture comparison.
+initial stronger-model experiments. Although the sampled-target checkpoint
+improves the frozen offline gates, its arena interval remains unresolved;
+pass-count ablation stays deferred until the improvement is repeat-qualified
+and strength evidence is less ambiguous. Changing refinement compute must not
+be mixed into an architecture comparison.
 
 The promotion assets are repaired and available. The source-derived v3 pool
 replaces the old claimable-threefold root before selection is frozen, has zero
@@ -45,10 +57,9 @@ repair did not by itself open readiness. Dense representation drift is complete 
 PyTorch/JAX source parity passes in
 `artifacts/representations/upstream-bt4-source-parity-v1`; the pinned
 TransformerLens constructor-default epsilon fails and must not be used as the
-source oracle. The first post-baseline experiment is preregistered in
-`research/experiment_future_target_sampling_k2.md`; do not change its sampling,
-validation, checkpoint, or decision contract after inspecting candidate
-results.
+source oracle. The immutable preregistration and completed outcome of the first
+post-baseline experiment are in
+`research/experiment_future_target_sampling_k2.md`.
 
 ## Editable surface
 

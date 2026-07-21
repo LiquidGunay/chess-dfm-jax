@@ -30,24 +30,21 @@ work are in the
 Those published artifacts replace raw MLP or attention branches; they are not
 final-trunk SAEs.
 
-Unattended autoresearch is not enabled: `AUTORESEARCH_READY = False`,
-`research/results.tsv` remains header-only, and no continuation checkpoint has
-received a valid Elo evaluation or promotion. Two identical 30-minute
-batch-128 runs independently select update 300. The repeat-selected v2
-checkpoint is now the offline baseline: across four matched 4,096-position
-validation pools its DFM CE improves `4.550008280 → 4.529473042`, accuracy
-improves `0.106750488 → 0.108810425`, legal mass improves
-`0.642926642 → 0.646496401`, and all eight horizon CEs improve. Its CE gain is
-within `0.000210253` of the independently trained v1/u300 gain.
+Autoresearch is enabled with `AUTORESEARCH_READY = True`. The first accepted
+experiment samples two of eight future BT4 targets per training update while
+retaining all eight prediction horizons and full-horizon evaluation. Its
+update-800 checkpoint improves matched two-pool DFM CE from `4.5102692712` to
+`4.5054920968`, raises end-to-end throughput from `41.35` to `92.97`
+examples/s, and passes all frozen accuracy, legality, and latent-health gates.
+It is the current offline incumbent; `research/results.tsv` contains its first
+accepted row.
 
-The resumable relative-strength arena is implemented. Commits `5a49df9` and
-`12147e8` replace the draw-terminal promotion root with a deterministic
-source-derived opening, pin the resulting v3 pool and histories, and replay
-all 2,048 histories before model loading. Promotion assets are available
-again, but no strength claim is open: the first fault-free cap-256 pilot ended
-in 32 normal draws with a wide 16-pair interval, and real-checkpoint GPU timing
-plus the full 128-pair screen remain blocked by the elevated-execution account
-limit.
+The resumable relative-strength arena is implemented, and its repaired v3
+promotion pool replays all 2,048 histories before model loading. The accepted
+K=2 checkpoint scored `50.586%` in a direct eight-pass 128-pair cap-256 screen
+against the corrected incumbent: `+4.1` descriptive logistic Elo with
+pair-aware 95% interval `[-80.8,+89.4]`. This is positive but inconclusive and
+does not constitute Elo promotion.
 
 ## Layout
 

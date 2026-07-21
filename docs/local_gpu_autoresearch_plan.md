@@ -43,9 +43,9 @@ preregistration subsequently opened the loop on 2026-07-21.
 Execution decision, 2026-07-21: keep searchless inference fixed at eight DFM
 refinement passes through the first stronger-model experiments. Eight equals
 the current action horizon and is the frozen strength-anchor budget. A
-`1/2/4/8/16` pass-count ablation is deferred until a checkpoint first improves
-the offline gates, so test-time compute is not confounded with architecture or
-training changes.
+`1/2/4/8/16` pass-count ablation is deferred until an offline improvement is
+repeat-qualified and its strength screen is less ambiguous, so test-time
+compute is not confounded with architecture or training changes.
 
 Dense-representation update, 2026-07-21: the FP32 Stage-1 core comparison is
 complete on all five hooks, all 15 layers, both square-token and board-pooled
@@ -68,6 +68,17 @@ worst relative L2 `0.0563`; it is recorded as an upstream compatibility bug,
 not used as the oracle. The source-parity and first-experiment preregistration
 gates are therefore complete and `AUTORESEARCH_READY` is open. Published
 transcoder validation remains a separate hard gate for sparse interpretation.
+
+First-experiment update, 2026-07-21: sampling two of eight future target
+encodes increases the 30-minute run rate from `41.35` to `92.97` examples/s.
+The selected update-800 checkpoint improves matched two-pool DFM CE from
+`4.5102692712` to `4.5054920968`, improves accuracy and legal mass, and passes
+all preregistered collapse gates. It is the new offline incumbent. Its direct
+128-pair cap-256 arena against corrected v2/update 400 scores `50.586%`, or
+`+4.1` descriptive logistic Elo with pair-aware 95% interval
+`[-80.8,+89.4]`. This is an inconclusive-positive screen, not promotion. Only
+the selected 1.85 GB state is retained; repeat qualification precedes the
+pass-count or matched sparse-refit studies.
 
 This document is the implementation contract for turning the existing
 TPU/cloud-oriented BT4 + DFM + JEPA experiment into a fast, measurable,
@@ -1239,3 +1250,7 @@ sweeps, held-out data, and repeated seeds.
   validation and fixed eight-pass inference; the immutable hypothesis,
   checkpoint schedule, gates, and cleanup rules are in
   `research/experiment_future_target_sampling_k2.md`.
+- [x] Complete the first post-baseline model experiment. K=2 reaches `92.97`
+  examples/s, selects update 800 at two-pool CE `4.5054920968`, passes every
+  offline gate, and scores `50.586%` in the 128-pair incumbent arena. Retain
+  only update 800 and record the arena interval as inconclusive.

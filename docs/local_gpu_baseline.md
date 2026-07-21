@@ -1555,11 +1555,10 @@ reported through 2026-07-25. Do not project a speedup or reuse the
 pre-optimization timing as optimized-path performance; both the GPU benchmark
 and full screen remain pending.
 
-No checkpoint has been promoted. The v2/u300 result is a
-baseline-qualification result, not an accepted autoresearch experiment, so
-`research/results.tsv` remains header-only. The code-level readiness flag
-remains `AUTORESEARCH_READY = False` pending real-checkpoint GPU validation of
-the sealed path and a fault-free full strength screen.
+At this intermediate checkpoint, no model had been promoted, v2/u300 was only
+a baseline-qualification result, `research/results.tsv` was header-only, and
+`AUTORESEARCH_READY` remained false. The later real-checkpoint strength runs,
+source-parity gate, and first accepted experiment below supersede that status.
 
 ## Strict local checkpoint/resume
 
@@ -1949,9 +1948,9 @@ and the remaining acceptance work was completed on 2026-07-21:
 - the first post-baseline architecture experiment and its checkpoint schedule
   are preregistered in `research/experiment_future_target_sampling_k2.md`.
 
-`AUTORESEARCH_READY` is now `True`; `research/results.tsv` remains header-only
-until the first accepted 30-minute candidate finishes. Published sparse
-artifact interpretation remains separately gated on source reconstruction.
+`AUTORESEARCH_READY` is now `True`; the first accepted 30-minute candidate is
+recorded below and in `research/results.tsv`. Published sparse artifact
+interpretation remains separately gated on source reconstruction.
 
 ### Dense four-model representation anchor
 
@@ -1994,3 +1993,27 @@ relative L2 and `89.9723` max-absolute error and fails the gate. The official
 epsilon path is now the cross-framework oracle. This opens model autoresearch;
 it does not validate a published sparse artifact or authorize sparse-feature
 interpretation.
+
+### First accepted autoresearch result
+
+The preregistered K=2 future-target sampling experiment completed on
+2026-07-21. Training still predicts all eight DFM/JEPA horizons and evaluation
+still encodes all eight future targets, but each update encodes only the
+current board plus two uniformly sampled target boards. Its 30-minute rate is
+`92.9745` end-to-end examples/s versus `41.3498` for the corrected control.
+
+Full-horizon selection across seeds 10,000 and 20,000 chooses update 800. Mean
+DFM CE is `4.5054920968` versus control `4.5102692712`; accuracy is
+`0.1095886230` versus `0.1081848145`, and legal mass is `0.6455246028` versus
+`0.6426193411`. Mean/min prediction effective rank is `31.0497/29.1594`,
+mean/min feature-std p05 is `0.65010/0.63620`, target RMS is `0.92656`, and
+the prediction/target RMS ratio is `0.97114`. It passes every frozen offline
+gate and becomes the offline incumbent.
+
+The direct eight-pass 128-pair cap-256 arena against corrected v2/update 400
+scores `50.586%`: descriptive logistic Elo `+4.0717`, pair-aware 95% interval
+`[-80.7651,+89.4067]`, and pentanomial `[0,1,123,4,0]`. Ten games are cap
+draws; one candidate loss is the known legacy promotion-codec fault. This is
+an inconclusive-positive relative result, not an Elo promotion. The retained
+state SHA-256 is
+`f42af6bef64c532376e0532d2370b1cf2bd6356d494e08738355359bb506abd2`.
