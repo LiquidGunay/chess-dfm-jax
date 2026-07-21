@@ -6,9 +6,8 @@ inference faster.
 
 Current gate: `AUTORESEARCH_READY = False`. Do not launch unattended
 architecture search, append calibration runs to `research/results.tsv`, run a
-promotion arena, or describe a checkpoint as promoted until a repeated,
-noise-qualified baseline passes the offline gates below and the arena path is
-strength-valid.
+promotion arena, or describe a checkpoint as promoted until the remaining
+representation-parity and first-experiment preregistration gates are complete.
 
 The current offline baseline is v2/update 300. An identical v1 run also
 selected update 300, and their four-pool DFM CE gains differ by only
@@ -23,21 +22,25 @@ two-pool CE is `4.511721` versus incumbent v2/u300 `4.510334`; a matched
 update-400 audit also regresses accuracy, legal mass, and JEPA MSE for only
 tiny rank/variance gains. Keep prediction-SIGReg at `0.0`.
 
-Static-batch arena pilots are fault-free, and cap 256 is the first tested limit
-with zero cap draws. Its 16-pair descriptive Elo point estimate is `0` with a
-95% interval of `[-287.451, +287.451]`, not a strength decision. Commit
-`c2d5efb` adds sealed O(1) trusted-history validation and passes 83 focused CPU
-tests with exact gameplay-payload parity. Real-checkpoint GPU parity,
-post-optimization timing, and the full 128-pair screen are still required.
-Elevated GPU execution is blocked by the reported account usage limit until
-2026-07-25; do not infer GPU parity or speedup from the CPU evidence.
+The corrected no-norm target-SIGReg-5.76/prediction-SIGReg-1.0 baseline is
+repeat-qualified at v2/update 400. Real-checkpoint GPU parity, sealed-history
+timing, and both 128-pair cap-256 strength anchors are complete. It scored
+`49.61%` against the recovered step-265,000 model and `38.09%` against raw
+BT4. These are descriptive model-pool-relative results, not promotion or
+absolute Elo. The fixed four-model representation comparison may proceed.
+
+Keep searchless inference fixed at eight DFM refinement passes during the
+initial stronger-model experiments. Pass-count ablation is deferred until a
+checkpoint improves the frozen offline gates; changing refinement compute
+must not be mixed into an architecture comparison.
 
 The promotion assets are repaired and available. The source-derived v3 pool
 replaces the old claimable-threefold root before selection is frozen, has zero
 selected validation/test overlap, and passes production replay for all 2,048
 histories. Runtime skipping or substitution remains forbidden. This asset
-repair does not open readiness: real-checkpoint GPU parity, a full fault-free
-strength screen, and a strength-valid cap are still required.
+repair does not open readiness: dense representation drift, upstream source
+parity, and preregistration of the first post-baseline experiment are still
+required.
 
 ## Editable surface
 

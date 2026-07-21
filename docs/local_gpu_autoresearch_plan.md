@@ -40,6 +40,13 @@ the A10G. The checkpoint-retention and free-space policy is now frozen and
 machine-audited; unattended architecture search remains disabled pending the
 remaining representation parity and experiment-preregistration gates.
 
+Execution decision, 2026-07-21: keep searchless inference fixed at eight DFM
+refinement passes through the first stronger-model experiments. Eight equals
+the current action horizon and is the frozen strength-anchor budget. A
+`1/2/4/8/16` pass-count ablation is deferred until a checkpoint first improves
+the offline gates, so test-time compute is not confounded with architecture or
+training changes.
+
 This document is the implementation contract for turning the existing
 TPU/cloud-oriented BT4 + DFM + JEPA experiment into a fast, measurable,
 single-A10G research loop.
