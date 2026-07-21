@@ -65,6 +65,14 @@ deleted, and all four DFM blocks return as the active baseline. Smaller
 planners require a separately preregistered distillation or gradual LayerDrop
 method rather than assuming the final source-trained block is redundant.
 
+The active experiment holds the full K=2 model and `0.0/5.76/1.0` loss fixed
+and changes only the optimizer schedule. Both exact constant-rate runs select
+update 800 and regress sharply at update 1200. The candidate stays at peak
+main/BT4 rates through update 400, cosine-decays to a 10% floor at update 1200,
+and holds that floor thereafter. It must improve selected CE beyond repeat
+noise and preserve every latent gate; a smoother late curve alone is not
+enough for acceptance.
+
 The repeat-qualified norm-on compatibility baseline is v2/update 300. An identical v1 run also
 selected update 300, and their four-pool DFM CE gains differ by only
 `0.000210253`; the selected v2 checkpoint also passes the recorded

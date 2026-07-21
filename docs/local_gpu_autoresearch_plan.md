@@ -1306,3 +1306,8 @@ sweeps, held-out data, and repeated seeds.
 - [ ] Continue from the full-projector, full-DFM K=2 incumbent with loss
   coefficients `0.0/5.76/1.0`. Do not revisit smaller planner depth without a
   separately controlled distillation or gradual-depth training objective.
+- [ ] Test a fixed optimizer warmdown from the full K=2 graph: constant peak
+  rates through update 400, cosine decay to 10% over updates 400-1200, then a
+  fixed floor. The goal is to remove the replicated update-1200 regression
+  without changing architecture or loss. The frozen contract is in
+  `research/experiment_cosine_warmdown_k2.md`.
