@@ -124,3 +124,12 @@ inference throughput by `6.28%` and training throughput by `1.49%`, but its
 best CE/accuracy/legal mass regress to `6.084679/0.03290/0.36431`. Direct DFM
 prefix pruning is rejected, retains no state, and leaves all four planner
 blocks active.
+
+A fixed-time cosine warmdown then keeps that full K=2 graph and the
+norm/target/prediction loss coefficients `0.0/5.76/1.0` unchanged. Two exact
+runs independently pass every offline gate at selected CE
+`4.5007607210/4.5022441577`, and both remove the replicated constant-rate
+update-1200 regression. The primary update-1261 state scores `50.391%` in the
+128-pair arena against K=2, with descriptive logistic Elo `+2.71` and a wide
+pair-aware interval `[-82.20,+87.96]`. It is the new offline incumbent, not an
+Elo-promoted model; the repeat retains no state.

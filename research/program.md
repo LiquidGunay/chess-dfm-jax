@@ -14,7 +14,7 @@ training while preserving all eight DFM/JEPA prediction horizons and
 full-horizon evaluation. Its update-800 checkpoint improves two-pool DFM CE
 from `4.5102692712` to `4.5054920968`, improves accuracy and legal mass, passes
 every latent gate, and raises fixed-time throughput from `41.35` to `92.97`
-examples/s. It is the current offline incumbent. Its direct 128-pair arena
+examples/s. It was the previous offline incumbent. Its direct 128-pair arena
 against corrected v2/update 400 scored `50.586%` (`+4.1` descriptive logistic
 Elo, pair-aware 95% interval `[-80.8,+89.4]`), which is positive but
 inconclusive. An exact v2 repeat again selects update 800 and independently
@@ -65,13 +65,19 @@ deleted, and all four DFM blocks return as the active baseline. Smaller
 planners require a separately preregistered distillation or gradual LayerDrop
 method rather than assuming the final source-trained block is redundant.
 
-The active experiment holds the full K=2 model and `0.0/5.76/1.0` loss fixed
-and changes only the optimizer schedule. Both exact constant-rate runs select
-update 800 and regress sharply at update 1200. The candidate stays at peak
-main/BT4 rates through update 400, cosine-decays to a 10% floor at update 1200,
-and holds that floor thereafter. It must improve selected CE beyond repeat
-noise and preserve every latent gate; a smoother late curve alone is not
-enough for acceptance.
+Fixed-time cosine warmdown is the new offline incumbent. It holds the full K=2
+model and `0.0/5.76/1.0` loss fixed, stays at peak main/BT4 rates through
+update 400, cosine-decays to a 10% floor at update 1200, and holds that floor.
+The primary run selects terminal update 1261 at CE `4.5007607210`; an exact
+repeat independently selects update 800 at CE `4.5022441577`. Both pass every
+policy and latent gate, and the selected CE separation `0.0014834367` is
+inside the prior K=2 repeat separation. At update 1200, both warmdown runs are
+at CE `4.50150..4.50276`, eliminating the constant-rate regression to
+`4.52867..4.53762`. The primary checkpoint scores `50.391%` in the frozen
+128-pair arena against K=2, with descriptive logistic Elo `+2.71` and
+pair-aware interval `[-82.20,+87.96]`. This is positive but inconclusive and
+does not constitute Elo promotion. Retain v1/update 1261 as the current
+offline incumbent and no repeat state.
 
 The repeat-qualified norm-on compatibility baseline is v2/update 300. An identical v1 run also
 selected update 300, and their four-pool DFM CE gains differ by only
@@ -96,11 +102,11 @@ BT4. These are descriptive model-pool-relative results, not promotion or
 absolute Elo. The fixed four-model representation comparison may proceed.
 
 Keep searchless inference fixed at eight DFM refinement passes during the
-initial stronger-model experiments. Although the sampled-target checkpoint
-improves the frozen offline gates twice, its effect size varies and its arena
-interval remains unresolved. Pass-count ablation stays deferred until a larger
-offline improvement gives less ambiguous strength evidence. Changing
-refinement compute must not be mixed into an architecture comparison.
+initial stronger-model experiments. Although cosine warmdown improves the
+frozen offline gates twice, its 128-pair arena interval remains unresolved.
+Pass-count ablation stays deferred until a separately preregistered compute
+study has sufficiently strong chess evidence. Changing refinement compute
+must not be mixed into an architecture comparison.
 
 The promotion assets are repaired and available. The source-derived v3 pool
 replaces the old claimable-threefold root before selection is frozen, has zero
@@ -112,12 +118,13 @@ PyTorch/JAX source parity passes in
 `artifacts/representations/upstream-bt4-source-parity-v1`; the pinned
 TransformerLens constructor-default epsilon fails and must not be used as the
 source oracle. The immutable preregistrations and completed outcomes of the
-first five post-baseline experiments are in
+first six post-baseline experiments are in
 `research/experiment_future_target_sampling_k2.md`,
 `research/experiment_sampled_target_anchors_k2.md`,
 `research/experiment_projector_active_depth1_k2.md`,
-`research/experiment_projector_depth1_predsigreg4_k2.md`, and
-`research/experiment_dfm_active_depth3_k2.md`.
+`research/experiment_projector_depth1_predsigreg4_k2.md`,
+`research/experiment_dfm_active_depth3_k2.md`, and
+`research/experiment_cosine_warmdown_k2.md`.
 
 ## Editable surface
 

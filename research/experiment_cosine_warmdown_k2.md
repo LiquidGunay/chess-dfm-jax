@@ -1,6 +1,7 @@
 # Experiment 006: fixed-time cosine learning-rate warmdown
 
-Status: preregistered on 2026-07-21 before implementation or candidate GPU
+Status: completed and accepted as the offline incumbent on 2026-07-21. The
+contract below was preregistered before implementation or candidate GPU
 measurement.
 
 ## Question and hypothesis
@@ -138,3 +139,64 @@ and require the repeat to beat K=2 CE while passing every non-CE gate before
 the frozen 128-pair arena. A failure gets no repeat, arena, pass-count sweep,
 or SAE refit. Retain only a qualifying selected state; otherwise delete all
 candidate states after preserving compact evidence.
+
+## Outcome
+
+Commits `dfe3dd4` and `984101c` preregister and implement the schedule. The
+implementation preserves the default constant/warmup optimizer ABI, binds the
+schedule into checkpoint contracts and reports, and passed 53 focused CPU
+tests plus Ruff. The one-update A10G smoke had finite metrics, encoded three
+boards per example, retained all eight predictions, reported target/prediction
+SIGReg counts `576/512`, did not clip or skip the update, and peaked at
+`9,482,849,280` bytes of HBM. The cached 30-update profile reached `93.2987`
+end-to-end examples/s, `1.29%` above K=2 and above the `87.5092` gate.
+
+The first 1,800-second run processed `161,408` examples in 1,261 updates at
+`92.8796` steady end-to-end examples/s and peaked at `9,581,214,976` bytes.
+The frozen two-pool scan was:
+
+| update | DFM CE | accuracy | legal mass |
+| ---: | ---: | ---: | ---: |
+| 400 | 4.5098696686 | 0.1086425781 | 0.6431957292 |
+| 800 | 4.5032504834 | 0.1087341309 | 0.6439909316 |
+| 1200 | 4.5014958344 | 0.1093139648 | 0.6468938608 |
+| 1261 | **4.5007607210** | **0.1094207764** | **0.6473310636** |
+
+The selected terminal state improves the retained K=2 incumbent by
+`0.0047313757`, exceeding its `0.0022991356` repeat separation, while passing
+all policy and latent gates. Its mean/min prediction effective rank is
+`30.9710/29.0574`, mean/min feature-std p05 is `0.65062/0.63730`, mean target
+RMS is `0.92754`, and prediction/target RMS ratio is `0.97044`. Positive JEPA
+MSE beats both zero and action-shuffled controls at every horizon.
+
+The update-1200 result directly confirms the secondary hypothesis. Relative
+to constant-rate K=2 v1/v2 at update 1200, warmdown v1 changes CE by
+`-0.0271779485/-0.0361252427`, accuracy by `+0.0016174316/+0.0026550293`, and
+legal mass by `+0.0109306378/+0.0151808239`. The large replicated late-policy
+regression is removed.
+
+An exact second run processed `160,384` examples in 1,253 updates at `92.4980`
+examples/s and independently selected update 800 at CE `4.5022441577`,
+accuracy `0.1088714600`, and legal mass `0.6433968488`. Its selected-checkpoint
+latent audit also passes: rank `31.0751/29.2224`, feature p05
+`0.65108/0.63779`, target RMS `0.92711`, RMS ratio `0.97137`, and both trivial
+controls beaten at all horizons. The two selected CEs differ by `0.0014834367`,
+inside the preregistered K=2 repeat separation. All v2 states were deleted
+after the audit.
+
+The primary v1/update-1261 checkpoint then completed the frozen eight-pass
+128-pair cap-256 arena against K=2 v1/update 800. It scored `0.50390625` with
+pentanomial `[0,3,120,5,0]`, descriptive logistic Elo `+2.7144`, and pair-aware
+95% interval `[-82.1983,+87.9592]`. Seven games were cap draws. One candidate
+game was a fail-closed `no_representable_move` loss from the known incomplete
+legacy promotion codec; the incumbent had no fault. Mean policy-call time was
+`41.70 ms` for the candidate and `43.01 ms` for K=2. This is an
+inconclusive-positive development screen, not an Elo promotion.
+
+Accept cosine warmdown as the new offline incumbent. Retain only the selected
+v1/update-1261 candidate state, SHA-256
+`7bac3c49875ab35c3121c4471b65a40c08ce169a10915d4ebbb55661617cdc1a`;
+all other candidate and repeat states are deleted. The arena state is
+`artifacts/arena/cosine-warmdown-k2-u1261-vs-future-target-k2-u800-development-128pairs-cap256-v1/state.json`
+with SHA-256
+`342d41d70a97a5575a9cf055cc37c660ffe48eb812f3e1ad837b97e0d9d15ba7`.

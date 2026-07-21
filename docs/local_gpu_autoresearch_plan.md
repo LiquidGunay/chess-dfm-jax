@@ -1303,11 +1303,19 @@ sweeps, held-out data, and repeated seeds.
   legal mass `0.36431` catastrophically fail. Reject it without repeat/arena,
   retain no state, and keep all four DFM blocks. Full evidence is in
   `research/experiment_dfm_active_depth3_k2.md`.
-- [ ] Continue from the full-projector, full-DFM K=2 incumbent with loss
+- [x] Continue from the full-projector, full-DFM K=2 incumbent with loss
   coefficients `0.0/5.76/1.0`. Do not revisit smaller planner depth without a
   separately controlled distillation or gradual-depth training objective.
-- [ ] Test a fixed optimizer warmdown from the full K=2 graph: constant peak
+- [x] Test a fixed optimizer warmdown from the full K=2 graph: constant peak
   rates through update 400, cosine decay to 10% over updates 400-1200, then a
   fixed floor. The goal is to remove the replicated update-1200 regression
   without changing architecture or loss. The frozen contract is in
-  `research/experiment_cosine_warmdown_k2.md`.
+  `research/experiment_cosine_warmdown_k2.md`. Both exact runs pass every
+  offline gate at selected CE `4.5007607210/4.5022441577`; update-1200 CE
+  improves by at least `0.02718` versus both constant runs. The primary state
+  scores `50.391%` in an inconclusive-positive 128-pair K=2 arena and becomes
+  the new offline incumbent.
+- [ ] Continue from the full-projector, full-DFM cosine-warmdown incumbent.
+  Keep norm/target/prediction coefficients `0.0/5.76/1.0`, eight-pass
+  inference, fixed evaluation pools, and the accepted optimizer schedule
+  unless a future experiment explicitly isolates one of those axes.

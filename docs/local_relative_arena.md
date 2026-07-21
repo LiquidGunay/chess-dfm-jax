@@ -163,6 +163,21 @@ The completed state is
 (SHA-256
 `7e8de65e39f77d79fae3c9846ea5c727bfa48cfae2f15e16a47e59161fb7c997`).
 
+The repeat-qualified cosine-warmdown K=2 checkpoint at update 1261 then
+completed the same eight-pass 128-pair cap-256 development screen against the
+K=2 update-800 incumbent. It scored `0.50390625`, descriptive logistic Elo
+`+2.7144`, pair-aware 95% interval `[-82.1983,+87.9592]`, and pentanomial
+`[0,3,120,5,0]`. Seven of 256 games were cap draws. The candidate had one
+fail-closed `no_representable_move` legacy-codec promotion fault; the incumbent
+had none. Mean policy-call time was `41.70 ms` for cosine warmdown and
+`43.01 ms` for K=2 at physical batch 16. This is another
+inconclusive-positive model-pool-relative screen, not promotion.
+
+Its completed state is
+`artifacts/arena/cosine-warmdown-k2-u1261-vs-future-target-k2-u800-development-128pairs-cap256-v1/state.json`
+(SHA-256
+`342d41d70a97a5575a9cf055cc37c660ffe48eb812f3e1ad837b97e0d9d15ba7`).
+
 The state files are
 `artifacts/arena/corrected-nonorm-target5p76-pred1-v2-u400-vs-source-development-128pairs-cap256-v1/state.json`
 (SHA-256
