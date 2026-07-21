@@ -70,7 +70,7 @@ EXPERIMENT_OVERRIDES: dict[str, Any] = {
     "lr_warmup_steps": 0,
     "lr_decay_start_steps": 400,
     "lr_decay_steps": 800,
-    "lr_min_ratio": 0.01,
+    "lr_min_ratio": 0.1,
     "jepa_target_sample_count": 2,
     # "dfm_active_layers": 3,
     # "jepa_projector_active_layers": 1,

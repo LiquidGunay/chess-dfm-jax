@@ -1,7 +1,8 @@
 # Experiment 007: one-percent cosine floor
 
-Status: preregistered on 2026-07-21 before changing the active override or
-measuring the candidate on GPU.
+Status: completed and rejected on 2026-07-21. The 1% floor improved the
+incumbent point estimate but missed the frozen repeat-noise-aware CE ceiling
+by `0.0000760853`; no repeat or arena was run and no candidate state remains.
 
 ## Question and hypothesis
 
@@ -106,3 +107,53 @@ repeat to beat the cosine incumbent CE while passing every non-CE gate before
 the frozen 128-pair arena. A failure gets no repeat, arena, pass-count sweep,
 or SAE refit. Retain only a qualifying selected state; otherwise delete all
 candidate states after preserving compact evidence.
+
+## Outcome
+
+Commits `f832edf` and `181c7e9` preregister and activate the 1% floor. The
+implementation passed 54 focused CPU tests plus Ruff. The real-checkpoint
+one-update A10G smoke stayed finite, used the full two-projector/four-DFM
+graph, encoded three boards per example, retained all eight predictions,
+reported target/prediction SIGReg counts `576/512`, did not clip or skip the
+update, and peaked at `9,474,440,192` bytes of HBM. The cached 30-update
+profile reached `91.3181` end-to-end examples/s, above the `88.6337` gate and
+`2.12%` below the accepted 10%-floor profile.
+
+The fixed 1,800-second run processed `158,720` examples in 1,240 updates at
+`91.6046` steady end-to-end examples/s and peaked at `9,585,710,848` bytes.
+Every recorded value remained finite and no loss clip activated. The frozen
+two-pool scan was:
+
+| update | DFM CE | accuracy | legal mass |
+| ---: | ---: | ---: | ---: |
+| 400 | 4.5114891175 | 0.1085662842 | 0.6424590521 |
+| 800 | 4.5022034571 | 0.1091766357 | 0.6452634027 |
+| 1200 | **4.4993533697** | **0.1100006104** | **0.6472349875** |
+| 1240 | 4.4993873630 | 0.1098632812 | 0.6471266039 |
+
+Update 1200 wins and improves the 10%-floor incumbent by `0.0014073513` CE.
+Acceptance required an improvement greater than the accepted repeat
+separation, or CE below `4.4992772844`; the candidate misses that strict
+ceiling by `0.0000760853`. Accuracy and legal mass pass their gates, so this
+is a primary-CE-only rejection rather than a policy or legality regression.
+
+The mandatory seed-10,000 free-rollout audit also passes every latent gate.
+Mean/minimum prediction effective rank is `30.9780/29.0780`, mean/minimum
+feature-std p05 is `0.65079/0.63758`, mean target RMS is `0.92941`, and the
+prediction/target RMS ratio is `0.96882`. Genuine JEPA predictions beat zero
+and action-shuffled controls at all eight horizons. Prediction SIGReg remains
+sufficient to prevent collapse without RMS norm matching in this trial.
+
+The secondary tail-stability result is positive. At update 1200 the 1% floor
+improves CE versus the two 10%-floor runs by `0.0021424647/0.0034112222`, and
+its terminal CE is only `0.0000339933` above its selected update-1200 value.
+The terminal also improves the two accepted-run endpoints by
+`0.0013733581/0.0029827412`. One run is not enough to establish that smaller
+floor as a repeat-stable gain, and the frozen primary gate deliberately
+requires more than this point estimate.
+
+Per the preregistration, the experiment gets no exact repeat, arena,
+pass-count sweep, or SAE refit. All four 1.85 GB candidate states were
+deleted; compact manifests, training metrics, profile, paired scan, latent
+audit, and this decision remain. The active override returns to the accepted
+10% cosine floor.

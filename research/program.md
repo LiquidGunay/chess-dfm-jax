@@ -79,12 +79,15 @@ pair-aware interval `[-82.20,+87.96]`. This is positive but inconclusive and
 does not constitute Elo promotion. Retain v1/update 1261 as the current
 offline incumbent and no repeat state.
 
-The active experiment keeps that incumbent unchanged except for lowering the
-cosine floor from 10% to 1%. It tests whether residual low-rate drift explains
-the small disagreement between the accepted runs after update 800. The frozen
-acceptance ceiling is CE `4.4992772844`, one accepted-repeat separation below
-the incumbent; loss remains `0.0/5.76/1.0`, so prediction SIGReg—not RMS norm
-matching—continues to regularize `z_pred`.
+The one-percent cosine-floor follow-up selects update 1200 at CE
+`4.4993533697`, accuracy `0.1100006104`, and legal mass `0.6472349875`, while
+passing every latent-health gate. It improves the 10%-floor incumbent point
+estimate by `0.0014073513`, and its terminal CE is essentially flat, but it
+misses the frozen repeat-noise-aware ceiling by `0.0000760853`. The trial is
+therefore rejected without repeat or arena, all candidate states are deleted,
+and the active schedule returns to the accepted 10% floor. Loss remains
+`0.0/5.76/1.0`, so prediction SIGReg—not RMS norm matching—continues to
+regularize `z_pred`.
 
 The repeat-qualified norm-on compatibility baseline is v2/update 300. An identical v1 run also
 selected update 300, and their four-pool DFM CE gains differ by only
@@ -125,13 +128,14 @@ PyTorch/JAX source parity passes in
 `artifacts/representations/upstream-bt4-source-parity-v1`; the pinned
 TransformerLens constructor-default epsilon fails and must not be used as the
 source oracle. The immutable preregistrations and completed outcomes of the
-first six post-baseline experiments are in
+first seven post-baseline experiments are in
 `research/experiment_future_target_sampling_k2.md`,
 `research/experiment_sampled_target_anchors_k2.md`,
 `research/experiment_projector_active_depth1_k2.md`,
 `research/experiment_projector_depth1_predsigreg4_k2.md`,
-`research/experiment_dfm_active_depth3_k2.md`, and
-`research/experiment_cosine_warmdown_k2.md`.
+`research/experiment_dfm_active_depth3_k2.md`,
+`research/experiment_cosine_warmdown_k2.md`, and
+`research/experiment_cosine_floor001_k2.md`.
 
 ## Editable surface
 

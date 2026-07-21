@@ -133,3 +133,10 @@ update-1200 regression. The primary update-1261 state scores `50.391%` in the
 128-pair arena against K=2, with descriptive logistic Elo `+2.71` and a wide
 pair-aware interval `[-82.20,+87.96]`. It is the new offline incumbent, not an
 Elo-promoted model; the repeat retains no state.
+
+A one-percent cosine-floor follow-up then selects update 1200 at CE
+`4.4993533697`, accuracy `0.1100006104`, and legal mass `0.6472349875`; its
+latent audit passes every gate. This improves the 10%-floor incumbent point
+estimate by `0.0014073513`, but misses the preregistered repeat-noise-aware CE
+ceiling by `0.0000760853`. It is rejected without repeat or arena, retains no
+state, and the active schedule returns to the accepted 10% floor.

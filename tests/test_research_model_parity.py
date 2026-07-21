@@ -1261,16 +1261,16 @@ def test_cosine_warmdown_schedule_values_and_contract():
     assert serialized["lr_min_ratio"] == 0.1
 
 
-def test_active_experiment_uses_one_percent_cosine_floor():
+def test_active_experiment_uses_accepted_ten_percent_cosine_floor():
     config = local.apply_experiment_overrides(
         local.JointLatentSASAConfig()
     )
     assert config.lr_warmup_steps == 0
     assert config.lr_decay_start_steps == 400
     assert config.lr_decay_steps == 800
-    assert config.lr_min_ratio == 0.01
+    assert config.lr_min_ratio == 0.1
     main_schedule, bt4_schedule = local.learning_rate_schedules(config)
-    for update, ratio in ((0, 1.0), (400, 1.0), (800, 0.505), (1200, 0.01)):
+    for update, ratio in ((0, 1.0), (400, 1.0), (800, 0.55), (1200, 0.1)):
         np.testing.assert_allclose(
             main_schedule(update),
             config.learning_rate * ratio,
@@ -1284,9 +1284,9 @@ def test_active_experiment_uses_one_percent_cosine_floor():
             atol=0.0,
         )
     contract = local.learning_rate_schedule_contract(config)
-    assert contract["minimum_ratio"] == 0.01
-    assert contract["ratio_by_update"]["800"] == 0.505
-    assert contract["ratio_by_update"]["1200"] == 0.01
+    assert contract["minimum_ratio"] == 0.1
+    assert contract["ratio_by_update"]["800"] == 0.55
+    assert contract["ratio_by_update"]["1200"] == 0.1
 
 
 def test_default_constant_learning_rate_schedule_is_exact():

@@ -1315,8 +1315,11 @@ sweeps, held-out data, and repeated seeds.
   improves by at least `0.02718` versus both constant runs. The primary state
   scores `50.391%` in an inconclusive-positive 128-pair K=2 arena and becomes
   the new offline incumbent.
-- [ ] Test a one-percent cosine floor from the full-projector, full-DFM
+- [x] Test a one-percent cosine floor from the full-projector, full-DFM
   warmdown incumbent. Keep norm/target/prediction coefficients
   `0.0/5.76/1.0`, eight-pass inference, and fixed evaluation pools; isolate
   `lr_min_ratio=0.01` as the sole change. The frozen contract is in
-  `research/experiment_cosine_floor001_k2.md`.
+  `research/experiment_cosine_floor001_k2.md`. Update 1200 wins at CE
+  `4.4993533697` and passes every policy/latent secondary gate, but misses the
+  repeat-noise-aware CE ceiling by `0.0000760853`. Reject it without repeat or
+  arena, retain no state, and restore the accepted 10% floor.
