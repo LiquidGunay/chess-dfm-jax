@@ -2029,3 +2029,22 @@ SHA-256 was
 `95daef7749b67bc65990ea0bb5e7b3f7e4b86bad4810cdabb87aea9a446dd8a2`;
 all v2 state files were removed after recording the compact selection and
 collapse evidence.
+
+### Rejected sampled-target anchor experiment
+
+The second preregistered architecture experiment reused each of the two
+sampled future targets as the recurrent carry only after producing its own
+prediction. Evaluation and inference remained fully free-running. The cached
+profile reached `93.4206` examples/s, and the 30-minute run processed 160,384
+examples in 1,253 updates at `92.6631` examples/s with peak HBM
+`9,576,349,184` bytes.
+
+Across seeds 10,000 and 20,000, terminal update 1253 is the candidate best:
+DFM CE `4.5064137187`, accuracy `0.1091308594`, and legal mass
+`0.6438060440`. CE is `0.0009216219` worse than the retained K=2 v1 checkpoint
+and misses the preregistered ceiling by `0.0032207575`. Its seed-10,000 latent
+audit passes rank, target-RMS, RMS-ratio, and both trivial-prediction gates,
+but minimum feature-std p05 is `0.60744` versus the `0.61` floor. The candidate
+is rejected without repeat or arena; all four candidate states were deleted.
+The implementation remains available default-off, and the unanchored K=2
+checkpoint remains the offline incumbent.

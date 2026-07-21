@@ -23,6 +23,16 @@ worse than v1, beyond the old `0.000637` repeat envelope. The direction is
 replicated; the effect size is not tightly repeat-stable, and the model is not
 Elo-promoted.
 
+The next experiment reused those two sampled targets as post-prediction
+teacher-forcing anchors during training while keeping validation fully
+free-running. It retained K=2 speed (`92.663` examples/s), but its best
+two-pool checkpoint reached CE `4.5064137187`, `0.0009216219` worse than the
+retained K=2 incumbent and above the preregistered `4.5031929612` ceiling.
+Its final-horizon prediction feature-std p05 was `0.60744`, just below the
+`0.61` floor. Sparse anchoring is rejected; no repeat or arena was run and all
+candidate states were deleted. Keep the no-norm objective and prediction
+SIGReg coefficient `1.0` as the active baseline.
+
 The repeat-qualified norm-on compatibility baseline is v2/update 300. An identical v1 run also
 selected update 300, and their four-pool DFM CE gains differ by only
 `0.000210253`; the selected v2 checkpoint also passes the recorded
@@ -61,9 +71,10 @@ repair did not by itself open readiness. Dense representation drift is complete 
 PyTorch/JAX source parity passes in
 `artifacts/representations/upstream-bt4-source-parity-v1`; the pinned
 TransformerLens constructor-default epsilon fails and must not be used as the
-source oracle. The immutable preregistration and completed outcome of the first
-post-baseline experiment are in
-`research/experiment_future_target_sampling_k2.md`.
+source oracle. The immutable preregistrations and completed outcomes of the
+first two post-baseline experiments are in
+`research/experiment_future_target_sampling_k2.md` and
+`research/experiment_sampled_target_anchors_k2.md`.
 
 ## Editable surface
 

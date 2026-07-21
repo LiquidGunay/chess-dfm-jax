@@ -139,3 +139,52 @@ relative-strength screen against the retained K=2 offline incumbent, but only
 the preregistered normalized-Elo GSPRT can promote chess strength. Do not run a
 pass-count sweep or SAE refit from this experiment unless strength is later
 resolved.
+
+## Outcome
+
+Commits `4a74004` and `97285fb` preregister and implement the sparse-anchor
+contract. Ten focused target-sampling/anchor tests pass, and the full touched
+CPU set contributed 63 passing tests. The one-update A10G smoke encoded three
+boards per example, retained eight predictions, reported target/prediction
+SIGReg counts `576/512`, and used the sampled horizons as downstream anchors
+only after their predictions. Explicit first compile took `146.55` seconds
+and peak HBM was `9,474,441,728` bytes.
+
+The cached 30-update profile reached `93.4206` end-to-end examples/s, above
+both the `87.5092` gate and the matched K=2 rate of `92.1149`. The fixed
+1,800-second run completed 1,253 updates and 160,384 examples at `92.6631`
+steady end-to-end examples/s, with peak HBM `9,576,349,184` bytes and mean GPU
+utilization `72.81%`. All recorded values remained finite and no update was
+skipped.
+
+The full-horizon two-seed checkpoint scan produced:
+
+| update | mean DFM CE | accuracy | legal mass |
+| ---: | ---: | ---: | ---: |
+| 400 | 4.5121365078 | 0.1076354980 | 0.6425860464 |
+| 800 | 4.5095584393 | 0.1081085205 | 0.6443018941 |
+| 1200 | 4.5244152509 | 0.1069793701 | 0.6373525830 |
+| 1253 | **4.5064137187** | **0.1091308594** | **0.6438060440** |
+
+The terminal checkpoint wins within the candidate run, but is `0.0009216219`
+worse than retained K=2 v1 (`4.5054920968`) and `0.0032207575` above the
+preregistered acceptance ceiling (`4.5031929612`). It therefore fails the
+primary gate. The result lies between the two K=2 repeat outcomes, so the
+honest interpretation is no resolved policy improvement rather than strong
+evidence of a large regression.
+
+The already-computed seed-10,000 free-rollout latent audit has mean/minimum
+effective rank `30.8915/28.9334`, mean target RMS `0.90344`, and
+prediction/target RMS ratio `0.97554`. Prediction MSE beats zero and
+action-shuffled controls at every horizon. Mean feature-standard-deviation
+fifth percentile is `0.63736`, but the final-horizon minimum is `0.60744`,
+slightly below the frozen `0.61` floor. Thus the candidate also fails one
+latent-tail gate even though it does not exhibit broad rank or RMS collapse.
+
+The experiment is rejected. It is not repeated, arena-tested, or promoted.
+All four 1.85 GB candidate states were deleted; compact manifests, metrics,
+profile telemetry, the scan, and this decision remain. The anchor capability
+stays available default-off, while the active experiment surface returns to
+the unanchored K=2 incumbent. Future experiments continue with no RMS-matching
+loss and prediction SIGReg coefficient `1.0`; changing that coefficient is a
+separate experiment.

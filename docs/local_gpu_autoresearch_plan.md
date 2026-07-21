@@ -83,6 +83,18 @@ is `0.0022991356` worse than v1, so the direction replicates more tightly than
 the effect size. The pass-count and matched sparse-refit studies remain
 deferred until a larger gain makes strength evidence less ambiguous.
 
+Second-experiment update, 2026-07-21: reusing the same two sampled targets as
+post-prediction recurrent anchors preserves throughput (`92.663` examples/s)
+but does not improve the frozen policy metric. Its best checkpoint is terminal
+update 1253 at two-pool CE `4.5064137187`, accuracy `0.1091308594`, and legal
+mass `0.6438060440`; CE is `0.0009216219` worse than retained K=2 v1 and fails
+the `4.5031929612` acceptance ceiling. Mean/min effective rank is
+`30.8915/28.9334`, but the final-horizon feature-std p05 is `0.60744`, below
+the `0.61` floor. The experiment is rejected without repeat or arena, all four
+candidate states are removed, and the unanchored K=2 checkpoint remains the
+offline incumbent. The no-norm plus prediction-SIGReg-1.0 objective remains
+frozen for subsequent architecture experiments.
+
 This document is the implementation contract for turning the existing
 TPU/cloud-oriented BT4 + DFM + JEPA experiment into a fast, measurable,
 single-A10G research loop.
@@ -1261,3 +1273,8 @@ sweeps, held-out data, and repeated seeds.
   independently passes every offline gate at CE `4.5077912323`, but the
   `0.0022991356` gap to v1 exceeds the old repeat envelope. Retain no v2 state;
   record directional replication and effect-size variability.
+- [x] Test sparse post-prediction teacher forcing with the same K=2 targets.
+  It preserves `92.663` examples/s, but best CE `4.5064137187` does not beat
+  K=2 and final-horizon feature-std p05 `0.60744` misses its floor. Reject it,
+  run no arena/repeat, and retain no candidate state. Full evidence is in
+  `research/experiment_sampled_target_anchors_k2.md`.

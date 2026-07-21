@@ -106,4 +106,7 @@ passes the offline gates and has an inconclusive-positive 128-pair incumbent
 screen; an exact repeat independently passes the offline gates but shows a
 larger-than-baseline between-repeat CE gap. It is not promoted. See
 `docs/local_relative_arena.md`, the plan, and the baseline report for the exact
-contracts and measured results.
+contracts and measured results. The subsequent sampled-target anchor
+experiment preserved throughput but was rejected at CE `4.5064137187` and a
+minimum feature-std p05 of `0.60744`; it retained no state and did not consume
+arena games.
