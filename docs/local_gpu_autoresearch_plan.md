@@ -1,8 +1,8 @@
 # Local GPU Autoresearch Plan
 
 Status: implementation in progress. The plan was approved on 2026-07-18 and
-revised on 2026-07-19; unattended research remains disabled with
-`AUTORESEARCH_READY = False`. Compatibility v2/update 300 remains the
+revised through 2026-07-21; the frozen loop is now enabled with
+`AUTORESEARCH_READY = True`. Compatibility v2/update 300 remains the
 repeat-qualified control. The no-norm target-SIGReg-5.76,
 prediction-SIGReg-1.0 v2/update-400 checkpoint is now the repeat-qualified
 corrected baseline. Its 128-pair searchless strength anchors are complete: it
@@ -37,8 +37,8 @@ recovered source (`-2.7` descriptive logistic Elo, pair-aware 95% interval
 `[-181.0,+0.6]`). The representation-study strength precondition is therefore
 satisfied. Stage-0/1 read-only representation work may begin, sequentially on
 the A10G. The checkpoint-retention and free-space policy is now frozen and
-machine-audited; unattended architecture search remains disabled pending the
-remaining representation parity and experiment-preregistration gates.
+machine-audited. This was the last state before source parity and experiment
+preregistration subsequently opened the loop on 2026-07-21.
 
 Execution decision, 2026-07-21: keep searchless inference fixed at eight DFM
 refinement passes through the first stronger-model experiments. Eight equals
@@ -58,6 +58,16 @@ current dense result a useful baseline but leaves little local-backbone signal
 for sparse-feature interpretation. Published-artifact work remains gated on
 upstream parity; the next model experiment should create a stronger,
 measurably changed checkpoint before pass-count or sparse-refit sweeps.
+
+Source-parity update, 2026-07-21: the hash-pinned PyTorch implementation at
+Leela-SAEs revision `f946a573...` now matches the official FP32 JAX source at
+every normative hook/layer. With epsilon `1e-3`, worst relative L2 is
+`1.86e-5` and policy-logit relative L2 is `5.68e-6`. The pinned
+`HookedTransformer` constructor's effective `1e-5` layer epsilon fails, with
+worst relative L2 `0.0563`; it is recorded as an upstream compatibility bug,
+not used as the oracle. The source-parity and first-experiment preregistration
+gates are therefore complete and `AUTORESEARCH_READY` is open. Published
+transcoder validation remains a separate hard gate for sparse interpretation.
 
 This document is the implementation contract for turning the existing
 TPU/cloud-oriented BT4 + DFM + JEPA experiment into a fast, measurable,
@@ -1218,8 +1228,12 @@ sweeps, held-out data, and repeated seeds.
   were removed and the storage audit passes. Dense linear probes remain a
   separate Stage-1 follow-up. Schedule all representation GPU work
   sequentially; sparse downloads/training remain gated on source parity.
-- [ ] Complete upstream TransformerLens/source-weight parity, then validate one
-  published transcoder before interpreting fixed sparse-feature transfer.
+- [x] Complete upstream TransformerLens/source-weight parity. The exact pinned
+  PyTorch component path passes against all local FP32 hooks and the policy
+  head in `artifacts/representations/upstream-bt4-source-parity-v1`; the
+  constructor-default epsilon path is explicitly rejected.
+- [ ] Validate one published transcoder before interpreting fixed
+  sparse-feature transfer. This remains off the stronger-model critical path.
 - [x] Preregister the first post-baseline model experiment. It samples two of
   eight future BT4 targets during training while retaining full-horizon
   validation and fixed eight-pass inference; the immutable hypothesis,

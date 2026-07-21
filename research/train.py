@@ -61,7 +61,7 @@ from research.prepare import (  # noqa: E402
 )
 
 
-AUTORESEARCH_READY = False
+AUTORESEARCH_READY = True
 ARCHITECTURE_SOURCE = "research_train_local_model_and_loss"
 
 # AUTORESEARCH EDIT SURFACE: change model/objective knobs here. Checkpoint

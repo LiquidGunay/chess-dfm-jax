@@ -11,9 +11,11 @@ pre/post-branch tensors without adding checkpoint state. On the real
 ordinary local path and every hook at every layer agrees with the independent
 `reference_bt4.py` path within `5e-4`. Unit tests also prove that attention and
 MLP overrides are applied before `alpha`, residual addition, and layer norm.
-This passes the local JAX dense-hook ABI gate. Cross-framework
-TransformerLens parity, source sparse reconstruction, and published-artifact
-support parity remain pending.
+This passes the local JAX dense-hook ABI gate. Cross-framework source parity is
+also complete in `artifacts/representations/upstream-bt4-source-parity-v1`:
+the official `1e-3` path passes all hooks while the pinned constructor-default
+`1e-5` path fails. Source sparse reconstruction and published-artifact support
+parity remain pending.
 
 Local Stage-1 core result, 2026-07-21: the immutable FP32 all-pairs run in
 `artifacts/representations/dense-stage1-four-model-v2` evaluated 128 pinned

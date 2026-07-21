@@ -4,10 +4,10 @@ The goal is to improve the fixed held-out chess metrics of the local-GPU
 BT4/DFM/JEPA model while preserving latent diversity and making training and
 inference faster.
 
-Current gate: `AUTORESEARCH_READY = False`. Do not launch unattended
-architecture search, append calibration runs to `research/results.tsv`, run a
-promotion arena, or describe a checkpoint as promoted until the remaining
-representation-parity and first-experiment preregistration gates are complete.
+Current gate: `AUTORESEARCH_READY = True`. The dense source-parity gate and
+first-experiment preregistration are complete, so the frozen 30-minute
+autoresearch loop may begin. Promotion still requires every offline and arena
+gate below; readiness alone is not a strength claim.
 
 The current offline baseline is v2/update 300. An identical v1 run also
 selected update 300, and their four-pool DFM CE gains differ by only
@@ -15,7 +15,7 @@ selected update 300, and their four-pool DFM CE gains differ by only
 effective-rank, low-variance-tail, prediction/target RMS-ratio, and
 trivial-baseline checks. This repeat-qualified baseline is not an accepted
 autoresearch experiment, an Elo result, or a promoted checkpoint. Readiness
-remains closed.
+was opened later by the separate source-parity and preregistration gates.
 
 The baseline-length prediction-SIGReg `0.57` experiment is rejected. Its best
 two-pool CE is `4.511721` versus incumbent v2/u300 `4.510334`; a matched
@@ -40,9 +40,12 @@ The promotion assets are repaired and available. The source-derived v3 pool
 replaces the old claimable-threefold root before selection is frozen, has zero
 selected validation/test overlap, and passes production replay for all 2,048
 histories. Runtime skipping or substitution remains forbidden. This asset
-repair does not open readiness. Dense representation drift is complete in
-`artifacts/representations/dense-stage1-four-model-v2`; upstream source parity
-is still required. The first post-baseline experiment is preregistered in
+repair did not by itself open readiness. Dense representation drift is complete in
+`artifacts/representations/dense-stage1-four-model-v2`. Official-epsilon
+PyTorch/JAX source parity passes in
+`artifacts/representations/upstream-bt4-source-parity-v1`; the pinned
+TransformerLens constructor-default epsilon fails and must not be used as the
+source oracle. The first post-baseline experiment is preregistered in
 `research/experiment_future_target_sampling_k2.md`; do not change its sampling,
 validation, checkpoint, or decision contract after inspecting candidate
 results.

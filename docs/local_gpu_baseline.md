@@ -1935,24 +1935,23 @@ compatibility v2/update 300 remains the norm-on control. The 2026-07-20
 retention pass removed all other research states and verified source staging
 archives, while preserving compact run evidence and the original source
 history. `research/storage_retention.json` now pins the exact durable set and
-`research/storage_audit.py` enforces it. Both initial strength anchors now
-exist, so the next acceptance work is to:
+`research/storage_audit.py` enforces it. Both initial strength anchors exist,
+and the remaining acceptance work was completed on 2026-07-21:
 
-- implement the read-only five-hook BT4 capture path and prove that capture
+- the read-only five-hook BT4 capture path proves that capture
   leaves the unmodified FP32 source forward unchanged (the local JAX portion
-  passed in commit `7c896a8`; upstream cross-framework parity remains);
-- retain the completed all-pairs dense representation drift in
+  passed in commit `7c896a8`; upstream cross-framework parity now passes at
+  the official epsilon);
+- the completed all-pairs dense representation drift in
   `artifacts/representations/dense-stage1-four-model-v2` as the longitudinal
   zero point; it shows large raw-to-recovered drift but only about `0.28%`
   final-trunk relative L2 from recovered to either local 30-minute baseline;
-- preregister the first post-baseline architecture experiment and its
-  checkpoint schedule.
+- the first post-baseline architecture experiment and its checkpoint schedule
+  are preregistered in `research/experiment_future_target_sampling_k2.md`.
 
-`AUTORESEARCH_READY` remains `False` and `research/results.tsv` remains
-header-only while those operational contracts are settled. This no longer
-blocks read-only Stage-0/1 representation work. Sparse-artifact download,
-causal replacement, and SAE/TC/LoRSA training remain gated on source hook and
-FP32 parity.
+`AUTORESEARCH_READY` is now `True`; `research/results.tsv` remains header-only
+until the first accepted 30-minute candidate finishes. Published sparse
+artifact interpretation remains separately gated on source reconstruction.
 
 ### Dense four-model representation anchor
 
@@ -1977,3 +1976,21 @@ hook/layer. Thus the selected corrected loss did not measurably reorganize the
 BT4 trunk during this short run; its DFM/JEPA result should not be narrated as
 a new sparse representation regime. A stronger model checkpoint is the next
 useful target for pass-count and matched sparse-refit experiments.
+
+### Upstream FP32 source-parity gate
+
+The 2026-07-21 cross-framework run imports the exact hash-pinned BT4 embedding,
+encoder, and policy component files from Leela-SAEs revision `f946a573...`,
+replaces only `HookPoint` with an identity, and explicitly binds the audited
+local FP32 arrays. It uses two exact stored development-pool plane records and
+does not deserialize any external checkpoint object.
+
+At the official LC0 epsilon `1e-3`, every one of the five hooks across all 15
+layers passes: worst relative L2 is `1.858e-5`, worst max-absolute error is
+`0.004456`, minimum cosine is `0.999999999827`, and policy-logit relative L2 is
+`5.677e-6`. In contrast, reproducing the pinned `HookedTransformer`
+constructor's effective default `1e-5` layer epsilon reaches `0.056264`
+relative L2 and `89.9723` max-absolute error and fails the gate. The official
+epsilon path is now the cross-framework oracle. This opens model autoresearch;
+it does not validate a published sparse artifact or authorize sparse-feature
+interpretation.
