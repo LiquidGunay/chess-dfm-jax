@@ -79,6 +79,13 @@ pair-aware interval `[-82.20,+87.96]`. This is positive but inconclusive and
 does not constitute Elo promotion. Retain v1/update 1261 as the current
 offline incumbent and no repeat state.
 
+The active experiment keeps that incumbent unchanged except for lowering the
+cosine floor from 10% to 1%. It tests whether residual low-rate drift explains
+the small disagreement between the accepted runs after update 800. The frozen
+acceptance ceiling is CE `4.4992772844`, one accepted-repeat separation below
+the incumbent; loss remains `0.0/5.76/1.0`, so prediction SIGReg—not RMS norm
+matching—continues to regularize `z_pred`.
+
 The repeat-qualified norm-on compatibility baseline is v2/update 300. An identical v1 run also
 selected update 300, and their four-pool DFM CE gains differ by only
 `0.000210253`; the selected v2 checkpoint also passes the recorded

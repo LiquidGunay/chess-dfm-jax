@@ -1315,7 +1315,8 @@ sweeps, held-out data, and repeated seeds.
   improves by at least `0.02718` versus both constant runs. The primary state
   scores `50.391%` in an inconclusive-positive 128-pair K=2 arena and becomes
   the new offline incumbent.
-- [ ] Continue from the full-projector, full-DFM cosine-warmdown incumbent.
-  Keep norm/target/prediction coefficients `0.0/5.76/1.0`, eight-pass
-  inference, fixed evaluation pools, and the accepted optimizer schedule
-  unless a future experiment explicitly isolates one of those axes.
+- [ ] Test a one-percent cosine floor from the full-projector, full-DFM
+  warmdown incumbent. Keep norm/target/prediction coefficients
+  `0.0/5.76/1.0`, eight-pass inference, and fixed evaluation pools; isolate
+  `lr_min_ratio=0.01` as the sole change. The frozen contract is in
+  `research/experiment_cosine_floor001_k2.md`.
