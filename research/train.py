@@ -68,6 +68,7 @@ ARCHITECTURE_SOURCE = "research_train_local_model_and_loss"
 # metadata is loaded first, then these values, then explicit CLI overrides.
 EXPERIMENT_OVERRIDES: dict[str, Any] = {
     "lr_warmup_steps": 0,
+    "jepa_target_sample_count": 2,
     # "jepa_norm_loss_coeff": 0.0,
     # "jepa_pred_sigreg_coeff": 1.0,
     # "jepa_sigreg_estimator": "u_stat",
@@ -197,7 +198,6 @@ class JointLatentSASAConfig:
 _INERT_OR_DEPRECATED_CONFIG_FIELDS = (
     "jepa_num_heads",
     "horizon_legality_coeff",
-    "jepa_target_sample_count",
     "jepa_action_contrast_coeff",
     "jepa_action_contrast_margin",
     "contrastive_coeff",
@@ -879,10 +879,18 @@ class JointLatentSASAModel(nnx.Module):
             raise ValueError(
                 f"Unsupported jepa_target_mode: {config.jepa_target_mode!r}."
             )
-        if config.jepa_target_sample_count not in (0, config.horizon):
+        if (
+            isinstance(config.jepa_target_sample_count, bool)
+            or not isinstance(
+                config.jepa_target_sample_count,
+                (int, np.integer),
+            )
+            or not 0 <= config.jepa_target_sample_count <= config.horizon
+        ):
             raise ValueError(
-                "Projected-vector JEPA currently uses full-horizon targets; "
-                "set jepa_target_sample_count=0."
+                "jepa_target_sample_count must be an integer in "
+                f"[0, {config.horizon}], found "
+                f"{config.jepa_target_sample_count!r}."
             )
         projector_heads = config.projector_num_heads
         if config.z_dim % projector_heads != 0:
@@ -1623,6 +1631,7 @@ def joint_stage1_loss_fn(
     sigreg_axis_name: str | None = None,
     compute_fp32_legality: bool = False,
     positive_target_override: jax.Array | None = None,
+    sample_future_targets: bool = False,
 ) -> tuple[jnp.ndarray, dict[str, jnp.ndarray]]:
     actions = batch["action_indices"][:, : model.config.horizon]
     batch_size, horizon = actions.shape
@@ -1634,10 +1643,41 @@ def joint_stage1_loss_fn(
     future_valid = jnp.asarray(batch["future_valid"], dtype=jnp.float32)[:, :horizon]
     future_planes = jnp.asarray(batch["future_planes"], dtype=jnp.float32)[:, :horizon]
 
+    # Preserve the baseline DFM time/mask RNG streams. Target-horizon sampling
+    # is derived only from the former SIGReg branch, and the remaining SIGReg
+    # key is then used exactly as the candidate's projection/sampling source.
+    rng_t, rng_mask, rng_sigreg = jax.random.split(rng, 3)
+    configured_target_count = int(model.config.jepa_target_sample_count)
+    target_sampling_active = bool(
+        sample_future_targets
+        and 0 < configured_target_count < horizon
+    )
+    if target_sampling_active:
+        rng_target_horizons, rng_sigreg = jax.random.split(rng_sigreg)
+        selected_horizons = jnp.sort(
+            jax.random.permutation(rng_target_horizons, horizon)[
+                :configured_target_count
+            ]
+        )
+        target_future_planes = jnp.take(
+            future_planes,
+            selected_horizons,
+            axis=1,
+        )
+        future_valid_for_loss = jnp.take(
+            future_valid,
+            selected_horizons,
+            axis=1,
+        )
+    else:
+        selected_horizons = jnp.arange(horizon, dtype=jnp.int32)
+        target_future_planes = future_planes
+        future_valid_for_loss = future_valid
+
     with jax.named_scope("joint_encode_project_current_future"):
         all_bt4_tokens, z_all = model.encode_current_and_future_tokens_and_vectors(
             batch["current_planes"],
-            future_planes,
+            target_future_planes,
         )
     current_bt4_tokens = all_bt4_tokens[:, 0]
     z_jepa = z_all[:, 0]
@@ -1645,7 +1685,6 @@ def joint_stage1_loss_fn(
     with jax.named_scope("joint_dfm_state_projector"):
         z_dfm = model.dfm_latents(current_bt4_tokens)
 
-    rng_t, rng_mask, rng_sigreg = jax.random.split(rng, 3)
     t = jax.random.uniform(rng_t, shape=(batch_size,))
     if "deterministic_t" in batch:
         t = jnp.full_like(t, batch["deterministic_t"])
@@ -1726,10 +1765,22 @@ def joint_stage1_loss_fn(
                 z0_normalized=True,
             )
 
-        pred_z = jax.lax.cond(teacher_forcing > 0.5, teacher_forced_rollout, free_rollout, operand=None)
-    selected_horizons = jnp.arange(horizon, dtype=jnp.int32)
-    pred_for_loss = pred_z
-    future_valid_for_loss = future_valid
+        if target_sampling_active:
+            # Teacher forcing requires all future latent states. The candidate
+            # contract rejects that combination before compilation.
+            pred_z = free_rollout(None)
+        else:
+            pred_z = jax.lax.cond(
+                teacher_forcing > 0.5,
+                teacher_forced_rollout,
+                free_rollout,
+                operand=None,
+            )
+    pred_for_loss = (
+        jnp.take(pred_z, selected_horizons, axis=1)
+        if target_sampling_active
+        else pred_z
+    )
     if positive_target_override is None:
         target_vectors = _jepa_positive_target_vectors(
             z_jepa,
@@ -1845,7 +1896,8 @@ def joint_stage1_loss_fn(
     sigreg_z_all = z_all
     sigreg_pred_z = pred_z
     sigreg_valid = valid
-    sigreg_future_valid = future_valid
+    sigreg_target_future_valid = future_valid_for_loss
+    sigreg_pred_future_valid = future_valid
     sigreg_projection_rng = rng_sigreg
     sigreg_example_count = model.config.jepa_sigreg_example_count
     if sigreg_example_count > batch_size:
@@ -1864,8 +1916,13 @@ def joint_stage1_loss_fn(
         sigreg_z_all = jnp.take(z_all, sigreg_indices, axis=0)
         sigreg_pred_z = jnp.take(pred_z, sigreg_indices, axis=0)
         sigreg_valid = jnp.take(valid, sigreg_indices, axis=0)
-        sigreg_future_valid = jnp.take(
+        sigreg_target_future_valid = jnp.take(
             future_valid_for_loss,
+            sigreg_indices,
+            axis=0,
+        )
+        sigreg_pred_future_valid = jnp.take(
+            future_valid,
             sigreg_indices,
             axis=0,
         )
@@ -1876,11 +1933,24 @@ def joint_stage1_loss_fn(
         0.0,
         dtype=jnp.float32,
     )
+    target_future_importance = jnp.asarray(
+        horizon / selected_horizons.shape[0],
+        dtype=jnp.float32,
+    )
+    if target_sampling_active:
+        target_sigreg_future_weight = (
+            sigreg_valid[:, None]
+            * sigreg_target_future_valid
+            * target_future_importance
+        )
+    else:
+        # Preserve the legacy full-horizon graph exactly, including operation
+        # ordering in its gradients.
+        target_sigreg_future_weight = (
+            sigreg_valid[:, None] * sigreg_target_future_valid
+        )
     valid_all = jnp.concatenate(
-        [
-            sigreg_valid[:, None],
-            sigreg_valid[:, None] * sigreg_future_valid,
-        ],
+        [sigreg_valid[:, None], target_sigreg_future_weight],
         axis=1,
     )
     sigreg_weight = valid_all.reshape((-1,))
@@ -1929,7 +1999,7 @@ def joint_stage1_loss_fn(
         dtype=jnp.float32,
     )
     pred_sigreg_weight = (
-        sigreg_future_valid * sigreg_valid[:, None]
+        sigreg_pred_future_valid * sigreg_valid[:, None]
     ).reshape((-1,))
     pred_sigreg_valid_count = jnp.sum(pred_sigreg_weight)
     if model.config.jepa_pred_sigreg_coeff != 0.0:
@@ -2143,6 +2213,26 @@ def joint_stage1_loss_fn(
         "mask_prob": jnp.mean(1.0 - t),
         "loss_horizon": jnp.asarray(loss_horizon, dtype=jnp.float32),
     }
+    if target_sampling_active:
+        aux.update(
+            {
+                "jepa_target_sampling_active": jnp.asarray(
+                    1.0,
+                    dtype=jnp.float32,
+                ),
+                "jepa_target_future_importance_weight": (
+                    target_future_importance
+                ),
+                "bt4_encoded_boards_per_example": jnp.asarray(
+                    selected_horizons.shape[0] + 1,
+                    dtype=jnp.float32,
+                ),
+                "jepa_prediction_horizon_count": jnp.asarray(
+                    pred_z.shape[1],
+                    dtype=jnp.float32,
+                ),
+            }
+        )
     if target_variance_hinge is not None:
         aux.update(
             {
@@ -2432,6 +2522,36 @@ def validate_objective_config(
             "Fixed-count SIGReg example sampling requires "
             "--objective normalized."
         )
+    target_sample_count = config.jepa_target_sample_count
+    if (
+        isinstance(target_sample_count, bool)
+        or not isinstance(target_sample_count, (int, np.integer))
+        or not 0 <= target_sample_count <= config.horizon
+    ):
+        raise ValueError(
+            "jepa_target_sample_count must be an integer in "
+            f"[0, {config.horizon}], found {target_sample_count!r}"
+        )
+    if 0 < target_sample_count < config.horizon:
+        if objective != "normalized":
+            raise ValueError(
+                "Sampled future targets require --objective normalized."
+            )
+        if config.jepa_target_semantics != "online":
+            raise ValueError(
+                "Sampled future targets currently require online targets; "
+                "EMA target encoding is intentionally unsupported."
+            )
+        if config.jepa_teacher_forcing_steps != 0:
+            raise ValueError(
+                "Sampled future targets cannot be combined with teacher "
+                "forcing because unencoded future states are unavailable."
+            )
+        if config.jepa_target_variance_hinge_coeff != 0.0:
+            raise ValueError(
+                "Sampled future targets do not yet support the per-horizon "
+                "target variance hinge."
+            )
     if config.jepa_target_semantics not in ("online", "ema"):
         raise ValueError(
             "jepa_target_semantics must be 'online' or 'ema', found "
@@ -3391,6 +3511,25 @@ def build_research_resume_contract(
             "projection_rng_split_after_selection": True,
             "full_batch_fast_path_when_equal": True,
         }
+    if 0 < config.jepa_target_sample_count < config.horizon:
+        objective_contract["future_target_sampling"] = {
+            "scope": "training_only",
+            "sample_count": int(config.jepa_target_sample_count),
+            "population_horizons": int(config.horizon),
+            "unit": "one_shared_horizon_subset_per_physical_batch",
+            "without_replacement": True,
+            "sorted_after_selection": True,
+            "resampled_each_update": True,
+            "rng_derivation": "split_from_existing_sigreg_rng_branch",
+            "dfm_time_and_mask_rng_unchanged": True,
+            "positive_jepa_horizons": "sampled",
+            "prediction_sigreg_horizons": "all",
+            "target_sigreg_future_importance_weight": float(
+                config.horizon / config.jepa_target_sample_count
+            ),
+            "target_sigreg_current_importance_weight": 1.0,
+            "evaluation_horizons": "all",
+        }
     if config.jepa_target_variance_hinge_coeff != 0.0:
         objective_contract["jepa_target_variance_hinge"] = {
             "coefficient": float(
@@ -3797,6 +3936,7 @@ def normalized_stage1_loss_fn(
     target_reference_count: float,
     pred_reference_count: float,
     positive_target_override: jax.Array | None = None,
+    sample_future_targets: bool = False,
 ) -> tuple[jax.Array, dict[str, jax.Array]]:
     """Compatibility loss with finite-sample SIGReg and legal corrections.
 
@@ -3811,6 +3951,7 @@ def normalized_stage1_loss_fn(
         rng,
         compute_fp32_legality=True,
         positive_target_override=positive_target_override,
+        sample_future_targets=sample_future_targets,
     )
     target_official = jnp.asarray(
         compatibility_aux["jepa_sigreg_loss"],
@@ -3923,6 +4064,7 @@ def gradient_component_vector(
         rng,
         sigreg_reference_count,
         sigreg_reference_count,
+        sample_future_targets=True,
     )
     components = [
         jnp.asarray(aux["dfm_ce_loss"], dtype=jnp.float32),
@@ -3953,8 +4095,27 @@ def gradient_component_names(
     return GRADIENT_COMPONENT_NAMES
 
 
+def normalized_stage1_training_loss_fn(
+    model,
+    batch: dict[str, jax.Array],
+    rng: jax.Array,
+    target_reference_count: float,
+    pred_reference_count: float,
+) -> tuple[jax.Array, dict[str, jax.Array]]:
+    """Training-only normalized objective with configured target sampling."""
+
+    return normalized_stage1_loss_fn(
+        model,
+        batch,
+        rng,
+        target_reference_count,
+        pred_reference_count,
+        sample_future_targets=True,
+    )
+
+
 _normalized_loss_and_grad = nnx.value_and_grad(
-    normalized_stage1_loss_fn,
+    normalized_stage1_training_loss_fn,
     argnums=nnx.DiffState(0, TrainableParam),
     has_aux=True,
 )
@@ -6275,8 +6436,14 @@ def main() -> int:
     performance_seconds = steady_update_seconds_mean or first_update_seconds
     compiler_cost_analysis = compiler_cost_summary(compiler_cost_analysis_raw)
     performance = compiler_performance(compiler_cost_analysis, performance_seconds)
+    online_target_horizons = (
+        config.jepa_target_sample_count
+        if 0 < config.jepa_target_sample_count < config.horizon
+        else config.horizon
+    )
+    online_encoded_boards_per_example = online_target_horizons + 1
     encoded_boards_per_example = (
-        config.horizon + 1
+        online_encoded_boards_per_example
         + (
             config.horizon
             if config.jepa_target_semantics == "ema"
@@ -6334,7 +6501,10 @@ def main() -> int:
             / steady_update_seconds_mean
         ),
         "encoded_boards_per_example": encoded_boards_per_example,
-        "online_encoded_boards_per_example": config.horizon + 1,
+        "online_encoded_boards_per_example": (
+            online_encoded_boards_per_example
+        ),
+        "online_future_target_horizons_per_example": online_target_horizons,
         "ema_teacher_encoded_boards_per_example": (
             config.horizon
             if config.jepa_target_semantics == "ema"
