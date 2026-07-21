@@ -89,6 +89,14 @@ and the active schedule returns to the accepted 10% floor. Loss remains
 `0.0/5.76/1.0`, so prediction SIGReg—not RMS norm matching—continues to
 regularize `z_pred`.
 
+The active experiment samples one rather than two future BT4 targets on each
+training update while retaining full-horizon rollout, validation, and
+eight-pass inference. It tests whether reducing the per-example encoder work
+from three boards to two produces a meaningful throughput gain and a policy CE
+improvement larger than accepted repeat noise. The accepted 10% cosine
+schedule and `0.0/5.76/1.0` loss remain fixed; the size-one estimator must also
+preserve every latent-health gate.
+
 The repeat-qualified norm-on compatibility baseline is v2/update 300. An identical v1 run also
 selected update 300, and their four-pool DFM CE gains differ by only
 `0.000210253`; the selected v2 checkpoint also passes the recorded
