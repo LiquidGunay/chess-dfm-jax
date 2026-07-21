@@ -55,6 +55,13 @@ shallow-projector line ends. This is useful evidence that stronger prediction
 SIGReg helps but does not substitute for projector capacity or explicit scale
 control.
 
+The active experiment returns to the full two-block K=2 JEPA path and changes
+only DFM planner depth: execute three of four stored blocks while retaining the
+exact source-compatible parameter tree. Loss coefficients remain
+`0.0/5.76/1.0`. This is the first post-baseline architecture trial that can
+improve both training and searchless inference latency; it must beat the same
+policy/noise and latent-health gates, not merely run faster.
+
 The repeat-qualified norm-on compatibility baseline is v2/update 300. An identical v1 run also
 selected update 300, and their four-pool DFM CE gains differ by only
 `0.000210253`; the selected v2 checkpoint also passes the recorded

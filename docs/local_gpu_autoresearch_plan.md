@@ -1297,3 +1297,7 @@ sweeps, held-out data, and repeated seeds.
 - [ ] Move to the next original-plan model axis from the full two-block K=2
   baseline. Keep loss coefficients fixed at norm/target/prediction
   `0.0/5.76/1.0` so the next architecture result is attributable.
+- [ ] Test three active DFM planner blocks while retaining the exact
+  four-layer checkpoint ABI. Measure both training and matched eight-pass
+  inference throughput; require the same policy and latent gates. The frozen
+  contract is in `research/experiment_dfm_active_depth3_k2.md`.
