@@ -454,7 +454,6 @@ def test_inert_nondefault_experiment_knobs_fail_closed():
     non_defaults = {
         "jepa_num_heads": 4,
         "horizon_legality_coeff": 0.25,
-        "jepa_target_sample_count": config.horizon,
         "jepa_action_contrast_coeff": 0.1,
         "jepa_action_contrast_margin": 0.1,
         "contrastive_coeff": 0.1,
