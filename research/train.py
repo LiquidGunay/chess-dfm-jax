@@ -71,7 +71,7 @@ EXPERIMENT_OVERRIDES: dict[str, Any] = {
     "lr_decay_start_steps": 400,
     "lr_decay_steps": 800,
     "lr_min_ratio": 0.1,
-    "jepa_target_sample_count": 2,
+    "jepa_target_sample_count": 1,
     # "dfm_active_layers": 3,
     # "jepa_projector_active_layers": 1,
     # "jepa_sampled_target_anchors": True,

@@ -164,6 +164,47 @@ def test_two_target_training_is_deterministic_and_preserves_full_mass() -> None:
     assert "jepa_target_sampling_active" not in full
 
 
+def test_one_target_training_preserves_mass_and_prediction_coverage() -> None:
+    ENCODE_BATCH_SIZES.clear()
+    model = train.JointLatentSASAModel(
+        RecordingEncoder(),
+        _config(jepa_target_sample_count=1),
+        rngs=nnx.Rngs(18),
+    )
+    loss, aux = _loss(
+        model,
+        _batch(),
+        jax.random.PRNGKey(124),
+        sample=True,
+    )
+
+    assert jnp.isfinite(loss)
+    assert ENCODE_BATCH_SIZES == [8]
+    assert aux["jepa_target_sample_count"] == 1.0
+    assert aux["jepa_target_sample_fraction"] == 0.25
+    assert aux["jepa_target_future_importance_weight"] == 4.0
+    assert aux["bt4_encoded_boards_per_example"] == 2.0
+    assert aux["jepa_prediction_horizon_count"] == 4.0
+    assert aux["jepa_sigreg_valid_count"] == 10.0
+    assert aux["jepa_pred_sigreg_valid_count"] == 8.0
+    assert jnp.sum(aux["jepa_target_horizon_mask"]) == 1.0
+    assert jnp.all(
+        aux["jepa_loss_by_horizon"]
+        * (1.0 - aux["jepa_target_horizon_mask"])
+        == 0.0
+    )
+
+
+def test_active_experiment_uses_one_sampled_future_target() -> None:
+    config = train.apply_experiment_overrides(
+        train.JointLatentSASAConfig()
+    )
+    assert config.jepa_target_sample_count == 1
+    assert config.lr_decay_start_steps == 400
+    assert config.lr_decay_steps == 800
+    assert config.lr_min_ratio == 0.1
+
+
 def test_sampled_target_subset_changes_across_predeclared_rng_keys() -> None:
     model = train.JointLatentSASAModel(
         RecordingEncoder(),
