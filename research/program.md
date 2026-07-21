@@ -43,6 +43,14 @@ active. It is rejected without repeat or arena, and all candidate states were
 deleted. Keep both projector blocks active. Scalar norm health is not a
 substitute for rank and low-variance-tail diagnostics.
 
+The active follow-up holds that rejected one-block graph fixed and changes
+only prediction SIGReg from `1.0` to `4.0`. At the prior terminal audit this
+would raise its weighted scalar contribution from `0.0871` to `0.3484`,
+between positive JEPA (`0.2833`) and target SIGReg (`0.4220`) after their early
+drop. RMS matching remains disabled. The follow-up must restore every latent
+gate and beat the same policy CE ceiling; otherwise the shallow-projector line
+ends without another coefficient sweep.
+
 The repeat-qualified norm-on compatibility baseline is v2/update 300. An identical v1 run also
 selected update 300, and their four-pool DFM CE gains differ by only
 `0.000210253`; the selected v2 checkpoint also passes the recorded

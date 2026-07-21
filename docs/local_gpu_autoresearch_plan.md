@@ -1288,3 +1288,9 @@ sweeps, held-out data, and repeated seeds.
   incumbent. Keep the prediction/target RMS loss disabled and prediction
   SIGReg coefficient `1.0`; any SIGReg-weight change must be isolated from an
   architecture change.
+- [ ] Test the one-block projector with only prediction SIGReg increased from
+  `1.0` to `4.0`. The value matches the settled prediction-SIGReg contribution
+  to the other representation auxiliaries. Require both policy improvement
+  and full latent recovery; if it fails, end the shallow-projector line. The
+  frozen contract is in
+  `research/experiment_projector_depth1_predsigreg4_k2.md`.
