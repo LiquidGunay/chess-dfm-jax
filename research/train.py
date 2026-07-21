@@ -68,6 +68,9 @@ ARCHITECTURE_SOURCE = "research_train_local_model_and_loss"
 # metadata is loaded first, then these values, then explicit CLI overrides.
 EXPERIMENT_OVERRIDES: dict[str, Any] = {
     "lr_warmup_steps": 0,
+    "lr_decay_start_steps": 400,
+    "lr_decay_steps": 800,
+    "lr_min_ratio": 0.1,
     "jepa_target_sample_count": 2,
     # "dfm_active_layers": 3,
     # "jepa_projector_active_layers": 1,
@@ -192,6 +195,9 @@ class JointLatentSASAConfig:
     use_muon: bool = True
     grad_clip_norm: float = 1.0
     lr_warmup_steps: int = 1000
+    lr_decay_start_steps: int = 0
+    lr_decay_steps: int = 0
+    lr_min_ratio: float = 1.0
     skip_nonfinite_updates: bool = True
     unfreeze_bt4_encoder: bool = True
     bt4_encode_chunk_size: int = 0
@@ -2658,6 +2664,154 @@ def joint_stage1_loss_fn(
     return loss, aux
 
 
+def validate_learning_rate_schedule_config(
+    config: JointLatentSASAConfig,
+) -> None:
+    """Reject ambiguous or inert learning-rate schedule settings."""
+
+    for name in (
+        "lr_warmup_steps",
+        "lr_decay_start_steps",
+        "lr_decay_steps",
+    ):
+        value = getattr(config, name)
+        if (
+            isinstance(value, bool)
+            or not isinstance(value, (int, np.integer))
+            or value < 0
+        ):
+            raise ValueError(
+                f"{name} must be a non-negative integer, found {value!r}"
+            )
+    if (
+        isinstance(config.lr_min_ratio, bool)
+        or not math.isfinite(config.lr_min_ratio)
+        or not 0.0 < config.lr_min_ratio <= 1.0
+    ):
+        raise ValueError(
+            "lr_min_ratio must be finite and in (0, 1], found "
+            f"{config.lr_min_ratio!r}"
+        )
+    if config.lr_decay_steps == 0:
+        if config.lr_decay_start_steps != 0:
+            raise ValueError(
+                "lr_decay_start_steps is inert when lr_decay_steps=0; "
+                "keep it at 0"
+            )
+        if config.lr_min_ratio != 1.0:
+            raise ValueError(
+                "lr_min_ratio is inert when lr_decay_steps=0; keep it "
+                "at 1.0"
+            )
+    elif config.lr_warmup_steps != 0:
+        raise ValueError(
+            "Simultaneous learning-rate warmup and decay are unsupported; "
+            "set lr_warmup_steps=0 when lr_decay_steps is positive"
+        )
+
+
+def learning_rate_schedules(config: JointLatentSASAConfig):
+    """Return main and BT4 schedules sharing one optimizer-step contract."""
+
+    validate_learning_rate_schedule_config(config)
+
+    def schedule(peak: float):
+        if config.lr_decay_steps > 0:
+            cosine = optax.cosine_decay_schedule(
+                init_value=peak,
+                decay_steps=config.lr_decay_steps,
+                alpha=config.lr_min_ratio,
+            )
+            if config.lr_decay_start_steps == 0:
+                return cosine
+            return optax.join_schedules(
+                [optax.constant_schedule(peak), cosine],
+                boundaries=[config.lr_decay_start_steps],
+            )
+        if config.lr_warmup_steps > 0:
+            return optax.join_schedules(
+                [
+                    optax.linear_schedule(
+                        init_value=0.0,
+                        end_value=peak,
+                        transition_steps=config.lr_warmup_steps,
+                    ),
+                    optax.constant_schedule(peak),
+                ],
+                boundaries=[config.lr_warmup_steps],
+            )
+        return optax.constant_schedule(peak)
+
+    return schedule(config.learning_rate), schedule(config.bt4_learning_rate)
+
+
+def _cosine_decay_ratio(
+    *,
+    update: int,
+    start: int,
+    decay_steps: int,
+    minimum: float,
+) -> float:
+    relative_update = min(max(update - start, 0), decay_steps)
+    progress = relative_update / decay_steps
+    return minimum + (1.0 - minimum) * 0.5 * (
+        1.0 + math.cos(math.pi * progress)
+    )
+
+
+def learning_rate_schedule_contract(
+    config: JointLatentSASAConfig,
+) -> dict[str, Any]:
+    """Describe the zero-based optimizer-update schedule in run metadata."""
+
+    validate_learning_rate_schedule_config(config)
+    if config.lr_decay_steps > 0:
+        start = int(config.lr_decay_start_steps)
+        decay_steps = int(config.lr_decay_steps)
+        end = start + decay_steps
+        boundary_updates = {0, start, start + decay_steps // 2, end - 1, end}
+        if start > 0:
+            boundary_updates.add(start - 1)
+        ratios = {
+            str(update): _cosine_decay_ratio(
+                update=update,
+                start=start,
+                decay_steps=decay_steps,
+                minimum=float(config.lr_min_ratio),
+            )
+            for update in sorted(boundary_updates)
+        }
+        family = "constant_then_cosine_decay"
+    elif config.lr_warmup_steps > 0:
+        warmup_steps = int(config.lr_warmup_steps)
+        boundary_updates = {0, warmup_steps - 1, warmup_steps}
+        ratios = {
+            str(update): min(update / warmup_steps, 1.0)
+            for update in sorted(boundary_updates)
+        }
+        family = "linear_warmup_then_constant"
+    else:
+        ratios = {"0": 1.0}
+        family = "constant"
+    return {
+        "family": family,
+        "counter": "zero_based_optimizer_update",
+        "main_peak_learning_rate": float(config.learning_rate),
+        "bt4_peak_learning_rate": float(config.bt4_learning_rate),
+        "warmup_steps": int(config.lr_warmup_steps),
+        "decay_start_update": int(config.lr_decay_start_steps),
+        "decay_transition_steps": int(config.lr_decay_steps),
+        "minimum_ratio": float(config.lr_min_ratio),
+        "ratio_by_update": ratios,
+        "learning_rate_by_update": {
+            update: {
+                "main": float(config.learning_rate) * ratio,
+                "bt4": float(config.bt4_learning_rate) * ratio,
+            }
+            for update, ratio in ratios.items()
+        },
+    }
+
 
 def create_joint_components(
     bt4_params: dict[str, Any],
@@ -2678,39 +2832,7 @@ def create_joint_components(
         config,
         rngs=nnx.Rngs(seed),
     )
-    learning_rate = config.learning_rate
-    bt4_learning_rate = config.bt4_learning_rate
-    if config.lr_warmup_steps > 0:
-        learning_rate = optax.join_schedules(
-            [
-                optax.linear_schedule(
-                    init_value=0.0,
-                    end_value=config.learning_rate,
-                    transition_steps=config.lr_warmup_steps,
-                ),
-                optax.constant_schedule(config.learning_rate),
-            ],
-            boundaries=[config.lr_warmup_steps],
-        )
-        bt4_learning_rate = optax.join_schedules(
-            [
-                optax.linear_schedule(
-                    init_value=0.0,
-                    end_value=config.bt4_learning_rate,
-                    transition_steps=config.lr_warmup_steps,
-                ),
-                optax.constant_schedule(config.bt4_learning_rate),
-            ],
-            boundaries=[config.lr_warmup_steps],
-        )
-    else:
-        # Keep the same stateful schedule ABI as the restored warmup
-        # transform. This lets model-only initialization use a truly constant
-        # local LR while still preflighting the source optimizer tree.
-        learning_rate = optax.constant_schedule(config.learning_rate)
-        bt4_learning_rate = optax.constant_schedule(
-            config.bt4_learning_rate
-        )
+    learning_rate, bt4_learning_rate = learning_rate_schedules(config)
     if config.use_muon:
         from chess_dfm_jax.nnx_bt4 import muon_adamw
 
@@ -2790,6 +2912,7 @@ def validate_objective_config(
     objective: str,
     config: JointLatentSASAConfig,
 ) -> None:
+    validate_learning_rate_schedule_config(config)
     dfm_active_layers = config.dfm_active_layers
     if (
         isinstance(dfm_active_layers, bool)
@@ -4013,6 +4136,11 @@ def build_research_resume_contract(
         "architecture_source": ARCHITECTURE_SOURCE,
         "model_config": serialized_model_config(config),
         "objective": objective_contract,
+        "optimizer": {
+            "learning_rate_schedule": learning_rate_schedule_contract(
+                config
+            ),
+        },
         "data": {
             "batch_size": int(batch_size),
             "horizon": int(config.horizon),
@@ -5508,6 +5636,7 @@ def run_checkpoint_evaluation(
         "checkpoint_resume_contract": checkpoint_contract,
         "checkpoint_resume_contract_sha256": checkpoint_contract_sha256,
         "model_config": serialized_model_config(config),
+        "learning_rate_schedule": learning_rate_schedule_contract(config),
         "objective": objective,
         "sigreg_reference_count": sigreg_reference_count,
         "training_batch_size": training_batch_size,
@@ -6481,6 +6610,9 @@ def main() -> int:
                 ).items()
             },
             "model_config": serialized_model_config(config),
+            "learning_rate_schedule": learning_rate_schedule_contract(
+                config
+            ),
             "checkpoint_step": checkpoint_step,
             "initial_optimizer_step": initial_optimizer_step,
             "initial_research_update": initial_research_update,
@@ -6619,6 +6751,7 @@ def main() -> int:
         "timestamp_utc": timestamp,
         "args": vars(args) | {"output_dir": str(output_dir)},
         "model_config": serialized_model_config(config),
+        "learning_rate_schedule": learning_rate_schedule_contract(config),
         "ema_target": ema_target_metadata,
         "checkpoint_step": checkpoint_step,
         "initial_optimizer_step": initial_optimizer_step,

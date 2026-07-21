@@ -417,6 +417,14 @@ def test_experiment_then_cli_override_precedence_and_resume_contract(
     assert contract["objective"]["jepa_norm_loss_coeff"] == 1.0
     assert contract["objective"]["jepa_sigreg_estimator"] == "v_stat"
     assert contract["objective"]["jepa_sigreg_example_count"] == 0
+    assert (
+        contract["optimizer"]["learning_rate_schedule"]["family"]
+        == "linear_warmup_then_constant"
+    )
+    assert (
+        contract["optimizer"]["learning_rate_schedule"]["warmup_steps"]
+        == 3
+    )
     assert contract["data"]["schedule"] == train_provenance
 
 
@@ -485,6 +493,9 @@ def test_local_config_and_initialized_model_match_legacy_exactly():
             "jepa_sigreg_example_count",
             "jepa_target_variance_hinge_coeff",
             "jepa_target_variance_hinge_gamma",
+            "lr_decay_start_steps",
+            "lr_decay_steps",
+            "lr_min_ratio",
             "dfm_active_layers",
             "jepa_projector_active_layers",
             "jepa_sampled_target_anchors",
@@ -1172,6 +1183,196 @@ def test_zero_warmup_constant_schedule_preserves_optimizer_abi(monkeypatch):
         constant_state
     ) == local.research_state_abi(warmup_state)
     _assert_trees_exact(constant_state, warmup_state)
+
+
+def test_cosine_warmdown_schedule_values_and_contract():
+    config = local.JointLatentSASAConfig(
+        learning_rate=3e-5,
+        bt4_learning_rate=1e-6,
+        lr_warmup_steps=0,
+        lr_decay_start_steps=400,
+        lr_decay_steps=800,
+        lr_min_ratio=0.1,
+    )
+    main_schedule, bt4_schedule = local.learning_rate_schedules(config)
+    updates = (0, 399, 400, 800, 1199, 1200, 1600)
+    expected_ratios = (
+        1.0,
+        1.0,
+        1.0,
+        0.55,
+        0.1
+        + 0.9
+        * 0.5
+        * (1.0 + np.cos(np.pi * np.asarray(799.0 / 800.0))),
+        0.1,
+        0.1,
+    )
+    main_values = np.asarray(
+        [main_schedule(update) for update in updates]
+    )
+    bt4_values = np.asarray(
+        [bt4_schedule(update) for update in updates]
+    )
+    np.testing.assert_allclose(
+        main_values,
+        np.asarray(expected_ratios) * config.learning_rate,
+        rtol=2e-6,
+        atol=0.0,
+    )
+    np.testing.assert_allclose(
+        bt4_values,
+        np.asarray(expected_ratios) * config.bt4_learning_rate,
+        rtol=2e-6,
+        atol=0.0,
+    )
+    np.testing.assert_allclose(
+        main_values / bt4_values,
+        config.learning_rate / config.bt4_learning_rate,
+        rtol=2e-6,
+        atol=0.0,
+    )
+
+    contract = local.learning_rate_schedule_contract(config)
+    assert contract["family"] == "constant_then_cosine_decay"
+    assert contract["counter"] == "zero_based_optimizer_update"
+    assert contract["main_peak_learning_rate"] == 3e-5
+    assert contract["bt4_peak_learning_rate"] == 1e-6
+    assert contract["decay_start_update"] == 400
+    assert contract["decay_transition_steps"] == 800
+    assert contract["minimum_ratio"] == 0.1
+    assert set(contract["ratio_by_update"]) == {
+        "0",
+        "399",
+        "400",
+        "800",
+        "1199",
+        "1200",
+    }
+    assert contract["ratio_by_update"]["800"] == 0.55
+    assert contract["ratio_by_update"]["1200"] == 0.1
+    assert (
+        contract["learning_rate_by_update"]["800"]["main"]
+        == 3e-5 * 0.55
+    )
+    serialized = local.serialized_model_config(config)
+    assert serialized["lr_decay_start_steps"] == 400
+    assert serialized["lr_decay_steps"] == 800
+    assert serialized["lr_min_ratio"] == 0.1
+
+
+def test_default_constant_learning_rate_schedule_is_exact():
+    config = dataclasses.replace(
+        local.JointLatentSASAConfig(),
+        lr_warmup_steps=0,
+    )
+    main_schedule, bt4_schedule = local.learning_rate_schedules(config)
+    for update in (0, 1, 400, 10_000):
+        assert float(main_schedule(update)) == config.learning_rate
+        assert float(bt4_schedule(update)) == config.bt4_learning_rate
+    contract = local.learning_rate_schedule_contract(config)
+    assert contract["family"] == "constant"
+    assert contract["ratio_by_update"] == {"0": 1.0}
+
+
+@pytest.mark.parametrize(
+    ("updates", "message"),
+    [
+        ({"lr_warmup_steps": True}, "lr_warmup_steps"),
+        ({"lr_decay_start_steps": -1}, "lr_decay_start_steps"),
+        ({"lr_decay_steps": 1.5}, "lr_decay_steps"),
+        ({"lr_min_ratio": True}, "lr_min_ratio"),
+        ({"lr_min_ratio": 0.0}, "lr_min_ratio"),
+        ({"lr_min_ratio": float("nan")}, "lr_min_ratio"),
+        ({"lr_decay_start_steps": 1}, "inert"),
+        ({"lr_min_ratio": 0.5}, "inert"),
+        (
+            {"lr_warmup_steps": 1, "lr_decay_steps": 1},
+            "Simultaneous learning-rate warmup and decay",
+        ),
+    ],
+)
+def test_invalid_learning_rate_schedule_configs_fail_closed(
+    updates,
+    message,
+):
+    config = dataclasses.replace(
+        local.JointLatentSASAConfig(),
+        lr_warmup_steps=0,
+    )
+    config = dataclasses.replace(config, **updates)
+    with pytest.raises(ValueError, match=message):
+        local.validate_learning_rate_schedule_config(config)
+
+
+def test_cosine_schedule_preserves_abi_and_update_zero_exactness(
+    monkeypatch,
+):
+    def make_dummy_encoder(*_args, **_kwargs):
+        return DummyEncoder()
+
+    monkeypatch.setattr(local, "make_bt4_model", make_dummy_encoder)
+    constant_kwargs = _config_kwargs() | {"lr_warmup_steps": 0}
+    cosine_kwargs = constant_kwargs | {
+        "lr_decay_start_steps": 400,
+        "lr_decay_steps": 800,
+        "lr_min_ratio": 0.1,
+    }
+    constant_model, constant_optimizer = local.create_joint_components(
+        {},
+        local.JointLatentSASAConfig(**constant_kwargs),
+        seed=37,
+    )
+    cosine_model, cosine_optimizer = local.create_joint_components(
+        {},
+        local.JointLatentSASAConfig(**cosine_kwargs),
+        seed=37,
+    )
+    _assert_trees_exact(
+        _pure_trainable(constant_model),
+        _pure_trainable(cosine_model),
+    )
+    assert local.research_state_abi(
+        _pure_optimizer(constant_optimizer)
+    ) == local.research_state_abi(_pure_optimizer(cosine_optimizer))
+    _assert_trees_exact(
+        _pure_optimizer(constant_optimizer),
+        _pure_optimizer(cosine_optimizer),
+    )
+
+    loss_and_grad = nnx.value_and_grad(
+        local.joint_stage1_loss_fn,
+        argnums=nnx.DiffState(0, TrainableParam),
+        has_aux=True,
+    )
+    batch = _batch()
+    rng = jax.random.PRNGKey(113)
+    constant_value, constant_gradients = loss_and_grad(
+        constant_model,
+        batch,
+        rng,
+    )
+    cosine_value, cosine_gradients = loss_and_grad(
+        cosine_model,
+        batch,
+        rng,
+    )
+    _assert_trees_exact(constant_value, cosine_value)
+    _assert_trees_exact(
+        nnx.to_pure_dict(constant_gradients),
+        nnx.to_pure_dict(cosine_gradients),
+    )
+
+    constant_optimizer.update(constant_model, constant_gradients)
+    cosine_optimizer.update(cosine_model, cosine_gradients)
+    _assert_trees_exact(
+        _pure_trainable(constant_model),
+        _pure_trainable(cosine_model),
+    )
+    _assert_trees_exact(
+        _pure_optimizer(constant_optimizer),
+        _pure_optimizer(cosine_optimizer),
+    )
 
 
 def test_local_optimizer_updates_match_legacy_exactly(monkeypatch):
