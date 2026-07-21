@@ -69,6 +69,7 @@ ARCHITECTURE_SOURCE = "research_train_local_model_and_loss"
 EXPERIMENT_OVERRIDES: dict[str, Any] = {
     "lr_warmup_steps": 0,
     "jepa_target_sample_count": 2,
+    "jepa_sampled_target_anchors": True,
     # "jepa_norm_loss_coeff": 0.0,
     # "jepa_pred_sigreg_coeff": 1.0,
     # "jepa_sigreg_estimator": "u_stat",
@@ -162,6 +163,7 @@ class JointLatentSASAConfig:
     jepa_target_variance_hinge_coeff: float = 0.0
     jepa_target_variance_hinge_gamma: float = 0.9
     jepa_target_sample_count: int = 0
+    jepa_sampled_target_anchors: bool = False
     jepa_gamma: float = 1.0
     jepa_sigreg_coeff: float = 0.1
     jepa_pred_sigreg_coeff: float = 0.0
@@ -1249,6 +1251,80 @@ class JointLatentSASAModel(nnx.Module):
         )
         return jnp.transpose(pred_seq, (1, 0, 2))
 
+    def jepa_rollout_from_latents_with_anchors(
+        self,
+        z0_jepa: jnp.ndarray,
+        actions: jnp.ndarray,
+        action_hidden: jnp.ndarray,
+        anchor_latents: jnp.ndarray,
+        anchor_mask: jnp.ndarray,
+        *,
+        z0_normalized: bool = False,
+    ) -> jnp.ndarray:
+        """Free predictions whose downstream carry may use true latents.
+
+        Prediction ``h`` is always produced before applying anchor ``h``.
+        The anchor can therefore affect only predictions after ``h``.
+        """
+
+        expected_latent_shape = (
+            actions.shape[0],
+            actions.shape[1],
+            self.z_dim,
+        )
+        if anchor_latents.shape != expected_latent_shape:
+            raise ValueError(
+                "anchor_latents shape must be "
+                f"{expected_latent_shape}, found {anchor_latents.shape}"
+            )
+        if anchor_mask.shape != actions.shape:
+            raise ValueError(
+                "anchor_mask shape must match actions: "
+                f"{anchor_mask.shape} != {actions.shape}"
+            )
+
+        action_hidden_seq = jnp.transpose(
+            jnp.asarray(action_hidden, dtype=self.compute_dtype),
+            (1, 0, 2),
+        )
+        actions_seq = jnp.transpose(actions, (1, 0))
+        anchor_latents_seq = jnp.transpose(
+            jnp.asarray(anchor_latents, dtype=self.compute_dtype),
+            (1, 0, 2),
+        )
+        anchor_mask_seq = jnp.transpose(
+            jnp.asarray(anchor_mask, dtype=jnp.bool_),
+            (1, 0),
+        )
+
+        def loop_body(z, inputs):
+            action_idx, hidden, anchor_z, use_anchor = inputs
+            condition = (
+                self.jepa_action_embed(action_idx)
+                + self.jepa_hidden_adapter(hidden)
+            )
+            pred_z = self.jepa_transition(z, condition)
+            pred_z = self.normalize_jepa_state(pred_z)
+            next_carry = jnp.where(use_anchor[:, None], anchor_z, pred_z)
+            return next_carry, pred_z
+
+        z0 = (
+            jnp.asarray(z0_jepa, dtype=self.compute_dtype)
+            if z0_normalized
+            else self.normalize_jepa_state(z0_jepa)
+        )
+        _, pred_seq = jax.lax.scan(
+            loop_body,
+            z0,
+            (
+                actions_seq,
+                action_hidden_seq,
+                anchor_latents_seq,
+                anchor_mask_seq,
+            ),
+        )
+        return jnp.transpose(pred_seq, (1, 0, 2))
+
     def jepa_teacher_forced_from_latents(
         self,
         z_context: jnp.ndarray,
@@ -1765,9 +1841,32 @@ def joint_stage1_loss_fn(
                 z0_normalized=True,
             )
 
-        if target_sampling_active:
-            # Teacher forcing requires all future latent states. The candidate
-            # contract rejects that combination before compilation.
+        if (
+            target_sampling_active
+            and model.config.jepa_sampled_target_anchors
+        ):
+            dense_anchor_latents = jnp.zeros(
+                (batch_size, horizon, model.config.z_dim),
+                dtype=target_z.dtype,
+            ).at[:, selected_horizons, :].set(target_z)
+            selected_anchor_valid = (
+                valid[:, None] * future_valid_for_loss
+            ) > 0.0
+            dense_anchor_mask = jnp.zeros(
+                (batch_size, horizon),
+                dtype=jnp.bool_,
+            ).at[:, selected_horizons].set(selected_anchor_valid)
+            pred_z = model.jepa_rollout_from_latents_with_anchors(
+                z_jepa,
+                actions,
+                clean_hidden["action_tokens"],
+                dense_anchor_latents,
+                dense_anchor_mask,
+                z0_normalized=True,
+            )
+        elif target_sampling_active:
+            # Full teacher forcing requires all future latent states. Sampled
+            # targets otherwise retain the exact free-rollout control path.
             pred_z = free_rollout(None)
         else:
             pred_z = jax.lax.cond(
@@ -2088,6 +2187,9 @@ def joint_stage1_loss_fn(
     jepa_raw_mse_by_horizon = horizon_raw_mse_num / jnp.maximum(horizon_denom, 1.0)
     jepa_norm_loss_by_horizon = horizon_norm_num / jnp.maximum(horizon_denom, 1.0)
     target_horizon_mask = jnp.zeros((horizon,), dtype=jnp.float32).at[selected_horizons].set(1.0)
+    downstream_anchor_horizon_mask = target_horizon_mask * (
+        jnp.arange(horizon, dtype=jnp.int32) < horizon - 1
+    ).astype(jnp.float32)
 
     zero = jnp.asarray(0.0, dtype=jnp.float32)
     zero_by_horizon = jnp.zeros((horizon,), dtype=jnp.float32)
@@ -2233,6 +2335,35 @@ def joint_stage1_loss_fn(
                 ),
             }
         )
+        if model.config.jepa_sampled_target_anchors:
+            eligible_anchor_slots = (
+                valid[:, None] * future_valid[:, : max(horizon - 1, 0)]
+            )
+            used_anchor_slots = (
+                eligible_anchor_slots
+                * downstream_anchor_horizon_mask[None, : horizon - 1]
+            )
+            aux.update(
+                {
+                    "jepa_sampled_target_anchors_active": jnp.asarray(
+                        1.0,
+                        dtype=jnp.float32,
+                    ),
+                    "jepa_sampled_target_anchor_horizon_mask": (
+                        downstream_anchor_horizon_mask
+                    ),
+                    "jepa_sampled_target_anchor_horizon_count": jnp.sum(
+                        downstream_anchor_horizon_mask
+                    ),
+                    "jepa_sampled_target_anchor_example_count": jnp.sum(
+                        used_anchor_slots
+                    ),
+                    "jepa_sampled_target_anchor_fraction": (
+                        jnp.sum(used_anchor_slots)
+                        / jnp.maximum(jnp.sum(eligible_anchor_slots), 1.0)
+                    ),
+                }
+            )
     if target_variance_hinge is not None:
         aux.update(
             {
@@ -2532,6 +2663,18 @@ def validate_objective_config(
             "jepa_target_sample_count must be an integer in "
             f"[0, {config.horizon}], found {target_sample_count!r}"
         )
+    if type(config.jepa_sampled_target_anchors) is not bool:
+        raise ValueError(
+            "jepa_sampled_target_anchors must be a bool, found "
+            f"{config.jepa_sampled_target_anchors!r}"
+        )
+    if config.jepa_sampled_target_anchors and not (
+        0 < target_sample_count < config.horizon
+    ):
+        raise ValueError(
+            "jepa_sampled_target_anchors requires a strict sampled-target "
+            "count in (0, horizon)."
+        )
     if 0 < target_sample_count < config.horizon:
         if objective != "normalized":
             raise ValueError(
@@ -2676,6 +2819,7 @@ def flatten_metrics(metrics: dict[str, Any]) -> dict[str, float]:
             "jepa_norm_loss_by_horizon",
             "mean_token_cosine_by_horizon",
             "jepa_target_horizon_mask",
+            "jepa_sampled_target_anchor_horizon_mask",
         }:
             for index, item in enumerate(flat):
                 flattened[f"{key}_h{index + 1}"] = float(item)
@@ -3461,6 +3605,8 @@ def serialized_model_config(
         payload.pop("jepa_target_variance_hinge_gamma")
     if not config.jepa_state_fixed_unit_rms:
         payload.pop("jepa_state_fixed_unit_rms")
+    if not config.jepa_sampled_target_anchors:
+        payload.pop("jepa_sampled_target_anchors")
     return payload
 
 
@@ -3529,6 +3675,21 @@ def build_research_resume_contract(
             ),
             "target_sigreg_current_importance_weight": 1.0,
             "evaluation_horizons": "all",
+        }
+    if config.jepa_sampled_target_anchors:
+        objective_contract["sampled_target_rollout_anchors"] = {
+            "scope": "training_only",
+            "source": "same_sampled_online_future_targets",
+            "selection_rng": "no_additional_rng",
+            "timing": "after_prediction_h_before_transition_h_plus_1",
+            "prediction_at_anchor_horizon": "free_pre_anchor_output",
+            "positive_jepa_predictions": "pre_anchor",
+            "prediction_sigreg_predictions": "all_pre_anchor_outputs",
+            "carry_replacement_validity": "valid*future_valid",
+            "target_gradient": "attached_online",
+            "final_horizon_anchor": "inert_no_downstream_transition",
+            "evaluation_rollout": "fully_free_running",
+            "inference_future_latents": False,
         }
     if config.jepa_target_variance_hinge_coeff != 0.0:
         objective_contract["jepa_target_variance_hinge"] = {

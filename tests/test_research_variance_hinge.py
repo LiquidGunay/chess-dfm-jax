@@ -502,6 +502,7 @@ def test_hinge_cli_contract_and_disabled_serialization() -> None:
         not in {
             "jepa_target_variance_hinge_coeff",
             "jepa_target_variance_hinge_gamma",
+            "jepa_sampled_target_anchors",
             "jepa_state_fixed_unit_rms",
         }
     }
