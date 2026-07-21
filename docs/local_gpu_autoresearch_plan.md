@@ -1284,13 +1284,16 @@ sweeps, held-out data, and repeated seeds.
   `21.53/19.52` and the RMS ratio to `0.8603`. Reject it, run no arena/repeat,
   and retain no candidate state. Full evidence is in
   `research/experiment_projector_active_depth1_k2.md`.
-- [ ] Continue model experiments from the unanchored, two-projector-block K=2
+- [x] Return model experiments to the unanchored, two-projector-block K=2
   incumbent. Keep the prediction/target RMS loss disabled and prediction
   SIGReg coefficient `1.0`; any SIGReg-weight change must be isolated from an
   architecture change.
-- [ ] Test the one-block projector with only prediction SIGReg increased from
-  `1.0` to `4.0`. The value matches the settled prediction-SIGReg contribution
-  to the other representation auxiliaries. Require both policy improvement
-  and full latent recovery; if it fails, end the shallow-projector line. The
-  frozen contract is in
+- [x] Test the one-block projector with only prediction SIGReg increased from
+  `1.0` to `4.0`. It improves CE to `4.4995188527` and partially restores
+  rank, p05, and RMS ratio, but still fails every latent-diversity floor.
+  Reject it without repeat/arena, retain no state, and end the
+  shallow-projector line. Full evidence is in
   `research/experiment_projector_depth1_predsigreg4_k2.md`.
+- [ ] Move to the next original-plan model axis from the full two-block K=2
+  baseline. Keep loss coefficients fixed at norm/target/prediction
+  `0.0/5.76/1.0` so the next architecture result is attributable.

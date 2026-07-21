@@ -43,13 +43,17 @@ active. It is rejected without repeat or arena, and all candidate states were
 deleted. Keep both projector blocks active. Scalar norm health is not a
 substitute for rank and low-variance-tail diagnostics.
 
-The active follow-up holds that rejected one-block graph fixed and changes
-only prediction SIGReg from `1.0` to `4.0`. At the prior terminal audit this
-would raise its weighted scalar contribution from `0.0871` to `0.3484`,
-between positive JEPA (`0.2833`) and target SIGReg (`0.4220`) after their early
-drop. RMS matching remains disabled. The follow-up must restore every latent
-gate and beat the same policy CE ceiling; otherwise the shallow-projector line
-ends without another coefficient sweep.
+The coefficient-4 follow-up improves the one-block result to CE
+`4.4995188527`, accuracy `0.1105346680`, and legal mass `0.6497509237`, so it
+clears the policy gate by more than the K=2 repeat separation. Prediction
+SIGReg also partially rescues mean/min rank from `21.53/19.52` to
+`24.13/22.29`, mean/min feature p05 from `0.495/0.470` to `0.569/0.549`, and
+the RMS ratio from `0.8603` to `0.9371`. Those values still fail every frozen
+latent-diversity threshold and narrowly miss the RMS floor. The experiment is
+rejected without repeat or arena, all states are deleted, and the
+shallow-projector line ends. This is useful evidence that stronger prediction
+SIGReg helps but does not substitute for projector capacity or explicit scale
+control.
 
 The repeat-qualified norm-on compatibility baseline is v2/update 300. An identical v1 run also
 selected update 300, and their four-pool DFM CE gains differ by only
@@ -90,10 +94,11 @@ PyTorch/JAX source parity passes in
 `artifacts/representations/upstream-bt4-source-parity-v1`; the pinned
 TransformerLens constructor-default epsilon fails and must not be used as the
 source oracle. The immutable preregistrations and completed outcomes of the
-first three post-baseline experiments are in
+first four post-baseline experiments are in
 `research/experiment_future_target_sampling_k2.md`,
-`research/experiment_sampled_target_anchors_k2.md`, and
-`research/experiment_projector_active_depth1_k2.md`.
+`research/experiment_sampled_target_anchors_k2.md`,
+`research/experiment_projector_active_depth1_k2.md`, and
+`research/experiment_projector_depth1_predsigreg4_k2.md`.
 
 ## Editable surface
 

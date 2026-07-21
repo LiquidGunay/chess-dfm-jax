@@ -114,4 +114,7 @@ rejected: it gained `6.70%` cached-profile throughput and tied K=2 policy CE
 within `0.00004`, but prediction effective rank contracted to `21.53` mean and
 `19.52` minimum. Its implementation remains default-off and no state is
 retained. Normalized experiments continue with the RMS norm coefficient at
-zero and prediction SIGReg at `1.0`.
+zero and prediction SIGReg at `1.0`. A coefficient-4 rescue then improved CE
+to `4.4995188527` and partially recovered rank to `24.13/22.29`, but still
+failed all rank/feature-tail gates and narrowly missed the RMS-ratio floor.
+It also retained no state and ends the shallow-projector line.

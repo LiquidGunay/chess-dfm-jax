@@ -2073,3 +2073,27 @@ predictor. The active prediction SIGReg coefficient `1.0` was insufficient
 for this architecture, while the RMS matching term remained disabled and is
 not restored. The candidate gets no repeat or arena; all four state files
 were deleted and the two-block K=2 model remains the offline incumbent.
+
+### Rejected one-block prediction-SIGReg rescue
+
+The fourth preregistered experiment holds the one-block graph fixed and
+changes only prediction SIGReg from `1.0` to `4.0`, keeping RMS matching off.
+The cached profile reaches `99.0462` examples/s. The 30-minute run completes
+1,327 updates and 169,856 examples at `97.8572` examples/s, with peak HBM
+`9,074,546,688` bytes.
+
+Terminal update 1327 wins the two-seed scan at DFM CE `4.4995188527`, accuracy
+`0.1105346680`, and legal mass `0.6497509237`. It improves K=2 v1 CE by
+`0.0059732441` and clears the preregistered repeat-noise ceiling by
+`0.0036741085`.
+
+The mandatory latent audit nevertheless rejects it. Stronger prediction
+SIGReg improves mean/minimum effective rank from `21.5274/19.5168` to
+`24.1256/22.2930`, mean/minimum feature-std p05 from `0.49511/0.47037` to
+`0.56906/0.54872`, and prediction/target RMS from `0.86034` to `0.93710`.
+Mean target RMS is `0.91512`, and prediction beats zero and action-shuffled
+controls at every horizon. The recovery is real but remains well below the
+rank and feature-tail floors; RMS also narrowly misses `0.94`. Per the frozen
+contract this policy-CE winner gets no repeat or arena. All four state files
+were deleted, coefficient `4.0` is not adopted as the general K=2 default, and
+the shallow-projector line ends.

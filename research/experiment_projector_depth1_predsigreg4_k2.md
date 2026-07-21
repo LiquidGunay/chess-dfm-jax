@@ -1,7 +1,8 @@
 # Experiment 004: stronger prediction SIGReg for one-block projector
 
-Status: preregistered on 2026-07-21 before implementation or candidate GPU
-measurement.
+Status: completed and rejected on 2026-07-21. Stronger prediction SIGReg
+improves both policy CE and latent health, but does not restore the frozen
+rank, feature-tail, or RMS-ratio gates. No candidate state is retained.
 
 ## Question and hypothesis
 
@@ -140,3 +141,60 @@ pass every health gate before any frozen 128-pair arena. A failure gets no
 repeat, arena, pass-count sweep, SAE refit, or further one-block coefficient
 tuning. Retain only a qualifying selected state; otherwise delete every
 candidate state after preserving compact evidence.
+
+## Outcome
+
+Commits `11a7b82` and `dd6747a` preregister and activate the rescue trial.
+Eleven focused CPU contract tests pass. The real-checkpoint A10G smoke records
+the exact `0.0/5.76/4.0` norm/target/prediction coefficients, active projector
+depth `1/2`, three encoded boards per example, eight prediction horizons, and
+target/prediction SIGReg counts `576/512`. It stays finite without clipping,
+compiles in `142.38` seconds, and peaks at `8,975,344,896` bytes of HBM.
+
+The cached 30-update profile reaches `99.0462` end-to-end examples/s, `0.77%`
+above coefficient-1 one-block and `7.52%` above the K=2 profile. The
+coefficient change therefore has no measurable compute penalty. The fixed
+1,800-second run completes 1,327 updates and 169,856 examples at `97.8572`
+steady end-to-end examples/s, with peak HBM `9,074,546,688` bytes and mean GPU
+utilization `72.05%`. Every recorded value remains finite; no update is
+skipped and no loss clip activates.
+
+The full-horizon two-seed checkpoint scan produces:
+
+| update | mean DFM CE | accuracy | legal mass |
+| ---: | ---: | ---: | ---: |
+| 400 | 4.5081419740 | 0.1083374023 | 0.6458180095 |
+| 800 | 4.5048121754 | 0.1087493896 | 0.6462494726 |
+| 1200 | 4.5217495691 | 0.1086120605 | 0.6400082060 |
+| 1327 | **4.4995188527** | **0.1105346680** | **0.6497509237** |
+
+Terminal update 1327 wins. It improves K=2 v1 by `0.0059732441` CE and lies
+`0.0036741085` below the preregistered ceiling, while accuracy and legal mass
+comfortably pass. Thus the policy-quality hypothesis succeeds on the first
+run and by more than the complete observed K=2 repeat separation.
+
+The mandatory seed-10,000 terminal audit shows a meaningful but incomplete
+latent rescue. Relative to coefficient 1:
+
+| diagnostic | coefficient 1 | coefficient 4 | frozen gate |
+| --- | ---: | ---: | ---: |
+| mean effective rank | 21.5274 | 24.1256 | >= 30.0 |
+| minimum effective rank | 19.5168 | 22.2930 | >= 28.5 |
+| mean feature-std p05 | 0.49511 | 0.56906 | >= 0.63 |
+| minimum feature-std p05 | 0.47037 | 0.54872 | >= 0.61 |
+| prediction/target RMS | 0.86034 | 0.93710 | >= 0.94 |
+
+Mean target RMS is healthy at `0.91512`, and positive JEPA MSE beats zero and
+action-shuffled prediction at every horizon. Stronger prediction SIGReg
+therefore recovers about `2.60` rank points, `0.074` mean p05, and `0.077` RMS
+ratio without norm matching. It still misses both dimensional-diversity gates
+by a wide margin and the RMS gate narrowly. This is partial recovery, not a
+qualified representation.
+
+The experiment is rejected despite its policy CE improvement. Per the frozen
+contract it gets no exact repeat, arena, pass-count sweep, SAE refit, or
+further one-block coefficient tuning. All four 1.85 GB candidate states were
+deleted; compact manifests, metrics, telemetry, paired scan, terminal latent
+audit, and this decision remain. The shallow-projector line ends. Future
+experiments return to both projector blocks, RMS norm loss `0.0`, and the
+general K=2 prediction SIGReg coefficient `1.0`.
