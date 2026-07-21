@@ -1220,3 +1220,8 @@ sweeps, held-out data, and repeated seeds.
   sequentially; sparse downloads/training remain gated on source parity.
 - [ ] Complete upstream TransformerLens/source-weight parity, then validate one
   published transcoder before interpreting fixed sparse-feature transfer.
+- [x] Preregister the first post-baseline model experiment. It samples two of
+  eight future BT4 targets during training while retaining full-horizon
+  validation and fixed eight-pass inference; the immutable hypothesis,
+  checkpoint schedule, gates, and cleanup rules are in
+  `research/experiment_future_target_sampling_k2.md`.

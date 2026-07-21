@@ -42,7 +42,10 @@ selected validation/test overlap, and passes production replay for all 2,048
 histories. Runtime skipping or substitution remains forbidden. This asset
 repair does not open readiness. Dense representation drift is complete in
 `artifacts/representations/dense-stage1-four-model-v2`; upstream source parity
-and preregistration of the first post-baseline experiment are still required.
+is still required. The first post-baseline experiment is preregistered in
+`research/experiment_future_target_sampling_k2.md`; do not change its sampling,
+validation, checkpoint, or decision contract after inspecting candidate
+results.
 
 ## Editable surface
 
