@@ -69,7 +69,7 @@ ARCHITECTURE_SOURCE = "research_train_local_model_and_loss"
 EXPERIMENT_OVERRIDES: dict[str, Any] = {
     "lr_warmup_steps": 0,
     "jepa_target_sample_count": 2,
-    "dfm_active_layers": 3,
+    # "dfm_active_layers": 3,
     # "jepa_projector_active_layers": 1,
     # "jepa_sampled_target_anchors": True,
     # Normalized autoresearch runs fix these at 0.0/1.0 on the CLI. They

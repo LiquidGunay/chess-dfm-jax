@@ -55,12 +55,15 @@ shallow-projector line ends. This is useful evidence that stronger prediction
 SIGReg helps but does not substitute for projector capacity or explicit scale
 control.
 
-The active experiment returns to the full two-block K=2 JEPA path and changes
-only DFM planner depth: execute three of four stored blocks while retaining the
-exact source-compatible parameter tree. Loss coefficients remain
-`0.0/5.76/1.0`. This is the first post-baseline architecture trial that can
-improve both training and searchless inference latency; it must beat the same
-policy/noise and latent-health gates, not merely run faster.
+The three-active-block DFM experiment gains `1.49%` cached training throughput
+and `6.28%` matched batch-64 eight-pass inference throughput, with a `0.59%`
+batch-one positions/s regression. It catastrophically damages policy quality:
+its best two-pool CE/accuracy/legal mass are `6.084679/0.03290/0.36431` versus
+K=2 `4.505492/0.10959/0.64552`. It also misses several latent gates. Direct
+planner-prefix pruning is rejected without repeat or arena, all states are
+deleted, and all four DFM blocks return as the active baseline. Smaller
+planners require a separately preregistered distillation or gradual LayerDrop
+method rather than assuming the final source-trained block is redundant.
 
 The repeat-qualified norm-on compatibility baseline is v2/update 300. An identical v1 run also
 selected update 300, and their four-pool DFM CE gains differ by only
@@ -101,11 +104,12 @@ PyTorch/JAX source parity passes in
 `artifacts/representations/upstream-bt4-source-parity-v1`; the pinned
 TransformerLens constructor-default epsilon fails and must not be used as the
 source oracle. The immutable preregistrations and completed outcomes of the
-first four post-baseline experiments are in
+first five post-baseline experiments are in
 `research/experiment_future_target_sampling_k2.md`,
 `research/experiment_sampled_target_anchors_k2.md`,
-`research/experiment_projector_active_depth1_k2.md`, and
-`research/experiment_projector_depth1_predsigreg4_k2.md`.
+`research/experiment_projector_active_depth1_k2.md`,
+`research/experiment_projector_depth1_predsigreg4_k2.md`, and
+`research/experiment_dfm_active_depth3_k2.md`.
 
 ## Editable surface
 

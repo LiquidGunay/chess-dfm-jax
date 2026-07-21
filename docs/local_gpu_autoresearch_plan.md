@@ -1294,10 +1294,15 @@ sweeps, held-out data, and repeated seeds.
   Reject it without repeat/arena, retain no state, and end the
   shallow-projector line. Full evidence is in
   `research/experiment_projector_depth1_predsigreg4_k2.md`.
-- [ ] Move to the next original-plan model axis from the full two-block K=2
+- [x] Move to the next original-plan model axis from the full two-block K=2
   baseline. Keep loss coefficients fixed at norm/target/prediction
   `0.0/5.76/1.0` so the next architecture result is attributable.
-- [ ] Test three active DFM planner blocks while retaining the exact
-  four-layer checkpoint ABI. Measure both training and matched eight-pass
-  inference throughput; require the same policy and latent gates. The frozen
-  contract is in `research/experiment_dfm_active_depth3_k2.md`.
+- [x] Test three active DFM planner blocks while retaining the exact
+  four-layer checkpoint ABI. It gains `1.49%` training and `6.28%` batch-64
+  inference throughput, but best CE `6.0846793652`, accuracy `0.03290`, and
+  legal mass `0.36431` catastrophically fail. Reject it without repeat/arena,
+  retain no state, and keep all four DFM blocks. Full evidence is in
+  `research/experiment_dfm_active_depth3_k2.md`.
+- [ ] Continue from the full-projector, full-DFM K=2 incumbent with loss
+  coefficients `0.0/5.76/1.0`. Do not revisit smaller planner depth without a
+  separately controlled distillation or gradual-depth training objective.

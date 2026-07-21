@@ -2097,3 +2097,25 @@ rank and feature-tail floors; RMS also narrowly misses `0.94`. Per the frozen
 contract this policy-CE winner gets no repeat or arena. All four state files
 were deleted, coefficient `4.0` is not adopted as the general K=2 default, and
 the shallow-projector line ends.
+
+### Rejected three-block DFM planner experiment
+
+The fifth preregistered model experiment executes three of four stored DFM
+planner blocks while retaining the exact checkpoint ABI. Its cached training
+profile reaches `93.4893` examples/s, `1.49%` above K=2. A matched
+source-weight eight-pass profile measures batch-64 throughput
+`984.77 -> 1046.65 positions/s` (`+6.28%`) and batch-one throughput
+`34.71 -> 34.50 positions/s` (`-0.59%`). The intended inference saving is
+therefore real but modest at batch one, where BT4 encoding dominates.
+
+The policy cost is overwhelming. The three-layer model begins around CE
+`6.79`; after 1,269 updates and 162,432 examples, terminal update 1269 is the
+two-pool best at CE `6.0846793652`, accuracy `0.0328979492`, and legal mass
+`0.3643126297`. The corresponding K=2 values are `4.5054920968`,
+`0.1095886230`, and `0.6455246028`. Terminal latent diagnostics also miss
+minimum rank, feature-tail, target-RMS, and prediction/target-RMS gates.
+
+Direct prefix pruning is rejected without repeat or arena. All candidate state
+files were deleted; the capability remains default-off and all four planner
+blocks remain active. Any smaller-planner revisit must explicitly train for
+depth removal, for example by distillation or gradual LayerDrop.

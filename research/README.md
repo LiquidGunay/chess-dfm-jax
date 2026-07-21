@@ -118,3 +118,9 @@ zero and prediction SIGReg at `1.0`. A coefficient-4 rescue then improved CE
 to `4.4995188527` and partially recovered rank to `24.13/22.29`, but still
 failed all rank/feature-tail gates and narrowly missed the RMS-ratio floor.
 It also retained no state and ends the shallow-projector line.
+
+A three-active-block DFM experiment then improves matched batch-64 eight-pass
+inference throughput by `6.28%` and training throughput by `1.49%`, but its
+best CE/accuracy/legal mass regress to `6.084679/0.03290/0.36431`. Direct DFM
+prefix pruning is rejected, retains no state, and leaves all four planner
+blocks active.

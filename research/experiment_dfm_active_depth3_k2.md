@@ -1,7 +1,8 @@
 # Experiment 005: three active DFM planner blocks
 
-Status: preregistered on 2026-07-21 before implementation or candidate GPU
-measurement.
+Status: completed and rejected on 2026-07-21. Three active blocks modestly
+improve training and batched inference throughput, but catastrophically
+regress policy quality. No candidate state is retained.
 
 ## Question and hypothesis
 
@@ -134,3 +135,66 @@ frozen 128-pair cap-256 incumbent arena. Only the normalized-Elo GSPRT can
 promote chess strength. A failure gets no repeat, arena, refinement-pass sweep,
 or SAE refit. Retain only a qualifying selected state; otherwise delete all
 candidate states after preserving compact evidence.
+
+## Outcome
+
+Commits `d2c0b4f` and `ec53c2d` preregister and implement active DFM depth.
+Thirty-four focused and touched CPU tests pass. They prove default/full-depth
+exactness, explicit three-layer equivalence, exact source-compatible parameter
+ABI, exact-zero loss gradients for stored layer 3, shared planner semantics,
+serialization, resume contracts, and checked-inference compatibility.
+
+The real-checkpoint A10G smoke restores every source parameter, reports DFM
+depth `3/4`, keeps both JEPA projector blocks, encodes three boards per
+example, retains eight predictions and SIGReg counts `576/512`, and remains
+finite without clipping. Its explicit compile takes `156.05` seconds and peak
+HBM is `9,471,004,416` bytes. Removing the trained fourth block immediately
+raises seed-10,000 validation CE from the full-depth regime near `4.56` to
+`6.78444`, demonstrating that this is not a zero-shot redundant layer.
+
+The cached 30-update training profile reaches `93.4893` end-to-end examples/s,
+`1.49%` above the K=2 profile and above the `87.5092` hard floor. A newly
+matched source-weight eight-pass inference profile records:
+
+| batch | full-depth p50 | three-layer p50 | full positions/s | three-layer positions/s | delta |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | 28.81 ms | 28.98 ms | 34.71 | 34.50 | -0.59% |
+| 64 | 64.99 ms | 61.15 ms | 984.77 | 1046.65 | +6.28% |
+
+Thus the batched-inference speed hypothesis succeeds without a meaningful
+batch-one regression. The compact matched report is
+`research/runs/dfm-depth3-k2-source-inference-profile-v1/report.json`, SHA-256
+`03287784cc70a05cd75b2182f4efaaf0bb3a2341d4e9b183ef732cc4693694a0`.
+
+The fixed 1,800-second run completes 1,269 updates and 162,432 examples at
+`93.4488` steady end-to-end examples/s, with peak HBM `9,533,455,104` bytes
+and mean GPU utilization `73.44%`. Every value remains finite; no update is
+skipped and no loss clip activates. The full-horizon two-seed scan produces:
+
+| update | mean DFM CE | accuracy | legal mass |
+| ---: | ---: | ---: | ---: |
+| 400 | 6.2164552882 | 0.0270233154 | 0.3127601617 |
+| 800 | 6.1394354403 | 0.0299377441 | 0.3446467556 |
+| 1200 | 6.0875638500 | 0.0322570801 | 0.3533861609 |
+| 1269 | **6.0846793652** | **0.0328979492** | **0.3643126297** |
+
+Terminal update 1269 is the within-run best, but is `1.5791872684` CE worse
+than K=2 v1. Accuracy falls by `0.07669` absolute and legal mass by `0.28121`.
+This fails the primary and both policy safeguards by margins far beyond run
+noise.
+
+The already-computed terminal latent audit also fails multiple gates: mean/
+minimum prediction rank is `30.9856/26.4318`, mean/minimum feature-std p05 is
+`0.57873/0.43780`, mean target RMS is `0.88879`, and prediction/target RMS is
+`0.90474`. Prediction still beats zero and action-shuffled controls at every
+horizon. The dominant result nevertheless remains the catastrophic policy
+regression.
+
+The experiment is rejected. It is not repeated, arena-tested, pass-count
+swept, or used for SAE comparison. All four 1.85 GB candidate states were
+deleted; compact manifests, metrics, telemetry, paired scan, matched inference
+profile, and this decision remain. Active DFM depth stays available
+default-off, and the full four-layer K=2 checkpoint remains the offline
+incumbent. Future work may revisit a smaller planner only with an explicitly
+separate distillation or gradual LayerDrop objective, not direct prefix
+pruning.
