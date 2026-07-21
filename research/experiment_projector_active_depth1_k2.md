@@ -1,7 +1,7 @@
 # Experiment 003: one active JEPA projector block
 
-Status: preregistered on 2026-07-21 before implementation or candidate GPU
-measurement.
+Status: completed and rejected on 2026-07-21. The implementation remains
+available default-off; no candidate state is retained.
 
 ## Question and hypothesis
 
@@ -136,3 +136,56 @@ K=2 control CE while passing every non-CE health gate. A passing first run may
 then receive the frozen 128-pair cap-256 incumbent screen; only the normalized-
 Elo GSPRT can promote strength. A failure gets no repeat, arena, pass-count
 sweep, or SAE refit.
+
+## Outcome
+
+Commits `a629630` and `e0f617d` preregister and implement active projector
+depth. Fifty touched CPU tests pass. The real-checkpoint A10G smoke restored
+the complete source-compatible parameter ABI, executed one of two stored
+projector blocks for all online consumers, encoded three boards per example,
+retained eight recurrent predictions, and reported target/prediction SIGReg
+counts `576/512`. The unused second block retained storage compatibility and
+received exactly zero loss gradient. The initial explicit compile took
+`148.43` seconds and the smoke peaked at `8,975,336,448` bytes of HBM.
+
+The cached 30-update profile reached `98.2906` end-to-end examples/s. That is
+`6.70%` faster than the matched K=2 profile and above the hard `87.5092`
+floor, though below the secondary 10%-gain target of `101.3264`. The fixed
+1,800-second run completed 1,317 updates and 168,576 examples at `97.3351`
+steady end-to-end examples/s, with peak HBM `9,073,219,584` bytes and mean GPU
+utilization `71.37%`. All recorded values remained finite, no update was
+skipped, and no loss clip activated.
+
+The full-horizon two-seed checkpoint scan produced:
+
+| update | mean DFM CE | accuracy | legal mass |
+| ---: | ---: | ---: | ---: |
+| 400 | 4.5131098721 | 0.1090698242 | 0.6422025193 |
+| 800 | 4.5068802554 | 0.1090545654 | 0.6449448005 |
+| 1200 | 4.5273095630 | 0.1074981689 | 0.6340113832 |
+| 1317 | **4.5055253655** | **0.1100006104** | **0.6430465472** |
+
+Terminal update 1317 wins within the candidate run. Its CE is only
+`0.0000332687` worse than retained K=2 v1, so policy quality is best described
+as unresolved rather than materially regressed. It is nevertheless
+`0.0023324043` above the preregistered acceptance ceiling and therefore fails
+the primary gate.
+
+The already-computed seed-10,000 terminal latent audit also exposes a clear
+failure that scalar norms alone did not reveal. Mean/minimum prediction
+effective rank falls to `21.5274/19.5168`, and mean/minimum feature-std p05
+falls to `0.49511/0.47037`, well below the `30.0/28.5` and `0.63/0.61` gates.
+Mean target RMS remains `0.91275`, but prediction RMS is `0.78528`, for a
+prediction/target ratio of `0.86034`, below the `0.94` floor. Positive JEPA
+MSE still beats zero and action-shuffled predictions at every horizon. Thus
+prediction SIGReg coefficient `1.0` prevents total collapse but is not strong
+enough to preserve the incumbent representation under the shallower
+projector; the disabled RMS loss was diagnostic only and is not reinstated.
+
+The experiment is rejected. It is not repeated, arena-tested, or promoted.
+All four 1.85 GB candidate states were deleted; compact manifests, training
+metrics, GPU telemetry, the paired scan, and this decision remain. Active
+projector depth stays available default-off, the two-block K=2 checkpoint
+remains the offline incumbent, and future experiments continue with RMS norm
+loss coefficient `0.0` plus prediction SIGReg coefficient `1.0`. Tuning that
+coefficient is a separate controlled experiment.

@@ -109,4 +109,9 @@ larger-than-baseline between-repeat CE gap. It is not promoted. See
 contracts and measured results. The subsequent sampled-target anchor
 experiment preserved throughput but was rejected at CE `4.5064137187` and a
 minimum feature-std p05 of `0.60744`; it retained no state and did not consume
-arena games.
+arena games. A subsequent one-active-block projector experiment was also
+rejected: it gained `6.70%` cached-profile throughput and tied K=2 policy CE
+within `0.00004`, but prediction effective rank contracted to `21.53` mean and
+`19.52` minimum. Its implementation remains default-off and no state is
+retained. Normalized experiments continue with the RMS norm coefficient at
+zero and prediction SIGReg at `1.0`.

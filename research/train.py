@@ -69,8 +69,11 @@ ARCHITECTURE_SOURCE = "research_train_local_model_and_loss"
 EXPERIMENT_OVERRIDES: dict[str, Any] = {
     "lr_warmup_steps": 0,
     "jepa_target_sample_count": 2,
-    "jepa_projector_active_layers": 1,
+    # "jepa_projector_active_layers": 1,
     # "jepa_sampled_target_anchors": True,
+    # Normalized autoresearch runs fix these at 0.0/1.0 on the CLI. They
+    # remain explicit there because the default legacy parity path requires
+    # the historical 1.0/0.0 pair.
     # "jepa_norm_loss_coeff": 0.0,
     # "jepa_pred_sigreg_coeff": 1.0,
     # "jepa_sigreg_estimator": "u_stat",

@@ -33,6 +33,16 @@ Its final-horizon prediction feature-std p05 was `0.60744`, just below the
 candidate states were deleted. Keep the no-norm objective and prediction
 SIGReg coefficient `1.0` as the active baseline.
 
+The following one-active-block projector experiment improved the cached
+profile by `6.70%` and reached `97.335` examples/s during the fixed run. Its
+best two-pool CE, `4.5055253655`, was effectively tied with K=2 v1 but missed
+the frozen `4.5031929612` acceptance ceiling. More importantly, its terminal
+prediction effective rank fell to `21.53` mean / `19.52` minimum and its
+prediction/target RMS ratio to `0.8603`, despite prediction SIGReg remaining
+active. It is rejected without repeat or arena, and all candidate states were
+deleted. Keep both projector blocks active. Scalar norm health is not a
+substitute for rank and low-variance-tail diagnostics.
+
 The repeat-qualified norm-on compatibility baseline is v2/update 300. An identical v1 run also
 selected update 300, and their four-pool DFM CE gains differ by only
 `0.000210253`; the selected v2 checkpoint also passes the recorded
@@ -72,9 +82,10 @@ PyTorch/JAX source parity passes in
 `artifacts/representations/upstream-bt4-source-parity-v1`; the pinned
 TransformerLens constructor-default epsilon fails and must not be used as the
 source oracle. The immutable preregistrations and completed outcomes of the
-first two post-baseline experiments are in
-`research/experiment_future_target_sampling_k2.md` and
-`research/experiment_sampled_target_anchors_k2.md`.
+first three post-baseline experiments are in
+`research/experiment_future_target_sampling_k2.md`,
+`research/experiment_sampled_target_anchors_k2.md`, and
+`research/experiment_projector_active_depth1_k2.md`.
 
 ## Editable surface
 

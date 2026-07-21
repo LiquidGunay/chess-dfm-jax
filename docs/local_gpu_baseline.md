@@ -2048,3 +2048,28 @@ but minimum feature-std p05 is `0.60744` versus the `0.61` floor. The candidate
 is rejected without repeat or arena; all four candidate states were deleted.
 The implementation remains available default-off, and the unanchored K=2
 checkpoint remains the offline incumbent.
+
+### Rejected one-block projector experiment
+
+The third preregistered model experiment executed only the first of the two
+stored JEPA projector transformer blocks while preserving the exact
+source-compatible parameter tree. The cached profile reached `98.2906`
+examples/s, a `6.70%` gain over K=2. The 30-minute run completed 1,317 updates
+and 168,576 examples at `97.3351` steady end-to-end examples/s, with peak HBM
+`9,073,219,584` bytes.
+
+Across seeds 10,000 and 20,000, terminal update 1317 is the candidate best:
+DFM CE `4.5055253655`, accuracy `0.1100006104`, and legal mass
+`0.6430465472`. Its CE is effectively tied with the retained K=2 v1 result
+(`0.0000332687` worse), but misses the preregistered ceiling by
+`0.0023324043`.
+
+The terminal latent audit independently rejects the candidate. Mean/minimum
+prediction effective rank is `21.5274/19.5168`, mean/minimum feature-std p05
+is `0.49511/0.47037`, and the prediction/target RMS ratio is `0.86034`.
+Prediction still beats zero and action-shuffled controls at every horizon, so
+this is severe dimensional/scale contraction rather than a fully constant
+predictor. The active prediction SIGReg coefficient `1.0` was insufficient
+for this architecture, while the RMS matching term remained disabled and is
+not restored. The candidate gets no repeat or arena; all four state files
+were deleted and the two-block K=2 model remains the offline incumbent.

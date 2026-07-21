@@ -1278,3 +1278,13 @@ sweeps, held-out data, and repeated seeds.
   K=2 and final-horizon feature-std p05 `0.60744` misses its floor. Reject it,
   run no arena/repeat, and retain no candidate state. Full evidence is in
   `research/experiment_sampled_target_anchors_k2.md`.
+- [x] Test one active JEPA projector block while retaining the exact two-block
+  checkpoint ABI. It gains `6.70%` cached-profile throughput and ties K=2 CE
+  within `0.00004`, but mean/min prediction effective rank contracts to
+  `21.53/19.52` and the RMS ratio to `0.8603`. Reject it, run no arena/repeat,
+  and retain no candidate state. Full evidence is in
+  `research/experiment_projector_active_depth1_k2.md`.
+- [ ] Continue model experiments from the unanchored, two-projector-block K=2
+  incumbent. Keep the prediction/target RMS loss disabled and prediction
+  SIGReg coefficient `1.0`; any SIGReg-weight change must be isolated from an
+  architecture change.
