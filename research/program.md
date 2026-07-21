@@ -89,13 +89,14 @@ and the active schedule returns to the accepted 10% floor. Loss remains
 `0.0/5.76/1.0`, so prediction SIGReg—not RMS norm matching—continues to
 regularize `z_pred`.
 
-The active experiment samples one rather than two future BT4 targets on each
-training update while retaining full-horizon rollout, validation, and
-eight-pass inference. It tests whether reducing the per-example encoder work
-from three boards to two produces a meaningful throughput gain and a policy CE
-improvement larger than accepted repeat noise. The accepted 10% cosine
-schedule and `0.0/5.76/1.0` loss remain fixed; the size-one estimator must also
-preserve every latent-health gate.
+The K=1 target-sampling follow-up reduces training from three to two BT4
+encodes per example and raises cached throughput by `24.88%`, processing
+`40,320` more examples than K=2 v1 in 30 minutes. Its terminal checkpoint
+passes every policy-secondary and latent-health gate at CE `4.4998821113`, but
+the `0.0008786097` improvement over the incumbent is smaller than the accepted
+repeat separation and misses the frozen ceiling by `0.0006048269`. K=1 is
+rejected without repeat or arena, all candidate states are deleted, and K=2
+returns as the active target sampler.
 
 The repeat-qualified norm-on compatibility baseline is v2/update 300. An identical v1 run also
 selected update 300, and their four-pool DFM CE gains differ by only
@@ -136,14 +137,15 @@ PyTorch/JAX source parity passes in
 `artifacts/representations/upstream-bt4-source-parity-v1`; the pinned
 TransformerLens constructor-default epsilon fails and must not be used as the
 source oracle. The immutable preregistrations and completed outcomes of the
-first seven post-baseline experiments are in
+first eight post-baseline experiments are in
 `research/experiment_future_target_sampling_k2.md`,
 `research/experiment_sampled_target_anchors_k2.md`,
 `research/experiment_projector_active_depth1_k2.md`,
 `research/experiment_projector_depth1_predsigreg4_k2.md`,
 `research/experiment_dfm_active_depth3_k2.md`,
-`research/experiment_cosine_warmdown_k2.md`, and
-`research/experiment_cosine_floor001_k2.md`.
+`research/experiment_cosine_warmdown_k2.md`,
+`research/experiment_cosine_floor001_k2.md`, and
+`research/experiment_future_target_sampling_k1.md`.
 
 ## Editable surface
 

@@ -1,7 +1,8 @@
 # Experiment 008: one sampled future target
 
-Status: preregistered on 2026-07-21 before changing the active override or
-measuring the candidate on GPU.
+Status: completed and rejected on 2026-07-21. K=1 improved throughput and the
+incumbent CE point estimate, but missed the frozen repeat-noise-aware CE
+ceiling by `0.0006048269`; no repeat or arena was run and no state remains.
 
 ## Question and hypothesis
 
@@ -122,3 +123,50 @@ passing every non-CE gate before the frozen 128-pair arena. A failure gets no
 repeat, arena, pass-count sweep, or SAE refit. Retain only a qualifying
 selected state; otherwise delete all candidate states after preserving compact
 evidence.
+
+## Outcome
+
+Commits `4bcc0ee` and `1e794c1` preregister and activate K=1. The implementation
+passed 56 focused CPU tests plus Ruff. The real-checkpoint one-update A10G
+smoke stayed finite and unclipped with two encoded boards per example, one
+sampled target, future importance weight `8`, all eight JEPA predictions,
+target/prediction SIGReg counts `576/512`, full two-projector/four-DFM depth,
+and loss coefficients `0.0/5.76/1.0`. Peak HBM was `9,453,737,472` bytes.
+
+The cached 30-update profile reached `116.5113` end-to-end and `148.1117`
+device examples/s, `24.88%` above the accepted K=2 cached profile and well
+above the `97.9636` gate. The fixed 1,800-second run then completed 1,576
+updates and `201,728` examples at `116.5422` steady end-to-end examples/s,
+`25.48%` above K=2 v1. It processed `40,320` more examples and 315 more
+updates, peaked at `9,552,134,400` bytes of HBM, remained finite throughout,
+and never activated the loss clip.
+
+The frozen full-horizon two-pool scan was:
+
+| update | DFM CE | accuracy | legal mass |
+| ---: | ---: | ---: | ---: |
+| 400 | 4.5148623250 | 0.1081237793 | 0.6398715046 |
+| 800 | 4.5040370226 | 0.1092529297 | 0.6435642564 |
+| 1200 | 4.5046553016 | 0.1090545654 | 0.6463082810 |
+| 1576 | **4.4998821113** | **0.1096038818** | **0.6480329307** |
+
+Terminal update 1576 wins and improves the accepted K=2 incumbent by
+`0.0008786097` CE. That is only `59.23%` of the accepted
+`0.0014834367` repeat separation: acceptance required CE below
+`4.4992772844`, which K=1 misses by `0.0006048269`. Accuracy and legal mass
+pass. The curve is consistent with extra low-rate updates being useful—the
+terminal improves sharply after update 1200—but does not establish a gain
+larger than observed run-to-run variation.
+
+The selected terminal state's already-computed seed-10,000 free-rollout audit
+passes every latent gate. Mean/minimum prediction effective rank is
+`31.0137/29.1349`, mean/minimum feature-std p05 is `0.65068/0.63778`, mean
+target RMS is `0.92717`, and prediction/target RMS ratio is `0.97074`.
+Genuine predictions beat zero and action-shuffled controls at every horizon.
+Thus size-one sampling does not collapse `z_pred` under prediction SIGReg, but
+its fixed-time policy improvement is not repeat-noise-qualified.
+
+Per the frozen decision rule, K=1 gets no exact repeat, arena, pass-count
+sweep, or SAE refit. All four 1.85 GB candidate states were deleted; compact
+manifests, training metrics, profile, paired scan, terminal latent audit, and
+this decision remain. The active target count returns to accepted K=2.

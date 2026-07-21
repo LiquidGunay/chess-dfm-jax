@@ -140,3 +140,11 @@ latent audit passes every gate. This improves the 10%-floor incumbent point
 estimate by `0.0014073513`, but misses the preregistered repeat-noise-aware CE
 ceiling by `0.0000760853`. It is rejected without repeat or arena, retains no
 state, and the active schedule returns to the accepted 10% floor.
+
+A K=1 target-sampling follow-up reduces training to two BT4 encodes per
+example and raises cached throughput to `116.51` examples/s, `24.88%` over
+K=2. Its terminal checkpoint reaches CE `4.4998821113`, accuracy
+`0.1096038818`, and legal mass `0.6480329307`, and passes every latent gate.
+The CE gain is smaller than accepted repeat variability and misses the frozen
+ceiling by `0.0006048269`, so it is rejected without repeat or arena, retains
+no state, and K=2 remains active.

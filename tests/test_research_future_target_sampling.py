@@ -195,11 +195,11 @@ def test_one_target_training_preserves_mass_and_prediction_coverage() -> None:
     )
 
 
-def test_active_experiment_uses_one_sampled_future_target() -> None:
+def test_active_experiment_uses_accepted_two_sampled_future_targets() -> None:
     config = train.apply_experiment_overrides(
         train.JointLatentSASAConfig()
     )
-    assert config.jepa_target_sample_count == 1
+    assert config.jepa_target_sample_count == 2
     assert config.lr_decay_start_steps == 400
     assert config.lr_decay_steps == 800
     assert config.lr_min_ratio == 0.1

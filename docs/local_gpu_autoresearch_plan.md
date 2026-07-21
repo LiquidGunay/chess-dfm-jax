@@ -1323,10 +1323,14 @@ sweeps, held-out data, and repeated seeds.
   `4.4993533697` and passes every policy/latent secondary gate, but misses the
   repeat-noise-aware CE ceiling by `0.0000760853`. Reject it without repeat or
   arena, retain no state, and restore the accepted 10% floor.
-- [ ] Test one sampled future BT4 target from the accepted K=2 warmdown
+- [x] Test one sampled future BT4 target from the accepted K=2 warmdown
   incumbent. Keep the 10% cosine schedule, norm/target/prediction coefficients
   `0.0/5.76/1.0`, all eight rollout horizons, and eight-pass inference fixed;
   isolate `jepa_target_sample_count=1` as the sole change. Require at least 5%
   cached-throughput improvement and a CE gain beyond accepted repeat noise.
   The frozen contract is in
-  `research/experiment_future_target_sampling_k1.md`.
+  `research/experiment_future_target_sampling_k1.md`. K=1 gains `24.88%`
+  cached throughput and selects terminal CE `4.4998821113`, with every
+  secondary policy/latent gate passing. Its improvement is smaller than the
+  accepted repeat separation and misses the CE ceiling by `0.0006048269`, so
+  reject it without repeat/arena, retain no state, and restore K=2.
