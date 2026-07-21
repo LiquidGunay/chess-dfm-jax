@@ -485,6 +485,7 @@ def test_local_config_and_initialized_model_match_legacy_exactly():
             "jepa_sigreg_example_count",
             "jepa_target_variance_hinge_coeff",
             "jepa_target_variance_hinge_gamma",
+            "dfm_active_layers",
             "jepa_projector_active_layers",
             "jepa_sampled_target_anchors",
             "jepa_state_fixed_unit_rms",

@@ -69,6 +69,7 @@ ARCHITECTURE_SOURCE = "research_train_local_model_and_loss"
 EXPERIMENT_OVERRIDES: dict[str, Any] = {
     "lr_warmup_steps": 0,
     "jepa_target_sample_count": 2,
+    "dfm_active_layers": 3,
     # "jepa_projector_active_layers": 1,
     # "jepa_sampled_target_anchors": True,
     # Normalized autoresearch runs fix these at 0.0/1.0 on the CLI. They
@@ -140,6 +141,7 @@ class JointLatentSASAConfig:
     projector_mlp_dim: int = 0
     jepa_condition_dim: int = 0
     dfm_layers: int = 4
+    dfm_active_layers: int = 0
     jepa_layers: int = 4
     jepa_num_heads: int = 0
     jepa_mlp_dim: int = 0
@@ -636,6 +638,92 @@ class LinearAdapter(nnx.Module):
         )
 
 
+def _transformer_stack_prefix_params(
+    blocks: TrainableTransformerStack,
+    *,
+    active_layers: int,
+    compute_dtype: jnp.dtype,
+) -> tuple[jnp.ndarray, ...]:
+    """Materialize one checkpoint-compatible transformer prefix."""
+
+    qk_gain = (
+        jnp.asarray(
+            blocks.qk_gain[...],
+            dtype=compute_dtype,
+        )[:active_layers]
+        if blocks.use_qk_gain
+        else jnp.ones((active_layers,), dtype=compute_dtype)
+    )
+    return (
+        jnp.asarray(blocks.attn_norm_scale[...], dtype=compute_dtype)[
+            :active_layers
+        ],
+        jnp.asarray(blocks.mlp_norm_scale[...], dtype=compute_dtype)[
+            :active_layers
+        ],
+        jnp.asarray(blocks.w_qkv[...], dtype=compute_dtype)[:active_layers],
+        jnp.asarray(blocks.b_qkv[...], dtype=compute_dtype)[:active_layers],
+        jnp.asarray(blocks.w_o[...], dtype=compute_dtype)[:active_layers],
+        jnp.asarray(blocks.b_o[...], dtype=compute_dtype)[:active_layers],
+        jnp.asarray(blocks.w_gate_up[...], dtype=compute_dtype)[
+            :active_layers
+        ],
+        jnp.asarray(blocks.b_gate_up[...], dtype=compute_dtype)[
+            :active_layers
+        ],
+        jnp.asarray(blocks.w_down[...], dtype=compute_dtype)[:active_layers],
+        jnp.asarray(blocks.b_down[...], dtype=compute_dtype)[:active_layers],
+        qk_gain,
+    )
+
+
+def _apply_transformer_stack_prefix(
+    blocks: TrainableTransformerStack,
+    seq: jnp.ndarray,
+    *,
+    active_layers: int,
+    compute_dtype: jnp.dtype,
+) -> jnp.ndarray:
+    """Run a stored transformer prefix while preserving the full fast path."""
+
+    if active_layers in (0, blocks.num_layers):
+        return blocks(seq)
+
+    params = _transformer_stack_prefix_params(
+        blocks,
+        active_layers=active_layers,
+        compute_dtype=compute_dtype,
+    )
+
+    def apply_layer(
+        carry: jnp.ndarray,
+        layer_params: tuple[jnp.ndarray, ...],
+    ) -> jnp.ndarray:
+        return blocks._layer(carry, layer_params)
+
+    layer_fn = (
+        jax.checkpoint(apply_layer, prevent_cse=False)
+        if blocks.remat_blocks
+        else apply_layer
+    )
+    if blocks.scan_layers:
+
+        def body(carry, layer_params):
+            return layer_fn(carry, layer_params), None
+
+        seq, _ = jax.lax.scan(
+            body,
+            jnp.asarray(seq, dtype=compute_dtype),
+            params,
+        )
+        return seq
+
+    for layer_index in range(active_layers):
+        layer_params = tuple(param[layer_index] for param in params)
+        seq = layer_fn(seq, layer_params)
+    return seq
+
+
 class StateVectorProjector(nnx.Module):
     """Project BT4 square tokens to one global JEPA state vector."""
 
@@ -705,95 +793,19 @@ class StateVectorProjector(nnx.Module):
         )
 
     def _active_block_params(self) -> tuple[jnp.ndarray, ...]:
-        count = self.effective_active_layers
-        qk_gain = (
-            jnp.asarray(
-                self.blocks.qk_gain[...],
-                dtype=self.compute_dtype,
-            )[:count]
-            if self.blocks.use_qk_gain
-            else jnp.ones((count,), dtype=self.compute_dtype)
-        )
-        return (
-            jnp.asarray(
-                self.blocks.attn_norm_scale[...],
-                dtype=self.compute_dtype,
-            )[:count],
-            jnp.asarray(
-                self.blocks.mlp_norm_scale[...],
-                dtype=self.compute_dtype,
-            )[:count],
-            jnp.asarray(
-                self.blocks.w_qkv[...],
-                dtype=self.compute_dtype,
-            )[:count],
-            jnp.asarray(
-                self.blocks.b_qkv[...],
-                dtype=self.compute_dtype,
-            )[:count],
-            jnp.asarray(
-                self.blocks.w_o[...],
-                dtype=self.compute_dtype,
-            )[:count],
-            jnp.asarray(
-                self.blocks.b_o[...],
-                dtype=self.compute_dtype,
-            )[:count],
-            jnp.asarray(
-                self.blocks.w_gate_up[...],
-                dtype=self.compute_dtype,
-            )[:count],
-            jnp.asarray(
-                self.blocks.b_gate_up[...],
-                dtype=self.compute_dtype,
-            )[:count],
-            jnp.asarray(
-                self.blocks.w_down[...],
-                dtype=self.compute_dtype,
-            )[:count],
-            jnp.asarray(
-                self.blocks.b_down[...],
-                dtype=self.compute_dtype,
-            )[:count],
-            qk_gain,
+        return _transformer_stack_prefix_params(
+            self.blocks,
+            active_layers=self.effective_active_layers,
+            compute_dtype=self.compute_dtype,
         )
 
     def _apply_active_blocks(self, seq: jnp.ndarray) -> jnp.ndarray:
-        if self.active_layers in (0, self.blocks.num_layers):
-            # Preserve the exact source-compatible control path.
-            return self.blocks(seq)
-
-        params = self._active_block_params()
-
-        def apply_layer(
-            carry: jnp.ndarray,
-            layer_params: tuple[jnp.ndarray, ...],
-        ) -> jnp.ndarray:
-            return self.blocks._layer(carry, layer_params)
-
-        layer_fn = (
-            jax.checkpoint(apply_layer, prevent_cse=False)
-            if self.blocks.remat_blocks
-            else apply_layer
+        return _apply_transformer_stack_prefix(
+            self.blocks,
+            seq,
+            active_layers=self.active_layers,
+            compute_dtype=self.compute_dtype,
         )
-        if self.blocks.scan_layers:
-
-            def body(carry, layer_params):
-                return layer_fn(carry, layer_params), None
-
-            seq, _ = jax.lax.scan(
-                body,
-                jnp.asarray(seq, dtype=self.compute_dtype),
-                params,
-            )
-            return seq
-
-        for layer_index in range(self.effective_active_layers):
-            layer_params = tuple(
-                param[layer_index] for param in params
-            )
-            seq = layer_fn(seq, layer_params)
-        return seq
 
     def __call__(self, tokens: jnp.ndarray) -> jnp.ndarray:
         tokens = jnp.asarray(tokens, dtype=self.compute_dtype)
@@ -1023,6 +1035,19 @@ class JointLatentSASAModel(nnx.Module):
                 "jepa_projector_active_layers must be an integer in "
                 f"[0, {config.projector_layers}], found "
                 f"{config.jepa_projector_active_layers!r}."
+            )
+        if (
+            isinstance(config.dfm_active_layers, bool)
+            or not isinstance(
+                config.dfm_active_layers,
+                (int, np.integer),
+            )
+            or not 0 <= config.dfm_active_layers <= config.dfm_layers
+        ):
+            raise ValueError(
+                "dfm_active_layers must be an integer in "
+                f"[0, {config.dfm_layers}], found "
+                f"{config.dfm_active_layers!r}."
             )
         projector_heads = config.projector_num_heads
         if config.z_dim % projector_heads != 0:
@@ -1324,7 +1349,12 @@ class JointLatentSASAModel(nnx.Module):
         )
         action_emb = action_emb + self.get_time_embedding(t)[:, None, :]
         seq = jnp.concatenate([z_dfm, action_emb], axis=1)
-        seq = self.dfm_blocks(seq)
+        seq = _apply_transformer_stack_prefix(
+            self.dfm_blocks,
+            seq,
+            active_layers=self.config.dfm_active_layers,
+            compute_dtype=self.compute_dtype,
+        )
         state_hidden = seq[:, :64, :]
         action_hidden = seq[:, 64:, :]
         logits = self.logits_from_action_hidden(action_hidden)
@@ -2446,6 +2476,24 @@ def joint_stage1_loss_fn(
         "mask_prob": jnp.mean(1.0 - t),
         "loss_horizon": jnp.asarray(loss_horizon, dtype=jnp.float32),
     }
+    if model.config.dfm_active_layers > 0:
+        aux.update(
+            {
+                "dfm_configured_layers": jnp.asarray(
+                    model.config.dfm_layers,
+                    dtype=jnp.float32,
+                ),
+                "dfm_active_layers": jnp.asarray(
+                    model.config.dfm_active_layers,
+                    dtype=jnp.float32,
+                ),
+                "dfm_active_layer_fraction": jnp.asarray(
+                    model.config.dfm_active_layers
+                    / model.config.dfm_layers,
+                    dtype=jnp.float32,
+                ),
+            }
+        )
     if model.config.jepa_projector_active_layers > 0:
         aux.update(
             {
@@ -2742,6 +2790,17 @@ def validate_objective_config(
     objective: str,
     config: JointLatentSASAConfig,
 ) -> None:
+    dfm_active_layers = config.dfm_active_layers
+    if (
+        isinstance(dfm_active_layers, bool)
+        or not isinstance(dfm_active_layers, (int, np.integer))
+        or not 0 <= dfm_active_layers <= config.dfm_layers
+    ):
+        raise ValueError(
+            "dfm_active_layers must be an integer in "
+            f"[0, {config.dfm_layers}], found "
+            f"{dfm_active_layers!r}"
+        )
     projector_active_layers = config.jepa_projector_active_layers
     if (
         isinstance(projector_active_layers, bool)
@@ -3769,6 +3828,8 @@ def serialized_model_config(
         payload.pop("jepa_sampled_target_anchors")
     if config.jepa_projector_active_layers == 0:
         payload.pop("jepa_projector_active_layers")
+    if config.dfm_active_layers == 0:
+        payload.pop("dfm_active_layers")
     return payload
 
 
@@ -3868,6 +3929,21 @@ def build_research_resume_contract(
             "training_evaluation_depth_shared": True,
             "checkpoint_storage_packed": False,
             "dfm_inference_path_affected": False,
+        }
+    if config.dfm_active_layers > 0:
+        objective_contract["dfm_active_depth"] = {
+            "configured_parameter_layers": int(config.dfm_layers),
+            "active_forward_layers": int(config.dfm_active_layers),
+            "active_layer_indices": list(
+                range(config.dfm_active_layers)
+            ),
+            "inactive_layer_role": "checkpoint_abi_only",
+            "inactive_layer_loss_gradient": "exact_zero",
+            "source_model_restore": "exact_all_parameters",
+            "training_evaluation_inference_depth_shared": True,
+            "checkpoint_storage_packed": False,
+            "dfm_inference_path_affected": True,
+            "refinement_passes_changed": False,
         }
     if config.jepa_target_variance_hinge_coeff != 0.0:
         objective_contract["jepa_target_variance_hinge"] = {
