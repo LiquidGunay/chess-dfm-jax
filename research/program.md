@@ -98,6 +98,13 @@ repeat separation and misses the frozen ceiling by `0.0006048269`. K=1 is
 rejected without repeat or arena, all candidate states are deleted, and K=2
 returns as the active target sampler.
 
+The active experiment keeps K=1's two-encode budget but replaces its one
+batch-shared horizon with one balanced horizon assignment per example. At
+batch 128, every update contains exactly 16 examples from each of the eight
+future horizons. This isolates horizon-estimator variance while keeping the
+accepted schedule, full-horizon prediction/evaluation, and
+`0.0/5.76/1.0` loss fixed.
+
 The repeat-qualified norm-on compatibility baseline is v2/update 300. An identical v1 run also
 selected update 300, and their four-pool DFM CE gains differ by only
 `0.000210253`; the selected v2 checkpoint also passes the recorded

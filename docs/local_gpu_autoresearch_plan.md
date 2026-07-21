@@ -1334,3 +1334,8 @@ sweeps, held-out data, and repeated seeds.
   secondary policy/latent gate passing. Its improvement is smaller than the
   accepted repeat separation and misses the CE ceiling by `0.0006048269`, so
   reject it without repeat/arena, retain no state, and restore K=2.
+- [ ] Test balanced per-example K=1 target sampling. Preserve K=1's two BT4
+  encodes/example, but assign one horizon to each example so batch 128 covers
+  all horizons exactly 16 times per update. Require at least 95% of shared
+  K=1 throughput and a CE gain beyond accepted K=2 repeat noise. The frozen
+  contract is in `research/experiment_balanced_example_target_k1.md`.
