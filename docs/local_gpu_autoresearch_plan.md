@@ -47,6 +47,18 @@ the current action horizon and is the frozen strength-anchor budget. A
 the offline gates, so test-time compute is not confounded with architecture or
 training changes.
 
+Dense-representation update, 2026-07-21: the FP32 Stage-1 core comparison is
+complete on all five hooks, all 15 layers, both square-token and board-pooled
+views, and all six pairs in the frozen four-model set. Raw BT4 to recovered
+step 265,000 shows large final-trunk drift (`0.6521` board-cluster relative
+L2, `0.6221` linear CKA). In contrast, recovered to corrected v2/update 400
+is nearly identity (`0.00278` relative L2, `0.999992` CKA), and their fixed
+source-head legal-policy top-1 agrees on all 128 positions. This makes the
+current dense result a useful baseline but leaves little local-backbone signal
+for sparse-feature interpretation. Published-artifact work remains gated on
+upstream parity; the next model experiment should create a stronger,
+measurably changed checkpoint before pass-count or sparse-refit sweeps.
+
 This document is the implementation contract for turning the existing
 TPU/cloud-oriented BT4 + DFM + JEPA experiment into a fast, measurable,
 single-A10G research loop.
@@ -1200,8 +1212,11 @@ sweeps, held-out data, and repeated seeds.
   selected norm-on control, and selected corrected states; remove verified
   staging archives and unselected weights; retain compact experimental
   evidence; and enforce the contract with `research/storage_audit.py`.
-- [ ] Run dense Stage-1 drift on the frozen four-model comparison set.
-  Schedule all representation GPU work sequentially; sparse
-  downloads/training remain gated on source parity.
+- [x] Run dense Stage-1 core drift on the frozen four-model comparison set.
+  The all-pairs FP32 artifact is
+  `artifacts/representations/dense-stage1-four-model-v2`; temporary captures
+  were removed and the storage audit passes. Dense linear probes remain a
+  separate Stage-1 follow-up. Schedule all representation GPU work
+  sequentially; sparse downloads/training remain gated on source parity.
 - [ ] Complete upstream TransformerLens/source-weight parity, then validate one
   published transcoder before interpreting fixed sparse-feature transfer.

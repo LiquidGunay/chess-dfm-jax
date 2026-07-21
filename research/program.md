@@ -20,7 +20,9 @@ remains closed.
 The baseline-length prediction-SIGReg `0.57` experiment is rejected. Its best
 two-pool CE is `4.511721` versus incumbent v2/u300 `4.510334`; a matched
 update-400 audit also regresses accuracy, legal mass, and JEPA MSE for only
-tiny rank/variance gains. Keep prediction-SIGReg at `0.0`.
+tiny rank/variance gains. Keep prediction-SIGReg at `0.0` for the norm-on
+compatibility objective. The separately qualified corrected no-norm objective
+uses prediction-SIGReg `1.0`.
 
 The corrected no-norm target-SIGReg-5.76/prediction-SIGReg-1.0 baseline is
 repeat-qualified at v2/update 400. Real-checkpoint GPU parity, sealed-history
@@ -38,9 +40,9 @@ The promotion assets are repaired and available. The source-derived v3 pool
 replaces the old claimable-threefold root before selection is frozen, has zero
 selected validation/test overlap, and passes production replay for all 2,048
 histories. Runtime skipping or substitution remains forbidden. This asset
-repair does not open readiness: dense representation drift, upstream source
-parity, and preregistration of the first post-baseline experiment are still
-required.
+repair does not open readiness. Dense representation drift is complete in
+`artifacts/representations/dense-stage1-four-model-v2`; upstream source parity
+and preregistration of the first post-baseline experiment are still required.
 
 ## Editable surface
 

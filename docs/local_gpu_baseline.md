@@ -1941,8 +1941,10 @@ exist, so the next acceptance work is to:
 - implement the read-only five-hook BT4 capture path and prove that capture
   leaves the unmodified FP32 source forward unchanged (the local JAX portion
   passed in commit `7c896a8`; upstream cross-framework parity remains);
-- run dense representation drift on the frozen raw/source/compatibility/
-  corrected comparison set before loading a sparse artifact;
+- retain the completed all-pairs dense representation drift in
+  `artifacts/representations/dense-stage1-four-model-v2` as the longitudinal
+  zero point; it shows large raw-to-recovered drift but only about `0.28%`
+  final-trunk relative L2 from recovered to either local 30-minute baseline;
 - preregister the first post-baseline architecture experiment and its
   checkpoint schedule.
 
@@ -1951,3 +1953,27 @@ header-only while those operational contracts are settled. This no longer
 blocks read-only Stage-0/1 representation work. Sparse-artifact download,
 causal replacement, and SAE/TC/LoRSA training remain gated on source hook and
 FP32 parity.
+
+### Dense four-model representation anchor
+
+The 2026-07-21 FP32 run uses the exact stored planes referenced by all 128
+development roots, all five normative hooks, all 15 layers, square-token and
+board-pooled views, and all six model pairs. It reports coordinate moments,
+full covariance spectra and rank measures, corresponding-layer
+CKA/SVCCA/PWCCA/Procrustes/principal angles, complete layer correspondence,
+board-level bootstrap intervals, and fixed-source-head legal-policy controls.
+Every recorded file digest verifies, no temporary activation capture remains,
+the durable result is `11 MiB`, and `research/storage_audit.py` passes.
+
+The final square-token trunk separates the history into two regimes:
+
+- raw BT4 to recovered step 265,000: relative L2 `0.652109`, CKA `0.622069`,
+  fixed-head policy JS `0.129090`, and top-1 agreement `56.25%`;
+- recovered to corrected v2/update 400: relative L2 `0.002784`, CKA
+  `0.999991949`, policy JS `4.77e-7`, and top-1 agreement `100%`.
+
+Recovered-to-corrected CKA stays above `0.9999919` at every square-token
+hook/layer. Thus the selected corrected loss did not measurably reorganize the
+BT4 trunk during this short run; its DFM/JEPA result should not be narrated as
+a new sparse representation regime. A stronger model checkpoint is the next
+useful target for pass-count and matched sparse-refit experiments.

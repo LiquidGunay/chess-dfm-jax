@@ -108,6 +108,72 @@
       "role": "corrected_no_norm_baseline",
       "sha256": "cbeb1bafa74d0983ae4c0cad2a33c405c3507b2428c5bcebbe4fb7f8df44aa61",
       "size_bytes": 1851704172
+    },
+    {
+      "path": "artifacts/representations/dense-stage1-four-model-v2/manifest.json",
+      "role": "dense_representation_manifest",
+      "sha256": "af164c52ed2f03912cf012a732615f9c1013b3e59266f7f3417493ef55944281",
+      "size_bytes": 2688
+    },
+    {
+      "path": "artifacts/representations/dense-stage1-four-model-v2/summary.json",
+      "role": "dense_representation_summary",
+      "sha256": "55ac516c9e7c9f855abf771a3e96dea91550892dc8f5329fa7665460f12db43a",
+      "size_bytes": 18169
+    },
+    {
+      "path": "artifacts/representations/dense-stage1-four-model-v2/corpus.json",
+      "role": "dense_representation_corpus_contract",
+      "sha256": "66a180324d905d00c9a057f48cf78647b17960c85880a6a1005f5e309245dfed",
+      "size_bytes": 94745
+    },
+    {
+      "path": "artifacts/representations/dense-stage1-four-model-v2/models.json",
+      "role": "dense_representation_model_contracts",
+      "sha256": "bc15d69c8acab24378e89237d8e476fd00578acd692500ebbf590d24e875b6a0",
+      "size_bytes": 5207
+    },
+    {
+      "path": "artifacts/representations/dense-stage1-four-model-v2/per_model_metrics.jsonl",
+      "role": "dense_representation_per_model_metrics",
+      "sha256": "1f163651037b4b484f6e23bba15e2fe0c5b694e7745fcac00a1754aaf4622d77",
+      "size_bytes": 398531
+    },
+    {
+      "path": "artifacts/representations/dense-stage1-four-model-v2/pair_metrics.jsonl",
+      "role": "dense_representation_pair_metrics",
+      "sha256": "a31310f6731752f0df8d0d7fa8cbea3d80522b7e491660e0116bb7c0c4fd5749",
+      "size_bytes": 1021309
+    },
+    {
+      "path": "artifacts/representations/dense-stage1-four-model-v2/layer_correspondence.jsonl",
+      "role": "dense_representation_layer_correspondence",
+      "sha256": "724edd874165c8a44f58f9569b1efec59f338bada9e98366bfefc1bf3ff166ab",
+      "size_bytes": 297691
+    },
+    {
+      "path": "artifacts/representations/dense-stage1-four-model-v2/policy_metrics.json",
+      "role": "dense_representation_fixed_head_policy_metrics",
+      "sha256": "6b0700d9dcafd75927f6139e213ea5e36ae6b1bde386a5139a4fb7120cedc474",
+      "size_bytes": 7522
+    },
+    {
+      "path": "artifacts/representations/dense-stage1-four-model-v2/coordinate_moments.npz",
+      "role": "dense_representation_coordinate_moments",
+      "sha256": "179016e34d8d066fbf30c70c6f36408624e8a74f9b683d11d0c01040fe905b5c",
+      "size_bytes": 6826095
+    },
+    {
+      "path": "artifacts/representations/dense-stage1-four-model-v2/covariance_spectra.npz",
+      "role": "dense_representation_covariance_spectra",
+      "sha256": "1babdcfe169ba8ae17a3d14cc7be7368ff6737d4936b052628b8d7b38ef2825a",
+      "size_bytes": 1796957
+    },
+    {
+      "path": "artifacts/representations/dense-stage1-four-model-v2/cca_spectra.npz",
+      "role": "dense_representation_cca_spectra",
+      "sha256": "9ae8b479dc2e5f83546d6c298ce4c25ee958c10a4c7b9b1d5731a81333228bd2",
+      "size_bytes": 507202
     }
   ],
   "schema_version": 1,

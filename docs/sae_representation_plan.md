@@ -15,6 +15,33 @@ This passes the local JAX dense-hook ABI gate. Cross-framework
 TransformerLens parity, source sparse reconstruction, and published-artifact
 support parity remain pending.
 
+Local Stage-1 core result, 2026-07-21: the immutable FP32 all-pairs run in
+`artifacts/representations/dense-stage1-four-model-v2` evaluated 128 pinned
+source-game roots using their exact stored plane bytes. It contains coordinate
+moments, full covariance spectra, effective/stable/participation ranks,
+corresponding-layer CKA, SVCCA, PWCCA, orthogonal Procrustes, principal angles,
+complete `15 x 15` layer correspondence, game/board bootstrap intervals, and
+fixed-source-head policy controls. The superseded raw-only v1 artifact was
+removed after v2 passed every recorded digest and the workspace storage audit.
+
+The dominant representation change predates local autoresearch. At the final
+`resid_post_after_ln` square-token hook:
+
+| Pair | Relative L2 | Cosine | Linear CKA | SVCCA | Fixed-head policy JS | Top-1 agreement |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| raw BT4 -> recovered 265k | 0.652109 | 0.730787 | 0.622069 | 0.557865 | 0.129090 | 56.25% |
+| recovered 265k -> compatibility v2/u300 | 0.002882 | 0.999993 | 0.999990 | 0.999970 | 5.11e-7 | 100% |
+| recovered 265k -> corrected v2/u400 | 0.002784 | 0.999994 | 0.999992 | 0.999973 | 4.77e-7 | 100% |
+| compatibility v2/u300 -> corrected v2/u400 | 0.002822 | 0.999993 | 0.999991 | 0.999972 | 4.49e-7 | 100% |
+
+Across every square-token hook/layer, recovered-to-corrected linear CKA stays
+above `0.9999919`. This does not prove semantic identity, but it shows that the
+current 30-minute local runs provide almost no dense-backbone movement for a
+high-power feature-change comparison. Keep this artifact as the longitudinal
+zero point; prioritize a stronger checkpoint before spending the single GPU
+on matched sparse refits. Cross-framework parity and one published-artifact
+source reconstruction remain hard gates for any fixed-feature interpretation.
+
 This document defines how to compare the original BT4 backbone with the
 recovered step-265,000 backbone, promoted intermediate checkpoints, and a final
 locally trained BT4 + DFM + JEPA model. It is the detailed Phase 6 companion to
