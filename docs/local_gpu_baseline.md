@@ -2017,3 +2017,15 @@ draws; one candidate loss is the known legacy promotion-codec fault. This is
 an inconclusive-positive relative result, not an Elo promotion. The retained
 state SHA-256 is
 `f42af6bef64c532376e0532d2370b1cf2bd6356d494e08738355359bb506abd2`.
+
+An exact v2 repeat independently selects update 800 at two-pool CE
+`4.5077912323`, accuracy `0.1079254150`, and legal mass `0.6440788107`.
+It runs at `92.1929` end-to-end examples/s and passes the same effective-rank,
+feature-tail, RMS-ratio, and trivial-prediction gates. Its CE gain over control
+is `0.0024780389`, while the selected v1/v2 separation is `0.0022991356`—larger
+than the old `0.000637` corrected-control repeat envelope. This independently
+replicates the direction, not a tightly stable effect size. The repeat state
+SHA-256 was
+`95daef7749b67bc65990ea0bb5e7b3f7e4b86bad4810cdabb87aea9a446dd8a2`;
+all v2 state files were removed after recording the compact selection and
+collapse evidence.

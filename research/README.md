@@ -103,5 +103,7 @@ action-only inference path, and an official-formulation normalized-Elo
 promotion GSPRT. The repaired v3 promotion pool is open, and
 `AUTORESEARCH_READY = True`. The first accepted K=2 target-sampling checkpoint
 passes the offline gates and has an inconclusive-positive 128-pair incumbent
-screen; it is not promoted. See `docs/local_relative_arena.md`, the plan, and
-the baseline report for the exact contracts and measured results.
+screen; an exact repeat independently passes the offline gates but shows a
+larger-than-baseline between-repeat CE gap. It is not promoted. See
+`docs/local_relative_arena.md`, the plan, and the baseline report for the exact
+contracts and measured results.

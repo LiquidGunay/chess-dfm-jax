@@ -77,8 +77,11 @@ all preregistered collapse gates. It is the new offline incumbent. Its direct
 128-pair cap-256 arena against corrected v2/update 400 scores `50.586%`, or
 `+4.1` descriptive logistic Elo with pair-aware 95% interval
 `[-80.8,+89.4]`. This is an inconclusive-positive screen, not promotion. Only
-the selected 1.85 GB state is retained; repeat qualification precedes the
-pass-count or matched sparse-refit studies.
+the selected 1.85 GB state is retained. An exact v2 repeat independently
+selects update 800 and clears every offline gate at CE `4.5077912323`, but it
+is `0.0022991356` worse than v1, so the direction replicates more tightly than
+the effect size. The pass-count and matched sparse-refit studies remain
+deferred until a larger gain makes strength evidence less ambiguous.
 
 This document is the implementation contract for turning the existing
 TPU/cloud-oriented BT4 + DFM + JEPA experiment into a fast, measurable,
@@ -1254,3 +1257,7 @@ sweeps, held-out data, and repeated seeds.
   examples/s, selects update 800 at two-pool CE `4.5054920968`, passes every
   offline gate, and scores `50.586%` in the 128-pair incumbent arena. Retain
   only update 800 and record the arena interval as inconclusive.
+- [x] Repeat the accepted K=2 run exactly. V2 again selects update 800 and
+  independently passes every offline gate at CE `4.5077912323`, but the
+  `0.0022991356` gap to v1 exceeds the old repeat envelope. Retain no v2 state;
+  record directional replication and effect-size variability.

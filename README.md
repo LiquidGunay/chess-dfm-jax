@@ -37,7 +37,9 @@ update-800 checkpoint improves matched two-pool DFM CE from `4.5102692712` to
 `4.5054920968`, raises end-to-end throughput from `41.35` to `92.97`
 examples/s, and passes all frozen accuracy, legality, and latent-health gates.
 It is the current offline incumbent; `research/results.tsv` contains its first
-accepted row.
+accepted row. An exact repeat again selects update 800 and independently
+clears every gate at CE `4.5077912323`; the direction replicates, although the
+`0.0022991356` v1/v2 gap shows that the effect size is not tightly stable.
 
 The resumable relative-strength arena is implemented, and its repaired v3
 promotion pool replays all 2,048 histories before model loading. The accepted

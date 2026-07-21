@@ -187,5 +187,30 @@ Update 800 is accepted as the new offline incumbent. Its state SHA-256 is
 `f42af6bef64c532376e0532d2370b1cf2bd6356d494e08738355359bb506abd2`.
 Updates 400, 1200, and 1261 were deleted after selection, and the exact
 retained state/manifest pair is enforced by `research/storage_retention.json`.
-The pass-count and SAE-refit studies remain deferred until this improvement is
-repeat-qualified and its strength evidence is less ambiguous.
+The pass-count and SAE-refit studies remain deferred until a larger
+offline effect makes the strength evidence less ambiguous.
+
+### Exact v2 repeat
+
+An exact second 1,800-second run from the same source model, seed, data order,
+optimizer, and objective processed `160,128` examples in `1,251` updates at
+`92.1929` steady end-to-end examples/s, with peak HBM `9,583,339,776` bytes.
+Its state differs from v1, confirming that the GPU path is not bitwise
+repeatable. The two-pool scan independently selected update 800:
+
+- DFM CE `4.5077912323`, improving the frozen control by `0.0024780389` or
+  `3.89x` the acceptance threshold;
+- accuracy `0.1079254150` and legal mass `0.6440788107`, both inside their
+  gates;
+- mean/minimum prediction effective rank `30.9897/29.0984`;
+- mean/minimum prediction feature-std p05 `0.64930/0.63585`; and
+- target RMS `0.92547` with prediction/target RMS ratio `0.97171`.
+
+Prediction again beats zero and action-shuffled baselines at all eight
+horizons. Thus the direction of the offline improvement and the throughput
+gain replicate independently. The v1/v2 selected CE separation is
+`0.0022991356`, however, which is `3.61x` the old `0.000637` corrected-control
+repeat envelope. Treat K=2 as independently accepted twice but not tightly
+repeat-stable in effect size. All four v2 states were deleted after the audit;
+the compact run, selection, and collapse reports remain, while the better
+arena-tested v1/update-800 state stays the sole retained K=2 checkpoint.

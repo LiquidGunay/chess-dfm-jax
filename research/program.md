@@ -17,7 +17,11 @@ every latent gate, and raises fixed-time throughput from `41.35` to `92.97`
 examples/s. It is the current offline incumbent. Its direct 128-pair arena
 against corrected v2/update 400 scored `50.586%` (`+4.1` descriptive logistic
 Elo, pair-aware 95% interval `[-80.8,+89.4]`), which is positive but
-inconclusive. It is neither repeat-qualified nor Elo-promoted.
+inconclusive. An exact v2 repeat again selects update 800 and independently
+passes every gate at CE `4.5077912323`, but its selected CE is `0.0022991356`
+worse than v1, beyond the old `0.000637` repeat envelope. The direction is
+replicated; the effect size is not tightly repeat-stable, and the model is not
+Elo-promoted.
 
 The repeat-qualified norm-on compatibility baseline is v2/update 300. An identical v1 run also
 selected update 300, and their four-pool DFM CE gains differ by only
@@ -43,10 +47,10 @@ absolute Elo. The fixed four-model representation comparison may proceed.
 
 Keep searchless inference fixed at eight DFM refinement passes during the
 initial stronger-model experiments. Although the sampled-target checkpoint
-improves the frozen offline gates, its arena interval remains unresolved;
-pass-count ablation stays deferred until the improvement is repeat-qualified
-and strength evidence is less ambiguous. Changing refinement compute must not
-be mixed into an architecture comparison.
+improves the frozen offline gates twice, its effect size varies and its arena
+interval remains unresolved. Pass-count ablation stays deferred until a larger
+offline improvement gives less ambiguous strength evidence. Changing
+refinement compute must not be mixed into an architecture comparison.
 
 The promotion assets are repaired and available. The source-derived v3 pool
 replaces the old claimable-threefold root before selection is frozen, has zero
