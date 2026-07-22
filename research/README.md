@@ -281,3 +281,11 @@ the accepted primary by `0.0052875` but misses the frozen ceiling by
 the accepted surface. One final corruption follow-up may keep H1 forced while
 using `t=u^2` to reduce ground-truth future-action leakage; failure closes the
 line. Norm matching remains off and target/`z_pred` SIGReg stay `5.76/1.0`.
+
+Experiment 019 is preregistered in
+`research/experiment_force_first_action_mask_timepower2_tail1.md`. It keeps
+H1 forced and changes only normalized training time from `t=u` to `t=u^2`,
+raising expected future-action masking from `1/2` to `2/3` without changing
+RNG draws, validation, inference, objective weights, legality, or the fixed
+`0.0/5.76/1.0` loss. Failure closes this corruption line rather than opening
+a time-power sweep.

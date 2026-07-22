@@ -1630,4 +1630,6 @@ sweeps, held-out data, and repeated seeds.
 - [ ] Preregister one final corruption-alignment follow-up: keep H1 forced and
   use `t=u^2` during training so future action tokens are masked with expected
   probability `2/3` instead of `1/2`. Keep all loss coefficients and gates
-  fixed; close the line on failure rather than tuning the power.
+  fixed; close the line on failure rather than tuning the power. The frozen
+  contract is in
+  `research/experiment_force_first_action_mask_timepower2_tail1.md`.
