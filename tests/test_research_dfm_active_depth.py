@@ -266,6 +266,15 @@ def test_first_action_share_requires_normalized_multi_horizon_objective() -> Non
         )
 
 
+@pytest.mark.parametrize("value", [True, -0.1, float("nan"), float("inf")])
+def test_first_legality_coefficient_validation_fails_closed(value) -> None:
+    with pytest.raises(ValueError, match="first_legality_coeff"):
+        train.validate_objective_config(
+            objective="normalized",
+            config=_config(first_legality_coeff=value),
+        )
+
+
 def test_first_action_share_serialization_is_default_off() -> None:
     default = train.serialized_model_config(_config())
     active = train.serialized_model_config(

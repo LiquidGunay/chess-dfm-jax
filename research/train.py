@@ -73,6 +73,8 @@ EXPERIMENT_OVERRIDES: dict[str, Any] = {
     "lr_min_ratio": 0.1,
     "jepa_target_sample_count": 1,
     "jepa_target_sampling_unit": "example_balanced",
+    "dfm_first_action_loss_share": 0.25,
+    "first_legality_coeff": 4.0,
     "bt4_encode_chunk_size": 0,
     # "dfm_active_layers": 3,
     # "jepa_projector_active_layers": 1,
@@ -3386,6 +3388,15 @@ def validate_objective_config(
                 "dfm_first_action_loss_share requires at least two active "
                 "loss horizons."
             )
+    if (
+        isinstance(config.first_legality_coeff, bool)
+        or not math.isfinite(config.first_legality_coeff)
+        or config.first_legality_coeff < 0.0
+    ):
+        raise ValueError(
+            "first_legality_coeff must be finite and non-negative, found "
+            f"{config.first_legality_coeff!r}"
+        )
     dfm_active_layers = config.dfm_active_layers
     if (
         isinstance(dfm_active_layers, bool)
@@ -4531,6 +4542,13 @@ def build_research_resume_contract(
             "each_remaining_horizon_share": float(
                 (1.0 - config.dfm_first_action_loss_share)
                 / tail_horizon_count
+            ),
+            "first_legality_coeff": float(
+                config.first_legality_coeff
+            ),
+            "legality_to_first_action_ce_coefficient_ratio": float(
+                config.first_legality_coeff
+                / config.dfm_first_action_loss_share
             ),
             "selection_metric": "two_pool_dfm_ce_loss_by_horizon_h1",
             "inference_affected": False,

@@ -275,7 +275,13 @@ def test_active_experiment_uses_one_block_future_gradient_tail() -> None:
     )
     assert config.jepa_target_sample_count == 1
     assert config.jepa_target_sampling_unit == "example_balanced"
-    assert config.dfm_first_action_loss_share == 0.0
+    assert config.dfm_first_action_loss_share == 0.25
+    assert config.first_legality_coeff == 4.0
+    assert (
+        config.first_legality_coeff
+        / config.dfm_first_action_loss_share
+        == 16.0
+    )
     assert config.bt4_future_target_stop_gradient is True
     assert config.bt4_future_target_trainable_tail_layers == 1
     assert config.bt4_freeze_backbone is False
