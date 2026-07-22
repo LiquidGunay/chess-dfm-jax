@@ -201,6 +201,20 @@ and the reported score already includes it. This is not an unmasked illegal
 model choice, but it is a known symmetric action-space limitation and prevents
 interpreting the development screen as promotion evidence.
 
+The accepted checkpoint's direct frozen anchor against original raw BT4 then
+scores `0.365234375`: 0 wins, 187 draws, and 69 losses, pentanomial
+`[10, 49, 69, 0, 0]`, with no cap draws. Descriptive logistic Elo is `-96.02`
+and the pair-aware 95% interval is `[-195.33, -10.24]`. Mean policy-call time
+is `44.14` ms for the eight-pass candidate and `34.07` ms for raw BT4. The
+candidate incurs one black-promotion coverage fault; raw BT4's canonical codec
+has complete coverage. Raw BT4 is therefore clearly stronger under this
+searchless development protocol. On the same frozen openings, the corrected
+v2/update-400 baseline scored `0.380859375`; the new point estimate is 1.5625
+percentage points lower, with 29 pair outcomes better, 64 unchanged, and 35
+worse. This small cross-checkpoint difference has no preregistered decision
+threshold and does not overturn the offline CE decision, but lower validation
+CE has not yet translated into higher measured chess strength.
+
 Accept primary update 2,072 as the new offline incumbent because both exact
 runs clear their frozen offline gates. The arena is indistinguishable from a
 tie and does not authorize promotion. Retain only the primary selected state

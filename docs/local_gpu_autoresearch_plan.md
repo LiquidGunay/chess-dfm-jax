@@ -201,6 +201,17 @@ experiment, and make no Elo-promotion claim. Close the tail-depth line at one
 block; do not sweep depths 2 or 4--15. Norm matching remains disabled and
 target/`z_pred` SIGReg remain fixed at `5.76/1.0`.
 
+Direct-strength update, 2026-07-22: the accepted one-block-tail checkpoint
+scores `36.523%` against original raw BT4 under the same 128-pair, eight-pass,
+cap-256 protocol. Descriptive logistic Elo is `-96.02`, with pair-aware 95%
+interval `[-195.33,-10.24]`; the game record is 0 wins, 187 draws, and 69
+losses. One candidate loss is the known legacy-codec black-promotion fault,
+while raw BT4 has complete canonical coverage. Raw BT4 remains clearly
+stronger. The result is 1.5625 score points below corrected v2/update 400 on
+the identical roots, so the next training axis should target first-action
+chess quality rather than assume another small mean eight-horizon CE gain will
+improve Elo.
+
 This document is the implementation contract for turning the existing
 TPU/cloud-oriented BT4 + DFM + JEPA experiment into a fast, measurable,
 single-A10G research loop.
@@ -1490,3 +1501,9 @@ sweeps, held-out data, and repeated seeds.
   `153.075/153.450` examples/s. The 128-pair incumbent arena scores `49.609%`
   with interval `[-87.96,+82.20]`; accept primary update 2,072 as the offline
   incumbent, not an Elo-promoted model, and retain only its candidate state.
+- [x] Measure the accepted one-block-tail checkpoint directly against original
+  raw BT4 before representation work. It scores `36.523%`, descriptive
+  logistic Elo `-96.02`, and pair-aware interval `[-195.33,-10.24]`, with one
+  known candidate legacy-codec promotion fault and complete raw-BT4 coverage.
+  Raw BT4 remains clearly stronger; lower uniform eight-horizon CE has not yet
+  translated into higher measured chess strength.

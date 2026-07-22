@@ -215,6 +215,15 @@ not an Elo-promoted model, and retain only its candidate state. The tail-depth
 line ends at one block. Loss remains fixed at norm/target/prediction
 coefficients `0.0/5.76/1.0`.
 
+Its direct 128-pair anchor against original raw BT4 scores `36.523%`
+(`-96.02` descriptive logistic Elo, pair-aware interval
+`[-195.33,-10.24]`), with 0 wins, 187 draws, and 69 losses. The candidate has
+one known black-promotion codec fault and raw BT4 has complete coverage. Raw
+BT4 remains clearly stronger, and the new checkpoint's point estimate is
+1.5625 percentage points below corrected v2/update 400 on the same roots.
+Future experiments must therefore report first-action quality and cannot
+treat a small uniform eight-horizon CE gain as chess-strength evidence.
+
 ## Editable surface
 
 During automated architecture research, edit only `research/train.py`.

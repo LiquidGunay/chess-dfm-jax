@@ -214,3 +214,12 @@ is a black promotion, a symmetric known limitation of both checkpoints'
 incumbent, not an Elo-promoted model. Only its candidate state is retained for
 this experiment, the tail-depth line closes, RMS norm matching remains off,
 and target/`z_pred` SIGReg remain `5.76/1.0`.
+
+Against original raw BT4, that accepted checkpoint scores `36.523%` over the
+same 128 color-reversed pairs: 0 wins, 187 draws, and 69 losses, or `-96.02`
+descriptive logistic Elo with pair-aware interval `[-195.33,-10.24]`. Raw BT4
+is clearly stronger at this searchless budget. One candidate loss is the known
+legacy-codec black-promotion fault; the canonical raw policy has complete move
+coverage. This direct anchor satisfies the base-model measurement prerequisite
+for later representation work, while showing that lower uniform
+eight-horizon CE has not yet produced higher measured chess strength.
