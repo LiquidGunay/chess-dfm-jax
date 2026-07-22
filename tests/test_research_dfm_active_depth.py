@@ -173,6 +173,106 @@ def test_first_action_objective_weights_are_unit_sum_and_differentiable() -> Non
     np.testing.assert_array_equal(gradients, weights)
 
 
+def test_force_first_action_mask_changes_only_first_slot() -> None:
+    actions = _batch()["action_indices"]
+    noisy, masked = train.mask_actions(
+        actions,
+        jnp.full((actions.shape[0],), 0.5, dtype=jnp.float32),
+        32,
+        jax.random.PRNGKey(12),
+    )
+    forced_noisy, forced_masked = train.force_first_action_mask(
+        noisy,
+        masked,
+        mask_token_id=32,
+    )
+
+    np.testing.assert_array_equal(forced_noisy[:, 0], 32)
+    np.testing.assert_array_equal(forced_masked[:, 0], True)
+    np.testing.assert_array_equal(forced_noisy[:, 1:], noisy[:, 1:])
+    np.testing.assert_array_equal(forced_masked[:, 1:], masked[:, 1:])
+    np.testing.assert_array_equal(actions, _batch()["action_indices"])
+
+
+def test_forced_first_mask_is_training_only_and_preserves_rng_branches() -> None:
+    control = train.JointLatentSASAModel(
+        DeterministicEncoder(),
+        _config(
+            jepa_target_sample_count=1,
+            jepa_target_sampling_unit="example_balanced",
+        ),
+        rngs=nnx.Rngs(16),
+    )
+    candidate = train.JointLatentSASAModel(
+        DeterministicEncoder(),
+        _config(
+            jepa_target_sample_count=1,
+            jepa_target_sampling_unit="example_balanced",
+            dfm_force_first_action_mask=True,
+        ),
+        rngs=nnx.Rngs(16),
+    )
+    _assert_tree_exact(
+        nnx.to_pure_dict(nnx.state(control, train.TrainableParam)),
+        nnx.to_pure_dict(nnx.state(candidate, train.TrainableParam)),
+    )
+    assert train.research_state_abi(
+        nnx.state(control, train.TrainableParam)
+    ) == train.research_state_abi(
+        nnx.state(candidate, train.TrainableParam)
+    )
+    args = (_batch(), jax.random.PRNGKey(22), 1.0, 1.0)
+    control_loss, control_aux = train.normalized_stage1_loss_fn(
+        control,
+        *args,
+        sample_future_targets=True,
+    )
+    candidate_loss, candidate_aux = train.normalized_stage1_loss_fn(
+        candidate,
+        *args,
+        sample_future_targets=True,
+    )
+
+    assert jnp.isfinite(control_loss)
+    assert jnp.isfinite(candidate_loss)
+    assert candidate_aux["dfm_force_first_action_mask"] == 1.0
+    assert candidate_aux["dfm_mask_fraction_by_horizon"][0] == 1.0
+    np.testing.assert_array_equal(
+        candidate_aux["dfm_mask_fraction_by_horizon"][1:],
+        control_aux["dfm_mask_fraction_by_horizon"][1:],
+    )
+    assert "dfm_force_first_action_mask" not in control_aux
+    assert "dfm_objective_ce_loss" not in candidate_aux
+    assert "dfm_objective_weight_by_horizon" not in candidate_aux
+    np.testing.assert_array_equal(
+        candidate_aux["jepa_target_assignment_count_by_horizon"],
+        control_aux["jepa_target_assignment_count_by_horizon"],
+    )
+    for name in (
+        "jepa_positive_loss",
+        "jepa_sigreg_loss",
+        "jepa_pred_sigreg_loss",
+        "jepa_sigreg_valid_count",
+        "jepa_pred_sigreg_valid_count",
+    ):
+        np.testing.assert_array_equal(candidate_aux[name], control_aux[name])
+
+    control_eval_loss, control_eval = train.normalized_stage1_loss_fn(
+        control,
+        *args,
+        sample_future_targets=False,
+    )
+    candidate_eval_loss, candidate_eval = train.normalized_stage1_loss_fn(
+        candidate,
+        *args,
+        sample_future_targets=False,
+    )
+    np.testing.assert_array_equal(candidate_eval_loss, control_eval_loss)
+    assert candidate_eval.keys() == control_eval.keys()
+    for name in candidate_eval:
+        np.testing.assert_array_equal(candidate_eval[name], control_eval[name])
+
+
 def test_default_first_action_weighting_preserves_uniform_loss_exactly() -> None:
     uniform = train.dfm_objective_horizon_weights(
         jnp.ones((8,), dtype=jnp.float32),
@@ -282,6 +382,60 @@ def test_first_action_share_serialization_is_default_off() -> None:
     )
     assert "dfm_first_action_loss_share" not in default
     assert active["dfm_first_action_loss_share"] == 0.25
+
+
+@pytest.mark.parametrize("value", [1, 0, "yes", None])
+def test_force_first_action_mask_validation_fails_closed(value) -> None:
+    with pytest.raises(ValueError, match="dfm_force_first_action_mask"):
+        train.validate_objective_config(
+            objective="normalized",
+            config=_config(dfm_force_first_action_mask=value),
+        )
+
+
+def test_force_first_action_mask_serialization_and_resume_contract(
+    monkeypatch,
+) -> None:
+    enabled = _config(dfm_force_first_action_mask=True)
+    train.validate_objective_config(objective="normalized", config=enabled)
+    with pytest.raises(ValueError, match="requires --objective normalized"):
+        train.validate_objective_config(objective="legacy", config=enabled)
+    assert "dfm_force_first_action_mask" not in train.serialized_model_config(
+        _config()
+    )
+    assert train.serialized_model_config(enabled)[
+        "dfm_force_first_action_mask"
+    ] is True
+
+    monkeypatch.setattr(train, "require_within_workspace", lambda path: path)
+    monkeypatch.setattr(
+        train,
+        "load_asset_manifest",
+        lambda: {
+            "trajectory_v3": {
+                "archive": {"sha256": "trajectory", "size_bytes": 123}
+            }
+        },
+    )
+    monkeypatch.setattr(train, "sha256_file", lambda _path: "source")
+    contract = train.build_research_resume_contract(
+        config=enabled,
+        objective="normalized",
+        sigreg_reference_count=1.0,
+        batch_size=4,
+        train_seed=0,
+        train_provenance={"kind": "test"},
+        models_dir=train.REPO_ROOT / "models",
+    )
+    semantics = contract["objective"]["dfm_first_action_masking"]
+    assert semantics["scope"] == "training_only"
+    assert semantics["played_first_action_masked"] is True
+    assert semantics["played_first_action_mask_token"] == 32
+    assert semantics["remaining_action_masks"] == "unchanged_existing_rng_draws"
+    assert semantics["uniform_dfm_ce_weighting"] is True
+    assert semantics["evaluation_affected"] is False
+    assert semantics["inference_affected"] is False
+    assert semantics["model_state_abi"] == "unchanged"
 
 
 def test_three_layer_output_matches_explicit_prefix_execution() -> None:

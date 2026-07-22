@@ -73,6 +73,7 @@ EXPERIMENT_OVERRIDES: dict[str, Any] = {
     "lr_min_ratio": 0.1,
     "jepa_target_sample_count": 1,
     "jepa_target_sampling_unit": "example_balanced",
+    "dfm_force_first_action_mask": True,
     "bt4_encode_chunk_size": 0,
     # "dfm_active_layers": 3,
     # "jepa_projector_active_layers": 1,
@@ -165,6 +166,7 @@ class JointLatentSASAConfig:
     loss_horizon: int = 0
     dfm_ce_coeff: float = 1.0
     dfm_first_action_loss_share: float = 0.0
+    dfm_force_first_action_mask: bool = False
     first_legality_coeff: float = 7.64
     horizon_legality_coeff: float = 0.0
     legality_on_masked_only: bool = True
@@ -625,6 +627,20 @@ def mask_actions(
     mask = r < mask_prob[:, None]
     noisy_actions = jnp.where(mask, mask_token_id, actions)
     return noisy_actions, mask
+
+
+def force_first_action_mask(
+    noisy_actions: jnp.ndarray,
+    is_masked: jnp.ndarray,
+    *,
+    mask_token_id: int,
+) -> tuple[jnp.ndarray, jnp.ndarray]:
+    """Force only the played action to the DFM mask token."""
+
+    return (
+        noisy_actions.at[:, 0].set(mask_token_id),
+        is_masked.at[:, 0].set(True),
+    )
 
 
 def legal_mass_from_indices(
@@ -2108,6 +2124,16 @@ def joint_stage1_loss_fn(
     if "deterministic_t" in batch:
         t = jnp.full_like(t, batch["deterministic_t"])
     noisy_actions, is_masked = mask_actions(actions, 1.0 - t, model.config.action_vocab_size, rng_mask)
+    force_first_mask_active = bool(
+        sample_future_targets
+        and model.config.dfm_force_first_action_mask
+    )
+    if force_first_mask_active:
+        noisy_actions, is_masked = force_first_action_mask(
+            noisy_actions,
+            is_masked,
+            mask_token_id=model.config.action_vocab_size,
+        )
 
     with jax.named_scope("joint_dfm_noisy_planner"):
         logits = model.planner_from_latents(z_dfm, noisy_actions, t)
@@ -2752,6 +2778,11 @@ def joint_stage1_loss_fn(
                 ),
             }
         )
+    if force_first_mask_active:
+        aux["dfm_force_first_action_mask"] = jnp.asarray(
+            1.0,
+            dtype=jnp.float32,
+        )
     if model.config.dfm_active_layers > 0:
         aux.update(
             {
@@ -3386,6 +3417,15 @@ def validate_objective_config(
                 "dfm_first_action_loss_share requires at least two active "
                 "loss horizons."
             )
+    if not isinstance(config.dfm_force_first_action_mask, bool):
+        raise ValueError(
+            "dfm_force_first_action_mask must be boolean, found "
+            f"{config.dfm_force_first_action_mask!r}"
+        )
+    if config.dfm_force_first_action_mask and objective != "normalized":
+        raise ValueError(
+            "dfm_force_first_action_mask requires --objective normalized."
+        )
     if (
         isinstance(config.first_legality_coeff, bool)
         or not math.isfinite(config.first_legality_coeff)
@@ -4474,6 +4514,8 @@ def serialized_model_config(
         payload.pop("dfm_active_layers")
     if config.dfm_first_action_loss_share == 0.0:
         payload.pop("dfm_first_action_loss_share")
+    if not config.dfm_force_first_action_mask:
+        payload.pop("dfm_force_first_action_mask")
     if not config.bt4_freeze_backbone:
         payload.pop("bt4_freeze_backbone")
     if not config.bt4_future_target_stop_gradient:
@@ -4550,6 +4592,25 @@ def build_research_resume_contract(
             ),
             "selection_metric": "two_pool_dfm_ce_loss_by_horizon_h1",
             "inference_affected": False,
+        }
+    if config.dfm_force_first_action_mask:
+        objective_contract["dfm_first_action_masking"] = {
+            "scope": "training_only",
+            "played_first_action_masked": True,
+            "played_first_action_mask_token": int(
+                config.action_vocab_size
+            ),
+            "remaining_action_masks": "unchanged_existing_rng_draws",
+            "time_sampling": "unchanged",
+            "target_actions": "unchanged",
+            "uniform_dfm_ce_weighting": True,
+            "first_legality_coeff": float(
+                config.first_legality_coeff
+            ),
+            "evaluation_affected": False,
+            "inference_affected": False,
+            "model_state_abi": "unchanged",
+            "optimizer_state_abi": "unchanged_source_compatible",
         }
     if config.jepa_sigreg_example_count > 0:
         objective_contract["jepa_sigreg_sampling"] = {

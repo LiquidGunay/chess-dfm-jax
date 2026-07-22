@@ -497,6 +497,7 @@ def test_local_config_and_initialized_model_match_legacy_exactly():
             "lr_decay_steps",
             "lr_min_ratio",
             "dfm_first_action_loss_share",
+            "dfm_force_first_action_mask",
             "dfm_active_layers",
             "jepa_projector_active_layers",
             "jepa_sampled_target_anchors",
