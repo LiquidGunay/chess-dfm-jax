@@ -131,7 +131,7 @@ runs independently pass every offline gate at selected CE
 `4.5007607210/4.5022441577`, and both remove the replicated constant-rate
 update-1200 regression. The primary update-1261 state scores `50.391%` in the
 128-pair arena against K=2, with descriptive logistic Elo `+2.71` and a wide
-pair-aware interval `[-82.20,+87.96]`. It is the new offline incumbent, not an
+pair-aware interval `[-82.20,+87.96]`. It became the offline incumbent, not an
 Elo-promoted model; the repeat retains no state.
 
 A one-percent cosine-floor follow-up then selects update 1200 at CE
@@ -147,4 +147,15 @@ K=2. Its terminal checkpoint reaches CE `4.4998821113`, accuracy
 `0.1096038818`, and legal mass `0.6480329307`, and passes every latent gate.
 The CE gain is smaller than accepted repeat variability and misses the frozen
 ceiling by `0.0006048269`, so it is rejected without repeat or arena, retains
-no state, and K=2 remains active.
+no state.
+
+Balancing that one sampled horizon across examples then preserves the
+two-encode path while removing batch-level horizon sparsity. The primary and
+exact-repeat runs select terminal checkpoints at CE
+`4.4979399741/4.4969695099`; both beat the cosine-warmdown K=2 incumbent and
+pass every policy and latent gate. The primary processes `202,368` examples
+at `117.061` examples/s. Its 128-pair screen against K=2 scores `51.172%`, or
+`+8.14` descriptive logistic Elo with pair-aware 95% interval
+`[-76.48,+93.77]`, and zero faults. Primary update 1,581 is the current
+offline incumbent, not an Elo-promoted model; only that candidate state is
+retained.

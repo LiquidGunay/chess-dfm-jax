@@ -178,6 +178,20 @@ Its completed state is
 (SHA-256
 `342d41d70a97a5575a9cf055cc37c660ffe48eb812f3e1ad837b97e0d9d15ba7`).
 
+The repeat-qualified balanced per-example K=1 checkpoint at update 1,581 then
+completed the same eight-pass 128-pair cap-256 development screen against
+cosine-warmdown K=2. It scored `0.51171875`, descriptive logistic Elo
+`+8.1445`, pair-aware 95% interval `[-76.4814,+93.7678]`, and pentanomial
+`[0,2,118,8,0]`. Six of 256 games were cap draws, and neither model had a
+fault. Mean policy-call time was `42.05 ms` for balanced K=1 and `42.72 ms`
+for cosine-warmdown K=2 at physical batch 16. This positive result remains an
+inconclusive model-pool-relative screen, not promotion or absolute Elo.
+
+Its completed state is
+`artifacts/arena/balanced-example-k1-u1581-vs-cosine-warmdown-k2-u1261-development-128pairs-cap256-v1/state.json`
+(SHA-256
+`69f9a3046c454cb6b7d4e31c8e30ba6118925ea4922383da7cec6d46a64a046d`).
+
 The state files are
 `artifacts/arena/corrected-nonorm-target5p76-pred1-v2-u400-vs-source-development-128pairs-cap256-v1/state.json`
 (SHA-256

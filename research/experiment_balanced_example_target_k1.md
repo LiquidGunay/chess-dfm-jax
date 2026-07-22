@@ -1,7 +1,8 @@
 # Experiment 009: balanced per-example K=1 targets
 
-Status: preregistered on 2026-07-21 before implementing the sampling unit or
-measuring the candidate on GPU.
+Status: completed and accepted as the offline incumbent on 2026-07-22. The
+frozen 128-pair arena was positive but inconclusive; this is not an Elo
+promotion.
 
 ## Question and hypothesis
 
@@ -134,3 +135,55 @@ repeat to beat the K=2 incumbent CE while passing every non-CE gate before the
 frozen 128-pair arena. A failure gets no repeat, arena, pass-count sweep, or
 SAE refit. Retain only a qualifying selected state; otherwise delete every
 candidate state after preserving compact evidence.
+
+## Outcome
+
+The implementation and all pre-run gates passed. Focused CPU coverage contains
+72 passing tests. The real-checkpoint smoke used the full two-block projector
+and four-block DFM, assigned exactly 16 examples to each horizon, encoded two
+BT4 boards per example, produced all eight predictions, reported target and
+prediction SIGReg counts `576/512`, and completed an unclipped optimizer
+update. Peak smoke HBM was `9,462,135,296` bytes.
+
+The cached 30-update profile reached `117.3799` end-to-end examples/s and
+`149.0972` device examples/s at peak HBM `9,453,743,360` bytes. It clears the
+frozen `110.6858` gate by `6.05%` and is slightly faster than the
+`116.5113` shared-horizon K=1 compute control.
+
+The primary 30-minute run compiled in `17.5010` seconds and processed
+`202,368` examples in 1,581 updates at `117.0611` steady-state examples/s.
+The frozen two-pool checkpoint scan was:
+
+| Update | DFM CE | Accuracy | Legal mass |
+|---:|---:|---:|---:|
+| 400 | 4.5102302 | 0.1084442 | 0.6449483 |
+| 800 | 4.5044888 | 0.1090546 | 0.6460078 |
+| 1,200 | 4.5045125 | 0.1098633 | 0.6469114 |
+| 1,581 | **4.4979400** | **0.1100922** | **0.6497235** |
+
+The terminal checkpoint beats the K=2 cosine-warmdown incumbent by
+`0.0028207470` CE and clears the repeat-noise-aware ceiling by `0.0013373103`.
+Its prediction effective-rank mean/minimum is `31.0093/29.1222`, feature-std
+p05 mean/minimum is `0.65017/0.63619`, mean target RMS is `0.92492`, and the
+prediction/target RMS ratio is `0.97215`. Positive prediction beats zero and
+action-shuffled controls at every horizon.
+
+The exact repeat processed `201,600` examples in 1,575 updates at `116.4586`
+examples/s. Its selected terminal checkpoint reaches CE `4.4969695`, accuracy
+`0.1105804`, and legal mass `0.6477513`; it again passes every policy and
+latent gate. The two selected CEs differ by `0.0009704642`, inside the accepted
+K=2 repeat separation, and both independently beat that incumbent.
+
+The preregistered primary checkpoint then scored `0.51171875` over 128
+color-reversed development pairs against K=2 cosine warmdown: 8 wins, 246
+draws, and 2 losses across 256 games, pentanomial `[0, 2, 118, 8, 0]`, with
+six cap draws and zero faults. Descriptive logistic Elo is `+8.14`, with a
+pair-aware 95% interval of `[-76.48, +93.77]`. Mean policy-call time was
+`42.05 ms` for the candidate and `42.72 ms` for K=2. This is a positive but
+inconclusive model-pool-relative screen, not an absolute-Elo claim or
+promotion.
+
+Accept primary update 1,581 as the new offline incumbent. Its state SHA-256 is
+`26c3621d1f9c35aa1401ef5e2e9d35ffdf59607d0c4369730cc6dd207b65c7c7`.
+Retain that one candidate state and compact evidence only; all other primary
+and repeat states were deleted.

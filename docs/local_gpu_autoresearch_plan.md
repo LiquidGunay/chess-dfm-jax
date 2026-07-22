@@ -8,7 +8,9 @@ prediction-SIGReg-1.0 v2/update-400 checkpoint is now the repeat-qualified
 corrected baseline. Its 128-pair searchless strength anchors are complete: it
 is indistinguishable from the recovered DFM/JEPA source at this resolution,
 but substantially weaker in point estimate than the original raw BT4 policy.
-It is not Elo-promoted.
+It is not Elo-promoted. The current offline incumbent is balanced per-example
+K=1/update 1,581; its two exact runs beat the prior K=2 incumbent while its
+128-pair arena remains positive but inconclusive.
 
 The agreed critical path is now:
 
@@ -73,7 +75,7 @@ First-experiment update, 2026-07-21: sampling two of eight future target
 encodes increases the 30-minute run rate from `41.35` to `92.97` examples/s.
 The selected update-800 checkpoint improves matched two-pool DFM CE from
 `4.5102692712` to `4.5054920968`, improves accuracy and legal mass, and passes
-all preregistered collapse gates. It is the new offline incumbent. Its direct
+all preregistered collapse gates. It became the first offline incumbent. Its direct
 128-pair cap-256 arena against corrected v2/update 400 scores `50.586%`, or
 `+4.1` descriptive logistic Elo with pair-aware 95% interval
 `[-80.8,+89.4]`. This is an inconclusive-positive screen, not promotion. Only
@@ -91,9 +93,20 @@ mass `0.6438060440`; CE is `0.0009216219` worse than retained K=2 v1 and fails
 the `4.5031929612` acceptance ceiling. Mean/min effective rank is
 `30.8915/28.9334`, but the final-horizon feature-std p05 is `0.60744`, below
 the `0.61` floor. The experiment is rejected without repeat or arena, all four
-candidate states are removed, and the unanchored K=2 checkpoint remains the
-offline incumbent. The no-norm plus prediction-SIGReg-1.0 objective remains
-frozen for subsequent architecture experiments.
+candidate states are removed, and the unanchored K=2 checkpoint remained the
+offline incumbent at that point. The no-norm plus prediction-SIGReg-1.0
+objective remains frozen for subsequent architecture experiments.
+
+Current autoresearch update, 2026-07-22: Experiment 009 replaces shared
+batch-level K=1 horizon sampling with one balanced assignment per example.
+The primary and exact-repeat terminal checkpoints reach two-pool CE
+`4.4979399741/4.4969695099`, both beat the cosine-warmdown K=2 incumbent, and
+pass every frozen policy and collapse gate. The primary run processes
+`202,368` examples at `117.061` examples/s. Its frozen 128-pair arena against
+K=2 scores `51.172%`, descriptive logistic Elo `+8.14`, and pair-aware 95%
+interval `[-76.48,+93.77]`, with zero faults. Accept primary update 1,581 as
+the new offline incumbent, retain only its selected state, and keep eight-pass
+inference fixed because the arena evidence remains inconclusive.
 
 This document is the implementation contract for turning the existing
 TPU/cloud-oriented BT4 + DFM + JEPA experiment into a fast, measurable,
@@ -1334,8 +1347,13 @@ sweeps, held-out data, and repeated seeds.
   secondary policy/latent gate passing. Its improvement is smaller than the
   accepted repeat separation and misses the CE ceiling by `0.0006048269`, so
   reject it without repeat/arena, retain no state, and restore K=2.
-- [ ] Test balanced per-example K=1 target sampling. Preserve K=1's two BT4
+- [x] Test balanced per-example K=1 target sampling. Preserve K=1's two BT4
   encodes/example, but assign one horizon to each example so batch 128 covers
   all horizons exactly 16 times per update. Require at least 95% of shared
   K=1 throughput and a CE gain beyond accepted K=2 repeat noise. The frozen
-  contract is in `research/experiment_balanced_example_target_k1.md`.
+  contract is in `research/experiment_balanced_example_target_k1.md`. The
+  primary/repeat terminal checkpoints reach CE
+  `4.4979399741/4.4969695099`, both pass every gate, and the primary retains
+  `117.061` examples/s. Its 128-pair arena scores `51.172%` with a wide
+  `[-76.48,+93.77]` Elo interval. Accept primary update 1,581 as the offline
+  incumbent, but do not claim Elo promotion.

@@ -30,23 +30,21 @@ work are in the
 Those published artifacts replace raw MLP or attention branches; they are not
 final-trunk SAEs.
 
-Autoresearch is enabled with `AUTORESEARCH_READY = True`. The first accepted
-experiment samples two of eight future BT4 targets per training update while
-retaining all eight prediction horizons and full-horizon evaluation. Its
-update-800 checkpoint improves matched two-pool DFM CE from `4.5102692712` to
-`4.5054920968`, raises end-to-end throughput from `41.35` to `92.97`
-examples/s, and passes all frozen accuracy, legality, and latent-health gates.
-It is the current offline incumbent; `research/results.tsv` contains its first
-accepted row. An exact repeat again selects update 800 and independently
-clears every gate at CE `4.5077912323`; the direction replicates, although the
-`0.0022991356` v1/v2 gap shows that the effect size is not tightly stable.
+Autoresearch is enabled with `AUTORESEARCH_READY = True`. The current offline
+incumbent uses one balanced future target per example while retaining all
+eight prediction horizons and full-horizon evaluation. Its primary and exact
+repeat reach two-pool DFM CE `4.4979399741/4.4969695099`, both improve the
+previous K=2 cosine-warmdown incumbent, and pass all frozen accuracy,
+legality, and latent-health gates. The primary processes `202,368` examples
+in 30 steady-state minutes at `117.061` examples/s; only its selected update
+1,581 state is retained.
 
 The resumable relative-strength arena is implemented, and its repaired v3
-promotion pool replays all 2,048 histories before model loading. The accepted
-K=2 checkpoint scored `50.586%` in a direct eight-pass 128-pair cap-256 screen
-against the corrected incumbent: `+4.1` descriptive logistic Elo with
-pair-aware 95% interval `[-80.8,+89.4]`. This is positive but inconclusive and
-does not constitute Elo promotion.
+promotion pool replays all 2,048 histories before model loading. The balanced
+K=1 checkpoint scored `51.172%` in a direct eight-pass 128-pair cap-256 screen
+against cosine-warmdown K=2: `+8.14` descriptive logistic Elo with pair-aware
+95% interval `[-76.48,+93.77]`. This is positive but inconclusive and does not
+constitute Elo promotion.
 
 ## Layout
 

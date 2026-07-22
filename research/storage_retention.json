@@ -4,7 +4,8 @@
     "research/runs/baseline-freshopt-online-target576-b128-lr3e5-bt4lr1e6-30m-v2/checkpoints/update00000300/state.npz",
     "research/runs/corrected-nonorm-target5p76-pred1-fixed64-b128-30m-v2/checkpoints/update00000400/state.npz",
     "research/runs/future-target-k2-b128-30m-v1/checkpoints/update00000800/state.npz",
-    "research/runs/cosine-warmdown-k2-b128-30m-v1/checkpoints/update00001261/state.npz"
+    "research/runs/cosine-warmdown-k2-b128-30m-v1/checkpoints/update00001261/state.npz",
+    "research/runs/balanced-example-k1-cosine-b128-30m-v1/checkpoints/update00001581/state.npz"
   ],
   "cache_budgets_bytes": {
     ".local/cache/jax": 4294967296
@@ -125,14 +126,26 @@
     },
     {
       "path": "research/runs/cosine-warmdown-k2-b128-30m-v1/checkpoints/update00001261/manifest.json",
-      "role": "cosine_warmdown_k2_offline_incumbent_manifest",
+      "role": "cosine_warmdown_k2_previous_offline_incumbent_manifest",
       "sha256": "ca783a1e55b02cdb13e1fd34741b736253ca78f9a6b7c1adb91bc991e2b686a4",
       "size_bytes": 5967947
     },
     {
       "path": "research/runs/cosine-warmdown-k2-b128-30m-v1/checkpoints/update00001261/state.npz",
-      "role": "cosine_warmdown_k2_offline_incumbent",
+      "role": "cosine_warmdown_k2_previous_offline_incumbent",
       "sha256": "7bac3c49875ab35c3121c4471b65a40c08ce169a10915d4ebbb55661617cdc1a",
+      "size_bytes": 1851704172
+    },
+    {
+      "path": "research/runs/balanced-example-k1-cosine-b128-30m-v1/checkpoints/update00001581/manifest.json",
+      "role": "balanced_example_k1_offline_incumbent_manifest",
+      "sha256": "a1cc0b374bb91544a8a2cfb41f2c3f7d6d6a52aae000408484d0f56b111f9933",
+      "size_bytes": 5968838
+    },
+    {
+      "path": "research/runs/balanced-example-k1-cosine-b128-30m-v1/checkpoints/update00001581/state.npz",
+      "role": "balanced_example_k1_offline_incumbent",
+      "sha256": "26c3621d1f9c35aa1401ef5e2e9d35ffdf59607d0c4369730cc6dd207b65c7c7",
       "size_bytes": 1851704172
     },
     {

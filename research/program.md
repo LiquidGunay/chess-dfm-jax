@@ -65,7 +65,7 @@ deleted, and all four DFM blocks return as the active baseline. Smaller
 planners require a separately preregistered distillation or gradual LayerDrop
 method rather than assuming the final source-trained block is redundant.
 
-Fixed-time cosine warmdown is the new offline incumbent. It holds the full K=2
+Fixed-time cosine warmdown became the next offline incumbent. It holds the full K=2
 model and `0.0/5.76/1.0` loss fixed, stays at peak main/BT4 rates through
 update 400, cosine-decays to a 10% floor at update 1200, and holds that floor.
 The primary run selects terminal update 1261 at CE `4.5007607210`; an exact
@@ -76,8 +76,8 @@ at CE `4.50150..4.50276`, eliminating the constant-rate regression to
 `4.52867..4.53762`. The primary checkpoint scores `50.391%` in the frozen
 128-pair arena against K=2, with descriptive logistic Elo `+2.71` and
 pair-aware interval `[-82.20,+87.96]`. This is positive but inconclusive and
-does not constitute Elo promotion. Retain v1/update 1261 as the current
-offline incumbent and no repeat state.
+does not constitute Elo promotion. Retain v1/update 1261 as a prior
+offline-incumbent milestone and no repeat state.
 
 The one-percent cosine-floor follow-up selects update 1200 at CE
 `4.4993533697`, accuracy `0.1100006104`, and legal mass `0.6472349875`, while
@@ -96,14 +96,22 @@ passes every policy-secondary and latent-health gate at CE `4.4998821113`, but
 the `0.0008786097` improvement over the incumbent is smaller than the accepted
 repeat separation and misses the frozen ceiling by `0.0006048269`. K=1 is
 rejected without repeat or arena, all candidate states are deleted, and K=2
-returns as the active target sampler.
+returned as the active target sampler for the next controlled experiment.
 
-The active experiment keeps K=1's two-encode budget but replaces its one
+Balanced per-example K=1 sampling keeps K=1's two-encode budget but replaces its one
 batch-shared horizon with one balanced horizon assignment per example. At
 batch 128, every update contains exactly 16 examples from each of the eight
 future horizons. This isolates horizon-estimator variance while keeping the
 accepted schedule, full-horizon prediction/evaluation, and
-`0.0/5.76/1.0` loss fixed.
+`0.0/5.76/1.0` loss fixed. Its primary and exact-repeat selected checkpoints
+reach two-pool CE `4.4979399741/4.4969695099`, both beat the K=2 incumbent,
+and differ by only `0.0009704642`, inside accepted repeat variation. The
+primary run processes `202,368` examples at `117.061` examples/s and passes
+every policy and latent gate. Its frozen 128-pair arena against cosine
+warmdown scores `51.172%` (`+8.14` descriptive logistic Elo, pair-aware 95%
+interval `[-76.48,+93.77]`) with zero faults. Accept primary update 1,581 as
+the current offline incumbent; the arena remains positive but inconclusive,
+so this is not Elo promotion. Retain only the primary selected state.
 
 The repeat-qualified norm-on compatibility baseline is v2/update 300. An identical v1 run also
 selected update 300, and their four-pool DFM CE gains differ by only
@@ -128,8 +136,9 @@ BT4. These are descriptive model-pool-relative results, not promotion or
 absolute Elo. The fixed four-model representation comparison may proceed.
 
 Keep searchless inference fixed at eight DFM refinement passes during the
-initial stronger-model experiments. Although cosine warmdown improves the
-frozen offline gates twice, its 128-pair arena interval remains unresolved.
+initial stronger-model experiments. Balanced K=1 now improves the frozen
+offline gates in two exact runs, but its 128-pair arena interval remains
+unresolved.
 Pass-count ablation stays deferred until a separately preregistered compute
 study has sufficiently strong chess evidence. Changing refinement compute
 must not be mixed into an architecture comparison.
@@ -144,15 +153,16 @@ PyTorch/JAX source parity passes in
 `artifacts/representations/upstream-bt4-source-parity-v1`; the pinned
 TransformerLens constructor-default epsilon fails and must not be used as the
 source oracle. The immutable preregistrations and completed outcomes of the
-first eight post-baseline experiments are in
+first nine post-baseline experiments are in
 `research/experiment_future_target_sampling_k2.md`,
 `research/experiment_sampled_target_anchors_k2.md`,
 `research/experiment_projector_active_depth1_k2.md`,
 `research/experiment_projector_depth1_predsigreg4_k2.md`,
 `research/experiment_dfm_active_depth3_k2.md`,
 `research/experiment_cosine_warmdown_k2.md`,
-`research/experiment_cosine_floor001_k2.md`, and
-`research/experiment_future_target_sampling_k1.md`.
+`research/experiment_cosine_floor001_k2.md`,
+`research/experiment_future_target_sampling_k1.md`, and
+`research/experiment_balanced_example_target_k1.md`.
 
 ## Editable surface
 
