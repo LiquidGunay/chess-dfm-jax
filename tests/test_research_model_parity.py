@@ -496,6 +496,7 @@ def test_local_config_and_initialized_model_match_legacy_exactly():
             "lr_decay_start_steps",
             "lr_decay_steps",
             "lr_min_ratio",
+            "dfm_first_action_loss_share",
             "dfm_active_layers",
             "jepa_projector_active_layers",
             "jepa_sampled_target_anchors",
@@ -511,6 +512,12 @@ def test_local_config_and_initialized_model_match_legacy_exactly():
         for field in dataclasses.fields(legacy.JointLatentSASAConfig)
     ]
     assert local_fields == legacy_fields
+    assert (
+        local.JointLatentSASAConfig.__dataclass_fields__[
+            "dfm_first_action_loss_share"
+        ].default
+        == 0.0
+    )
     assert (
         local.JointLatentSASAConfig.__dataclass_fields__[
             "bt4_freeze_backbone"

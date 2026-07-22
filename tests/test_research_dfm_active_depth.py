@@ -155,6 +155,126 @@ def test_active_depth_preserves_parameter_abi_and_full_control() -> None:
     assert not np.array_equal(np.asarray(three_logits), np.asarray(full_logits))
 
 
+def test_first_action_objective_weights_are_unit_sum_and_differentiable() -> None:
+    weights = train.dfm_objective_horizon_weights(
+        jnp.ones((8,), dtype=jnp.float32),
+        first_action_loss_share=0.25,
+    )
+    np.testing.assert_allclose(
+        weights,
+        np.asarray([0.25] + [3.0 / 28.0] * 7, dtype=np.float32),
+        rtol=0.0,
+        atol=1e-7,
+    )
+    np.testing.assert_allclose(jnp.sum(weights), 1.0, rtol=0.0, atol=1e-7)
+
+    losses = jnp.arange(8, dtype=jnp.float32)
+    gradients = jax.grad(lambda values: jnp.sum(values * weights))(losses)
+    np.testing.assert_array_equal(gradients, weights)
+
+
+def test_default_first_action_weighting_preserves_uniform_loss_exactly() -> None:
+    uniform = train.dfm_objective_horizon_weights(
+        jnp.ones((8,), dtype=jnp.float32),
+        first_action_loss_share=0.0,
+    )
+    np.testing.assert_array_equal(
+        uniform,
+        jnp.full((8,), 1.0 / 8.0, dtype=jnp.float32),
+    )
+
+    default = _model(active_layers=0, seed=18)
+    weighted = train.JointLatentSASAModel(
+        DeterministicEncoder(),
+        _config(dfm_first_action_loss_share=0.5),
+        rngs=nnx.Rngs(18),
+    )
+    _assert_tree_exact(
+        nnx.to_pure_dict(nnx.state(default, train.TrainableParam)),
+        nnx.to_pure_dict(nnx.state(weighted, train.TrainableParam)),
+    )
+    args = (_batch(), jax.random.PRNGKey(20), 1.0, 1.0)
+    default_loss, default_aux = train.normalized_stage1_loss_fn(
+        default,
+        *args,
+        sample_future_targets=True,
+    )
+    weighted_loss, weighted_aux = train.normalized_stage1_loss_fn(
+        weighted,
+        *args,
+        sample_future_targets=True,
+    )
+    np.testing.assert_array_equal(
+        weighted_aux["dfm_ce_loss"],
+        default_aux["dfm_ce_loss"],
+    )
+    np.testing.assert_array_equal(
+        weighted_aux["dfm_ce_loss_by_horizon"],
+        default_aux["dfm_ce_loss_by_horizon"],
+    )
+    assert "dfm_objective_ce_loss" not in default_aux
+    assert "dfm_objective_weight_by_horizon" not in default_aux
+    expected_weights = jnp.asarray(
+        [0.5, 1.0 / 6.0, 1.0 / 6.0, 1.0 / 6.0],
+        dtype=jnp.float32,
+    )
+    np.testing.assert_allclose(
+        weighted_aux["dfm_objective_weight_by_horizon"],
+        expected_weights,
+        rtol=0.0,
+        atol=1e-7,
+    )
+    expected_objective = jnp.sum(
+        weighted_aux["dfm_ce_loss_by_horizon"] * expected_weights
+    )
+    np.testing.assert_allclose(
+        weighted_aux["dfm_objective_ce_loss"],
+        expected_objective,
+        rtol=0.0,
+        atol=1e-6,
+    )
+    np.testing.assert_allclose(
+        weighted_loss - default_loss,
+        weighted_aux["dfm_objective_ce_loss"]
+        - default_aux["dfm_ce_loss"],
+        rtol=0.0,
+        atol=1e-6,
+    )
+
+
+@pytest.mark.parametrize("value", [True, -0.1, 1.1, float("nan")])
+def test_first_action_share_validation_fails_closed(value) -> None:
+    with pytest.raises(ValueError, match="dfm_first_action_loss_share"):
+        train.validate_objective_config(
+            objective="normalized",
+            config=_config(dfm_first_action_loss_share=value),
+        )
+
+
+def test_first_action_share_requires_normalized_multi_horizon_objective() -> None:
+    config = _config(dfm_first_action_loss_share=0.25)
+    train.validate_objective_config(objective="normalized", config=config)
+    with pytest.raises(ValueError, match="requires --objective normalized"):
+        train.validate_objective_config(objective="legacy", config=config)
+    with pytest.raises(ValueError, match="at least two active loss horizons"):
+        train.validate_objective_config(
+            objective="normalized",
+            config=_config(
+                dfm_first_action_loss_share=0.25,
+                loss_horizon=1,
+            ),
+        )
+
+
+def test_first_action_share_serialization_is_default_off() -> None:
+    default = train.serialized_model_config(_config())
+    active = train.serialized_model_config(
+        _config(dfm_first_action_loss_share=0.25)
+    )
+    assert "dfm_first_action_loss_share" not in default
+    assert active["dfm_first_action_loss_share"] == 0.25
+
+
 def test_three_layer_output_matches_explicit_prefix_execution() -> None:
     model = _model(active_layers=3, seed=19)
     z_dfm, actions, t = _planner_inputs(model)

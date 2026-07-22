@@ -73,6 +73,7 @@ EXPERIMENT_OVERRIDES: dict[str, Any] = {
     "lr_min_ratio": 0.1,
     "jepa_target_sample_count": 1,
     "jepa_target_sampling_unit": "example_balanced",
+    "dfm_first_action_loss_share": 0.25,
     "bt4_encode_chunk_size": 0,
     # "dfm_active_layers": 3,
     # "jepa_projector_active_layers": 1,
@@ -164,6 +165,7 @@ class JointLatentSASAConfig:
     horizon: int = 2
     loss_horizon: int = 0
     dfm_ce_coeff: float = 1.0
+    dfm_first_action_loss_share: float = 0.0
     first_legality_coeff: float = 7.64
     horizon_legality_coeff: float = 0.0
     legality_on_masked_only: bool = True
@@ -250,6 +252,31 @@ def _weighted_horizon_mean(
     mask: jnp.ndarray,
 ) -> jnp.ndarray:
     return jnp.sum(sample_values * mask) / jnp.maximum(jnp.sum(mask), 1.0)
+
+
+def dfm_objective_horizon_weights(
+    active_horizons: jnp.ndarray,
+    *,
+    first_action_loss_share: float,
+) -> jnp.ndarray:
+    """Return unit-sum DFM objective weights over active horizons."""
+
+    active = jnp.asarray(active_horizons, dtype=jnp.float32)
+    uniform = active / jnp.maximum(jnp.sum(active), 1.0)
+    if first_action_loss_share == 0.0:
+        return uniform
+
+    remaining = active.at[0].set(0.0)
+    tail = remaining / jnp.maximum(jnp.sum(remaining), 1.0)
+    weights = tail * jnp.asarray(
+        1.0 - first_action_loss_share,
+        dtype=jnp.float32,
+    )
+    weights = weights.at[0].set(
+        active[0]
+        * jnp.asarray(first_action_loss_share, dtype=jnp.float32)
+    )
+    return weights / jnp.maximum(jnp.sum(weights), 1.0)
 
 
 def balanced_example_target_horizons(
@@ -2098,6 +2125,20 @@ def joint_stage1_loss_fn(
         jnp.sum(dfm_ce_horizon_valid),
         1.0,
     )
+    if model.config.dfm_first_action_loss_share == 0.0:
+        # Preserve the compatibility path's exact reduction arithmetic.
+        dfm_objective_weight_by_horizon = None
+        dfm_objective_ce_loss = dfm_ce_loss
+    else:
+        dfm_objective_weight_by_horizon = dfm_objective_horizon_weights(
+            dfm_ce_horizon_valid,
+            first_action_loss_share=(
+                model.config.dfm_first_action_loss_share
+            ),
+        )
+        dfm_objective_ce_loss = jnp.sum(
+            dfm_ce_loss_by_horizon * dfm_objective_weight_by_horizon
+        )
     dfm_mask_fraction_by_horizon = dfm_ce_den_by_horizon / denom
 
     probs = jnp.exp(log_probs)
@@ -2599,7 +2640,7 @@ def joint_stage1_loss_fn(
             )
 
     unclipped_loss = (
-        model.config.dfm_ce_coeff * dfm_ce_loss
+        model.config.dfm_ce_coeff * dfm_objective_ce_loss
         + weighted_legality_loss
         + model.config.jepa_positive_coeff * jepa_positive_loss
         + model.config.jepa_sigreg_coeff * jepa_sigreg_loss
@@ -2703,6 +2744,15 @@ def joint_stage1_loss_fn(
         "mask_prob": jnp.mean(1.0 - t),
         "loss_horizon": jnp.asarray(loss_horizon, dtype=jnp.float32),
     }
+    if dfm_objective_weight_by_horizon is not None:
+        aux.update(
+            {
+                "dfm_objective_ce_loss": dfm_objective_ce_loss,
+                "dfm_objective_weight_by_horizon": (
+                    dfm_objective_weight_by_horizon
+                ),
+            }
+        )
     if model.config.dfm_active_layers > 0:
         aux.update(
             {
@@ -3312,6 +3362,31 @@ def validate_objective_config(
     config: JointLatentSASAConfig,
 ) -> None:
     validate_learning_rate_schedule_config(config)
+    first_action_share = config.dfm_first_action_loss_share
+    if (
+        isinstance(first_action_share, bool)
+        or not math.isfinite(first_action_share)
+        or not 0.0 <= first_action_share <= 1.0
+    ):
+        raise ValueError(
+            "dfm_first_action_loss_share must be finite and in [0, 1], "
+            f"found {first_action_share!r}"
+        )
+    if first_action_share != 0.0:
+        if objective != "normalized":
+            raise ValueError(
+                "dfm_first_action_loss_share requires --objective normalized."
+            )
+        effective_loss_horizon = (
+            config.horizon
+            if config.loss_horizon <= 0
+            else min(config.loss_horizon, config.horizon)
+        )
+        if effective_loss_horizon < 2:
+            raise ValueError(
+                "dfm_first_action_loss_share requires at least two active "
+                "loss horizons."
+            )
     dfm_active_layers = config.dfm_active_layers
     if (
         isinstance(dfm_active_layers, bool)
@@ -4389,6 +4464,8 @@ def serialized_model_config(
         payload.pop("jepa_projector_active_layers")
     if config.dfm_active_layers == 0:
         payload.pop("dfm_active_layers")
+    if config.dfm_first_action_loss_share == 0.0:
+        payload.pop("dfm_first_action_loss_share")
     if not config.bt4_freeze_backbone:
         payload.pop("bt4_freeze_backbone")
     if not config.bt4_future_target_stop_gradient:
@@ -4436,6 +4513,29 @@ def build_research_resume_contract(
         "target_sigreg_reference_count": float(sigreg_reference_count),
         "pred_sigreg_reference_count": float(sigreg_reference_count),
     }
+    if config.dfm_first_action_loss_share != 0.0:
+        tail_horizon_count = (
+            config.horizon
+            if config.loss_horizon <= 0
+            else min(config.loss_horizon, config.horizon)
+        ) - 1
+        objective_contract["dfm_horizon_weighting"] = {
+            "uniform_dfm_ce_reporting_unchanged": True,
+            "training_objective_metric": "dfm_objective_ce_loss",
+            "played_first_action_share": float(
+                config.dfm_first_action_loss_share
+            ),
+            "remaining_share": float(
+                1.0 - config.dfm_first_action_loss_share
+            ),
+            "remaining_active_horizon_count": int(tail_horizon_count),
+            "each_remaining_horizon_share": float(
+                (1.0 - config.dfm_first_action_loss_share)
+                / tail_horizon_count
+            ),
+            "selection_metric": "two_pool_dfm_ce_loss_by_horizon_h1",
+            "inference_affected": False,
+        }
     if config.jepa_sigreg_example_count > 0:
         objective_contract["jepa_sigreg_sampling"] = {
             "unit": "physical_batch_example",
@@ -5136,7 +5236,10 @@ def gradient_component_vector(
         sample_future_targets=True,
     )
     components = [
-        jnp.asarray(aux["dfm_ce_loss"], dtype=jnp.float32),
+        jnp.asarray(
+            aux.get("dfm_objective_ce_loss", aux["dfm_ce_loss"]),
+            dtype=jnp.float32,
+        ),
         jnp.asarray(aux["jepa_positive_loss"], dtype=jnp.float32),
         jnp.asarray(aux["jepa_sigreg_loss"], dtype=jnp.float32),
         jnp.asarray(aux["jepa_pred_sigreg_loss"], dtype=jnp.float32),
