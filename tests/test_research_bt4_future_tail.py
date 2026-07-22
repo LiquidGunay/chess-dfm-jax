@@ -254,8 +254,50 @@ def test_future_gradient_reaches_only_last_three_blocks_and_projector() -> None:
         assert _tree_norm(current_grads["encoder"]["layers"][layer_index]) > 0.0
 
 
-def test_training_reports_partial_future_route_and_keeps_full_eval_horizon() -> None:
-    model = _model(stop_future=True, tail_layers=3, seed=23)
+def test_future_gradient_reaches_only_final_block_for_one_layer_tail() -> None:
+    batch = _batch()
+    tail = _model(stop_future=True, tail_layers=1, seed=19)
+    grad_fn = nnx.grad(
+        _selected_vector_loss,
+        argnums=nnx.DiffState(0, TrainableParam),
+    )
+    future_grads = nnx.to_pure_dict(
+        grad_fn(
+            tail,
+            batch["current_planes"],
+            batch["future_planes"],
+            True,
+        )
+    )
+    current_grads = nnx.to_pure_dict(
+        grad_fn(
+            tail,
+            batch["current_planes"],
+            batch["future_planes"],
+            False,
+        )
+    )
+
+    assert _tree_norm(future_grads["encoder"]["embedding"]) == 0.0
+    for layer_index in range(14):
+        assert _tree_norm(future_grads["encoder"]["layers"][layer_index]) == 0.0
+    assert _tree_norm(future_grads["encoder"]["layers"][14]) > 0.0
+    assert _tree_norm(future_grads["state_projector"]) > 0.0
+
+    assert _tree_norm(current_grads["encoder"]["embedding"]) > 0.0
+    for layer_index in range(15):
+        assert _tree_norm(current_grads["encoder"]["layers"][layer_index]) > 0.0
+
+
+@pytest.mark.parametrize(
+    ("tail_layers", "prefix_layers"),
+    [(1, 14), (3, 12)],
+)
+def test_training_reports_partial_future_route_and_keeps_full_eval_horizon(
+    tail_layers: int,
+    prefix_layers: int,
+) -> None:
+    model = _model(stop_future=True, tail_layers=tail_layers, seed=23)
     batch = _batch()
     loss, aux = train.normalized_stage1_loss_fn(
         model,
@@ -271,8 +313,8 @@ def test_training_reports_partial_future_route_and_keeps_full_eval_horizon() -> 
     assert aux["bt4_partial_gradient_encoded_boards_per_example"] == 1.0
     assert aux["bt4_stop_gradient_encoded_boards_per_example"] == 0.0
     assert aux["bt4_trainable_encoded_boards_per_example"] == 2.0
-    assert aux["bt4_future_target_trainable_tail_layers"] == 3.0
-    assert aux["bt4_future_target_detached_prefix_layers"] == 12.0
+    assert aux["bt4_future_target_trainable_tail_layers"] == tail_layers
+    assert aux["bt4_future_target_detached_prefix_layers"] == prefix_layers
 
     eval_loss, eval_aux = train.normalized_stage1_loss_fn(
         model,

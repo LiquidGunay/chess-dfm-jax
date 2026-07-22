@@ -73,7 +73,7 @@ EXPERIMENT_OVERRIDES: dict[str, Any] = {
     "lr_min_ratio": 0.1,
     "jepa_target_sample_count": 1,
     "jepa_target_sampling_unit": "example_balanced",
-    "bt4_encode_chunk_size": 1,
+    "bt4_encode_chunk_size": 0,
     # "dfm_active_layers": 3,
     # "jepa_projector_active_layers": 1,
     # "jepa_sampled_target_anchors": True,
@@ -90,8 +90,8 @@ EXPERIMENT_OVERRIDES: dict[str, Any] = {
     # "jepa_target_variance_hinge_coeff": 1.0,
     # "jepa_target_variance_hinge_gamma": 0.9,
     # "jepa_state_fixed_unit_rms": True,
-    # "bt4_future_target_stop_gradient": True,
-    # "bt4_future_target_trainable_tail_layers": 3,
+    "bt4_future_target_stop_gradient": True,
+    "bt4_future_target_trainable_tail_layers": 1,
 }
 
 DEFAULT_RUN_ROOT = REPO_ROOT / "checkpoints" / "source" / "step0265000"
