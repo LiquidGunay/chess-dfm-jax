@@ -189,3 +189,14 @@ trivial controls at CE `4.4975412`; that is only `0.0003988` better than the
 incumbent and misses the repeat-noise-aware ceiling by `0.0005717`. It is
 rejected without repeat or arena, all five states are deleted, and the scanned
 balanced-K1 path remains active.
+
+A three-block future-gradient tail then keeps the current-board encoder fully
+trainable, detaches the future embedding and first 12 BT4 blocks, and attaches
+the final three blocks plus shared projector. It preserves almost all of the
+zero-tail systems gain: `149.531` fixed-run examples/s (`+27.74%`) at `13.70`
+GB peak JAX HBM. Terminal update 2,024 reaches CE/accuracy/legal mass
+`4.4977803/0.1107483/0.6467812`; accuracy and legal mass pass, but the CE gain
+is only `0.0001597`, inside accepted repeat noise, and misses the strict ceiling
+by `0.0008108`. Reject without repeat, arena, collapse audit, or retained
+state. The default path returns to scanned balanced-K1, with RMS norm loss off
+and target/prediction SIGReg fixed at `5.76/1.0`.

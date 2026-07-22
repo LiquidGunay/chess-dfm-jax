@@ -1,7 +1,10 @@
 # Experiment 013: three-block future-target BT4 gradient tail
 
-Status: preregistered on 2026-07-22; implementation and measurements have not
-started.
+Status: completed and rejected at the primary CE gate on 2026-07-22. The
+candidate preserves nearly all of the zero-tail systems gain and passes
+accuracy/legal mass at terminal, but its CE improvement is inside incumbent
+repeat noise. There is no repeat, arena, collapse audit, SAE work, or retained
+state.
 
 ## Question and hypothesis
 
@@ -151,3 +154,62 @@ balanced-K1 incumbent CE and pass every non-CE gate before a frozen 128-pair
 arena against balanced-K1/update 1,581. A failure gets no arena, pass-count
 sweep, or SAE refit. Keep all artifacts, caches, and temporary files below
 `/mountpoint/.exp`, and never overlap GPU workloads.
+
+## Outcome
+
+The implementation commit is `9366132`. Ninety-two focused CPU tests pass and
+lint is clean. They prove forward equivalence within the already established
+separate-vs-fused roundoff bound, exact-zero future-only gradients in the
+embedding and blocks 0--11, nonzero future-only gradients in blocks 12--14
+and the shared projector, full current-board gradients, unchanged
+model/optimizer ABI, full-horizon evaluation, explicit resume/report
+semantics, and fail-closed invalid configurations.
+
+The one-update real-checkpoint smoke reports exactly one full-gradient current
+board and one partial-gradient future board per example, detached/attached
+depths `12/3`, balanced 16-per-horizon assignments, eight predictions, and
+target/prediction SIGReg counts `576/512`. The unclipped update is finite,
+cold compilation takes `220.576` seconds, and peak JAX HBM is
+`13,606,881,536` bytes. It writes no checkpoint.
+
+The cached 30-update profile reaches `150.5611/207.5095`
+end-to-end/device examples/s. This is `28.27%` faster than scanned
+balanced-K1, only `2.39%` slower than the zero-tail profile, and comfortably
+above the frozen `129.1179` useful-effect gate. Peak JAX HBM is
+`13,615,281,664` bytes, `8.57%` above zero-tail and `16.17%` below fused
+full-gradient. XLA reports `14.7390` TFLOP and `139.187` GB/update. GPU
+utilization mean/p50/p95 is `59.74%/95%/100%`, power mean/p95 is
+`172.92/199.24 W`, and data stalls consume `27.44%` of iteration time. Thus a
+three-block future tail costs very little relative to the fully detached
+execution topology.
+
+The fixed run compiles in `14.4111` seconds and processes `259,072` examples
+in 2,024 updates. Steady end-to-end/device throughput is
+`149.5310/207.0796` examples/s, `27.74%` above the incumbent and only `3.29%`
+below zero-tail; it processes `28.02%` more examples than balanced-K1. Peak
+JAX HBM is `13,702,048,512` bytes. Utilization mean/p50/p95 is
+`58.60%/88%/100%`, power mean/p95 is `176.11/203.89 W`, and the data-stall
+fraction is `27.79%`.
+
+The frozen two-pool checkpoint scan is:
+
+| Update | DFM CE | Accuracy | Legal mass |
+|---:|---:|---:|---:|
+| 800 | 4.5047387 | 0.1081238 | 0.6434742 |
+| 1,600 | 4.5000040 | 0.1099854 | 0.6458503 |
+| 2,024 | **4.4977803** | **0.1107483** | **0.6467812** |
+
+Terminal passes the accuracy floor and clears the legal-mass floor by only
+`0.0000577`. It improves incumbent CE by `0.0001597`, far less than the
+accepted `0.0009705` repeat separation, and misses the strict CE ceiling by
+`0.0008108`. This is a primary CE failure. The no-norm objective remains
+scale-stable in ordinary held-out metrics: terminal mean `z_pred/z_target`
+norm ratio is `0.97296`, with prediction SIGReg active at coefficient `1.0`;
+the old RMS norm loss remains coefficient zero. Because CE is decisive, the
+more expensive collapse/control audit is intentionally not run and no latent
+promotion claim is made.
+
+Reject without repeat, arena, pass-count sweep, or SAE refit. All three
+`state.npz` files are deleted after their hashes and scan results are recorded;
+only compact manifests, metrics, and telemetry remain. The capability stays
+default-off, and the active edit surface returns to scanned balanced-K1.

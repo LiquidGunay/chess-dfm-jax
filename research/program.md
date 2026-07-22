@@ -195,10 +195,12 @@ Experiment 011's preregistration and completed outcome are in
 Experiment 012's preregistration and completed outcome are in
 `research/experiment_bt4_unchunked_fused_balanced_k1.md`.
 
-Experiment 013's frozen three-block future-gradient-tail contract is in
-`research/experiment_bt4_future_tail3_balanced_k1.md`. Its loss remains fixed
-at norm/target/prediction coefficients `0.0/5.76/1.0`; only the future BT4
-gradient boundary changes.
+Experiment 013's preregistration and completed outcome are in
+`research/experiment_bt4_future_tail3_balanced_k1.md`. The three-block tail
+retains `149.531` examples/s and passes terminal accuracy/legal mass, but CE
+`4.4977803` is inside incumbent repeat noise. It is rejected without repeat,
+arena, or retained state. Loss remains fixed at norm/target/prediction
+coefficients `0.0/5.76/1.0`.
 
 ## Editable surface
 

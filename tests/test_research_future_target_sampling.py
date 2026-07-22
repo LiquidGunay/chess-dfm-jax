@@ -269,16 +269,16 @@ def test_balanced_one_target_training_covers_every_horizon() -> None:
     assert aux["first_legality_loss"] == shared_aux["first_legality_loss"]
 
 
-def test_active_experiment_uses_three_block_future_gradient_tail() -> None:
+def test_active_experiment_returns_to_scanned_balanced_k1() -> None:
     config = train.apply_experiment_overrides(
         train.JointLatentSASAConfig()
     )
     assert config.jepa_target_sample_count == 1
     assert config.jepa_target_sampling_unit == "example_balanced"
-    assert config.bt4_future_target_stop_gradient is True
-    assert config.bt4_future_target_trainable_tail_layers == 3
+    assert config.bt4_future_target_stop_gradient is False
+    assert config.bt4_future_target_trainable_tail_layers == 0
     assert config.bt4_freeze_backbone is False
-    assert config.bt4_encode_chunk_size == 0
+    assert config.bt4_encode_chunk_size == 1
     assert config.lr_decay_start_steps == 400
     assert config.lr_decay_steps == 800
     assert config.lr_min_ratio == 0.1

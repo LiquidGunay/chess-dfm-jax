@@ -163,16 +163,27 @@ checkpoint-compatible boundary and predicts a memory footprint below the
 fused graph. This has priority over legality-coefficient tuning, pass-count
 sweeps, or SAE refits.
 
-Thirteenth-experiment preregistration, 2026-07-22: CPU inspection confirms a
-clean boundary between each of BT4's 15 uniform transformer blocks, with no
-final encoder norm or cross-layer state and no required checkpoint-ABI change.
-Freeze a three-block future tail: detach the future activation after the
-embedding and blocks 0--11, then attach blocks 12--14 and the shared projector.
-This exposes `33,236,736` parameters (`17.02%` of the encoder) to future
-gradients while all `195,305,728` encoder parameters remain trainable from the
-current-board path. The immutable contract and staged systems/quality gates
-are in `research/experiment_bt4_future_tail3_balanced_k1.md`. RMS norm matching
-remains off; target and `z_pred` SIGReg remain `5.76/1.0`.
+Thirteenth-experiment outcome, 2026-07-22: a three-block future tail exposes
+`33,236,736` parameters (`17.02%` of the encoder) to future gradients while
+the current path trains all `195,305,728`. It retains almost all of the
+zero-tail systems effect: the profile reaches `150.561` examples/s and the
+fixed run reaches `149.531`, `27.74%` above balanced-K1, at `13.70` GB peak
+JAX HBM. Terminal update 2,024 passes accuracy and clears legal mass by only
+`0.000058`, but CE `4.4977803` improves the incumbent by just `0.0001597` and
+misses the repeat-noise-aware ceiling by `0.0008108`. Reject at the primary CE
+gate, run no repeat/arena/collapse audit/SAE work, delete all three states, and
+return the active surface to scanned balanced-K1. RMS norm matching remains
+off; target and `z_pred` SIGReg remain `5.76/1.0`.
+
+Plan adjustment after Experiment 013: the tail boundary is a good systems
+primitive but three blocks do not produce an offline strength gain. One final
+minimal-tail interpolation is justified before closing the line: a one-block
+future tail is the closest attached variant to Experiment 011's fast zero-tail
+graph and tests whether the smallest alignment gradient can repair its narrow
+repeat legal-mass miss without giving up its CE behavior. Preregister it as a
+single depth change with the loss fixed at `0.0/5.76/1.0`; if it fails its
+primary or repeat gate, end tail-depth experiments rather than sweeping all 15
+depths.
 
 This document is the implementation contract for turning the existing
 TPU/cloud-oriented BT4 + DFM + JEPA experiment into a fast, measurable,
@@ -1445,9 +1456,15 @@ sweeps, held-out data, and repeated seeds.
   is inside repeat noise. Reject without repeat/arena or retained state; full
   evidence is in
   `research/experiment_bt4_unchunked_fused_balanced_k1.md`.
-- [ ] Test the preregistered three-block future-gradient tail. Keep the current
+- [x] Test the preregistered three-block future-gradient tail. Keep the current
   BT4 path fully trainable, detach the future embedding and first 12 blocks,
   attach the final three blocks and shared projector, and hold loss at
   norm/target/prediction `0.0/5.76/1.0`. Run CPU routing/ABI tests, then the
   batch-128 A10G smoke/profile gates before any fixed-time run. The frozen
   contract is in `research/experiment_bt4_future_tail3_balanced_k1.md`.
+  Systems gates pass and terminal accuracy/legal mass pass, but CE `4.4977803`
+  is inside repeat noise. Reject without repeat/arena or retained state.
+- [ ] Preregister and test one final minimal one-block future-gradient tail as
+  an interpolation between zero-tail's CE/system behavior and three-tail's
+  attached legality signal. Keep norm/target/prediction coefficients
+  `0.0/5.76/1.0`; close the tail-depth line on a primary or repeat failure.
