@@ -212,6 +212,17 @@ the identical roots, so the next training axis should target first-action
 chess quality rather than assume another small mean eight-horizon CE gain will
 improve Elo.
 
+Plan adjustment after the direct raw-BT4 anchor: optimize the played action
+explicitly before another architecture expansion. Uniform DFM CE gives each
+of eight trajectory actions equal weight, but arena inference consumes only
+horizon 1. Experiment 015 assigns 25% of the normalized DFM CE objective to
+horizon 1 and distributes 75% evenly over horizons 2--8, while preserving the
+uniform CE reporting metric as a non-regression gate. Architecture, schedule,
+batch, legality, eight-pass inference, and norm/target/`z_pred` coefficients
+remain fixed at `0.0/5.76/1.0`. Require repeat-qualified horizon-1 improvement
+and point-score gains against both the accepted checkpoint and raw BT4 before
+calling it an Elo-aligned offline incumbent.
+
 This document is the implementation contract for turning the existing
 TPU/cloud-oriented BT4 + DFM + JEPA experiment into a fast, measurable,
 single-A10G research loop.
@@ -1507,3 +1518,8 @@ sweeps, held-out data, and repeated seeds.
   known candidate legacy-codec promotion fault and complete raw-BT4 coverage.
   Raw BT4 remains clearly stronger; lower uniform eight-horizon CE has not yet
   translated into higher measured chess strength.
+- [ ] Test a 25% first-action share in the normalized DFM CE objective while
+  retaining uniform eight-horizon CE as a non-regression metric. Hold the
+  one-block tail, schedule, batch, legality, inference, and
+  norm/target/`z_pred` coefficients `0.0/5.76/1.0` fixed. The frozen contract
+  is in `research/experiment_dfm_first_action_share25_tail1.md`.

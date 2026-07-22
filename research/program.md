@@ -224,6 +224,15 @@ BT4 remains clearly stronger, and the new checkpoint's point estimate is
 Future experiments must therefore report first-action quality and cannot
 treat a small uniform eight-horizon CE gain as chess-strength evidence.
 
+Experiment 015 is preregistered in
+`research/experiment_dfm_first_action_share25_tail1.md`. It assigns 25% of
+normalized DFM CE to the played first action and distributes 75% evenly over
+horizons 2--8, while retaining uniform CE as a non-regression metric. It keeps
+the accepted one-block tail and loss coefficients `0.0/5.76/1.0` fixed. A
+candidate must repeat its horizon-1 gain and improve the frozen point score
+against both update 2,072 and raw BT4 before becoming an Elo-aligned offline
+incumbent.
+
 ## Editable surface
 
 During automated architecture research, edit only `research/train.py`.
