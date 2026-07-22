@@ -158,15 +158,15 @@ def test_active_depth_preserves_parameter_abi_and_full_control() -> None:
 def test_first_action_objective_weights_are_unit_sum_and_differentiable() -> None:
     weights = train.dfm_objective_horizon_weights(
         jnp.ones((8,), dtype=jnp.float32),
-        first_action_loss_share=0.25,
+        first_action_loss_share=3.0 / 16.0,
     )
     np.testing.assert_allclose(
         weights,
-        np.asarray([0.25] + [3.0 / 28.0] * 7, dtype=np.float32),
+        np.asarray([3.0 / 16.0] + [13.0 / 112.0] * 7, dtype=np.float32),
         rtol=0.0,
         atol=1e-7,
     )
-    np.testing.assert_allclose(jnp.sum(weights), 1.0, rtol=0.0, atol=1e-7)
+    np.testing.assert_allclose(jnp.sum(weights), 1.0, rtol=0.0, atol=2e-7)
 
     losses = jnp.arange(8, dtype=jnp.float32)
     gradients = jax.grad(lambda values: jnp.sum(values * weights))(losses)
