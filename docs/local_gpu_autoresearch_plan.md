@@ -1357,3 +1357,9 @@ sweeps, held-out data, and repeated seeds.
   `117.061` examples/s. Its 128-pair arena scores `51.172%` with a wide
   `[-76.48,+93.77]` Elo interval. Accept primary update 1,581 as the offline
   incumbent, but do not claim Elo promotion.
+- [ ] Test a fully frozen BT4 backbone from the balanced-K1 configuration.
+  Preserve the source-compatible model ABI and exact forward values, stop the
+  encoder gradient, remove its `195,305,728` parameters from optimizer state,
+  and set BT4 learning rate to zero. Keep all downstream architecture, loss,
+  schedule, data, and evaluation settings fixed. The preregistered contract is
+  in `research/experiment_bt4_frozen_backbone_balanced_k1.md`.

@@ -113,6 +113,15 @@ interval `[-76.48,+93.77]`) with zero faults. Accept primary update 1,581 as
 the current offline incumbent; the arena remains positive but inconclusive,
 so this is not Elo promotion. Retain only the primary selected state.
 
+The active experiment freezes the source-trained BT4 backbone while retaining
+its exact forward values and model-state ABI. It stops gradients at BT4 token
+outputs, removes the encoder's `195,305,728` parameters from optimizer state,
+and fixes its learning rate to zero. Balanced K=1 sampling, the full
+projector/DFM/JEPA graph, the cosine schedule, eight-pass inference, and
+`0.0/5.76/1.0` loss remain fixed. This tests whether preserving self-play
+features and spending the saved compute on more head updates improves the
+30-minute policy metric.
+
 The repeat-qualified norm-on compatibility baseline is v2/update 300. An identical v1 run also
 selected update 300, and their four-pool DFM CE gains differ by only
 `0.000210253`; the selected v2 checkpoint also passes the recorded
@@ -163,6 +172,9 @@ first nine post-baseline experiments are in
 `research/experiment_cosine_floor001_k2.md`,
 `research/experiment_future_target_sampling_k1.md`, and
 `research/experiment_balanced_example_target_k1.md`.
+
+Experiment 010 is preregistered separately in
+`research/experiment_bt4_frozen_backbone_balanced_k1.md`.
 
 ## Editable surface
 
