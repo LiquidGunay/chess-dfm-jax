@@ -278,6 +278,28 @@ matching the fully masked validation/inference start and doubling its
 effective per-update sample count without reweighting the loss. Preregister
 that train/eval-alignment test before activation.
 
+Eighteenth-experiment outcome, 2026-07-22: forcing the played first action to
+the mask token on every training example is a strict near-miss. H1-first
+selection chooses terminal update 2,069 at H1/uniform CE
+`2.8417612/4.4927525`, accuracy `0.1095734`, and legal mass `0.6483661`.
+Uniform CE, accuracy, legality, rank, feature-tail, RMS, and trivial-control
+gates all pass. H1 improves the accepted primary by `0.0052875` but misses
+the repeat-noise-aware ceiling by `0.0015028`; reject without repeat or arena,
+delete all three states, and restore the accepted surface. Throughput remains
+`152.678` examples/s. Norm matching stays off and target/`z_pred` SIGReg stay
+fixed at `5.76/1.0`.
+
+Plan adjustment after Experiment 018: the corruption-alignment direction is
+promising enough for one causal follow-up, but the failed gate is not relaxed.
+The DFM action transformer can still see ground-truth future action tokens on
+partially masked examples, whereas validation and the first inference pass
+start fully masked. Keep H1 forced and transform the existing uniform draw as
+`t = u^2` during training, raising expected mask probability from `1/2` to
+`2/3` while retaining continuous coverage of every diffusion time. Hold the
+objective, legality coefficient, architecture, schedule, validation, and
+`0.0/5.76/1.0` loss fixed. If that test fails, close this corruption line
+rather than tuning the power.
+
 This document is the implementation contract for turning the existing
 TPU/cloud-oriented BT4 + DFM + JEPA experiment into a fast, measurable,
 single-A10G research loop.
@@ -1597,9 +1619,15 @@ sweeps, held-out data, and repeated seeds.
   Terminal update 2,043 clears accuracy/legal mass but misses H1/uniform CE
   at `2.8555801/4.4992252`; reject without repeat/arena, retain no state, and
   close scalar weighting.
-- [ ] Preregister a train/eval-alignment experiment that always masks the
+- [x] Preregister a train/eval-alignment experiment that always masks the
   played first action during training while leaving the unweighted objective,
   legality coefficient, architecture, schedule, and `0.0/5.76/1.0` loss
   fixed. This tests lower-variance inference-aligned H1 supervision without
   another loss-weight sweep. The frozen contract is in
-  `research/experiment_force_first_action_mask_tail1.md`.
+  `research/experiment_force_first_action_mask_tail1.md`. Terminal update
+  2,069 clears every gate except the H1 repeat margin, missing it by
+  `0.0015028`; reject without repeat/arena and retain no state.
+- [ ] Preregister one final corruption-alignment follow-up: keep H1 forced and
+  use `t=u^2` during training so future action tokens are masked with expected
+  probability `2/3` instead of `1/2`. Keep all loss coefficients and gates
+  fixed; close the line on failure rather than tuning the power.

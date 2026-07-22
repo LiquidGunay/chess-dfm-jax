@@ -1,7 +1,8 @@
 # Experiment 018: inference-aligned first-action masking
 
-Status: preregistered on 2026-07-22; activation and measurements have not
-started.
+Status: completed and rejected at the primary H1-margin gate on 2026-07-22.
+No repeat or arena was run, no candidate state is retained, and the active
+surface has returned to the accepted one-block-tail incumbent.
 
 ## Question and hypothesis
 
@@ -103,3 +104,42 @@ Failure at any earlier gate gets no repeat, arena, pass-count sweep, or SAE
 work. Retain only a qualifying primary selected state and compact evidence;
 delete all nonselected and repeat states. Keep all mutable files below
 `/mountpoint/.exp`, and never overlap GPU workloads.
+
+## Outcome
+
+All CPU and staged GPU gates passed. The one-update smoke cold-compiled in
+`170.274 s`, used `12,874,133,504` peak JAX HBM bytes, and confirmed H1 mask
+fraction `1.0`, unchanged sampled H2--H8 fractions, no weighted-CE branch,
+source legality coefficient `2.0`, balanced 16-per-horizon targets, SIGReg
+counts `576/512`, future routing `14/1`, finite unclipped loss, and no state
+write. The 30-update profile reached `154.153` end-to-end and `215.054`
+device examples/s at `12,865,748,736` peak HBM bytes. XLA estimated
+`14.2575e12` FLOP and `133.447e9` bytes per update; measured data stalls were
+`28.32%`, GPU utilization mean/median/p95 was `60.49/91/100%`, and power
+mean/p95 was `170.64/199.06 W`.
+
+The fixed run completed `2,069` updates and `264,832` examples at `152.678`
+end-to-end and `212.793` device examples/s, with `12,965,360,640` peak HBM
+bytes. Two-pool H1-first selection chose the terminal checkpoint:
+
+| Update | H1 CE | Uniform CE | Accuracy | Legal mass |
+|---:|---:|---:|---:|---:|
+| 800 | 2.8699970 | 4.5040965 | 0.1088715 | 0.6426268 |
+| 1600 | 2.8563285 | 4.4963654 | 0.1098633 | 0.6462354 |
+| **2069** | **2.8417612** | **4.4927525** | **0.1095734** | **0.6483661** |
+
+The selected checkpoint clears uniform CE, accuracy, legal mass, and every
+latent gate. Prediction effective-rank mean/min is `30.9865/29.0841`,
+feature-std p05 mean/min is `0.64975/0.63553`, mean target RMS is `0.92561`,
+and prediction/target RMS ratio is `0.97110`; positive JEPA prediction beats
+zero, identity, and action-shuffled controls at every horizon. H1 CE improves
+the accepted primary by `0.0052875`, but misses the preregistered
+repeat-noise-aware ceiling by `0.0015028`.
+
+The candidate is therefore rejected without repeat or arena. Delete all
+three state payloads and restore the accepted surface. The close result
+supports training/inference corruption alignment but not acceptance. A
+separately preregistered follow-up may reduce future-action leakage by biasing
+training time toward more-masked contexts while keeping H1 forced and the
+loss fixed. RMS norm matching remains disabled; target and `z_pred` SIGReg
+remain `5.76/1.0`.

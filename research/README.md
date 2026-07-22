@@ -272,3 +272,12 @@ first action during training while leaving horizons 2--8 and every RNG stream
 unchanged. This matches fully masked validation/inference and doubles the H1
 sample count per batch without another scalar weighting change. Norm matching
 remains off; target and `z_pred` SIGReg remain `5.76/1.0`.
+
+Experiment 018 is complete and rejected only at its primary H1-margin gate.
+Terminal update 2,069 reaches H1/uniform CE `2.8417612/4.4927525`, accuracy
+`0.1095734`, and legal mass `0.6483661`; every non-H1 gate passes. H1 improves
+the accepted primary by `0.0052875` but misses the frozen ceiling by
+`0.0015028`, so run no repeat or arena, retain no candidate state, and restore
+the accepted surface. One final corruption follow-up may keep H1 forced while
+using `t=u^2` to reduce ground-truth future-action leakage; failure closes the
+line. Norm matching remains off and target/`z_pred` SIGReg stay `5.76/1.0`.
