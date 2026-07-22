@@ -1,7 +1,7 @@
 # Local GPU Autoresearch Plan
 
 Status: implementation in progress. The plan was approved on 2026-07-18 and
-revised through 2026-07-21; the frozen loop is now enabled with
+revised through 2026-07-22; the frozen loop is now enabled with
 `AUTORESEARCH_READY = True`. Compatibility v2/update 300 remains the
 repeat-qualified control. The no-norm target-SIGReg-5.76,
 prediction-SIGReg-1.0 v2/update-400 checkpoint is now the repeat-qualified
@@ -118,6 +118,29 @@ trainable-backbone balanced-K1 checkpoint as the offline incumbent. The
 `34.27%` data-stall fraction and `55.0%` mean GPU utilization also show that a
 future low-backward graph needs a separately preregistered batch/input-pipeline
 retune.
+
+Eleventh-experiment update, 2026-07-22: stopping gradients only through the
+future-target BT4 encode preserves current-board action gradients and
+reproducibly raises fixed-run throughput to `154.622/154.355` examples/s,
+about `32%` above balanced-K1. The primary passes every frozen gate at
+CE/accuracy/legal mass `4.494214/0.110535/0.649241`. The exact repeat also
+beats incumbent CE at `4.496387` and passes every accuracy and latent gate,
+but legal mass `0.646348` misses the `0.646724` floor by `0.000376`. Reject at
+the repeat gate, run no arena or SAE work, delete all candidate states, and
+keep balanced-K1/update 1,581 as the offline incumbent. Norm matching remains
+off and target/prediction SIGReg stay frozen at `5.76/1.0`.
+
+Plan adjustment after Experiment 011: separate the systems mechanism from the
+gradient-routing mechanism before another strength claim. The candidate both
+detached the future encoder branch and replaced the incumbent's scanned
+two-board encode with explicit asymmetric calls. XLA reports `3.72%` more
+static FLOPs and peak HBM rises `32.11%`, yet throughput improves `32.09%`.
+The next bounded experiment should therefore test the simpler unchunked fused
+current+future encode with all gradients attached, holding the now-fixed loss,
+data, schedule, batch, and inference contracts constant. First run only CPU
+parity plus an A10G memory smoke and 30-update profile; an OOM or failed
+throughput gate ends that line without a 30-minute run. This attribution step
+has priority over changing legality coefficients, pass count, or SAE work.
 
 This document is the implementation contract for turning the existing
 TPU/cloud-oriented BT4 + DFM + JEPA experiment into a fast, measurable,

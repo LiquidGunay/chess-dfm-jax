@@ -189,7 +189,7 @@ first nine post-baseline experiments are in
 Experiment 010's preregistration and completed outcome are in
 `research/experiment_bt4_frozen_backbone_balanced_k1.md`.
 
-Experiment 011 is preregistered in
+Experiment 011's preregistration and completed outcome are in
 `research/experiment_bt4_future_target_stopgrad_balanced_k1.md`.
 
 ## Editable surface

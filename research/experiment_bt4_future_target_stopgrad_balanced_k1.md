@@ -1,7 +1,9 @@
 # Experiment 011: stop-gradient future BT4 target branch
 
-Status: preregistered on 2026-07-22 before implementing the asymmetric encode
-path or measuring it on GPU.
+Status: completed and rejected at the repeat legal-mass gate on 2026-07-22.
+The primary passes every gate and the repeat confirms its CE and systems gains,
+but repeat legal mass misses the frozen floor, so there is no arena or retained
+state.
 
 ## Question and hypothesis
 
@@ -133,3 +135,85 @@ must beat balanced-K1 v1 CE and pass every non-CE gate before the frozen
 128-pair arena against balanced-K1 v1/update 1,581. A failure gets no repeat,
 arena, pass-count sweep, or SAE refit. Retain only a qualifying selected state;
 otherwise delete every candidate state after preserving compact evidence.
+
+## Outcome
+
+The implementation commits are `dc0f226` and `304ca96`. The focused CPU suite
+has 87 passing tests. It proves numerical forward equivalence, exact-zero
+future-encoder gradients, attached future-projector gradients, nonzero
+current-encoder gradients, unchanged model/optimizer ABI, full-horizon
+evaluation, explicit resume/report semantics, and fail-closed unsupported
+configurations. The separate CPU encoder batches differ from the fused path by
+at most roundoff-scale values, as anticipated in the amended preregistration.
+
+The one-update real-checkpoint A10G smoke encoded one trainable current board
+and one stop-gradient future board per example, assigned exactly 16 examples
+to each horizon, retained all eight predictions, reported target/prediction
+SIGReg counts `576/512`, and produced a finite unclipped update. Comparing its
+temporary checkpoint to step 265,000 found 151 of 404 BT4 leaves changed, with
+maximum absolute delta `1.9073486328125e-6`. The cold compile took `244.36`
+seconds and peak JAX HBM was `12,540,109,568` bytes. The 1.85 GB smoke state
+was deleted immediately after verification.
+
+The cached 30-update profile reached `154.2508` end-to-end and `216.7118`
+device examples/s, `31.41%` and `45.35%` above balanced-K1. It clears the
+preregistered 10% useful-effect threshold. Peak JAX HBM was
+`12,540,134,656` bytes. Mean/p50/p95 utilization was `63.50%/89%/100%`, with
+a `28.82%` data-stall fraction. XLA estimates `14.0691` TFLOP/update, `3.72%`
+more than the scanned incumbent graph; the speedup therefore comes from a
+more efficient asymmetric execution schedule, not fewer reported forward
+FLOPs alone.
+
+The primary fixed run compiled in `15.0568` seconds and processed `264,192`
+examples in 2,064 updates. Its steady end-to-end/device throughput was
+`154.6220/215.9311` examples/s, a `32.09%` end-to-end gain and `30.55%` more
+examples than balanced-K1. Peak JAX HBM was `12,648,467,712` bytes, `32.11%`
+higher than the scanned incumbent. Mean/p50/p95 GPU utilization was
+`57.26%/81%/100%`; data stalls consumed `28.39%` of iteration time.
+
+The primary two-pool scan was:
+
+| Update | DFM CE | Accuracy | Legal mass |
+|---:|---:|---:|---:|
+| 400 | 4.5100856 | 0.1090393 | 0.6440984 |
+| 800 | 4.5051096 | 0.1083069 | 0.6451121 |
+| 1,200 | 4.5040242 | 0.1093140 | 0.6463699 |
+| 1,600 | 4.4970728 | 0.1103363 | 0.6488097 |
+| 2,064 | **4.4942136** | **0.1105347** | **0.6492410** |
+
+Terminal update 2,064 passes every primary gate. It improves the balanced-K1
+incumbent by `0.0037263464` CE and clears the strict ceiling by
+`0.0027558822`. Prediction effective-rank mean/minimum is `30.9782/29.1188`,
+feature-std p05 mean/minimum is `0.64997/0.63595`, mean target RMS is
+`0.92666`, and the prediction/target RMS ratio is `0.97014`. Positive
+prediction beats zero, identity, target-shuffled, and action-shuffled controls
+at every horizon. JEPA/identity MSE is `0.14332`. Thus replacing the old norm
+loss with z_pred SIGReg remains collapse-safe in this faster graph.
+
+The exact repeat processed `263,040` examples in 2,055 updates at
+`154.3550/216.1630` end-to-end/device examples/s, reproducing the systems
+effect. Its scan was:
+
+| Update | DFM CE | Accuracy | Legal mass |
+|---:|---:|---:|---:|
+| 400 | 4.5112245 | 0.1088409 | 0.6428810 |
+| 800 | 4.5068634 | 0.1084747 | 0.6432910 |
+| 1,200 | 4.5039922 | 0.1084290 | 0.6440020 |
+| 1,600 | 4.4978132 | 0.1096344 | 0.6462222 |
+| 2,055 | **4.4963869** | **0.1103363** | **0.6463479** |
+
+The repeat beats balanced-K1 by `0.0015530810` CE and passes every accuracy,
+finite, control, rank, feature-tail, and RMS gate. Its rank is
+`30.9988/29.1226`, p05 is `0.64985/0.63573`, target RMS is `0.92379`, and RMS
+ratio is `0.97310`. However, legal mass misses the fixed `0.6467235410` floor
+by `0.0003756052`. The primary/repeat CE separation is `0.0021732654`, while
+legal mass separates by `0.0028931038`.
+
+Reject the direction at the repeat gate. It is a real and repeatable systems
+improvement with promising CE, and future-target BT4 gradients are not needed
+to maintain latent health, but the legal-policy result is not independently
+reproducible under the frozen acceptance rule. Do not run the arena, change
+the inference pass count, or refit an SAE. All primary and repeat states were
+deleted after their hashes, scans, and gate decisions were preserved. The
+capability remains default-off, and the active surface returns to the
+trainable balanced-K1 incumbent.

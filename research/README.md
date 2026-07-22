@@ -167,3 +167,15 @@ passes every latent gate, but legal mass falls to `0.6445921`, below the
 frozen `0.6467235` floor. The experiment is rejected without repeat or arena,
 all five states are deleted, and the trainable-backbone balanced-K1 checkpoint
 remains the offline incumbent.
+
+Stopping gradients only through the future-target BT4 encode then preserves
+current-board action gradients and raises fixed-run throughput to
+`154.622/154.355` examples/s across exact runs, about `32%` over balanced-K1.
+The primary passes every gate at CE/accuracy/legal mass
+`4.494214/0.110535/0.649241`; the repeat again beats incumbent CE at
+`4.496387` and passes every latent gate, but legal mass is `0.646348`, missing
+the frozen floor by `0.000376`. The direction is rejected at the repeat gate:
+no arena, no retained state, and no incumbent change. The default-off
+implementation remains as evidence that future-target encoder backward is a
+large systems cost, while normalized experiments continue with norm/target/
+prediction coefficients `0.0/5.76/1.0`.
