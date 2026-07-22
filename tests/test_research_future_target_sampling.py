@@ -277,6 +277,7 @@ def test_active_experiment_uses_balanced_one_sampled_future_target() -> None:
     assert config.jepa_target_sampling_unit == "example_balanced"
     assert config.bt4_future_target_stop_gradient is True
     assert config.bt4_freeze_backbone is False
+    assert config.bt4_encode_chunk_size == 0
     assert config.lr_decay_start_steps == 400
     assert config.lr_decay_steps == 800
     assert config.lr_min_ratio == 0.1
