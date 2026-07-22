@@ -113,14 +113,19 @@ interval `[-76.48,+93.77]`) with zero faults. Accept primary update 1,581 as
 the current offline incumbent; the arena remains positive but inconclusive,
 so this is not Elo promotion. Retain only the primary selected state.
 
-The active experiment freezes the source-trained BT4 backbone while retaining
+The full-backbone-freeze experiment retains
 its exact forward values and model-state ABI. It stops gradients at BT4 token
 outputs, removes the encoder's `195,305,728` parameters from optimizer state,
 and fixes its learning rate to zero. Balanced K=1 sampling, the full
 projector/DFM/JEPA graph, the cosine schedule, eight-pass inference, and
-`0.0/5.76/1.0` loss remain fixed. This tests whether preserving self-play
-features and spending the saved compute on more head updates improves the
-30-minute policy metric.
+`0.0/5.76/1.0` loss remain fixed. It raises fixed-run throughput by `58.59%`,
+cuts peak JAX HBM by `66.02%`, and selects terminal CE `4.4965047017`, which
+clears the primary CE gate. Prediction rank, feature tail, RMS ratio, and
+trivial controls all pass. Legal mass falls to `0.6445921361`, however,
+missing its frozen floor by `0.0021314049`. Reject it without repeat or arena,
+delete all candidate states, and return the active graph to the trainable BT4
+balanced-K1 incumbent. The result motivates a separately controlled partial
+gradient-routing experiment; it does not justify tuning the fixed loss.
 
 The repeat-qualified norm-on compatibility baseline is v2/update 300. An identical v1 run also
 selected update 300, and their four-pool DFM CE gains differ by only
@@ -173,7 +178,7 @@ first nine post-baseline experiments are in
 `research/experiment_future_target_sampling_k1.md`, and
 `research/experiment_balanced_example_target_k1.md`.
 
-Experiment 010 is preregistered separately in
+Experiment 010's preregistration and completed outcome are in
 `research/experiment_bt4_frozen_backbone_balanced_k1.md`.
 
 ## Editable surface

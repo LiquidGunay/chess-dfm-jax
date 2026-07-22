@@ -108,6 +108,17 @@ interval `[-76.48,+93.77]`, with zero faults. Accept primary update 1,581 as
 the new offline incumbent, retain only its selected state, and keep eight-pass
 inference fixed because the arena evidence remains inconclusive.
 
+Tenth-experiment update, 2026-07-22: fully freezing BT4 raises fixed-run
+throughput from `117.061` to `185.643` examples/s, cuts peak JAX HBM from
+`9.57` to `3.25` GB, and processes `320,512` examples in 30 minutes. Terminal
+CE `4.4965047017` clears the primary gate and every latent gate passes, but
+legal mass `0.6445921361` misses the frozen floor by `0.0021314049`. Reject
+the candidate without repeat or arena, delete all five states, and keep the
+trainable-backbone balanced-K1 checkpoint as the offline incumbent. The
+`34.27%` data-stall fraction and `55.0%` mean GPU utilization also show that a
+future low-backward graph needs a separately preregistered batch/input-pipeline
+retune.
+
 This document is the implementation contract for turning the existing
 TPU/cloud-oriented BT4 + DFM + JEPA experiment into a fast, measurable,
 single-A10G research loop.
@@ -1357,9 +1368,13 @@ sweeps, held-out data, and repeated seeds.
   `117.061` examples/s. Its 128-pair arena scores `51.172%` with a wide
   `[-76.48,+93.77]` Elo interval. Accept primary update 1,581 as the offline
   incumbent, but do not claim Elo promotion.
-- [ ] Test a fully frozen BT4 backbone from the balanced-K1 configuration.
+- [x] Test a fully frozen BT4 backbone from the balanced-K1 configuration.
   Preserve the source-compatible model ABI and exact forward values, stop the
   encoder gradient, remove its `195,305,728` parameters from optimizer state,
   and set BT4 learning rate to zero. Keep all downstream architecture, loss,
   schedule, data, and evaluation settings fixed. The preregistered contract is
-  in `research/experiment_bt4_frozen_backbone_balanced_k1.md`.
+  in `research/experiment_bt4_frozen_backbone_balanced_k1.md`. It gains
+  `58.59%` fixed-run throughput, cuts peak JAX HBM `66.02%`, and selects CE
+  `4.4965047017` with every latent gate passing. Legal mass `0.6445921361`
+  misses its floor by `0.0021314049`, so reject it without repeat/arena and
+  retain no candidate state.

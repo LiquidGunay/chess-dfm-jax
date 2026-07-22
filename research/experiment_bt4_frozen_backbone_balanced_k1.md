@@ -1,7 +1,8 @@
 # Experiment 010: frozen BT4 backbone with balanced K=1 targets
 
-Status: preregistered on 2026-07-22 before implementing the freeze path or
-measuring it on GPU.
+Status: completed and rejected on 2026-07-22. The candidate substantially
+improves throughput and DFM CE but fails the frozen legal-mass floor, so it
+receives no repeat or arena.
 
 ## Question and hypothesis
 
@@ -135,3 +136,62 @@ throughput improves, record a compute result but do not replace the strength
 incumbent or run the arena. A failure gets no repeat, arena, pass-count sweep,
 or SAE refit. Retain only a qualifying selected state; otherwise delete every
 candidate state after preserving compact evidence.
+
+## Outcome
+
+The implementation and all pre-run correctness gates passed. The focused CPU
+suite has 76 passing tests. A real-checkpoint A10G smoke preserved the full
+two-block projector and four-block DFM, assigned exactly 16 examples to every
+horizon, encoded two boards per example, produced all eight predictions,
+reported SIGReg counts `576/512`, and completed a finite unclipped downstream
+update. Its peak JAX HBM was `3,164,207,872` bytes. At both update 400 and
+terminal update 2,504, all 404 source BT4 encoder leaves were bitwise equal to
+initialization with maximum absolute delta `0.0`.
+
+The cached 30-update profile reached `186.7543` end-to-end and `281.1704`
+device examples/s, `59.10%` and `88.58%` above the balanced-K1 control. Peak
+JAX HBM fell to `3,155,814,144` bytes. XLA's static estimate fell from
+`13.5645` to `6.4374` TFLOP/update, a `52.54%` reduction. The profile clears
+both the no-regression gate and the preregistered 5% useful-effect target.
+
+The fixed run compiled in `8.5523` seconds and processed `320,512` examples
+in 2,504 updates at `185.6428` steady end-to-end and `282.4400` device
+examples/s. Relative to balanced-K1 v1, this is `58.59%` more end-to-end
+throughput and `58.38%` more examples within the same 1,800 steady seconds.
+Peak JAX HBM was `3,253,244,672` bytes, `66.02%` lower than the incumbent.
+The frozen optimizer covers `78,843,974` parameters and carries no state for
+the `195,305,728` BT4 parameters. Each temporary checkpoint was
+`1,290,641,865` bytes, `30.30%` smaller than the trainable-backbone state.
+
+Hardware samples expose the new bottleneck: GPU utilization was `55.00%`
+mean, `68%` median, and `100%` p95, while the measured data-stall fraction was
+`34.27%`. Mean/p95 power was `177.93/215.62 W` and p95 SM clock was
+`1710 MHz`. A future frozen or partially frozen graph should therefore retune
+batching/input delivery separately rather than attributing host stalls to the
+model kernel.
+
+The frozen two-pool checkpoint scan was:
+
+| Update | DFM CE | Accuracy | Legal mass |
+|---:|---:|---:|---:|
+| 400 | 4.5099108 | 0.1090088 | 0.6431585 |
+| 800 | 4.5032279 | 0.1088867 | 0.6420830 |
+| 1,200 | 4.5014677 | 0.1095886 | 0.6440504 |
+| 1,600 | 4.4986572 | 0.1096039 | 0.6443900 |
+| 2,504 | **4.4965047** | **0.1097260** | **0.6445921** |
+
+Terminal update 2,504 wins monotonically on mean CE. It improves the
+balanced-K1 incumbent by `0.0014352724` and clears the strict CE ceiling by
+`0.0004648082`; accuracy also passes. Its latent audit passes every collapse
+gate: prediction effective-rank mean/minimum `30.8243/28.9355`, feature-std
+p05 mean/minimum `0.64926/0.63581`, mean target RMS `0.92239`, and
+prediction/target RMS ratio `0.97462`. Positive prediction beats zero and
+action-shuffled controls at every horizon, and JEPA/identity MSE is `0.13913`.
+
+The decisive failure is legal mass. Selected legal mass `0.6445921` is
+`0.0051314` below the incumbent and misses the frozen `0.6467235` floor by
+`0.0021314`. Reject the candidate without repeat or arena. This is evidence
+that some BT4 adaptation matters for the action distribution even though full
+freezing is an excellent systems optimization and improves CE. All five
+candidate states were deleted after recording hashes and compact evidence;
+no frozen-backbone state is retained.

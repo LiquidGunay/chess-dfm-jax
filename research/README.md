@@ -159,3 +159,11 @@ at `117.061` examples/s. Its 128-pair screen against K=2 scores `51.172%`, or
 `[-76.48,+93.77]`, and zero faults. Primary update 1,581 is the current
 offline incumbent, not an Elo-promoted model; only that candidate state is
 retained.
+
+Freezing the complete BT4 backbone then produces the largest systems gain so
+far: `185.643` fixed-run examples/s, `320,512` examples in 30 minutes, and
+3.25 GB peak JAX HBM. Its terminal checkpoint improves CE to `4.4965047` and
+passes every latent gate, but legal mass falls to `0.6445921`, below the
+frozen `0.6467235` floor. The experiment is rejected without repeat or arena,
+all five states are deleted, and the trainable-backbone balanced-K1 checkpoint
+remains the offline incumbent.
