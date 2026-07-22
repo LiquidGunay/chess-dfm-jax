@@ -58,6 +58,7 @@ def _config(**updates) -> train.JointLatentSASAConfig:
         "jepa_sigreg_proj_dim": 8,
         "jepa_sigreg_example_count": 2,
         "jepa_target_sample_count": 2,
+        "jepa_target_sampling_unit": "batch_shared",
         "use_qk_gain": True,
         "use_qk_norm": True,
         "use_xsa": True,
@@ -195,11 +196,85 @@ def test_one_target_training_preserves_mass_and_prediction_coverage() -> None:
     )
 
 
-def test_active_experiment_uses_accepted_two_sampled_future_targets() -> None:
+def test_balanced_assignments_are_deterministic_and_nearly_equal() -> None:
+    first = train.balanced_example_target_horizons(
+        jax.random.PRNGKey(3),
+        batch_size=11,
+        horizon=4,
+    )
+    repeated = train.balanced_example_target_horizons(
+        jax.random.PRNGKey(3),
+        batch_size=11,
+        horizon=4,
+    )
+    changed = train.balanced_example_target_horizons(
+        jax.random.PRNGKey(5),
+        batch_size=11,
+        horizon=4,
+    )
+
+    np.testing.assert_array_equal(first, repeated)
+    assert not np.array_equal(np.asarray(first), np.asarray(changed))
+    counts = np.bincount(np.asarray(first), minlength=4)
+    assert counts.sum() == 11
+    assert counts.max() - counts.min() <= 1
+
+
+def test_balanced_one_target_training_covers_every_horizon() -> None:
+    ENCODE_BATCH_SIZES.clear()
+    balanced = train.JointLatentSASAModel(
+        RecordingEncoder(),
+        _config(
+            jepa_target_sample_count=1,
+            jepa_target_sampling_unit="example_balanced",
+        ),
+        rngs=nnx.Rngs(21),
+    )
+    shared = train.JointLatentSASAModel(
+        RecordingEncoder(),
+        _config(jepa_target_sample_count=1),
+        rngs=nnx.Rngs(21),
+    )
+    batch = _batch()
+    rng = jax.random.PRNGKey(129)
+
+    loss, aux = _loss(balanced, batch, rng, sample=True)
+    repeated_loss, repeated = _loss(balanced, batch, rng, sample=True)
+    _, shared_aux = _loss(shared, batch, rng, sample=True)
+
+    assert jnp.isfinite(loss)
+    assert loss == repeated_loss
+    assert ENCODE_BATCH_SIZES == [8, 8, 8]
+    np.testing.assert_array_equal(
+        aux["jepa_target_assignment_count_by_horizon"],
+        jnp.ones((4,), dtype=jnp.float32),
+    )
+    np.testing.assert_array_equal(
+        aux["jepa_target_assignment_count_by_horizon"],
+        repeated["jepa_target_assignment_count_by_horizon"],
+    )
+    np.testing.assert_array_equal(
+        aux["jepa_target_horizon_mask"],
+        jnp.ones((4,), dtype=jnp.float32),
+    )
+    assert jnp.all(aux["jepa_raw_mse_by_horizon"] > 0.0)
+    assert aux["jepa_target_sample_count"] == 1.0
+    assert aux["jepa_target_sample_fraction"] == 0.25
+    assert aux["jepa_target_future_importance_weight"] == 4.0
+    assert aux["bt4_encoded_boards_per_example"] == 2.0
+    assert aux["jepa_prediction_horizon_count"] == 4.0
+    assert aux["jepa_sigreg_valid_count"] == 10.0
+    assert aux["jepa_pred_sigreg_valid_count"] == 8.0
+    assert aux["dfm_ce_loss"] == shared_aux["dfm_ce_loss"]
+    assert aux["first_legality_loss"] == shared_aux["first_legality_loss"]
+
+
+def test_active_experiment_uses_balanced_one_sampled_future_target() -> None:
     config = train.apply_experiment_overrides(
         train.JointLatentSASAConfig()
     )
-    assert config.jepa_target_sample_count == 2
+    assert config.jepa_target_sample_count == 1
+    assert config.jepa_target_sampling_unit == "example_balanced"
     assert config.lr_decay_start_steps == 400
     assert config.lr_decay_steps == 800
     assert config.lr_min_ratio == 0.1
@@ -244,6 +319,32 @@ def test_full_horizon_evaluation_ignores_training_sample_count() -> None:
     assert aux["jepa_sigreg_valid_count"] == 10.0
     assert aux["jepa_pred_sigreg_valid_count"] == 8.0
     assert "jepa_target_sampling_active" not in aux
+
+
+def test_balanced_config_evaluates_every_horizon() -> None:
+    ENCODE_BATCH_SIZES.clear()
+    model = train.JointLatentSASAModel(
+        RecordingEncoder(),
+        _config(
+            jepa_target_sample_count=1,
+            jepa_target_sampling_unit="example_balanced",
+        ),
+        rngs=nnx.Rngs(24),
+    )
+    loss, aux = train.eval_normalized_stage1_step(
+        model,
+        _batch(),
+        jax.random.PRNGKey(9),
+        1.0,
+        1.0,
+    )
+
+    assert jnp.isfinite(loss)
+    assert ENCODE_BATCH_SIZES == [20]
+    assert aux["jepa_target_sample_count"] == 4.0
+    assert jnp.all(aux["jepa_target_horizon_mask"] == 1.0)
+    assert "jepa_target_sampling_active" not in aux
+    assert "jepa_target_assignment_count_by_horizon" not in aux
 
 
 def test_compiled_normalized_train_step_activates_target_sampling() -> None:
@@ -295,6 +396,47 @@ def test_sampled_targets_fail_closed_for_unsupported_objectives() -> None:
         train.validate_objective_config(
             objective="normalized",
             config=_config(jepa_target_variance_hinge_coeff=1.0),
+        )
+
+
+def test_balanced_sampling_unit_fails_closed() -> None:
+    enabled = _config(
+        jepa_target_sample_count=1,
+        jepa_target_sampling_unit="example_balanced",
+    )
+    train.validate_objective_config(
+        objective="normalized",
+        config=enabled,
+    )
+    assert train.serialized_model_config(enabled)[
+        "jepa_target_sampling_unit"
+    ] == "example_balanced"
+    assert "jepa_target_sampling_unit" not in train.serialized_model_config(
+        _config()
+    )
+
+    with pytest.raises(ValueError, match="must be 'batch_shared'"):
+        train.validate_objective_config(
+            objective="normalized",
+            config=_config(jepa_target_sampling_unit="unknown"),
+        )
+    for sample_count in (0, 2, enabled.horizon):
+        with pytest.raises(ValueError, match="requires.*sample_count=1"):
+            train.validate_objective_config(
+                objective="normalized",
+                config=_config(
+                    jepa_target_sample_count=sample_count,
+                    jepa_target_sampling_unit="example_balanced",
+                ),
+            )
+    with pytest.raises(ValueError, match="does not support.*anchors"):
+        train.validate_objective_config(
+            objective="normalized",
+            config=_config(
+                jepa_target_sample_count=1,
+                jepa_target_sampling_unit="example_balanced",
+                jepa_sampled_target_anchors=True,
+            ),
         )
 
 
@@ -520,3 +662,22 @@ def test_anchor_config_and_resume_semantics_fail_closed(monkeypatch) -> None:
     assert semantics["timing"] == "after_prediction_h_before_transition_h_plus_1"
     assert semantics["target_gradient"] == "attached_online"
     assert semantics["evaluation_rollout"] == "fully_free_running"
+
+    balanced_contract = train.build_research_resume_contract(
+        config=_config(
+            jepa_target_sample_count=1,
+            jepa_target_sampling_unit="example_balanced",
+        ),
+        objective="normalized",
+        sigreg_reference_count=1.0,
+        batch_size=4,
+        train_seed=0,
+        train_provenance={"kind": "test"},
+        models_dir=train.REPO_ROOT / "models",
+    )
+    sampling = balanced_contract["objective"]["future_target_sampling"]
+    assert sampling["unit"] == "one_balanced_horizon_per_physical_example"
+    assert sampling["per_example_target_count"] == 1
+    assert sampling["maximum_assignment_count_spread"] == 1
+    assert sampling["prediction_sigreg_horizons"] == "all"
+    assert sampling["evaluation_horizons"] == "all"

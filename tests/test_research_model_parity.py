@@ -499,6 +499,7 @@ def test_local_config_and_initialized_model_match_legacy_exactly():
             "dfm_active_layers",
             "jepa_projector_active_layers",
             "jepa_sampled_target_anchors",
+            "jepa_target_sampling_unit",
             "jepa_state_fixed_unit_rms",
         }
     ]

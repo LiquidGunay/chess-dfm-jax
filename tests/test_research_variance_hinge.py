@@ -505,6 +505,7 @@ def test_hinge_cli_contract_and_disabled_serialization() -> None:
             "dfm_active_layers",
             "jepa_projector_active_layers",
             "jepa_sampled_target_anchors",
+            "jepa_target_sampling_unit",
             "jepa_state_fixed_unit_rms",
         }
     }

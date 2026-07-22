@@ -71,7 +71,8 @@ EXPERIMENT_OVERRIDES: dict[str, Any] = {
     "lr_decay_start_steps": 400,
     "lr_decay_steps": 800,
     "lr_min_ratio": 0.1,
-    "jepa_target_sample_count": 2,
+    "jepa_target_sample_count": 1,
+    "jepa_target_sampling_unit": "example_balanced",
     # "dfm_active_layers": 3,
     # "jepa_projector_active_layers": 1,
     # "jepa_sampled_target_anchors": True,
@@ -173,6 +174,7 @@ class JointLatentSASAConfig:
     jepa_target_variance_hinge_coeff: float = 0.0
     jepa_target_variance_hinge_gamma: float = 0.9
     jepa_target_sample_count: int = 0
+    jepa_target_sampling_unit: str = "batch_shared"
     jepa_sampled_target_anchors: bool = False
     jepa_gamma: float = 1.0
     jepa_sigreg_coeff: float = 0.1
@@ -242,6 +244,22 @@ def _weighted_horizon_mean(
     mask: jnp.ndarray,
 ) -> jnp.ndarray:
     return jnp.sum(sample_values * mask) / jnp.maximum(jnp.sum(mask), 1.0)
+
+
+def balanced_example_target_horizons(
+    rng: jax.Array,
+    *,
+    batch_size: int,
+    horizon: int,
+) -> jax.Array:
+    """Assign one nearly equally represented target horizon per example."""
+
+    if batch_size <= 0:
+        raise ValueError(f"batch_size must be positive, found {batch_size}")
+    if horizon <= 0:
+        raise ValueError(f"horizon must be positive, found {horizon}")
+    tiled_horizons = jnp.arange(batch_size, dtype=jnp.int32) % horizon
+    return tiled_horizons[jax.random.permutation(rng, batch_size)]
 
 
 class TargetVarianceHingeResult(NamedTuple):
@@ -1026,6 +1044,31 @@ class JointLatentSASAModel(nnx.Module):
                 "jepa_target_sample_count must be an integer in "
                 f"[0, {config.horizon}], found "
                 f"{config.jepa_target_sample_count!r}."
+            )
+        if config.jepa_target_sampling_unit not in (
+            "batch_shared",
+            "example_balanced",
+        ):
+            raise ValueError(
+                "jepa_target_sampling_unit must be 'batch_shared' or "
+                f"'example_balanced', found "
+                f"{config.jepa_target_sampling_unit!r}."
+            )
+        if (
+            config.jepa_target_sampling_unit == "example_balanced"
+            and config.jepa_target_sample_count != 1
+        ):
+            raise ValueError(
+                "jepa_target_sampling_unit='example_balanced' requires "
+                "jepa_target_sample_count=1."
+            )
+        if (
+            config.jepa_target_sampling_unit == "example_balanced"
+            and config.jepa_sampled_target_anchors
+        ):
+            raise ValueError(
+                "jepa_target_sampling_unit='example_balanced' does not "
+                "support sampled-target anchors."
             )
         if (
             isinstance(config.jepa_projector_active_layers, bool)
@@ -1895,23 +1938,51 @@ def joint_stage1_loss_fn(
         sample_future_targets
         and 0 < configured_target_count < horizon
     )
+    per_example_target_sampling = bool(
+        target_sampling_active
+        and model.config.jepa_target_sampling_unit
+        == "example_balanced"
+    )
+    selected_horizons_by_example = None
     if target_sampling_active:
         rng_target_horizons, rng_sigreg = jax.random.split(rng_sigreg)
-        selected_horizons = jnp.sort(
-            jax.random.permutation(rng_target_horizons, horizon)[
-                :configured_target_count
-            ]
-        )
-        target_future_planes = jnp.take(
-            future_planes,
-            selected_horizons,
-            axis=1,
-        )
-        future_valid_for_loss = jnp.take(
-            future_valid,
-            selected_horizons,
-            axis=1,
-        )
+        if per_example_target_sampling:
+            selected_horizons_by_example = (
+                balanced_example_target_horizons(
+                    rng_target_horizons,
+                    batch_size=batch_size,
+                    horizon=horizon,
+                )
+            )
+            batch_indices = jnp.arange(batch_size, dtype=jnp.int32)
+            target_future_planes = future_planes[
+                batch_indices,
+                selected_horizons_by_example,
+            ][:, None]
+            future_valid_for_loss = future_valid[
+                batch_indices,
+                selected_horizons_by_example,
+            ][:, None]
+            selected_horizons = jnp.arange(
+                configured_target_count,
+                dtype=jnp.int32,
+            )
+        else:
+            selected_horizons = jnp.sort(
+                jax.random.permutation(rng_target_horizons, horizon)[
+                    :configured_target_count
+                ]
+            )
+            target_future_planes = jnp.take(
+                future_planes,
+                selected_horizons,
+                axis=1,
+            )
+            future_valid_for_loss = jnp.take(
+                future_valid,
+                selected_horizons,
+                axis=1,
+            )
     else:
         selected_horizons = jnp.arange(horizon, dtype=jnp.int32)
         target_future_planes = future_planes
@@ -2042,11 +2113,18 @@ def joint_stage1_loss_fn(
                 free_rollout,
                 operand=None,
             )
-    pred_for_loss = (
-        jnp.take(pred_z, selected_horizons, axis=1)
-        if target_sampling_active
-        else pred_z
-    )
+    if per_example_target_sampling:
+        batch_indices = jnp.arange(batch_size, dtype=jnp.int32)
+        pred_for_loss = pred_z[
+            batch_indices,
+            selected_horizons_by_example,
+        ][:, None]
+    else:
+        pred_for_loss = (
+            jnp.take(pred_z, selected_horizons, axis=1)
+            if target_sampling_active
+            else pred_z
+        )
     if positive_target_override is None:
         target_vectors = _jepa_positive_target_vectors(
             z_jepa,
@@ -2091,8 +2169,18 @@ def joint_stage1_loss_fn(
                 sample_raw_mse
                 + model.config.jepa_norm_loss_coeff * sample_norm_loss
             )
-    horizon_weights = model.config.jepa_gamma ** selected_horizons.astype(jnp.float32)
-    jepa_mask = future_valid_for_loss * valid[:, None] * horizon_weights[None, :]
+    if per_example_target_sampling:
+        horizon_weights = model.config.jepa_gamma ** (
+            selected_horizons_by_example.astype(jnp.float32)
+        )
+        jepa_mask = (
+            future_valid_for_loss
+            * valid[:, None]
+            * horizon_weights[:, None]
+        )
+    else:
+        horizon_weights = model.config.jepa_gamma ** selected_horizons.astype(jnp.float32)
+        jepa_mask = future_valid_for_loss * valid[:, None] * horizon_weights[None, :]
     jepa_positive_loss = _weighted_horizon_mean(sample_jepa, jepa_mask)
     jepa_raw_mse = _weighted_horizon_mean(sample_raw_mse, jepa_mask)
     jepa_norm_loss = _weighted_horizon_mean(sample_norm_loss, jepa_mask)
@@ -2199,10 +2287,16 @@ def joint_stage1_loss_fn(
         0.0,
         dtype=jnp.float32,
     )
-    target_future_importance = jnp.asarray(
-        horizon / selected_horizons.shape[0],
-        dtype=jnp.float32,
-    )
+    if per_example_target_sampling:
+        target_future_importance = jnp.asarray(
+            horizon / configured_target_count,
+            dtype=jnp.float32,
+        )
+    else:
+        target_future_importance = jnp.asarray(
+            horizon / selected_horizons.shape[0],
+            dtype=jnp.float32,
+        )
     if target_sampling_active:
         target_sigreg_future_weight = (
             sigreg_valid[:, None]
@@ -2340,20 +2434,49 @@ def joint_stage1_loss_fn(
         value_target_mean = jnp.mean(jnp.asarray(value_targets, dtype=jnp.float32))
 
     horizon_valid = future_valid_for_loss * valid[:, None]
-    horizon_num = jnp.zeros((horizon,), dtype=jnp.float32).at[selected_horizons].add(
-        jnp.sum(sample_jepa * horizon_valid, axis=0)
-    )
-    horizon_raw_mse_num = jnp.zeros((horizon,), dtype=jnp.float32).at[selected_horizons].add(
-        jnp.sum(sample_raw_mse * horizon_valid, axis=0)
-    )
-    horizon_norm_num = jnp.zeros((horizon,), dtype=jnp.float32).at[selected_horizons].add(
-        jnp.sum(sample_norm_loss * horizon_valid, axis=0)
-    )
-    horizon_denom = jnp.zeros((horizon,), dtype=jnp.float32).at[selected_horizons].add(jnp.sum(horizon_valid, axis=0))
+    if per_example_target_sampling:
+        assigned_horizons = selected_horizons_by_example
+        horizon_num = jnp.zeros(
+            (horizon,), dtype=jnp.float32
+        ).at[assigned_horizons].add(
+            sample_jepa[:, 0] * horizon_valid[:, 0]
+        )
+        horizon_raw_mse_num = jnp.zeros(
+            (horizon,), dtype=jnp.float32
+        ).at[assigned_horizons].add(
+            sample_raw_mse[:, 0] * horizon_valid[:, 0]
+        )
+        horizon_norm_num = jnp.zeros(
+            (horizon,), dtype=jnp.float32
+        ).at[assigned_horizons].add(
+            sample_norm_loss[:, 0] * horizon_valid[:, 0]
+        )
+        horizon_denom = jnp.zeros(
+            (horizon,), dtype=jnp.float32
+        ).at[assigned_horizons].add(horizon_valid[:, 0])
+        target_assignment_count_by_horizon = jnp.zeros(
+            (horizon,), dtype=jnp.float32
+        ).at[assigned_horizons].add(
+            jnp.ones((batch_size,), dtype=jnp.float32)
+        )
+        target_horizon_mask = (
+            target_assignment_count_by_horizon > 0.0
+        ).astype(jnp.float32)
+    else:
+        horizon_num = jnp.zeros((horizon,), dtype=jnp.float32).at[selected_horizons].add(
+            jnp.sum(sample_jepa * horizon_valid, axis=0)
+        )
+        horizon_raw_mse_num = jnp.zeros((horizon,), dtype=jnp.float32).at[selected_horizons].add(
+            jnp.sum(sample_raw_mse * horizon_valid, axis=0)
+        )
+        horizon_norm_num = jnp.zeros((horizon,), dtype=jnp.float32).at[selected_horizons].add(
+            jnp.sum(sample_norm_loss * horizon_valid, axis=0)
+        )
+        horizon_denom = jnp.zeros((horizon,), dtype=jnp.float32).at[selected_horizons].add(jnp.sum(horizon_valid, axis=0))
+        target_horizon_mask = jnp.zeros((horizon,), dtype=jnp.float32).at[selected_horizons].set(1.0)
     jepa_loss_by_horizon = horizon_num / jnp.maximum(horizon_denom, 1.0)
     jepa_raw_mse_by_horizon = horizon_raw_mse_num / jnp.maximum(horizon_denom, 1.0)
     jepa_norm_loss_by_horizon = horizon_norm_num / jnp.maximum(horizon_denom, 1.0)
-    target_horizon_mask = jnp.zeros((horizon,), dtype=jnp.float32).at[selected_horizons].set(1.0)
     downstream_anchor_horizon_mask = target_horizon_mask * (
         jnp.arange(horizon, dtype=jnp.int32) < horizon - 1
     ).astype(jnp.float32)
@@ -2459,9 +2582,28 @@ def joint_stage1_loss_fn(
         "jepa_raw_mse_by_horizon": jepa_raw_mse_by_horizon,
         "jepa_norm_loss_by_horizon": jepa_norm_loss_by_horizon,
         "jepa_target_horizon_mask": target_horizon_mask,
-        "jepa_target_sample_count": jnp.asarray(selected_horizons.shape[0], dtype=jnp.float32),
-        "jepa_target_sample_fraction": jnp.asarray(selected_horizons.shape[0] / horizon, dtype=jnp.float32),
-        "jepa_target_mean_horizon": jnp.mean(selected_horizons.astype(jnp.float32) + 1.0),
+        "jepa_target_sample_count": jnp.asarray(
+            configured_target_count
+            if per_example_target_sampling
+            else selected_horizons.shape[0],
+            dtype=jnp.float32,
+        ),
+        "jepa_target_sample_fraction": jnp.asarray(
+            (
+                configured_target_count
+                if per_example_target_sampling
+                else selected_horizons.shape[0]
+            )
+            / horizon,
+            dtype=jnp.float32,
+        ),
+        "jepa_target_mean_horizon": (
+            jnp.mean(
+                selected_horizons_by_example.astype(jnp.float32) + 1.0
+            )
+            if per_example_target_sampling
+            else jnp.mean(selected_horizons.astype(jnp.float32) + 1.0)
+        ),
         "mean_token_cosine": mean_token_cosine,
         "mean_token_cosine_by_horizon": mean_token_cosine_by_horizon,
         "pred_token_norm": pred_token_norm,
@@ -2529,7 +2671,12 @@ def joint_stage1_loss_fn(
                     target_future_importance
                 ),
                 "bt4_encoded_boards_per_example": jnp.asarray(
-                    selected_horizons.shape[0] + 1,
+                    (
+                        configured_target_count
+                        if per_example_target_sampling
+                        else selected_horizons.shape[0]
+                    )
+                    + 1,
                     dtype=jnp.float32,
                 ),
                 "jepa_prediction_horizon_count": jnp.asarray(
@@ -2538,6 +2685,10 @@ def joint_stage1_loss_fn(
                 ),
             }
         )
+        if per_example_target_sampling:
+            aux["jepa_target_assignment_count_by_horizon"] = (
+                target_assignment_count_by_horizon
+            )
         if model.config.jepa_sampled_target_anchors:
             eligible_anchor_slots = (
                 valid[:, None] * future_valid[:, : max(horizon - 1, 0)]
@@ -3005,6 +3156,30 @@ def validate_objective_config(
             "jepa_target_sample_count must be an integer in "
             f"[0, {config.horizon}], found {target_sample_count!r}"
         )
+    target_sampling_unit = config.jepa_target_sampling_unit
+    if target_sampling_unit not in (
+        "batch_shared",
+        "example_balanced",
+    ):
+        raise ValueError(
+            "jepa_target_sampling_unit must be 'batch_shared' or "
+            f"'example_balanced', found {target_sampling_unit!r}"
+        )
+    if (
+        target_sampling_unit == "example_balanced"
+        and target_sample_count != 1
+    ):
+        raise ValueError(
+            "jepa_target_sampling_unit='example_balanced' requires "
+            "jepa_target_sample_count=1."
+        )
+    if target_sampling_unit == "example_balanced" and not (
+        0 < target_sample_count < config.horizon
+    ):
+        raise ValueError(
+            "jepa_target_sampling_unit='example_balanced' requires a "
+            "strict sampled-target count in (0, horizon)."
+        )
     if type(config.jepa_sampled_target_anchors) is not bool:
         raise ValueError(
             "jepa_sampled_target_anchors must be a bool, found "
@@ -3016,6 +3191,14 @@ def validate_objective_config(
         raise ValueError(
             "jepa_sampled_target_anchors requires a strict sampled-target "
             "count in (0, horizon)."
+        )
+    if (
+        target_sampling_unit == "example_balanced"
+        and config.jepa_sampled_target_anchors
+    ):
+        raise ValueError(
+            "jepa_target_sampling_unit='example_balanced' does not "
+            "support sampled-target anchors."
         )
     if 0 < target_sample_count < config.horizon:
         if objective != "normalized":
@@ -3949,6 +4132,11 @@ def serialized_model_config(
         payload.pop("jepa_state_fixed_unit_rms")
     if not config.jepa_sampled_target_anchors:
         payload.pop("jepa_sampled_target_anchors")
+    if (
+        config.jepa_target_sampling_unit
+        == JointLatentSASAConfig.jepa_target_sampling_unit
+    ):
+        payload.pop("jepa_target_sampling_unit")
     if config.jepa_projector_active_layers == 0:
         payload.pop("jepa_projector_active_layers")
     if config.dfm_active_layers == 0:
@@ -4004,24 +4192,49 @@ def build_research_resume_contract(
             "full_batch_fast_path_when_equal": True,
         }
     if 0 < config.jepa_target_sample_count < config.horizon:
-        objective_contract["future_target_sampling"] = {
-            "scope": "training_only",
-            "sample_count": int(config.jepa_target_sample_count),
-            "population_horizons": int(config.horizon),
-            "unit": "one_shared_horizon_subset_per_physical_batch",
-            "without_replacement": True,
-            "sorted_after_selection": True,
-            "resampled_each_update": True,
-            "rng_derivation": "split_from_existing_sigreg_rng_branch",
-            "dfm_time_and_mask_rng_unchanged": True,
-            "positive_jepa_horizons": "sampled",
-            "prediction_sigreg_horizons": "all",
-            "target_sigreg_future_importance_weight": float(
-                config.horizon / config.jepa_target_sample_count
-            ),
-            "target_sigreg_current_importance_weight": 1.0,
-            "evaluation_horizons": "all",
-        }
+        if config.jepa_target_sampling_unit == "example_balanced":
+            objective_contract["future_target_sampling"] = {
+                "scope": "training_only",
+                "sample_count": int(config.jepa_target_sample_count),
+                "per_example_target_count": int(
+                    config.jepa_target_sample_count
+                ),
+                "population_horizons": int(config.horizon),
+                "unit": "one_balanced_horizon_per_physical_example",
+                "assignment_construction": (
+                    "random_permutation_of_tiled_horizon_labels"
+                ),
+                "maximum_assignment_count_spread": 1,
+                "resampled_each_update": True,
+                "rng_derivation": "split_from_existing_sigreg_rng_branch",
+                "dfm_time_and_mask_rng_unchanged": True,
+                "positive_jepa_horizons": "per_example_assigned",
+                "prediction_sigreg_horizons": "all",
+                "target_sigreg_future_importance_weight": float(
+                    config.horizon / config.jepa_target_sample_count
+                ),
+                "target_sigreg_current_importance_weight": 1.0,
+                "evaluation_horizons": "all",
+            }
+        else:
+            objective_contract["future_target_sampling"] = {
+                "scope": "training_only",
+                "sample_count": int(config.jepa_target_sample_count),
+                "population_horizons": int(config.horizon),
+                "unit": "one_shared_horizon_subset_per_physical_batch",
+                "without_replacement": True,
+                "sorted_after_selection": True,
+                "resampled_each_update": True,
+                "rng_derivation": "split_from_existing_sigreg_rng_branch",
+                "dfm_time_and_mask_rng_unchanged": True,
+                "positive_jepa_horizons": "sampled",
+                "prediction_sigreg_horizons": "all",
+                "target_sigreg_future_importance_weight": float(
+                    config.horizon / config.jepa_target_sample_count
+                ),
+                "target_sigreg_current_importance_weight": 1.0,
+                "evaluation_horizons": "all",
+            }
     if config.jepa_sampled_target_anchors:
         objective_contract["sampled_target_rollout_anchors"] = {
             "scope": "training_only",
