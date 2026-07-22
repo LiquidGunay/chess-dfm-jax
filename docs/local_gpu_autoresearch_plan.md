@@ -1639,3 +1639,11 @@ sweeps, held-out data, and repeated seeds.
   BT4, below the frozen `36.523%` anchor. Reject it as an Elo-aligned
   incumbent, retain no candidate state, restore power `1.0` with H1 forcing
   off, and close corruption-power tuning.
+- [ ] Test a checkpoint-compatible WDL auxiliary on every free-rollout
+  predicted state. The shards contain played-game outcome labels but no engine
+  or counterfactual action values. Add categorical WDL CE at coefficient
+  `0.25`, keep norm/target/`z_pred` coefficients `0.0/5.76/1.0`, leave
+  inference unchanged, require the head to beat fixed class-prior baselines,
+  and retain a candidate only if repeated offline gates plus both incumbent
+  and raw-BT4 arena point gates pass. The frozen contract is in
+  `research/experiment_predicted_wdl_aux_tail1.md`.

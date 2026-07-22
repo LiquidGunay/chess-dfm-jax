@@ -299,3 +299,13 @@ candidate is therefore not an Elo-aligned incumbent: delete both candidate
 states, keep update 2,072, restore forced H1 masking off and training-time
 power `1.0`, and close corruption-power tuning. Norm matching remains off;
 target and `z_pred` SIGReg remain fixed at `5.76/1.0`.
+
+Experiment 020 is preregistered in
+`research/experiment_predicted_wdl_aux_tail1.md`. The approved shards contain
+per-horizon played-game WDL labels, although they contain no search values or
+counterfactual action outcomes. The experiment activates the existing
+checkpoint-compatible WDL head on every free-rollout predicted state at
+coefficient `0.25`, adds outcome-quality metrics, and leaves eight-pass
+inference unchanged. Policy, legality, latent, repeat, and matched incumbent/
+raw-BT4 arena gates remain frozen; failure restores WDL coefficient zero
+rather than opening a weight sweep.
