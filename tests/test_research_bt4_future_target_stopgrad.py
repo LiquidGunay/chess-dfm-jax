@@ -237,6 +237,91 @@ def test_future_bt4_gradient_is_zero_but_projector_stays_attached() -> None:
     assert _tree_norm(candidate_current["encoder"]) > 0.0
 
 
+def test_unchunked_fused_path_preserves_values_and_both_encoder_gradients() -> None:
+    batch = _batch()
+    scanned = train.JointLatentSASAModel(
+        TrainableDummyEncoder(),
+        dataclasses.replace(
+            _config(stop_future=False),
+            bt4_encode_chunk_size=1,
+        ),
+        rngs=nnx.Rngs(29),
+    )
+    fused = _make_model(stop_future=False, seed=29)
+
+    scanned_tokens, scanned_vectors = (
+        scanned.encode_current_and_future_tokens_and_vectors(
+            batch["current_planes"],
+            batch["future_planes"],
+        )
+    )
+    fused_tokens, fused_vectors = (
+        fused.encode_current_and_future_tokens_and_vectors(
+            batch["current_planes"],
+            batch["future_planes"],
+        )
+    )
+    np.testing.assert_allclose(scanned_tokens, fused_tokens, rtol=2e-5, atol=3e-7)
+    np.testing.assert_allclose(scanned_vectors, fused_vectors, rtol=2e-5, atol=3e-6)
+
+    grad_fn = nnx.grad(
+        _latent_loss,
+        argnums=nnx.DiffState(0, TrainableParam),
+    )
+    fused_future = nnx.to_pure_dict(
+        grad_fn(
+            fused,
+            batch["current_planes"],
+            batch["future_planes"],
+            True,
+        )
+    )
+    fused_current = nnx.to_pure_dict(
+        grad_fn(
+            fused,
+            batch["current_planes"],
+            batch["future_planes"],
+            False,
+        )
+    )
+    assert _tree_norm(fused_future["encoder"]) > 0.0
+    assert _tree_norm(fused_current["encoder"]) > 0.0
+
+    scanned_loss, scanned_aux = train.normalized_stage1_loss_fn(
+        scanned,
+        batch,
+        jax.random.PRNGKey(31),
+        1.0,
+        1.0,
+        sample_future_targets=True,
+    )
+    fused_loss, fused_aux = train.normalized_stage1_loss_fn(
+        fused,
+        batch,
+        jax.random.PRNGKey(31),
+        1.0,
+        1.0,
+        sample_future_targets=True,
+    )
+    np.testing.assert_allclose(scanned_loss, fused_loss, rtol=1e-6)
+    np.testing.assert_allclose(
+        scanned_aux["dfm_ce_loss"],
+        fused_aux["dfm_ce_loss"],
+        rtol=1e-6,
+    )
+    np.testing.assert_allclose(
+        scanned_aux["first_legality_loss"],
+        fused_aux["first_legality_loss"],
+        rtol=1e-6,
+    )
+
+    scanned_optimizer = train.create_joint_optimizer(scanned, scanned.config)
+    fused_optimizer = train.create_joint_optimizer(fused, fused.config)
+    assert train.research_state_abi(
+        nnx.state(scanned_optimizer.opt_state)
+    ) == train.research_state_abi(nnx.state(fused_optimizer.opt_state))
+
+
 def test_training_reports_routing_and_eval_keeps_full_horizon() -> None:
     candidate = _make_model(stop_future=True, seed=23)
     batch = _batch()
