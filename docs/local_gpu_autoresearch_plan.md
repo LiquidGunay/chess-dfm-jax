@@ -1572,3 +1572,5 @@ sweeps, held-out data, and repeated seeds.
   first-legality coefficient `3.0`, preserving ratio 16 and every other
   contract. If it fails any primary gate, close scalar first-action
   reweighting and move to a constrained or legality-conditioned objective.
+  The frozen contract is in
+  `research/experiment_dfm_first_action_share1875_legality3_tail1.md`.

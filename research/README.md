@@ -246,3 +246,10 @@ the nominal legality/H1 coefficient ratio preserves Experiment 015's CE
 gain. One ratio-preserving midpoint (`3/16` first-action share, coefficient
 `3.0`) is the final bounded scalar interpolation before changing the loss
 form. Norm matching stays off; target and `z_pred` SIGReg stay `5.76/1.0`.
+
+Experiment 017 is preregistered in
+`research/experiment_dfm_first_action_share1875_legality3_tail1.md`. It is
+the final bounded scalar interpolation: `3/16` first-action CE share and
+first-legality coefficient `3.0`, preserving ratio 16 and every model, data,
+schedule, inference, validation, and SIGReg contract. Failure closes this
+scalar line rather than authorizing a parameter sweep.
