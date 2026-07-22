@@ -192,7 +192,7 @@ Experiment 010's preregistration and completed outcome are in
 Experiment 011's preregistration and completed outcome are in
 `research/experiment_bt4_future_target_stopgrad_balanced_k1.md`.
 
-Experiment 012 is preregistered in
+Experiment 012's preregistration and completed outcome are in
 `research/experiment_bt4_unchunked_fused_balanced_k1.md`.
 
 ## Editable surface

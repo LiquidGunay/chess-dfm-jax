@@ -142,6 +142,27 @@ parity plus an A10G memory smoke and 30-update profile; an OOM or failed
 throughput gate ends that line without a 30-minute run. This attribution step
 has priority over changing legality coefficients, pass count, or SAE work.
 
+Twelfth-experiment update, 2026-07-22: the fused full-gradient graph fits batch
+128 at `16.24` GB peak HBM and clears the useful profile gate at `133.628`
+examples/s. Its fixed run reaches `134.619` examples/s and processes `229,888`
+examples, confirming a `15.00%` systems gain without changing the objective.
+Terminal CE/accuracy/legal mass are `4.497541/0.109970/0.646824`; every non-CE
+and latent gate passes, but CE misses the repeat-noise-aware ceiling by
+`0.000572`. Reject without repeat or arena, delete all five states, and return
+to scanned balanced-K1.
+
+Plan adjustment after Experiment 012: execution attribution is complete.
+Fusing explains about `44%` of Experiment 011's absolute profile gain, while
+removing future backward accounts for the remaining gain but destabilizes the
+repeat legal-mass gate. Keep the loss fixed at `0.0/5.76/1.0`. The next
+architecture candidate should expose a future-target encoder tail-gradient
+boundary: keep the current-board encoder fully trainable, detach early future
+layers, and train only a small final BT4 tail from future JEPA/SIGReg losses.
+Preregister the exact tail depth only after CPU inspection confirms a clean
+checkpoint-compatible boundary and predicts a memory footprint below the
+fused graph. This has priority over legality-coefficient tuning, pass-count
+sweeps, or SAE refits.
+
 This document is the implementation contract for turning the existing
 TPU/cloud-oriented BT4 + DFM + JEPA experiment into a fast, measurable,
 single-A10G research loop.

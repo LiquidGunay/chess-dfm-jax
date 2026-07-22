@@ -179,3 +179,13 @@ no arena, no retained state, and no incumbent change. The default-off
 implementation remains as evidence that future-target encoder backward is a
 large systems cost, while normalized experiments continue with norm/target/
 prediction coefficients `0.0/5.76/1.0`.
+
+Fusing the current and sampled-future boards into one full-gradient BT4 batch
+then isolates the execution effect. It raises fixed-run throughput to
+`134.619` examples/s (`+15.00%`) and explains about `44%` of the asymmetric
+candidate's absolute profile gain, but peak JAX HBM rises to `16.34` GB. Its
+terminal checkpoint passes legality, accuracy, every latent gate, and all
+trivial controls at CE `4.4975412`; that is only `0.0003988` better than the
+incumbent and misses the repeat-noise-aware ceiling by `0.0005717`. It is
+rejected without repeat or arena, all five states are deleted, and the scanned
+balanced-K1 path remains active.
