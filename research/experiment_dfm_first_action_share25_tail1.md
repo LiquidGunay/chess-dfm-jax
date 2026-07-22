@@ -1,7 +1,7 @@
 # Experiment 015: 25% first-action DFM objective share
 
-Status: preregistered on 2026-07-22; implementation and measurements have not
-started.
+Status: completed and rejected at the primary legal-mass gate on 2026-07-22.
+No repeat or arena was run, and no candidate state is retained.
 
 ## Question and hypothesis
 
@@ -133,3 +133,61 @@ A failure at any earlier gate gets no later arena, pass-count sweep, or SAE
 work. Retain only a qualifying primary selected state and compact evidence;
 delete all nonselected and repeat states. Keep all files, caches, and temporary
 objects under `/mountpoint/.exp`, and never overlap GPU workloads.
+
+## Outcome
+
+The implementation and all pre-run gates passed. Eighty-six focused CPU tests
+plus lint cover exact default-off loss/auxiliary-tree/gradient/optimizer/state
+parity, the active `[0.25, 3/28, ..., 3/28]` weights, unit-sum and gradient
+semantics, unchanged uniform metrics and inference, serialization, routing,
+and fail-closed validation.
+
+The real-checkpoint batch-128 smoke completed one finite, unclipped update with
+the exact eight weights, balanced 16-per-horizon future assignments, target/
+prediction SIGReg counts `576/512`, future detached/attached depths `14/1`,
+and no state write. Cold compilation took `167.867` seconds and peak JAX HBM
+was `12,866,224,128` bytes.
+
+The cached 30-update profile passed at `154.7626` end-to-end and `214.7296`
+device examples/s with peak JAX HBM `12,865,913,600` bytes. Compiler work is
+unchanged at `14.2575` TFLOP and `133.447` GB per update. Mean/p50/p95 GPU
+utilization was `64.27/96.5/100%`, mean/p95 power was `171.04/197.76` W, and
+the data-stall fraction was `27.93%`.
+
+The fixed run compiled and completed its first update in `15.5681` seconds,
+then processed `265,856` examples in 2,077 updates at `153.2968` end-to-end
+and `213.2939` device examples/s. Peak JAX HBM was `12,957,817,344` bytes.
+The preregistered two-pool scan was:
+
+| Update | Horizon-1 CE | Uniform CE | Accuracy | Legal mass |
+|---:|---:|---:|---:|---:|
+| 800 | 2.7410193 | 4.4907841 | 0.1093750 | 0.6338664 |
+| 1,600 | 2.7239352 | 4.4828804 | 0.1101990 | 0.6372061 |
+| 2,077 | **2.7167628** | **4.4811102** | **0.1101532** | **0.6371051** |
+
+Terminal update 2,077 is the selected checkpoint. It clears the horizon-1 CE
+ceiling by `0.1234956`, improves the accepted primary by `0.1302859`, and
+clears the uniform-CE non-regression ceiling by `0.0160738`. Accuracy also
+passes. Legal mass `0.6371051`, however, misses the frozen `0.6467235` floor by
+`0.0096185`, so the primary is rejected.
+
+Latent health is not the failure. Prediction effective-rank mean/minimum is
+`30.9855/29.1275`, feature-std p05 mean/minimum is `0.64959/0.63593`, mean
+target RMS is `0.92495`, and the prediction/target RMS ratio is `0.97167`.
+Positive JEPA prediction beats zero, identity, shuffled-target, and
+action-shuffled controls at all eight horizons; mean JEPA/identity ratio is
+`0.14649`.
+
+Per the frozen contract, run no repeat or arena. Delete all update-800,
+update-1,600, and update-2,077 state payloads after preserving manifests,
+reports, metrics, scans, and diagnostics. Return the active training surface
+to the accepted unweighted one-block-tail incumbent. RMS norm matching remains
+off, target SIGReg remains `5.76`, and `z_pred` SIGReg remains `1.0`.
+
+The result isolates a useful loss-allocation effect. The source checkpoint's
+first-legality coefficient is `2.0`: under uniform CE its ratio to horizon-1
+CE weight is `2/(1/8)=16`, whereas the 25%-share candidate changes that ratio
+to `2/(1/4)=8`. A separately preregistered coefficient-4 rescue would restore
+the original relative legality pressure while testing whether the large CE
+gain can survive. This follow-up must retain every current gate and is not
+authorization to weaken the legal-mass threshold.

@@ -223,6 +223,20 @@ remain fixed at `0.0/5.76/1.0`. Require repeat-qualified horizon-1 improvement
 and point-score gains against both the accepted checkpoint and raw BT4 before
 calling it an Elo-aligned offline incumbent.
 
+Fifteenth-experiment outcome, 2026-07-22: assigning 25% of DFM CE to the
+played action produces a large, internally consistent metric shift. Selected
+terminal update 2,077 reaches horizon-1/uniform CE
+`2.7167628/4.4811102`, versus accepted primary
+`2.8470488/4.4950091`, while retaining `153.297` examples/s. Accuracy and all
+latent gates pass, but legal mass falls to `0.6371051`, missing the frozen
+floor by `0.0096185`. Reject without repeat or arena, delete all three states,
+and return the active surface to the unweighted one-block tail. Because the
+change doubled horizon-1 CE share while leaving the source legality
+coefficient at `2.0`, it halved relative legality pressure from 16 to 8. One
+coefficient-4 rescue is mechanistically justified: it restores that ratio
+without changing architecture, schedule, batch, or the fixed
+`0.0/5.76/1.0` loss components.
+
 This document is the implementation contract for turning the existing
 TPU/cloud-oriented BT4 + DFM + JEPA experiment into a fast, measurable,
 single-A10G research loop.
@@ -1518,8 +1532,10 @@ sweeps, held-out data, and repeated seeds.
   known candidate legacy-codec promotion fault and complete raw-BT4 coverage.
   Raw BT4 remains clearly stronger; lower uniform eight-horizon CE has not yet
   translated into higher measured chess strength.
-- [ ] Test a 25% first-action share in the normalized DFM CE objective while
+- [x] Test a 25% first-action share in the normalized DFM CE objective while
   retaining uniform eight-horizon CE as a non-regression metric. Hold the
   one-block tail, schedule, batch, legality, inference, and
   norm/target/`z_pred` coefficients `0.0/5.76/1.0` fixed. The frozen contract
-  is in `research/experiment_dfm_first_action_share25_tail1.md`.
+  is in `research/experiment_dfm_first_action_share25_tail1.md`. It improves
+  horizon-1/uniform CE to `2.7167628/4.4811102` but legal mass falls to
+  `0.6371051`; reject without repeat/arena and retain no candidate state.

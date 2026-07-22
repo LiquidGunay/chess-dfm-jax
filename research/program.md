@@ -233,6 +233,16 @@ candidate must repeat its horizon-1 gain and improve the frozen point score
 against both update 2,072 and raw BT4 before becoming an Elo-aligned offline
 incumbent.
 
+Experiment 015 is complete and rejected at its primary legal-mass gate. Its
+selected terminal update improves horizon-1/uniform CE to
+`2.7167628/4.4811102` and passes accuracy plus every latent gate at `153.297`
+examples/s, but legal mass `0.6371051` misses the `0.6467235` floor by
+`0.0096185`. Run no repeat or arena, retain no candidate state, and restore
+the unweighted one-block-tail surface. The source legality coefficient `2.0`
+had relative weight 16 against uniform horizon-1 CE and only 8 against the
+25%-share objective. A coefficient-4 rescue may be preregistered to restore
+the original ratio; the legal gate itself must not be weakened.
+
 ## Editable surface
 
 During automated architecture research, edit only `research/train.py`.

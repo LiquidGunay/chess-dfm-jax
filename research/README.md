@@ -223,3 +223,14 @@ legacy-codec black-promotion fault; the canonical raw policy has complete move
 coverage. This direct anchor satisfies the base-model measurement prerequisite
 for later representation work, while showing that lower uniform
 eight-horizon CE has not yet produced higher measured chess strength.
+
+Weighting the played first action to 25% of DFM CE then produces a large
+held-out gain without changing throughput: selected update 2,077 reaches
+horizon-1/uniform CE `2.7167628/4.4811102` at `153.297` examples/s, and all
+latent diagnostics pass. Legal mass regresses to `0.6371051`, however, below
+the frozen `0.6467235` floor. The experiment is rejected without repeat or
+arena and all three states are deleted. Since the change doubled horizon-1 CE
+share while holding first-legality coefficient `2.0`, it halved their relative
+weight ratio; a separately preregistered coefficient-4 rescue is the only
+immediate follow-up. Norm matching remains off and target/`z_pred` SIGReg stay
+fixed at `5.76/1.0`.
