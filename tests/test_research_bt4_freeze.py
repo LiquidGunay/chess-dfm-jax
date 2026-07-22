@@ -159,6 +159,38 @@ def test_freeze_config_and_serialization_fail_closed() -> None:
         )
 
 
+def test_sparse_checkpoint_schedule_is_strict_and_absolute() -> None:
+    args = train.parse_args(
+        ["--save-updates", "400", "800", "1200", "1600"]
+    )
+    schedule = train.validate_save_updates(args.save_updates)
+    assert schedule == (400, 800, 1200, 1600)
+    assert train.should_save_checkpoint(
+        invocation_update=17,
+        research_update=800,
+        save_every=0,
+        save_updates=schedule,
+    )
+    assert not train.should_save_checkpoint(
+        invocation_update=800,
+        research_update=801,
+        save_every=0,
+        save_updates=schedule,
+    )
+    assert train.should_save_checkpoint(
+        invocation_update=400,
+        research_update=999,
+        save_every=400,
+        save_updates=(),
+    )
+    with pytest.raises(ValueError, match="positive integers"):
+        train.validate_save_updates((0, 400))
+    with pytest.raises(ValueError, match="strictly increasing"):
+        train.validate_save_updates((800, 400))
+    with pytest.raises(ValueError, match="strictly increasing"):
+        train.validate_save_updates((400, 400))
+
+
 def test_frozen_forward_is_exact_and_encoder_gradient_is_zero(monkeypatch) -> None:
     unfrozen, _ = _make_components(monkeypatch, frozen=False, seed=11)
     frozen, optimizer = _make_components(monkeypatch, frozen=True, seed=11)

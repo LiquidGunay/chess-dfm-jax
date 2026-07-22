@@ -5372,6 +5372,16 @@ def parse_args(
         help="Save every N updates in this invocation; zero disables periodic saves.",
     )
     parser.add_argument(
+        "--save-updates",
+        type=int,
+        nargs="*",
+        default=(),
+        help=(
+            "Save at these absolute research-update numbers; omit to disable. "
+            "This supports sparse preregistered checkpoint schedules."
+        ),
+    )
+    parser.add_argument(
         "--save-final",
         action=argparse.BooleanOptionalAction,
         default=False,
@@ -6043,6 +6053,31 @@ def should_continue(*, updates: int, steps: int, deadline: float | None) -> bool
     if deadline is not None and updates > 0 and time.perf_counter() >= deadline:
         return False
     return steps > 0 or deadline is not None
+
+
+def validate_save_updates(values: tuple[int, ...] | list[int]) -> tuple[int, ...]:
+    """Return a strictly increasing sparse checkpoint schedule."""
+
+    updates = tuple(values)
+    if any(isinstance(update, bool) or update <= 0 for update in updates):
+        raise ValueError("--save-updates values must be positive integers")
+    if tuple(sorted(set(updates))) != updates:
+        raise ValueError(
+            "--save-updates values must be unique and strictly increasing"
+        )
+    return updates
+
+
+def should_save_checkpoint(
+    *,
+    invocation_update: int,
+    research_update: int,
+    save_every: int,
+    save_updates: tuple[int, ...],
+) -> bool:
+    return (
+        save_every > 0 and invocation_update % save_every == 0
+    ) or research_update in save_updates
 
 
 def normalize_cost_analysis(raw: Any) -> dict[str, float]:
@@ -6737,6 +6772,7 @@ def main() -> int:
         raise ValueError("--val-deterministic-t must be in [0, 1]")
     if args.save_every < 0:
         raise ValueError("--save-every must be non-negative")
+    save_updates = validate_save_updates(args.save_updates)
     if args.max_checkpoints < 0:
         raise ValueError("--max-checkpoints must be non-negative")
     if args.resume_from is not None and args.init != "exact":
@@ -6752,7 +6788,7 @@ def main() -> int:
             raise ValueError(
                 "--eval-checkpoints cannot be combined with --train-seconds"
             )
-        if args.save_every > 0 or args.save_final:
+        if args.save_every > 0 or save_updates or args.save_final:
             raise ValueError(
                 "--eval-checkpoints cannot save or prune checkpoints"
             )
@@ -7287,7 +7323,12 @@ def main() -> int:
                 }
                 metrics_log.write(json.dumps(record, sort_keys=True) + "\n")
                 metrics_log.flush()
-                if args.save_every > 0 and updates % args.save_every == 0:
+                if should_save_checkpoint(
+                    invocation_update=updates,
+                    research_update=research_update,
+                    save_every=args.save_every,
+                    save_updates=save_updates,
+                ):
                     save_current_checkpoint()
     finally:
         if gpu_monitor is not None:
