@@ -1468,3 +1468,5 @@ sweeps, held-out data, and repeated seeds.
   an interpolation between zero-tail's CE/system behavior and three-tail's
   attached legality signal. Keep norm/target/prediction coefficients
   `0.0/5.76/1.0`; close the tail-depth line on a primary or repeat failure.
+  The frozen contract is in
+  `research/experiment_bt4_future_tail1_balanced_k1.md`.

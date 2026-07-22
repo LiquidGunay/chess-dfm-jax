@@ -202,6 +202,11 @@ retains `149.531` examples/s and passes terminal accuracy/legal mass, but CE
 arena, or retained state. Loss remains fixed at norm/target/prediction
 coefficients `0.0/5.76/1.0`.
 
+Experiment 014's frozen final one-block future-gradient-tail contract is in
+`research/experiment_bt4_future_tail1_balanced_k1.md`. It changes only tail
+depth from three to one and closes the tail-depth line on a primary or repeat
+failure.
+
 ## Editable surface
 
 During automated architecture research, edit only `research/train.py`.
