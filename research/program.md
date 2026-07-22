@@ -243,6 +243,13 @@ had relative weight 16 against uniform horizon-1 CE and only 8 against the
 25%-share objective. A coefficient-4 rescue may be preregistered to restore
 the original ratio; the legal gate itself must not be weakened.
 
+Experiment 016 is preregistered in
+`research/experiment_dfm_first_action_share25_legality4_tail1.md`. It retains
+the 25% first-action CE allocation and changes only first-legality coefficient
+`2.0 -> 4.0`, restoring the accepted objective's relative ratio of 16. The CE,
+legal-mass, latent, repeat, and two matched arena gates remain frozen; the
+preceding CE gain does not authorize weakening any threshold.
+
 ## Editable surface
 
 During automated architecture research, edit only `research/train.py`.

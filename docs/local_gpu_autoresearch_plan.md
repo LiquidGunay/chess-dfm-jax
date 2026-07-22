@@ -1539,3 +1539,8 @@ sweeps, held-out data, and repeated seeds.
   is in `research/experiment_dfm_first_action_share25_tail1.md`. It improves
   horizon-1/uniform CE to `2.7167628/4.4811102` but legal mass falls to
   `0.6371051`; reject without repeat/arena and retain no candidate state.
+- [ ] Restore the original legality-to-horizon-1 coefficient ratio while
+  retaining the 25% first-action share: change first-legality coefficient
+  `2.0 -> 4.0` and hold every other model, data, schedule, inference, and loss
+  setting fixed. The frozen contract is in
+  `research/experiment_dfm_first_action_share25_legality4_tail1.md`.
