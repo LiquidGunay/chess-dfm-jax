@@ -289,3 +289,13 @@ raising expected future-action masking from `1/2` to `2/3` without changing
 RNG draws, validation, inference, objective weights, legality, or the fixed
 `0.0/5.76/1.0` loss. Failure closes this corruption line rather than opening
 a time-power sweep.
+
+Experiment 019 is complete and rejected at its raw-BT4 arena gate. Primary
+update 2,063 and repeat update 2,067 independently pass every offline gate at
+H1/uniform CE `2.8398960/4.4907011` and `2.8451609/4.4927080`, with no latent
+collapse. The primary scores `50.781%` against incumbent update 2,072 but only
+`34.766%` against original raw BT4, below the frozen `36.523%` anchor. The
+candidate is therefore not an Elo-aligned incumbent: delete both candidate
+states, keep update 2,072, restore forced H1 masking off and training-time
+power `1.0`, and close corruption-power tuning. Norm matching remains off;
+target and `z_pred` SIGReg remain fixed at `5.76/1.0`.

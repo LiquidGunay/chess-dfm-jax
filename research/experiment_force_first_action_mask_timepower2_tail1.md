@@ -1,7 +1,10 @@
 # Experiment 019: first-action mask with low-time-biased corruption
 
-Status: preregistered on 2026-07-22; activation and measurements have not
-started.
+Status: completed and rejected on 2026-07-22. Both exact runs pass every
+offline gate and the candidate beats update 2,072 head to head, but its frozen
+raw-BT4 score regresses below the required anchor. No candidate state is
+retained, the accepted update 2,072 remains incumbent, and the corruption line
+is closed.
 
 ## Question and hypothesis
 
@@ -105,3 +108,71 @@ work. Retain only a qualifying primary selected state and compact evidence;
 delete all nonselected and repeat states. A primary or repeat failure closes
 this corruption line rather than authorizing a time-power sweep. Keep all
 mutable files below `/mountpoint/.exp`, and never overlap GPU workloads.
+
+## Outcome
+
+All implementation, CPU, smoke, and profile gates passed. The one-update
+batch-128 smoke cold-compiled in `170.421 s`, used `12,865,654,016` peak JAX
+HBM bytes, and confirmed active power `2.0`, H1 mask fraction `1.0`, observed
+mean mask probability `0.6830`, uniform CE, source legality coefficient
+`2.0`, balanced 16-per-horizon targets, SIGReg counts `576/512`, future
+routing `14/1`, finite unclipped loss, and no state write. The 30-update
+profile reached `151.563` end-to-end and `213.172` device examples/s at
+`12,865,649,664` peak HBM bytes. XLA estimated `14.2575e12` FLOP and
+`133.447e9` bytes per update; measured data stalls were `28.90%`, GPU
+utilization mean/median/p95 was `61.88/88/100%`, and power mean/p95 was
+`168.35/197.26 W`.
+
+The primary fixed run completed 2,063 updates and 264,064 examples at
+`152.663` steady end-to-end and `212.616` device examples/s, with
+`12,967,065,856` peak HBM bytes. Two-pool H1-first selection chose its
+terminal checkpoint:
+
+| Update | H1 CE | Uniform CE | Accuracy | Legal mass |
+|---:|---:|---:|---:|---:|
+| 800 | 2.8761915 | 4.5040907 | 0.1092072 | 0.6451670 |
+| 1600 | 2.8593588 | 4.4977851 | 0.1103516 | 0.6480522 |
+| **2063** | **2.8398960** | **4.4907011** | **0.1103363** | **0.6487805** |
+
+Selected update 2,063 beats the frozen H1 ceiling by `0.0003624` and passes
+every other primary gate. Prediction effective-rank mean/min is
+`30.9886/29.1578`, feature-std p05 mean/min is `0.64984/0.63625`, mean target
+RMS is `0.92603`, and per-horizon prediction/target RMS ratio is
+`0.96474--0.97640`. Positive JEPA prediction beats zero and action-shuffled
+controls at every horizon.
+
+The exact repeat completed 2,067 updates and 264,576 examples at `152.645`
+steady end-to-end and `212.327` device examples/s, with `12,939,756,288` peak
+HBM bytes. Its H1-first terminal checkpoint independently passes at H1/uniform
+CE `2.8451609/4.4927080`, accuracy `0.1099701`, and legal mass `0.6475881`.
+It beats the accepted-repeat H1 ceiling by `0.0018878`; effective-rank
+mean/min is `30.9918/29.1289`, feature-std p05 mean/min is
+`0.64989/0.63636`, mean target RMS is `0.92560`, RMS ratio is
+`0.96549--0.97701`, and both trivial controls lose at every horizon.
+
+The primary then scores `0.5078125` in the frozen 128-pair cap-256 arena
+against accepted update 2,072: 7 wins, 246 draws, and 3 losses, pentanomial
+`[0, 3, 118, 7, 0]`, with no faults and four cap draws. Descriptive logistic
+Elo is `+5.43`, with pair-aware 95% interval `[-79.33, +90.86]`. Mean policy
+call time is `42.90` ms for the candidate and `43.03` ms for the incumbent.
+This passes the frozen `>50%` point-score gate but is not a promotion claim.
+
+Against original raw BT4, the same checkpoint scores only `0.34765625`: 0
+wins, 178 draws, and 78 losses, pentanomial `[13, 52, 63, 0, 0]`, with no cap
+draws. Descriptive Elo is `-109.33`, with pair-aware interval
+`[-212.25, -22.48]`. Candidate/raw mean policy-call time is
+`42.51/33.36` ms. One candidate loss is the known
+`no_representable_move` black-promotion fault of the legacy codec; the score
+already includes it. The result misses the frozen raw-BT4 anchor
+`0.365234375` by `0.017578125`.
+
+The experiment is therefore rejected as an Elo-aligned incumbent despite its
+repeat-stable offline gain and positive incumbent point score. Delete primary
+state SHA-256 `4e6cef86137d276007e0a5d00a3546e4a9c88f68a31db630acaf38389c18f6b4`
+and repeat state SHA-256
+`900c6ae72ed2e85f6e9349b891d60903fe6c132b275c01e2710fe14a8f325b34`,
+retain compact reports/scans/arena evidence only, restore forced H1 masking
+off and training-time power `1.0`, and keep update 2,072 as the sole current
+incumbent. Do not sweep the corruption power or run SAE work from this
+candidate. RMS norm matching remains disabled and target/`z_pred` SIGReg stay
+fixed at `5.76/1.0`.

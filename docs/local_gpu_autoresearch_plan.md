@@ -1627,9 +1627,15 @@ sweeps, held-out data, and repeated seeds.
   `research/experiment_force_first_action_mask_tail1.md`. Terminal update
   2,069 clears every gate except the H1 repeat margin, missing it by
   `0.0015028`; reject without repeat/arena and retain no state.
-- [ ] Preregister one final corruption-alignment follow-up: keep H1 forced and
+- [x] Preregister one final corruption-alignment follow-up: keep H1 forced and
   use `t=u^2` during training so future action tokens are masked with expected
   probability `2/3` instead of `1/2`. Keep all loss coefficients and gates
   fixed; close the line on failure rather than tuning the power. The frozen
   contract is in
-  `research/experiment_force_first_action_mask_timepower2_tail1.md`.
+  `research/experiment_force_first_action_mask_timepower2_tail1.md`. Primary
+  and exact-repeat terminal checkpoints pass every offline gate at H1/uniform
+  CE `2.8398960/4.4907011` and `2.8451609/4.4927080`. The primary scores
+  `50.781%` against incumbent update 2,072, but only `34.766%` against raw
+  BT4, below the frozen `36.523%` anchor. Reject it as an Elo-aligned
+  incumbent, retain no candidate state, restore power `1.0` with H1 forcing
+  off, and close corruption-power tuning.
