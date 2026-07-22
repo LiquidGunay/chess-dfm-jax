@@ -20,6 +20,23 @@ import research.train as local  # noqa: E402
 from chess_dfm_jax.nnx_bt4 import TrainableParam  # noqa: E402
 
 
+WDL_DIAGNOSTIC_AUX_KEYS = frozenset(
+    {
+        "wdl_weighted_loss",
+        "wdl_valid_count",
+        "wdl_label_one_hot_fraction",
+        "wdl_accuracy",
+        "wdl_expected_value_mse",
+        "wdl_target_win_fraction",
+        "wdl_target_draw_fraction",
+        "wdl_target_loss_fraction",
+        "wdl_loss_by_horizon",
+        "wdl_accuracy_by_horizon",
+        "wdl_expected_value_mse_by_horizon",
+    }
+)
+
+
 class DummyEncoder(nnx.Module):
     def __init__(self, embedding_size: int = 16):
         self.embedding_size = embedding_size
@@ -35,6 +52,15 @@ class DummyEncoder(nnx.Module):
             dtype=jnp.float32,
         )[None, None, :]
         return square + plane_mean.reshape((batch_size, 1, 1)) * feature
+
+
+class TrainableDummyEncoder(DummyEncoder):
+    def __init__(self, embedding_size: int = 16):
+        super().__init__(embedding_size)
+        self.scale = TrainableParam(jnp.asarray(1.0, dtype=jnp.float32))
+
+    def encode_tokens(self, planes: jax.Array) -> jax.Array:
+        return super().encode_tokens(planes) * self.scale[...]
 
 
 def _config_kwargs() -> dict[str, Any]:
@@ -78,6 +104,17 @@ def _pure_trainable(model: nnx.Module) -> dict[str, Any]:
 
 def _pure_optimizer(optimizer: nnx.Optimizer) -> dict[str, Any]:
     return nnx.to_pure_dict(nnx.state(optimizer.opt_state))
+
+
+def _tree_norm(tree: Any) -> float:
+    return float(
+        np.sqrt(
+            sum(
+                float(np.sum(np.square(np.asarray(leaf, dtype=np.float64))))
+                for leaf in jax.tree.leaves(tree)
+            )
+        )
+    )
 
 
 def _assert_trees_exact(left: Any, right: Any) -> None:
@@ -131,6 +168,7 @@ def _assert_loss_and_gradient_parity(
     batch: dict[str, jax.Array],
     model_seed: int,
     loss_seed: int,
+    local_only_aux_keys: frozenset[str] = frozenset(),
 ) -> tuple[tuple[Any, Any], Any]:
     local_model = local.JointLatentSASAModel(
         DummyEncoder(),
@@ -165,7 +203,20 @@ def _assert_loss_and_gradient_parity(
         rng,
         compute_fp32_legality=True,
     )
-    _assert_trees_exact(local_value, legacy_value)
+    local_value_for_parity = local_value
+    if local_only_aux_keys:
+        local_loss, local_aux = local_value
+        missing = local_only_aux_keys - set(local_aux)
+        assert not missing
+        local_value_for_parity = (
+            local_loss,
+            {
+                key: value
+                for key, value in local_aux.items()
+                if key not in local_only_aux_keys
+            },
+        )
+    _assert_trees_exact(local_value_for_parity, legacy_value)
     _assert_trees_exact(
         nnx.to_pure_dict(local_gradients),
         nnx.to_pure_dict(legacy_gradients),
@@ -1069,6 +1120,7 @@ def test_local_loss_oracle_covers_teacher_forcing_moments_and_heads():
         batch=batch,
         model_seed=37,
         loss_seed=107,
+        local_only_aux_keys=WDL_DIAGNOSTIC_AUX_KEYS,
     )
 
     assert float(aux["jepa_teacher_forcing"]) == 1.0
@@ -1076,8 +1128,159 @@ def test_local_loss_oracle_covers_teacher_forcing_moments_and_heads():
     assert float(loss) <= kwargs["loss_clip_value"] + 1e-6
     assert float(aux["value_loss"]) > 0.0
     assert float(aux["wdl_loss"]) > 0.0
+    assert float(aux["wdl_weighted_loss"]) == pytest.approx(
+        kwargs["wdl_coeff"] * float(aux["wdl_loss"])
+    )
+    assert float(aux["wdl_valid_count"]) == 3.0
+    assert float(aux["wdl_label_one_hot_fraction"]) == 1.0
+    assert 0.0 <= float(aux["wdl_accuracy"]) <= 1.0
+    assert float(aux["wdl_expected_value_mse"]) >= 0.0
+    assert float(aux["wdl_target_win_fraction"]) == pytest.approx(1.0 / 3.0)
+    assert float(aux["wdl_target_draw_fraction"]) == pytest.approx(1.0 / 3.0)
+    assert float(aux["wdl_target_loss_fraction"]) == pytest.approx(1.0 / 3.0)
+    assert aux["wdl_loss_by_horizon"].shape == (2,)
+    assert aux["wdl_accuracy_by_horizon"].shape == (2,)
+    assert aux["wdl_expected_value_mse_by_horizon"].shape == (2,)
     assert jnp.isfinite(aux["jepa_sigreg_loss"])
     assert jnp.isfinite(aux["jepa_pred_sigreg_loss"])
+
+
+@pytest.mark.parametrize("value", [True, -0.25, float("nan"), float("inf")])
+def test_wdl_coefficient_validation_fails_closed(value: Any):
+    config = local.JointLatentSASAConfig(wdl_coeff=value)
+    with pytest.raises(ValueError, match="wdl_coeff"):
+        local.validate_objective_config(
+            objective="normalized",
+            config=config,
+        )
+
+
+def test_wdl_auxiliary_requires_normalized_objective():
+    config = local.JointLatentSASAConfig(wdl_coeff=0.25)
+    with pytest.raises(ValueError, match="requires --objective normalized"):
+        local.validate_objective_config(
+            objective="legacy",
+            config=config,
+        )
+
+
+def test_wdl_coefficient_preserves_model_state_abi():
+    control = local.JointLatentSASAModel(
+        DummyEncoder(),
+        local.JointLatentSASAConfig(**_config_kwargs()),
+        rngs=nnx.Rngs(42),
+    )
+    candidate = local.JointLatentSASAModel(
+        DummyEncoder(),
+        local.JointLatentSASAConfig(
+            **(_config_kwargs() | {"wdl_coeff": 0.25})
+        ),
+        rngs=nnx.Rngs(42),
+    )
+    _assert_trees_exact(
+        _pure_trainable(control),
+        _pure_trainable(candidate),
+    )
+
+
+def test_wdl_auxiliary_requires_matching_per_horizon_labels():
+    model = local.JointLatentSASAModel(
+        DummyEncoder(),
+        local.JointLatentSASAConfig(
+            **(_config_kwargs() | {"wdl_coeff": 0.25})
+        ),
+        rngs=nnx.Rngs(43),
+    )
+    with pytest.raises(ValueError, match="requires per-horizon wdl_targets"):
+        local.joint_stage1_loss_fn(
+            model,
+            _batch(),
+            jax.random.PRNGKey(117),
+        )
+
+    wrong_shape = _batch() | {
+        "wdl_targets": jnp.ones((2, 2, 2), dtype=jnp.float32),
+    }
+    with pytest.raises(ValueError, match="must match predicted WDL logits"):
+        local.joint_stage1_loss_fn(
+            model,
+            wrong_shape,
+            jax.random.PRNGKey(118),
+        )
+
+
+def test_wdl_auxiliary_gradient_reaches_head_jepa_dfm_and_current_encoder():
+    config = local.JointLatentSASAConfig(
+        **(
+            _config_kwargs()
+            | {
+                "dfm_ce_coeff": 0.0,
+                "first_legality_coeff": 0.0,
+                "jepa_positive_coeff": 0.0,
+                "jepa_sigreg_coeff": 0.0,
+                "jepa_pred_sigreg_coeff": 0.0,
+                "value_coeff": 0.0,
+                "wdl_coeff": 1.0,
+            }
+        )
+    )
+    model = local.JointLatentSASAModel(
+        TrainableDummyEncoder(),
+        config,
+        rngs=nnx.Rngs(44),
+    )
+    model.jepa_transition.cond_w[...] = jnp.full_like(
+        model.jepa_transition.cond_w[...],
+        1e-3,
+    )
+    batch = _batch() | {
+        "wdl_targets": jnp.asarray(
+            [
+                [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]],
+                [[0.0, 0.0, 1.0], [1.0, 0.0, 0.0]],
+            ],
+            dtype=jnp.float32,
+        ),
+    }
+    (loss, aux), gradients = nnx.value_and_grad(
+        local.joint_stage1_loss_fn,
+        argnums=nnx.DiffState(0, TrainableParam),
+        has_aux=True,
+    )(
+        model,
+        batch,
+        jax.random.PRNGKey(119),
+    )
+    pure = nnx.to_pure_dict(gradients)
+
+    np.testing.assert_allclose(loss, aux["wdl_loss"], rtol=0.0, atol=1e-6)
+    assert local.gradient_component_names(config) == (
+        local.GRADIENT_COMPONENT_NAMES + (local.WDL_COMPONENT,)
+    )
+    components = local.gradient_component_vector(
+        model,
+        batch,
+        jax.random.PRNGKey(119),
+        1.0,
+    )
+    assert components.shape == (6,)
+    np.testing.assert_allclose(
+        components[-1],
+        aux["wdl_loss"],
+        rtol=0.0,
+        atol=1e-6,
+    )
+    for name in (
+        "encoder",
+        "dfm_state_projector",
+        "dfm_blocks",
+        "state_projector",
+        "jepa_hidden_adapter",
+        "jepa_transition",
+        "value_wdl_head",
+    ):
+        assert _tree_norm(pure[name]) > 0.0, name
+    assert _tree_norm(pure["out_proj"]) == 0.0
 
 
 def test_target_detach_changes_positive_gradient_but_not_target_sigreg():

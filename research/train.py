@@ -73,6 +73,7 @@ EXPERIMENT_OVERRIDES: dict[str, Any] = {
     "lr_min_ratio": 0.1,
     "jepa_target_sample_count": 1,
     "jepa_target_sampling_unit": "example_balanced",
+    "wdl_coeff": 0.25,
     "bt4_encode_chunk_size": 0,
     # "dfm_active_layers": 3,
     # "jepa_projector_active_layers": 1,
@@ -110,6 +111,7 @@ GRADIENT_COMPONENT_NAMES = (
     "fp32_legality",
 )
 TARGET_VARIANCE_HINGE_COMPONENT = "target_variance_hinge"
+WDL_COMPONENT = "wdl"
 GRADIENT_GROUP_NAMES = ("backbone", "dfm", "jepa", "other", "all")
 TARGET_VARIANCE_HINGE_EPSILON = 1e-4
 JEPA_STATE_RMS_EPSILON = 1e-6
@@ -2587,20 +2589,133 @@ def joint_stage1_loss_fn(
     wdl_loss = jnp.asarray(0.0, dtype=jnp.float32)
     value_pred_mean = jnp.asarray(0.0, dtype=jnp.float32)
     value_target_mean = jnp.asarray(0.0, dtype=jnp.float32)
+    wdl_diagnostics: dict[str, jnp.ndarray] | None = None
     if model.config.value_coeff != 0.0 or model.config.wdl_coeff != 0.0:
         with jax.named_scope("joint_value_wdl_heads"):
             value_pred, wdl_logits = model.value_wdl_from_pred(pred_z)
-        value_targets = jnp.asarray(batch.get("value_targets", jnp.zeros_like(value_pred)), dtype=jnp.float32)[:, :horizon]
-        value_loss_by_horizon = jnp.square(value_pred - value_targets)
-        value_loss = _weighted_horizon_mean(value_loss_by_horizon, future_valid * valid[:, None])
-        wdl_targets = jnp.asarray(batch.get("wdl_targets", jnp.zeros_like(wdl_logits)), dtype=jnp.float32)[:, :horizon]
-        wdl_sum = jnp.sum(wdl_targets, axis=-1, keepdims=True)
-        wdl_valid = (wdl_sum[..., 0] > 0).astype(jnp.float32)
-        wdl_targets = wdl_targets / jnp.maximum(wdl_sum, 1e-12)
-        wdl_loss_by_horizon = -jnp.sum(wdl_targets * jax.nn.log_softmax(wdl_logits, axis=-1), axis=-1)
-        wdl_loss = _weighted_horizon_mean(wdl_loss_by_horizon, future_valid * valid[:, None] * wdl_valid)
-        value_pred_mean = jnp.mean(jnp.asarray(value_pred, dtype=jnp.float32))
-        value_target_mean = jnp.mean(jnp.asarray(value_targets, dtype=jnp.float32))
+        if model.config.value_coeff != 0.0:
+            value_targets = jnp.asarray(
+                batch.get("value_targets", jnp.zeros_like(value_pred)),
+                dtype=jnp.float32,
+            )[:, :horizon]
+            value_loss_by_horizon = jnp.square(
+                value_pred - value_targets
+            )
+            value_loss = _weighted_horizon_mean(
+                value_loss_by_horizon,
+                future_valid * valid[:, None],
+            )
+            value_pred_mean = jnp.mean(
+                jnp.asarray(value_pred, dtype=jnp.float32)
+            )
+            value_target_mean = jnp.mean(
+                jnp.asarray(value_targets, dtype=jnp.float32)
+            )
+
+        if model.config.wdl_coeff != 0.0:
+            if "wdl_targets" not in batch:
+                raise ValueError(
+                    "Nonzero wdl_coeff requires per-horizon wdl_targets."
+                )
+            raw_wdl_targets = jnp.asarray(
+                batch["wdl_targets"],
+                dtype=jnp.float32,
+            )[:, :horizon]
+            if raw_wdl_targets.shape != wdl_logits.shape:
+                raise ValueError(
+                    "wdl_targets must match predicted WDL logits: "
+                    f"{raw_wdl_targets.shape} != {wdl_logits.shape}"
+                )
+            wdl_sum = jnp.sum(
+                raw_wdl_targets,
+                axis=-1,
+                keepdims=True,
+            )
+            wdl_valid = (wdl_sum[..., 0] > 0).astype(jnp.float32)
+            wdl_targets = raw_wdl_targets / jnp.maximum(wdl_sum, 1e-12)
+            wdl_mask = future_valid * valid[:, None] * wdl_valid
+            wdl_valid_count = jnp.sum(wdl_mask)
+            wdl_den_by_horizon = jnp.sum(wdl_mask, axis=0)
+            wdl_log_probs = jax.nn.log_softmax(wdl_logits, axis=-1)
+            wdl_probs = jnp.exp(wdl_log_probs)
+            wdl_loss_by_sample = -jnp.sum(
+                wdl_targets * wdl_log_probs,
+                axis=-1,
+            )
+            wdl_loss = _weighted_horizon_mean(
+                wdl_loss_by_sample,
+                wdl_mask,
+            )
+            wdl_loss_by_horizon = (
+                jnp.sum(wdl_loss_by_sample * wdl_mask, axis=0)
+                / jnp.maximum(wdl_den_by_horizon, 1.0)
+            )
+            wdl_correct = (
+                jnp.argmax(wdl_logits, axis=-1)
+                == jnp.argmax(wdl_targets, axis=-1)
+            ).astype(jnp.float32)
+            wdl_accuracy = _weighted_horizon_mean(
+                wdl_correct,
+                wdl_mask,
+            )
+            wdl_accuracy_by_horizon = (
+                jnp.sum(wdl_correct * wdl_mask, axis=0)
+                / jnp.maximum(wdl_den_by_horizon, 1.0)
+            )
+            wdl_expected_value = wdl_probs[..., 0] - wdl_probs[..., 2]
+            wdl_target_value = wdl_targets[..., 0] - wdl_targets[..., 2]
+            wdl_expected_value_square_error = jnp.square(
+                wdl_expected_value - wdl_target_value
+            )
+            wdl_expected_value_mse = _weighted_horizon_mean(
+                wdl_expected_value_square_error,
+                wdl_mask,
+            )
+            wdl_expected_value_mse_by_horizon = (
+                jnp.sum(
+                    wdl_expected_value_square_error * wdl_mask,
+                    axis=0,
+                )
+                / jnp.maximum(wdl_den_by_horizon, 1.0)
+            )
+            wdl_target_class_fraction = jnp.sum(
+                wdl_targets * wdl_mask[..., None],
+                axis=(0, 1),
+            ) / jnp.maximum(wdl_valid_count, 1.0)
+            wdl_label_is_one_hot = (
+                jnp.isclose(wdl_sum[..., 0], 1.0, rtol=0.0, atol=1e-6)
+                & jnp.isclose(
+                    jnp.sum(jnp.square(raw_wdl_targets), axis=-1),
+                    1.0,
+                    rtol=0.0,
+                    atol=1e-6,
+                )
+                & jnp.all(raw_wdl_targets >= 0.0, axis=-1)
+            ).astype(jnp.float32)
+            wdl_label_one_hot_fraction = _weighted_horizon_mean(
+                wdl_label_is_one_hot,
+                future_valid * valid[:, None],
+            )
+            wdl_diagnostics = {
+                "wdl_weighted_loss": (
+                    jnp.asarray(model.config.wdl_coeff, dtype=jnp.float32)
+                    * wdl_loss
+                ),
+                "wdl_valid_count": wdl_valid_count,
+                "wdl_label_one_hot_fraction": (
+                    wdl_label_one_hot_fraction
+                ),
+                "wdl_accuracy": wdl_accuracy,
+                "wdl_expected_value_mse": wdl_expected_value_mse,
+                "wdl_target_win_fraction": wdl_target_class_fraction[0],
+                "wdl_target_draw_fraction": wdl_target_class_fraction[1],
+                "wdl_target_loss_fraction": wdl_target_class_fraction[2],
+                "wdl_loss_by_horizon": wdl_loss_by_horizon,
+                "wdl_accuracy_by_horizon": wdl_accuracy_by_horizon,
+                "wdl_expected_value_mse_by_horizon": (
+                    wdl_expected_value_mse_by_horizon
+                ),
+            }
 
     horizon_valid = future_valid_for_loss * valid[:, None]
     if per_example_target_sampling:
@@ -2793,6 +2908,8 @@ def joint_stage1_loss_fn(
         "mask_prob": jnp.mean(1.0 - t),
         "loss_horizon": jnp.asarray(loss_horizon, dtype=jnp.float32),
     }
+    if wdl_diagnostics is not None:
+        aux.update(wdl_diagnostics)
     if dfm_objective_weight_by_horizon is not None:
         aux.update(
             {
@@ -3477,6 +3594,19 @@ def validate_objective_config(
         raise ValueError(
             "first_legality_coeff must be finite and non-negative, found "
             f"{config.first_legality_coeff!r}"
+        )
+    if (
+        isinstance(config.wdl_coeff, bool)
+        or not math.isfinite(config.wdl_coeff)
+        or config.wdl_coeff < 0.0
+    ):
+        raise ValueError(
+            "wdl_coeff must be finite and non-negative, found "
+            f"{config.wdl_coeff!r}"
+        )
+    if config.wdl_coeff != 0.0 and objective != "normalized":
+        raise ValueError(
+            "wdl_coeff requires --objective normalized."
         )
     dfm_active_layers = config.dfm_active_layers
     if (
@@ -5393,6 +5523,10 @@ def gradient_component_vector(
                 dtype=jnp.float32,
             )
         )
+    if model.config.wdl_coeff != 0.0:
+        components.append(
+            jnp.asarray(aux["wdl_loss"], dtype=jnp.float32)
+        )
     return jnp.stack(components)
 
 
@@ -5401,11 +5535,14 @@ def gradient_component_names(
 ) -> tuple[str, ...]:
     """Return the audit ABI, adding enabled-only research components."""
 
+    enabled_components: tuple[str, ...] = ()
     if config.jepa_target_variance_hinge_coeff != 0.0:
-        return GRADIENT_COMPONENT_NAMES + (
+        enabled_components += (
             TARGET_VARIANCE_HINGE_COMPONENT,
         )
-    return GRADIENT_COMPONENT_NAMES
+    if config.wdl_coeff != 0.0:
+        enabled_components += (WDL_COMPONENT,)
+    return GRADIENT_COMPONENT_NAMES + enabled_components
 
 
 def normalized_stage1_training_loss_fn(
@@ -7054,6 +7191,10 @@ def run_gradient_audit(
     primary_coefficients[component_names.index("fp32_legality")] = (
         model.config.first_legality_coeff
     )
+    if WDL_COMPONENT in component_names:
+        primary_coefficients[component_names.index(WDL_COMPONENT)] = (
+            model.config.wdl_coeff
+        )
     fractions = (0.01, 0.03, 0.10, 0.30)
     suggested_coefficients: dict[str, dict[str, dict[str, float]]] = {}
     for component_index, component_name in (
