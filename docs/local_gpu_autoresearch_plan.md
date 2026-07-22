@@ -1601,4 +1601,5 @@ sweeps, held-out data, and repeated seeds.
   played first action during training while leaving the unweighted objective,
   legality coefficient, architecture, schedule, and `0.0/5.76/1.0` loss
   fixed. This tests lower-variance inference-aligned H1 supervision without
-  another loss-weight sweep.
+  another loss-weight sweep. The frozen contract is in
+  `research/experiment_force_first_action_mask_tail1.md`.

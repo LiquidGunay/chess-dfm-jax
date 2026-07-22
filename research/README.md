@@ -264,3 +264,11 @@ The next bounded action-quality test should align training with fully masked
 inference by always masking the played first action, without reweighting CE or
 changing the legality coefficient. Norm matching stays off; target and
 `z_pred` SIGReg stay `5.76/1.0`.
+
+Experiment 018 is preregistered in
+`research/experiment_force_first_action_mask_tail1.md`. It restores the
+accepted uniform CE and legality coefficient, then always masks the played
+first action during training while leaving horizons 2--8 and every RNG stream
+unchanged. This matches fully masked validation/inference and doubles the H1
+sample count per batch without another scalar weighting change. Norm matching
+remains off; target and `z_pred` SIGReg remain `5.76/1.0`.
