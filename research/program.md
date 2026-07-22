@@ -195,6 +195,11 @@ Experiment 011's preregistration and completed outcome are in
 Experiment 012's preregistration and completed outcome are in
 `research/experiment_bt4_unchunked_fused_balanced_k1.md`.
 
+Experiment 013's frozen three-block future-gradient-tail contract is in
+`research/experiment_bt4_future_tail3_balanced_k1.md`. Its loss remains fixed
+at norm/target/prediction coefficients `0.0/5.76/1.0`; only the future BT4
+gradient boundary changes.
+
 ## Editable surface
 
 During automated architecture research, edit only `research/train.py`.

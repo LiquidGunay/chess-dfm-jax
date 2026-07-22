@@ -163,6 +163,17 @@ checkpoint-compatible boundary and predicts a memory footprint below the
 fused graph. This has priority over legality-coefficient tuning, pass-count
 sweeps, or SAE refits.
 
+Thirteenth-experiment preregistration, 2026-07-22: CPU inspection confirms a
+clean boundary between each of BT4's 15 uniform transformer blocks, with no
+final encoder norm or cross-layer state and no required checkpoint-ABI change.
+Freeze a three-block future tail: detach the future activation after the
+embedding and blocks 0--11, then attach blocks 12--14 and the shared projector.
+This exposes `33,236,736` parameters (`17.02%` of the encoder) to future
+gradients while all `195,305,728` encoder parameters remain trainable from the
+current-board path. The immutable contract and staged systems/quality gates
+are in `research/experiment_bt4_future_tail3_balanced_k1.md`. RMS norm matching
+remains off; target and `z_pred` SIGReg remain `5.76/1.0`.
+
 This document is the implementation contract for turning the existing
 TPU/cloud-oriented BT4 + DFM + JEPA experiment into a fast, measurable,
 single-A10G research loop.
@@ -1422,8 +1433,21 @@ sweeps, held-out data, and repeated seeds.
   `4.4965047017` with every latent gate passing. Legal mass `0.6445921361`
   misses its floor by `0.0021314049`, so reject it without repeat/arena and
   retain no candidate state.
-- [ ] Stop gradients only through the future-target BT4 encode while keeping
+- [x] Stop gradients only through the future-target BT4 encode while keeping
   BT4 trainable from the current-board DFM/action and JEPA paths. Keep the
   projector attached on both sides and preserve balanced K=1, loss, schedule,
   depths, batch, and evaluation. The frozen contract is in
-  `research/experiment_bt4_future_target_stopgrad_balanced_k1.md`.
+  `research/experiment_bt4_future_target_stopgrad_balanced_k1.md`. Its primary
+  passes, but the exact repeat misses legal mass by `0.000376`; reject without
+  arena or retained state.
+- [x] Isolate fused execution with all future gradients attached. It gains
+  `15.00%` fixed-run throughput and passes every non-CE gate, but its CE gain
+  is inside repeat noise. Reject without repeat/arena or retained state; full
+  evidence is in
+  `research/experiment_bt4_unchunked_fused_balanced_k1.md`.
+- [ ] Test the preregistered three-block future-gradient tail. Keep the current
+  BT4 path fully trainable, detach the future embedding and first 12 blocks,
+  attach the final three blocks and shared projector, and hold loss at
+  norm/target/prediction `0.0/5.76/1.0`. Run CPU routing/ABI tests, then the
+  batch-128 A10G smoke/profile gates before any fixed-time run. The frozen
+  contract is in `research/experiment_bt4_future_tail3_balanced_k1.md`.
