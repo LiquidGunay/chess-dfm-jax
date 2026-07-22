@@ -45,7 +45,9 @@ candidate semantics are:
   they simply do not update BT4 through the future branch.
 - Keep the full source-compatible model and optimizer ABI. All BT4 parameters
   retain optimizer moments and may update from current-board gradients.
-- Preserve exact forward values for identical parameters and inputs.
+- Preserve mathematically equivalent forward values for identical parameters
+  and inputs. Separate encoder batch shapes may introduce only roundoff-scale
+  kernel/reduction differences; CPU preflight measures and bounds them.
   Evaluation remains full-horizon; inference is unchanged and does not encode
   future boards.
 - Initially support only online targets, balanced per-example K=1 sampling,
@@ -93,7 +95,8 @@ with at most five temporary states.
 
 Before the fixed run:
 
-1. CPU tests prove default exactness; candidate forward equality; current-only
+1. CPU tests prove default exactness; candidate forward numerical equivalence;
+   current-only
    BT4 gradients; exact-zero future-branch BT4 gradients; attached future
    projector gradients; unchanged model/optimizer ABI; full-horizon
    evaluation; unchanged DFM RNG and inference; explicit reporting/resume

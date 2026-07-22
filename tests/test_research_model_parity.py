@@ -502,6 +502,7 @@ def test_local_config_and_initialized_model_match_legacy_exactly():
             "jepa_target_sampling_unit",
             "jepa_state_fixed_unit_rms",
             "bt4_freeze_backbone",
+            "bt4_future_target_stop_gradient",
         }
     ]
     legacy_fields = [
@@ -512,6 +513,12 @@ def test_local_config_and_initialized_model_match_legacy_exactly():
     assert (
         local.JointLatentSASAConfig.__dataclass_fields__[
             "bt4_freeze_backbone"
+        ].default
+        is False
+    )
+    assert (
+        local.JointLatentSASAConfig.__dataclass_fields__[
+            "bt4_future_target_stop_gradient"
         ].default
         is False
     )

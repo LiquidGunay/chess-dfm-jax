@@ -73,8 +73,7 @@ EXPERIMENT_OVERRIDES: dict[str, Any] = {
     "lr_min_ratio": 0.1,
     "jepa_target_sample_count": 1,
     "jepa_target_sampling_unit": "example_balanced",
-    "bt4_freeze_backbone": True,
-    "bt4_learning_rate": 0.0,
+    "bt4_future_target_stop_gradient": True,
     # "dfm_active_layers": 3,
     # "jepa_projector_active_layers": 1,
     # "jepa_sampled_target_anchors": True,
@@ -205,6 +204,7 @@ class JointLatentSASAConfig:
     skip_nonfinite_updates: bool = True
     unfreeze_bt4_encoder: bool = True
     bt4_freeze_backbone: bool = False
+    bt4_future_target_stop_gradient: bool = False
     bt4_encode_chunk_size: int = 0
     jepa_state_rmsnorm: bool = False
     jepa_state_fixed_unit_rms: bool = False
@@ -1028,6 +1028,7 @@ class JointLatentSASAModel(nnx.Module):
         self.encoder_dim = int(encoder.embedding_size)
         self.z_dim = int(config.z_dim)
         validate_bt4_freeze_config(config)
+        validate_bt4_future_target_stop_gradient_config(config)
         if config.jepa_loss_type != "raw_mse":
             raise ValueError(
                 "Joint projected-vector training supports raw_mse JEPA loss only."
@@ -1289,6 +1290,29 @@ class JointLatentSASAModel(nnx.Module):
         future_planes: jnp.ndarray,
     ) -> tuple[jnp.ndarray, jnp.ndarray]:
         batch_size, horizon, channels, height, width = future_planes.shape
+        if self.config.bt4_future_target_stop_gradient:
+            current_tokens = self.encode_bt4_tokens(current_planes)
+            flat_future_planes = future_planes.reshape(
+                (batch_size * horizon, channels, height, width)
+            )
+            future_tokens = jax.lax.stop_gradient(
+                self.encode_bt4_tokens(flat_future_planes)
+            ).reshape(
+                (batch_size, horizon, 64, self.encoder_dim)
+            )
+            tokens = jnp.concatenate(
+                (current_tokens[:, None, :, :], future_tokens),
+                axis=1,
+            )
+            vectors = self.state_projector(
+                tokens.reshape(
+                    (batch_size * (horizon + 1), 64, self.encoder_dim)
+                )
+            ).reshape(
+                (batch_size, horizon + 1, self.z_dim)
+            )
+            return tokens, self.normalize_jepa_state(vectors)
+
         all_planes = jnp.concatenate(
             (current_planes[:, None, :, :, :], future_planes),
             axis=1,
@@ -2696,6 +2720,24 @@ def joint_stage1_loss_fn(
             aux["jepa_target_assignment_count_by_horizon"] = (
                 target_assignment_count_by_horizon
             )
+        if model.config.bt4_future_target_stop_gradient:
+            aux.update(
+                {
+                    "bt4_future_target_stop_gradient": jnp.asarray(
+                        1.0,
+                        dtype=jnp.float32,
+                    ),
+                    "bt4_trainable_encoded_boards_per_example": (
+                        jnp.asarray(1.0, dtype=jnp.float32)
+                    ),
+                    "bt4_stop_gradient_encoded_boards_per_example": (
+                        jnp.asarray(
+                            configured_target_count,
+                            dtype=jnp.float32,
+                        )
+                    ),
+                }
+            )
         if model.config.jepa_sampled_target_anchors:
             eligible_anchor_slots = (
                 valid[:, None] * future_valid[:, : max(horizon - 1, 0)]
@@ -2882,6 +2924,41 @@ def validate_bt4_freeze_config(config: JointLatentSASAConfig) -> None:
         raise ValueError(
             "bt4_freeze_backbone requires bt4_learning_rate=0.0, found "
             f"{config.bt4_learning_rate!r}"
+        )
+
+
+def validate_bt4_future_target_stop_gradient_config(
+    config: JointLatentSASAConfig,
+) -> None:
+    """Restrict asymmetric BT4 gradients to the measured K=1 contract."""
+
+    if not config.bt4_future_target_stop_gradient:
+        return
+    requirements = {
+        "bt4_freeze_backbone": (config.bt4_freeze_backbone, False),
+        "unfreeze_bt4_encoder": (config.unfreeze_bt4_encoder, True),
+        "jepa_target_semantics": (config.jepa_target_semantics, "online"),
+        "jepa_target_mode": (config.jepa_target_mode, "projected_bt4"),
+        "jepa_target_sample_count": (config.jepa_target_sample_count, 1),
+        "jepa_target_sampling_unit": (
+            config.jepa_target_sampling_unit,
+            "example_balanced",
+        ),
+        "bt4_encode_chunk_size": (config.bt4_encode_chunk_size, 0),
+        "jepa_sampled_target_anchors": (
+            config.jepa_sampled_target_anchors,
+            False,
+        ),
+    }
+    mismatches = [
+        f"{name}={actual!r} (required {expected!r})"
+        for name, (actual, expected) in requirements.items()
+        if actual != expected
+    ]
+    if mismatches:
+        raise ValueError(
+            "bt4_future_target_stop_gradient requires "
+            + ", ".join(mismatches)
         )
 
 
@@ -3090,6 +3167,7 @@ def create_joint_components(
     """Build the local checkpoint-compatible model and configured optimizer."""
 
     validate_bt4_freeze_config(config)
+    validate_bt4_future_target_stop_gradient_config(config)
     encoder_dtype = _parse_compute_dtype(config.encoder_dtype)
     encoder = make_bt4_model(
         bt4_params,
@@ -4213,6 +4291,8 @@ def serialized_model_config(
         payload.pop("dfm_active_layers")
     if not config.bt4_freeze_backbone:
         payload.pop("bt4_freeze_backbone")
+    if not config.bt4_future_target_stop_gradient:
+        payload.pop("bt4_future_target_stop_gradient")
     return payload
 
 
@@ -4436,6 +4516,25 @@ def build_research_resume_contract(
             "legacy_exact_optimizer_restore": False,
             "research_checkpoint_resume": "exact_frozen_optimizer_abi",
             "evaluation_and_inference_values_affected": False,
+        }
+    if config.bt4_future_target_stop_gradient:
+        objective_contract["bt4_future_target_stop_gradient"] = {
+            "scope": "training_gradient_routing_only",
+            "encoder_calls_per_step": 2,
+            "trainable_current_boards_per_example": 1,
+            "stop_gradient_future_boards_per_example": int(
+                config.jepa_target_sample_count
+            ),
+            "current_bt4_token_gradient": "attached",
+            "future_bt4_token_gradient": "exact_zero",
+            "future_state_projector_gradient": "attached",
+            "shared_state_projector": True,
+            "model_state_abi": "unchanged",
+            "optimizer_state_abi": "unchanged_source_compatible",
+            "bt4_optimizer_partition": "trainable",
+            "evaluation_forward_values_affected": False,
+            "evaluation_horizons": "all",
+            "inference_affected": False,
         }
     return {
         "architecture_source": ARCHITECTURE_SOURCE,
@@ -6835,6 +6934,7 @@ def main() -> int:
         config=config,
     )
     validate_bt4_freeze_config(config)
+    validate_bt4_future_target_stop_gradient_config(config)
     if resume_from is None:
         validate_legacy_init_for_config(config, args.init)
     if (
