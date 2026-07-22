@@ -73,6 +73,8 @@ EXPERIMENT_OVERRIDES: dict[str, Any] = {
     "lr_min_ratio": 0.1,
     "jepa_target_sample_count": 1,
     "jepa_target_sampling_unit": "example_balanced",
+    "bt4_freeze_backbone": True,
+    "bt4_learning_rate": 0.0,
     # "dfm_active_layers": 3,
     # "jepa_projector_active_layers": 1,
     # "jepa_sampled_target_anchors": True,
@@ -202,6 +204,7 @@ class JointLatentSASAConfig:
     lr_min_ratio: float = 1.0
     skip_nonfinite_updates: bool = True
     unfreeze_bt4_encoder: bool = True
+    bt4_freeze_backbone: bool = False
     bt4_encode_chunk_size: int = 0
     jepa_state_rmsnorm: bool = False
     jepa_state_fixed_unit_rms: bool = False
@@ -1024,6 +1027,7 @@ class JointLatentSASAModel(nnx.Module):
         self.compute_dtype = jnp.dtype(compute_dtype)
         self.encoder_dim = int(encoder.embedding_size)
         self.z_dim = int(config.z_dim)
+        validate_bt4_freeze_config(config)
         if config.jepa_loss_type != "raw_mse":
             raise ValueError(
                 "Joint projected-vector training supports raw_mse JEPA loss only."
@@ -1237,10 +1241,13 @@ class JointLatentSASAModel(nnx.Module):
         )
 
     def encode_bt4_tokens(self, planes: jnp.ndarray) -> jnp.ndarray:
-        return jnp.asarray(
+        tokens = jnp.asarray(
             self.encoder.encode_tokens(planes),
             dtype=self.compute_dtype,
         )
+        if self.config.bt4_freeze_backbone:
+            tokens = jax.lax.stop_gradient(tokens)
+        return tokens
 
     def encode_current_jepa(self, current_planes: jnp.ndarray) -> jnp.ndarray:
         """Return projected current-state JEPA vectors."""
@@ -2861,6 +2868,36 @@ def validate_learning_rate_schedule_config(
         )
 
 
+def validate_bt4_freeze_config(config: JointLatentSASAConfig) -> None:
+    """Reject ambiguous frozen-backbone configurations."""
+
+    if not config.bt4_freeze_backbone:
+        return
+    if not config.unfreeze_bt4_encoder:
+        raise ValueError(
+            "bt4_freeze_backbone preserves the source model ABI and requires "
+            "unfreeze_bt4_encoder=True"
+        )
+    if config.bt4_learning_rate != 0.0:
+        raise ValueError(
+            "bt4_freeze_backbone requires bt4_learning_rate=0.0, found "
+            f"{config.bt4_learning_rate!r}"
+        )
+
+
+def validate_legacy_init_for_config(
+    config: JointLatentSASAConfig,
+    init_mode: str,
+) -> None:
+    """Require fresh optimizer state for a changed optimizer ABI."""
+
+    if config.bt4_freeze_backbone and init_mode != "model-only":
+        raise ValueError(
+            "bt4_freeze_backbone changes the optimizer ABI and requires "
+            "--init model-only for legacy initialization"
+        )
+
+
 def learning_rate_schedules(config: JointLatentSASAConfig):
     """Return main and BT4 schedules sharing one optimizer-step contract."""
 
@@ -2964,25 +3001,30 @@ def learning_rate_schedule_contract(
     }
 
 
-def create_joint_components(
-    bt4_params: dict[str, Any],
+def _optimizer_partition_for_path(
+    path: tuple[Any, ...],
+    *,
+    freeze_backbone: bool,
+) -> str:
+    parts = [str(getattr(item, "key", item)) for item in path]
+    name = "/".join(parts)
+    if name.startswith("encoder/embedding") or name.startswith(
+        "encoder/layers"
+    ):
+        return "frozen_bt4" if freeze_backbone else "bt4"
+    return "main"
+
+
+def create_joint_optimizer(
+    model: JointLatentSASAModel,
     config: JointLatentSASAConfig,
     *,
-    seed: int = 0,
-) -> tuple[JointLatentSASAModel, nnx.Optimizer]:
-    """Build the local checkpoint-compatible model and optimizer."""
+    freeze_backbone: bool | None = None,
+) -> nnx.Optimizer:
+    """Build either the configured or source-compatible optimizer ABI."""
 
-    encoder_dtype = _parse_compute_dtype(config.encoder_dtype)
-    encoder = make_bt4_model(
-        bt4_params,
-        dtype=encoder_dtype,
-        train_encoder=config.unfreeze_bt4_encoder,
-    )
-    model = JointLatentSASAModel(
-        encoder,
-        config,
-        rngs=nnx.Rngs(seed),
-    )
+    if freeze_backbone is None:
+        freeze_backbone = config.bt4_freeze_backbone
     learning_rate, bt4_learning_rate = learning_rate_schedules(config)
     if config.use_muon:
         from chess_dfm_jax.nnx_bt4 import muon_adamw
@@ -2991,34 +3033,38 @@ def create_joint_components(
             learning_rate=learning_rate,
             weight_decay=config.weight_decay,
         )
-        bt4_tx = muon_adamw(
-            learning_rate=bt4_learning_rate,
-            weight_decay=config.weight_decay,
-        )
+        if not freeze_backbone:
+            bt4_tx = muon_adamw(
+                learning_rate=bt4_learning_rate,
+                weight_decay=config.weight_decay,
+            )
     else:
         main_tx = optax.adamw(
             learning_rate=learning_rate,
             weight_decay=config.weight_decay,
         )
-        bt4_tx = optax.adamw(
-            learning_rate=bt4_learning_rate,
-            weight_decay=config.weight_decay,
-        )
+        if not freeze_backbone:
+            bt4_tx = optax.adamw(
+                learning_rate=bt4_learning_rate,
+                weight_decay=config.weight_decay,
+            )
 
     def label_one(path, _value):
-        parts = [str(getattr(item, "key", item)) for item in path]
-        name = "/".join(parts)
-        if name.startswith("encoder/embedding") or name.startswith(
-            "encoder/layers"
-        ):
-            return "bt4"
-        return "main"
+        return _optimizer_partition_for_path(
+            path,
+            freeze_backbone=freeze_backbone,
+        )
 
     def label_tree(params):
         return jax.tree_util.tree_map_with_path(label_one, params)
 
+    transforms = {"main": main_tx}
+    if freeze_backbone:
+        transforms["frozen_bt4"] = optax.set_to_zero()
+    else:
+        transforms["bt4"] = bt4_tx
     tx = optax.multi_transform(
-        {"main": main_tx, "bt4": bt4_tx},
+        transforms,
         label_tree,
     )
     if config.skip_nonfinite_updates:
@@ -3032,6 +3078,30 @@ def create_joint_components(
             tx,
         )
     optimizer = nnx.Optimizer(model, tx, wrt=TrainableParam)
+    return optimizer
+
+
+def create_joint_components(
+    bt4_params: dict[str, Any],
+    config: JointLatentSASAConfig,
+    *,
+    seed: int = 0,
+) -> tuple[JointLatentSASAModel, nnx.Optimizer]:
+    """Build the local checkpoint-compatible model and configured optimizer."""
+
+    validate_bt4_freeze_config(config)
+    encoder_dtype = _parse_compute_dtype(config.encoder_dtype)
+    encoder = make_bt4_model(
+        bt4_params,
+        dtype=encoder_dtype,
+        train_encoder=config.unfreeze_bt4_encoder,
+    )
+    model = JointLatentSASAModel(
+        encoder,
+        config,
+        rngs=nnx.Rngs(seed),
+    )
+    optimizer = create_joint_optimizer(model, config)
     return model, optimizer
 
 
@@ -4141,6 +4211,8 @@ def serialized_model_config(
         payload.pop("jepa_projector_active_layers")
     if config.dfm_active_layers == 0:
         payload.pop("dfm_active_layers")
+    if not config.bt4_freeze_backbone:
+        payload.pop("bt4_freeze_backbone")
     return payload
 
 
@@ -4345,15 +4417,31 @@ def build_research_resume_contract(
                 "target=decay*target+(1-decay)*online_updated"
             ),
         }
+    optimizer_contract: dict[str, Any] = {
+        "learning_rate_schedule": learning_rate_schedule_contract(
+            config
+        ),
+    }
+    if config.bt4_freeze_backbone:
+        optimizer_contract["bt4_backbone_freeze"] = {
+            "model_state_abi": "source_compatible_trainable_encoder_leaves",
+            "forward_values": "unchanged",
+            "gradient_boundary": "stop_gradient_after_bt4_tokens",
+            "optimizer_partition": "frozen_bt4_set_to_zero",
+            "optimizer_state_for_bt4": "none",
+            "bt4_learning_rate": float(config.bt4_learning_rate),
+            "legacy_initialization": (
+                "model_only_after_compatibility_optimizer_validation"
+            ),
+            "legacy_exact_optimizer_restore": False,
+            "research_checkpoint_resume": "exact_frozen_optimizer_abi",
+            "evaluation_and_inference_values_affected": False,
+        }
     return {
         "architecture_source": ARCHITECTURE_SOURCE,
         "model_config": serialized_model_config(config),
         "objective": objective_contract,
-        "optimizer": {
-            "learning_rate_schedule": learning_rate_schedule_contract(
-                config
-            ),
-        },
+        "optimizer": optimizer_contract,
         "data": {
             "batch_size": int(batch_size),
             "horizon": int(config.horizon),
@@ -6201,6 +6289,57 @@ def gradient_group_for_path(path: tuple[Any, ...]) -> str:
     return "other"
 
 
+def training_state_footprint(
+    model: nnx.Module,
+    optimizer: nnx.Optimizer,
+) -> dict[str, Any]:
+    """Summarize model parameters and optimizer storage without full schemas."""
+
+    _, trainable_state, _ = nnx.split(model, TrainableParam, ...)
+    path_leaves, _ = jax.tree_util.tree_flatten_with_path(trainable_state)
+    group_counts = {name: 0 for name in GRADIENT_GROUP_NAMES}
+    partition_counts = {
+        "main": 0,
+        "bt4": 0,
+        "frozen_bt4": 0,
+    }
+    for path, leaf in path_leaves:
+        count = int(np.prod(leaf.shape, dtype=np.int64))
+        group = gradient_group_for_path(path)
+        partition = _optimizer_partition_for_path(
+            path,
+            freeze_backbone=model.config.bt4_freeze_backbone,
+        )
+        group_counts[group] += count
+        group_counts["all"] += count
+        partition_counts[partition] += count
+
+    def compact_abi(value: Any) -> dict[str, Any]:
+        abi = research_state_abi(value)
+        return {
+            "sha256": abi["sha256"],
+            "leaf_count": int(abi["leaf_count"]),
+            "nbytes": int(abi["nbytes"]),
+        }
+
+    return {
+        "model_trainable_parameter_count_by_group": group_counts,
+        "model_parameter_count_by_optimizer_partition": partition_counts,
+        "optimizer_active_parameter_count": (
+            partition_counts["main"] + partition_counts["bt4"]
+        ),
+        "optimizer_frozen_parameter_count": partition_counts[
+            "frozen_bt4"
+        ],
+        "model_trainable_state_abi": compact_abi(
+            nnx.state(model, TrainableParam)
+        ),
+        "optimizer_state_abi": compact_abi(
+            nnx.state(optimizer.opt_state)
+        ),
+    }
+
+
 def reconstruct_polarized_grams(
     diagonal_q: np.ndarray,
     pair_q: np.ndarray,
@@ -6659,6 +6798,9 @@ def main() -> int:
         objective=args.objective,
         config=config,
     )
+    validate_bt4_freeze_config(config)
+    if resume_from is None:
+        validate_legacy_init_for_config(config, args.init)
     if (
         args.gradient_audit
         and config.jepa_target_semantics == "ema"
@@ -6750,15 +6892,24 @@ def main() -> int:
             if args.init == "exact" and not args.gradient_audit
             else "model-only"
         )
+        import_optimizer = optimizer
+        if config.bt4_freeze_backbone:
+            import_optimizer = create_joint_optimizer(
+                model,
+                config,
+                freeze_backbone=False,
+            )
         import_result = import_legacy_checkpoint(
             source_checkpoint_path,
             model=model,
-            optimizer=optimizer,
+            optimizer=import_optimizer,
             expected_size_bytes=int(checkpoint_asset["state_npz_size_bytes"]),
             expected_sha256=str(checkpoint_asset["state_npz_sha256"]),
             expected_step=checkpoint_step,
             init_mode=source_init_mode,
         )
+        if import_optimizer is not optimizer:
+            del import_optimizer
         if ema_target is not None:
             sync_ema_target_from_online(ema_target, model)
         lineage = {
@@ -6773,10 +6924,18 @@ def main() -> int:
             "run_id": run_id,
             "git_commit": commit,
         }
+        if config.bt4_freeze_backbone:
+            lineage["legacy_optimizer_validation"] = (
+                "source_compatible_temporary_optimizer"
+            )
+            lineage["training_optimizer"] = (
+                "fresh_frozen_bt4_optimizer"
+            )
     restore_seconds = time.perf_counter() - restore_started
     initial_optimizer_step = int(optimizer.step[...])
     initial_research_update = research_update
     initial_data_cursor = next_data_cursor
+    state_footprint = training_state_footprint(model, optimizer)
     output_dir.mkdir(parents=True, exist_ok=False)
 
     if args.gradient_audit:
@@ -6826,6 +6985,7 @@ def main() -> int:
             "learning_rate_schedule": learning_rate_schedule_contract(
                 config
             ),
+            "training_state_footprint": state_footprint,
             "checkpoint_step": checkpoint_step,
             "initial_optimizer_step": initial_optimizer_step,
             "initial_research_update": initial_research_update,
@@ -6965,6 +7125,7 @@ def main() -> int:
         "args": vars(args) | {"output_dir": str(output_dir)},
         "model_config": serialized_model_config(config),
         "learning_rate_schedule": learning_rate_schedule_contract(config),
+        "training_state_footprint": state_footprint,
         "ema_target": ema_target_metadata,
         "checkpoint_step": checkpoint_step,
         "initial_optimizer_step": initial_optimizer_step,

@@ -507,6 +507,7 @@ def test_hinge_cli_contract_and_disabled_serialization() -> None:
             "jepa_sampled_target_anchors",
             "jepa_target_sampling_unit",
             "jepa_state_fixed_unit_rms",
+            "bt4_freeze_backbone",
         }
     }
     args = train.parse_args(
