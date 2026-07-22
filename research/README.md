@@ -253,3 +253,14 @@ the final bounded scalar interpolation: `3/16` first-action CE share and
 first-legality coefficient `3.0`, preserving ratio 16 and every model, data,
 schedule, inference, validation, and SIGReg contract. Failure closes this
 scalar line rather than authorizing a parameter sweep.
+
+Experiment 017 is complete and rejected at its primary gate. H1-first
+selection chooses terminal update 2,043 at H1/uniform CE
+`2.8555801/4.4992252`, accuracy `0.1106110`, and legal mass `0.6483664`.
+Accuracy, legal mass, and every latent-health control pass, but both CE gates
+fail. Run no repeat or arena, retain no candidate state, restore the
+unweighted one-block-tail surface, and close scalar first-action weighting.
+The next bounded action-quality test should align training with fully masked
+inference by always masking the played first action, without reweighting CE or
+changing the legality coefficient. Norm matching stays off; target and
+`z_pred` SIGReg stay `5.76/1.0`.

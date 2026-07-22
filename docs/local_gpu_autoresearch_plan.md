@@ -258,6 +258,26 @@ clear the existing H1, uniform-CE, and legal-mass gates, close scalar
 first-action reweighting and move to an explicitly constrained or
 legality-conditioned action objective rather than sweeping more shares.
 
+Seventeenth-experiment outcome, 2026-07-22: the ratio-preserving midpoint
+(`3/16` first-action share, legality coefficient `3.0`) restores legal mass
+but still erases the desired CE gain. H1-first selection chooses terminal
+update 2,043 at H1/uniform CE `2.8555801/4.4992252`, accuracy `0.1106110`, and
+legal mass `0.6483664`. Accuracy, legal mass, latent health, and every trivial
+control pass, but H1 and uniform CE miss their frozen ceilings by `0.0153216`
+and `0.0020412`. The fixed run reaches `151.079` examples/s. Reject without
+repeat or arena, delete all three candidate states, return to the unweighted
+one-block-tail incumbent, and close scalar first-action weighting. Norm
+matching stays off and target/`z_pred` SIGReg stay fixed at `5.76/1.0`.
+
+Plan adjustment after Experiment 017: do not sweep more first-action shares
+or legality coefficients. The next action-quality experiment should change a
+single structural property of the objective or corruption process while
+preserving the fixed loss coefficients and legal-mass gate. A high-priority
+candidate is to force the played first action to be masked during training,
+matching the fully masked validation/inference start and doubling its
+effective per-update sample count without reweighting the loss. Preregister
+that train/eval-alignment test before activation.
+
 This document is the implementation contract for turning the existing
 TPU/cloud-oriented BT4 + DFM + JEPA experiment into a fast, measurable,
 single-A10G research loop.
@@ -1568,9 +1588,17 @@ sweeps, held-out data, and repeated seeds.
   update 2,062 misses the H1, uniform-CE, and legal-mass gates at
   `2.8581280/4.5007452/0.6460591`; reject without repeat/arena and retain no
   candidate state.
-- [ ] Test one final scalar midpoint with `3/16` first-action CE share and
+- [x] Test one final scalar midpoint with `3/16` first-action CE share and
   first-legality coefficient `3.0`, preserving ratio 16 and every other
   contract. If it fails any primary gate, close scalar first-action
   reweighting and move to a constrained or legality-conditioned objective.
   The frozen contract is in
   `research/experiment_dfm_first_action_share1875_legality3_tail1.md`.
+  Terminal update 2,043 clears accuracy/legal mass but misses H1/uniform CE
+  at `2.8555801/4.4992252`; reject without repeat/arena, retain no state, and
+  close scalar weighting.
+- [ ] Preregister a train/eval-alignment experiment that always masks the
+  played first action during training while leaving the unweighted objective,
+  legality coefficient, architecture, schedule, and `0.0/5.76/1.0` loss
+  fixed. This tests lower-variance inference-aligned H1 supervision without
+  another loss-weight sweep.

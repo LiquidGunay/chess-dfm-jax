@@ -1,7 +1,8 @@
 # Experiment 017: midpoint first-action share with matched legality
 
-Status: preregistered on 2026-07-22; activation and measurements have not
-started.
+Status: completed and rejected at the primary gate on 2026-07-22. No repeat
+or arena was run, no candidate state is retained, and scalar first-action
+share/coefficient tuning is closed.
 
 ## Question and hypothesis
 
@@ -100,3 +101,36 @@ Failure at any earlier gate gets no repeat, arena, pass-count sweep, or SAE
 work. Retain only a qualifying primary selected state and compact evidence;
 delete all nonselected and repeat states. Keep all mutable files below
 `/mountpoint/.exp`, and never overlap GPU workloads.
+
+## Outcome
+
+The CPU/config gates passed. The one-update A10G smoke cold-compiled in
+`173.121 s`, used `12,866,224,128` peak JAX HBM bytes, and confirmed exact
+float32 weights `[0.1875, 0.11607143, ..., 0.11607143]`, coefficient `3.0`,
+ratio 16, balanced 16-per-horizon targets, SIGReg counts `576/512`, future
+routing `14/1`, finite unclipped loss, and no state write. Per preregistration,
+the shape-identical Experiment 016 profile was reused rather than spending a
+second 30-update GPU profile.
+
+The fixed run completed `2,043` updates and `261,504` examples at `151.079`
+end-to-end and `212.031` device examples/s, with `12,973,376,512` peak HBM
+bytes. Two-pool H1-first selection chose the terminal checkpoint:
+
+| Update | H1 CE | Uniform CE | Accuracy | Legal mass |
+|---:|---:|---:|---:|---:|
+| 800 | 2.8623868 | 4.5057547 | 0.1087952 | 0.6448959 |
+| 1600 | 2.8597316 | 4.5016250 | 0.1097260 | 0.6469449 |
+| **2043** | **2.8555801** | **4.4992252** | **0.1106110** | **0.6483664** |
+
+The selected checkpoint clears accuracy and legal mass, but misses the H1
+ceiling by `0.0153216` and the uniform-CE ceiling by `0.0020412`. Latent
+health passes: prediction effective-rank mean/min is `30.9981/29.1104`,
+feature-std p05 mean/min is `0.65003/0.63692`, mean target RMS is `0.92481`,
+and prediction/target RMS ratio is `0.97215`. Positive JEPA prediction beats
+zero, identity, and action-shuffled controls at every horizon.
+
+The midpoint restores legal mass but does not produce the required action or
+uniform-CE improvement. Reject without repeat or arena, delete all three
+state payloads, restore the unweighted one-block-tail surface, and close
+scalar first-action share/coefficient interpolation. RMS norm matching
+remains disabled; target and `z_pred` SIGReg remain fixed at `5.76/1.0`.
