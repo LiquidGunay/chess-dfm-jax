@@ -127,6 +127,14 @@ delete all candidate states, and return the active graph to the trainable BT4
 balanced-K1 incumbent. The result motivates a separately controlled partial
 gradient-routing experiment; it does not justify tuning the fixed loss.
 
+The active experiment keeps BT4 trainable on the current-board action and
+JEPA paths but stops gradients through the future-target BT4 token output.
+The shared state projector remains attached to both branches. This isolates
+whether future-side encoder gradients are worth their backward cost while
+preserving the action gradients that full freeze appears to need for legal
+mass. Balanced K=1, all model depths, the schedule, eight-pass inference, and
+`0.0/5.76/1.0` loss remain fixed.
+
 The repeat-qualified norm-on compatibility baseline is v2/update 300. An identical v1 run also
 selected update 300, and their four-pool DFM CE gains differ by only
 `0.000210253`; the selected v2 checkpoint also passes the recorded
@@ -180,6 +188,9 @@ first nine post-baseline experiments are in
 
 Experiment 010's preregistration and completed outcome are in
 `research/experiment_bt4_frozen_backbone_balanced_k1.md`.
+
+Experiment 011 is preregistered in
+`research/experiment_bt4_future_target_stopgrad_balanced_k1.md`.
 
 ## Editable surface
 

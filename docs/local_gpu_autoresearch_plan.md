@@ -1378,3 +1378,8 @@ sweeps, held-out data, and repeated seeds.
   `4.4965047017` with every latent gate passing. Legal mass `0.6445921361`
   misses its floor by `0.0021314049`, so reject it without repeat/arena and
   retain no candidate state.
+- [ ] Stop gradients only through the future-target BT4 encode while keeping
+  BT4 trainable from the current-board DFM/action and JEPA paths. Keep the
+  projector attached on both sides and preserve balanced K=1, loss, schedule,
+  depths, batch, and evaluation. The frozen contract is in
+  `research/experiment_bt4_future_target_stopgrad_balanced_k1.md`.
