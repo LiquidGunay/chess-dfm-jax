@@ -509,6 +509,7 @@ def test_hinge_cli_contract_and_disabled_serialization() -> None:
             "jepa_state_fixed_unit_rms",
             "bt4_freeze_backbone",
             "bt4_future_target_stop_gradient",
+            "bt4_future_target_trainable_tail_layers",
         }
     }
     args = train.parse_args(

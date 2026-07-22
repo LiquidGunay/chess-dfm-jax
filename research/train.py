@@ -73,7 +73,7 @@ EXPERIMENT_OVERRIDES: dict[str, Any] = {
     "lr_min_ratio": 0.1,
     "jepa_target_sample_count": 1,
     "jepa_target_sampling_unit": "example_balanced",
-    "bt4_encode_chunk_size": 1,
+    "bt4_encode_chunk_size": 0,
     # "dfm_active_layers": 3,
     # "jepa_projector_active_layers": 1,
     # "jepa_sampled_target_anchors": True,
@@ -90,7 +90,8 @@ EXPERIMENT_OVERRIDES: dict[str, Any] = {
     # "jepa_target_variance_hinge_coeff": 1.0,
     # "jepa_target_variance_hinge_gamma": 0.9,
     # "jepa_state_fixed_unit_rms": True,
-    # "bt4_future_target_stop_gradient": True,
+    "bt4_future_target_stop_gradient": True,
+    "bt4_future_target_trainable_tail_layers": 3,
 }
 
 DEFAULT_RUN_ROOT = REPO_ROOT / "checkpoints" / "source" / "step0265000"
@@ -206,6 +207,7 @@ class JointLatentSASAConfig:
     unfreeze_bt4_encoder: bool = True
     bt4_freeze_backbone: bool = False
     bt4_future_target_stop_gradient: bool = False
+    bt4_future_target_trainable_tail_layers: int = 0
     bt4_encode_chunk_size: int = 0
     jepa_state_rmsnorm: bool = False
     jepa_state_fixed_unit_rms: bool = False
@@ -1030,6 +1032,22 @@ class JointLatentSASAModel(nnx.Module):
         self.z_dim = int(config.z_dim)
         validate_bt4_freeze_config(config)
         validate_bt4_future_target_stop_gradient_config(config)
+        trainable_future_tail = int(
+            config.bt4_future_target_trainable_tail_layers
+        )
+        if trainable_future_tail > 0:
+            if not hasattr(encoder, "layers"):
+                raise ValueError(
+                    "A trainable future BT4 tail requires an encoder.layers "
+                    "transformer stack"
+                )
+            encoder_layer_count = len(encoder.layers)
+            if trainable_future_tail > encoder_layer_count:
+                raise ValueError(
+                    "bt4_future_target_trainable_tail_layers exceeds the "
+                    f"loaded encoder depth: {trainable_future_tail} > "
+                    f"{encoder_layer_count}"
+                )
         if config.jepa_loss_type != "raw_mse":
             raise ValueError(
                 "Joint projected-vector training supports raw_mse JEPA loss only."
@@ -1251,6 +1269,35 @@ class JointLatentSASAModel(nnx.Module):
             tokens = jax.lax.stop_gradient(tokens)
         return tokens
 
+    def encode_future_bt4_tokens(self, planes: jnp.ndarray) -> jnp.ndarray:
+        """Encode a future target with the configured BT4 gradient boundary."""
+
+        trainable_tail_layers = int(
+            self.config.bt4_future_target_trainable_tail_layers
+        )
+        if trainable_tail_layers == 0:
+            return jax.lax.stop_gradient(self.encode_bt4_tokens(planes))
+
+        layer_count = len(self.encoder.layers)
+        if trainable_tail_layers > layer_count:
+            raise ValueError(
+                "bt4_future_target_trainable_tail_layers exceeds the loaded "
+                f"encoder depth: {trainable_tail_layers} > {layer_count}"
+            )
+        alpha = (
+            float(math.pow(2.0 * layer_count, -0.25))
+            if layer_count > 0
+            else 1.0
+        )
+        tokens, batch_size = self.encoder.embedding(planes, alpha)
+        tokens = tokens.reshape((batch_size, 64, self.encoder_dim))
+        gradient_boundary = layer_count - trainable_tail_layers
+        for layer_index, layer in enumerate(self.encoder.layers):
+            if layer_index == gradient_boundary:
+                tokens = jax.lax.stop_gradient(tokens)
+            tokens = layer(tokens, alpha)
+        return jnp.asarray(tokens, dtype=self.compute_dtype)
+
     def encode_current_jepa(self, current_planes: jnp.ndarray) -> jnp.ndarray:
         """Return projected current-state JEPA vectors."""
 
@@ -1296,8 +1343,8 @@ class JointLatentSASAModel(nnx.Module):
             flat_future_planes = future_planes.reshape(
                 (batch_size * horizon, channels, height, width)
             )
-            future_tokens = jax.lax.stop_gradient(
-                self.encode_bt4_tokens(flat_future_planes)
+            future_tokens = self.encode_future_bt4_tokens(
+                flat_future_planes
             ).reshape(
                 (batch_size, horizon, 64, self.encoder_dim)
             )
@@ -2722,6 +2769,19 @@ def joint_stage1_loss_fn(
                 target_assignment_count_by_horizon
             )
         if model.config.bt4_future_target_stop_gradient:
+            trainable_tail_layers = int(
+                model.config.bt4_future_target_trainable_tail_layers
+            )
+            partial_future_boards = (
+                configured_target_count
+                if trainable_tail_layers > 0
+                else 0
+            )
+            stopped_future_boards = (
+                configured_target_count
+                if trainable_tail_layers == 0
+                else 0
+            )
             aux.update(
                 {
                     "bt4_future_target_stop_gradient": jnp.asarray(
@@ -2729,11 +2789,35 @@ def joint_stage1_loss_fn(
                         dtype=jnp.float32,
                     ),
                     "bt4_trainable_encoded_boards_per_example": (
-                        jnp.asarray(1.0, dtype=jnp.float32)
+                        jnp.asarray(
+                            1.0 + partial_future_boards,
+                            dtype=jnp.float32,
+                        )
                     ),
                     "bt4_stop_gradient_encoded_boards_per_example": (
                         jnp.asarray(
-                            configured_target_count,
+                            stopped_future_boards,
+                            dtype=jnp.float32,
+                        )
+                    ),
+                    "bt4_full_gradient_encoded_boards_per_example": (
+                        jnp.asarray(1.0, dtype=jnp.float32)
+                    ),
+                    "bt4_partial_gradient_encoded_boards_per_example": (
+                        jnp.asarray(
+                            partial_future_boards,
+                            dtype=jnp.float32,
+                        )
+                    ),
+                    "bt4_future_target_trainable_tail_layers": (
+                        jnp.asarray(
+                            trainable_tail_layers,
+                            dtype=jnp.float32,
+                        )
+                    ),
+                    "bt4_future_target_detached_prefix_layers": (
+                        jnp.asarray(
+                            15 - trainable_tail_layers,
                             dtype=jnp.float32,
                         )
                     ),
@@ -2933,7 +3017,22 @@ def validate_bt4_future_target_stop_gradient_config(
 ) -> None:
     """Restrict asymmetric BT4 gradients to the measured K=1 contract."""
 
+    trainable_tail_layers = config.bt4_future_target_trainable_tail_layers
+    if (
+        isinstance(trainable_tail_layers, bool)
+        or not isinstance(trainable_tail_layers, (int, np.integer))
+        or not 0 <= trainable_tail_layers <= 15
+    ):
+        raise ValueError(
+            "bt4_future_target_trainable_tail_layers must be an integer in "
+            f"[0, 15], found {trainable_tail_layers!r}"
+        )
     if not config.bt4_future_target_stop_gradient:
+        if trainable_tail_layers != 0:
+            raise ValueError(
+                "bt4_future_target_trainable_tail_layers requires "
+                "bt4_future_target_stop_gradient=True"
+            )
         return
     requirements = {
         "bt4_freeze_backbone": (config.bt4_freeze_backbone, False),
@@ -4294,6 +4393,8 @@ def serialized_model_config(
         payload.pop("bt4_freeze_backbone")
     if not config.bt4_future_target_stop_gradient:
         payload.pop("bt4_future_target_stop_gradient")
+    if config.bt4_future_target_trainable_tail_layers == 0:
+        payload.pop("bt4_future_target_trainable_tail_layers")
     return payload
 
 
@@ -4519,15 +4620,39 @@ def build_research_resume_contract(
             "evaluation_and_inference_values_affected": False,
         }
     if config.bt4_future_target_stop_gradient:
+        trainable_tail_layers = int(
+            config.bt4_future_target_trainable_tail_layers
+        )
+        detached_prefix_layers = 15 - trainable_tail_layers
         objective_contract["bt4_future_target_stop_gradient"] = {
             "scope": "training_gradient_routing_only",
             "encoder_calls_per_step": 2,
             "trainable_current_boards_per_example": 1,
             "stop_gradient_future_boards_per_example": int(
                 config.jepa_target_sample_count
+                if trainable_tail_layers == 0
+                else 0
+            ),
+            "partial_gradient_future_boards_per_example": int(
+                config.jepa_target_sample_count
+                if trainable_tail_layers > 0
+                else 0
             ),
             "current_bt4_token_gradient": "attached",
-            "future_bt4_token_gradient": "exact_zero",
+            "future_bt4_token_gradient": (
+                "attached_through_tail"
+                if trainable_tail_layers > 0
+                else "exact_zero"
+            ),
+            "future_embedding_gradient": "exact_zero",
+            "future_detached_prefix_layers": detached_prefix_layers,
+            "future_trainable_tail_layers": trainable_tail_layers,
+            "future_prefix_block_gradient": "exact_zero",
+            "future_tail_block_gradient": (
+                "attached"
+                if trainable_tail_layers > 0
+                else "not_applicable"
+            ),
             "future_state_projector_gradient": "attached",
             "shared_state_projector": True,
             "model_state_abi": "unchanged",
