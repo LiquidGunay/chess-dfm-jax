@@ -237,6 +237,27 @@ coefficient-4 rescue is mechanistically justified: it restores that ratio
 without changing architecture, schedule, batch, or the fixed
 `0.0/5.76/1.0` loss components.
 
+Sixteenth-experiment outcome, 2026-07-22: restoring the nominal ratio with a
+25% first-action share and legality coefficient `4.0` nearly recovers legal
+mass but erases the preceding CE gains. H1-first selection chooses terminal
+update 2,062 at H1/uniform CE `2.8581280/4.5007452`, accuracy `0.1104431`, and
+legal mass `0.6460591`. It misses the frozen H1, uniform-CE, and legal-mass
+gates by `0.0178696`, `0.0035611`, and `0.0006645`, respectively. Every
+latent-health and trivial-control gate passes, and the fixed run retains the
+one-block tail's speed at `152.325` examples/s. Reject without repeat or
+arena, delete all three candidate states, and return to the unweighted
+one-block-tail incumbent. The target and `z_pred` SIGReg coefficients remain
+fixed at `5.76/1.0`, with RMS norm matching disabled.
+
+Plan adjustment after Experiment 016: the legality/action tradeoff is not
+captured by the nominal coefficient ratio alone. Before introducing a new
+loss form, one bounded midpoint on the same ratio-preserving line can test
+whether a feasible interior exists: allocate `3/16` of DFM CE to horizon 1
+and use legality coefficient `3.0`. If that midpoint cannot simultaneously
+clear the existing H1, uniform-CE, and legal-mass gates, close scalar
+first-action reweighting and move to an explicitly constrained or
+legality-conditioned action objective rather than sweeping more shares.
+
 This document is the implementation contract for turning the existing
 TPU/cloud-oriented BT4 + DFM + JEPA experiment into a fast, measurable,
 single-A10G research loop.
@@ -1539,8 +1560,15 @@ sweeps, held-out data, and repeated seeds.
   is in `research/experiment_dfm_first_action_share25_tail1.md`. It improves
   horizon-1/uniform CE to `2.7167628/4.4811102` but legal mass falls to
   `0.6371051`; reject without repeat/arena and retain no candidate state.
-- [ ] Restore the original legality-to-horizon-1 coefficient ratio while
+- [x] Restore the original legality-to-horizon-1 coefficient ratio while
   retaining the 25% first-action share: change first-legality coefficient
   `2.0 -> 4.0` and hold every other model, data, schedule, inference, and loss
   setting fixed. The frozen contract is in
-  `research/experiment_dfm_first_action_share25_legality4_tail1.md`.
+  `research/experiment_dfm_first_action_share25_legality4_tail1.md`. Terminal
+  update 2,062 misses the H1, uniform-CE, and legal-mass gates at
+  `2.8581280/4.5007452/0.6460591`; reject without repeat/arena and retain no
+  candidate state.
+- [ ] Test one final scalar midpoint with `3/16` first-action CE share and
+  first-legality coefficient `3.0`, preserving ratio 16 and every other
+  contract. If it fails any primary gate, close scalar first-action
+  reweighting and move to a constrained or legality-conditioned objective.

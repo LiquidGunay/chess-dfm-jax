@@ -234,3 +234,15 @@ share while holding first-legality coefficient `2.0`, it halved their relative
 weight ratio; a separately preregistered coefficient-4 rescue is the only
 immediate follow-up. Norm matching remains off and target/`z_pred` SIGReg stay
 fixed at `5.76/1.0`.
+
+The coefficient-4 rescue then nearly restores legal mass but erases the CE
+gain. H1-first selection chooses terminal update 2,062 at H1/uniform CE
+`2.8581280/4.5007452`, accuracy `0.1104431`, and legal mass `0.6460591`.
+Those values miss the frozen H1, uniform-CE, and legal-mass gates, although
+all latent-health controls pass and throughput remains `152.325` examples/s.
+Run no repeat or arena, retain no candidate state, and restore the unweighted
+one-block-tail surface. The result rules out the simple claim that restoring
+the nominal legality/H1 coefficient ratio preserves Experiment 015's CE
+gain. One ratio-preserving midpoint (`3/16` first-action share, coefficient
+`3.0`) is the final bounded scalar interpolation before changing the loss
+form. Norm matching stays off; target and `z_pred` SIGReg stay `5.76/1.0`.
