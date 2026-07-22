@@ -8,9 +8,10 @@ prediction-SIGReg-1.0 v2/update-400 checkpoint is now the repeat-qualified
 corrected baseline. Its 128-pair searchless strength anchors are complete: it
 is indistinguishable from the recovered DFM/JEPA source at this resolution,
 but substantially weaker in point estimate than the original raw BT4 policy.
-It is not Elo-promoted. The current offline incumbent is balanced per-example
-K=1/update 1,581; its two exact runs beat the prior K=2 incumbent while its
-128-pair arena remains positive but inconclusive.
+It is not Elo-promoted. The current offline incumbent is the one-block
+future-gradient-tail primary/update 2,072; two exact runs beat balanced K=1 on
+the frozen offline metric, while its direct 128-pair arena against balanced K=1
+is indistinguishable from a tie and does not constitute Elo promotion.
 
 The agreed critical path is now:
 
@@ -184,6 +185,21 @@ repeat legal-mass miss without giving up its CE behavior. Preregister it as a
 single depth change with the loss fixed at `0.0/5.76/1.0`; if it fails its
 primary or repeat gate, end tail-depth experiments rather than sweeping all 15
 depths.
+
+Fourteenth-experiment outcome, 2026-07-22: the one-block future tail passes
+the primary and exact-repeat offline gates at selected CE
+`4.4950091206/4.4971840288`, versus balanced-K1 incumbent CE `4.4979399741`.
+It preserves `153.075/153.450` fixed-run examples/s, about `31%` above the
+incumbent, with `12.97/12.95` GB peak JAX HBM. Both runs pass every policy,
+rank, feature-tail, RMS-ratio, and trivial-control gate. The primary's frozen
+128-pair arena against balanced K1 scores `49.609%`, descriptive logistic Elo
+`-2.71`, and pair-aware 95% interval `[-87.96,+82.20]`. One candidate loss is
+the preregistered symmetric legacy-codec failure mode: all legal moves were
+black promotions, which `legacy_absolute_1858` cannot represent. Accept primary
+update 2,072 as the offline incumbent, retain only its state for this
+experiment, and make no Elo-promotion claim. Close the tail-depth line at one
+block; do not sweep depths 2 or 4--15. Norm matching remains disabled and
+target/`z_pred` SIGReg remain fixed at `5.76/1.0`.
 
 This document is the implementation contract for turning the existing
 TPU/cloud-oriented BT4 + DFM + JEPA experiment into a fast, measurable,
@@ -1464,9 +1480,13 @@ sweeps, held-out data, and repeated seeds.
   contract is in `research/experiment_bt4_future_tail3_balanced_k1.md`.
   Systems gates pass and terminal accuracy/legal mass pass, but CE `4.4977803`
   is inside repeat noise. Reject without repeat/arena or retained state.
-- [ ] Preregister and test one final minimal one-block future-gradient tail as
+- [x] Preregister and test one final minimal one-block future-gradient tail as
   an interpolation between zero-tail's CE/system behavior and three-tail's
   attached legality signal. Keep norm/target/prediction coefficients
   `0.0/5.76/1.0`; close the tail-depth line on a primary or repeat failure.
   The frozen contract is in
-  `research/experiment_bt4_future_tail1_balanced_k1.md`.
+  `research/experiment_bt4_future_tail1_balanced_k1.md`. Its primary/repeat
+  select CE `4.4950091/4.4971840`, pass every frozen offline gate, and run at
+  `153.075/153.450` examples/s. The 128-pair incumbent arena scores `49.609%`
+  with interval `[-87.96,+82.20]`; accept primary update 2,072 as the offline
+  incumbent, not an Elo-promoted model, and retain only its candidate state.

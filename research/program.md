@@ -202,10 +202,18 @@ retains `149.531` examples/s and passes terminal accuracy/legal mass, but CE
 arena, or retained state. Loss remains fixed at norm/target/prediction
 coefficients `0.0/5.76/1.0`.
 
-Experiment 014's frozen final one-block future-gradient-tail contract is in
-`research/experiment_bt4_future_tail1_balanced_k1.md`. It changes only tail
-depth from three to one and closes the tail-depth line on a primary or repeat
-failure.
+Experiment 014's preregistration and completed outcome are in
+`research/experiment_bt4_future_tail1_balanced_k1.md`. The one-block tail
+processes `265,216/266,240` examples at `153.075/153.450` examples/s in exact
+runs and selects CE `4.4950091/4.4971840`; both runs clear every frozen
+offline gate. Its direct 128-pair arena against balanced K1 scores `49.609%`
+(`-2.71` descriptive logistic Elo, pair-aware interval
+`[-87.96,+82.20]`). One candidate loss comes from the symmetric declared
+legacy-codec inability to represent black promotions and is already charged
+in the score. Accept primary update 2,072 as the current offline incumbent,
+not an Elo-promoted model, and retain only its candidate state. The tail-depth
+line ends at one block. Loss remains fixed at norm/target/prediction
+coefficients `0.0/5.76/1.0`.
 
 ## Editable surface
 

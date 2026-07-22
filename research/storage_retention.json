@@ -5,7 +5,8 @@
     "research/runs/corrected-nonorm-target5p76-pred1-fixed64-b128-30m-v2/checkpoints/update00000400/state.npz",
     "research/runs/future-target-k2-b128-30m-v1/checkpoints/update00000800/state.npz",
     "research/runs/cosine-warmdown-k2-b128-30m-v1/checkpoints/update00001261/state.npz",
-    "research/runs/balanced-example-k1-cosine-b128-30m-v1/checkpoints/update00001581/state.npz"
+    "research/runs/balanced-example-k1-cosine-b128-30m-v1/checkpoints/update00001581/state.npz",
+    "research/runs/future-tail1-balanced-k1-cosine-b128-30m-v1/checkpoints/update00002072/state.npz"
   ],
   "cache_budgets_bytes": {
     ".local/cache/jax": 4294967296
@@ -138,14 +139,26 @@
     },
     {
       "path": "research/runs/balanced-example-k1-cosine-b128-30m-v1/checkpoints/update00001581/manifest.json",
-      "role": "balanced_example_k1_offline_incumbent_manifest",
+      "role": "balanced_example_k1_previous_offline_incumbent_manifest",
       "sha256": "a1cc0b374bb91544a8a2cfb41f2c3f7d6d6a52aae000408484d0f56b111f9933",
       "size_bytes": 5968838
     },
     {
       "path": "research/runs/balanced-example-k1-cosine-b128-30m-v1/checkpoints/update00001581/state.npz",
-      "role": "balanced_example_k1_offline_incumbent",
+      "role": "balanced_example_k1_previous_offline_incumbent",
       "sha256": "26c3621d1f9c35aa1401ef5e2e9d35ffdf59607d0c4369730cc6dd207b65c7c7",
+      "size_bytes": 1851704172
+    },
+    {
+      "path": "research/runs/future-tail1-balanced-k1-cosine-b128-30m-v1/checkpoints/update00002072/manifest.json",
+      "role": "future_tail1_balanced_k1_offline_incumbent_manifest",
+      "sha256": "2eb3e9745b989616f8ea091f0648bf97c70c58c7057edcb6548ae45609df782c",
+      "size_bytes": 5970370
+    },
+    {
+      "path": "research/runs/future-tail1-balanced-k1-cosine-b128-30m-v1/checkpoints/update00002072/state.npz",
+      "role": "future_tail1_balanced_k1_offline_incumbent",
+      "sha256": "69b11b51e7f98885deecefca541e1b8408795367bd60e89aa3f279b56e953edb",
       "size_bytes": 1851704172
     },
     {

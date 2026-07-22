@@ -1,7 +1,8 @@
 # Experiment 014: one-block future-target BT4 gradient tail
 
-Status: preregistered on 2026-07-22; implementation activation and
-measurements have not started.
+Status: completed and accepted as the offline incumbent on 2026-07-22. The
+frozen 128-pair arena was inconclusive and contained one symmetric legacy-codec
+coverage fault; this is not an Elo promotion.
 
 ## Question and hypothesis
 
@@ -134,3 +135,79 @@ and pass every non-CE gate before the frozen 128-pair arena. A failure gets no
 arena, pass-count sweep, or SAE refit and closes the tail-depth line. Keep all
 artifacts, caches, and temporary files below `/mountpoint/.exp`, and never
 overlap GPU workloads.
+
+## Outcome
+
+The implementation and every pre-run systems gate passed. Forty focused CPU
+tests plus lint prove the active `14/1` detached/attached split, zero
+future-only gradients through the embedding and blocks 0--13, nonzero
+future-only gradients through block 14 and the shared projector, complete
+current-board gradients, unchanged checkpoint/optimizer ABI, explicit routing
+metadata, and fail-closed invalid configurations.
+
+The real-checkpoint batch-128 smoke completed one unclipped update with exactly
+16 examples assigned to every horizon, eight predictions, target/prediction
+SIGReg counts `576/512`, and no state write. Cold compilation took `173.230`
+seconds and peak JAX HBM was `12,866,583,552` bytes.
+
+The cached 30-update profile reached `153.5362` end-to-end and `215.7788`
+device examples/s at `12,875,020,288` bytes peak JAX HBM. It is only `0.46%`
+slower than the zero-tail profile and `1.98%` faster than the three-block tail.
+The compiler reports `14.2575` TFLOP and `133.447` GB per update. Mean/p50/p95
+GPU utilization was `59.93/90/100%`, mean/p95 power was `169.63/196.91` W,
+and the measured data-stall fraction was `28.85%`.
+
+The primary 30-minute run compiled and completed its first update in `14.6871`
+seconds, then processed `265,216` examples in 2,072 updates at `153.0754`
+end-to-end and `213.2427` device examples/s. Peak JAX HBM was
+`12,973,654,528` bytes. The frozen two-pool scan was:
+
+| Update | DFM CE | Accuracy | Legal mass |
+|---:|---:|---:|---:|
+| 800 | 4.5034462 | 0.1087341 | 0.6441181 |
+| 1,600 | 4.4980034 | 0.1097870 | 0.6477664 |
+| 2,072 | **4.4950091** | **0.1104584** | **0.6488690** |
+
+Selected update 2,072 improves the balanced-K1 incumbent by `0.0029309` CE
+and clears the repeat-noise-aware ceiling by `0.0019604`. Its prediction
+effective-rank mean/minimum is `30.9728/29.1101`, feature-std p05
+mean/minimum is `0.64977/0.63551`, mean target RMS is `0.92525`, and the
+prediction/target RMS ratio is `0.97148`. Positive JEPA prediction beats zero,
+identity, shuffled-target, and action-shuffled controls at every horizon; its
+mean JEPA/identity ratio is `0.14678`.
+
+The exact repeat processed `266,240` examples in 2,080 updates at `153.4504`
+end-to-end examples/s. Its selected terminal checkpoint reaches CE/accuracy/
+legal mass `4.4971840/0.1103058/0.6468926`, independently beats the incumbent,
+and passes every non-CE gate. Its effective-rank mean/minimum is
+`30.9981/29.1399`, feature-std p05 mean/minimum is `0.64985/0.63608`, mean
+target RMS is `0.92619`, and the prediction/target RMS ratio is `0.97041`.
+The primary/repeat CE separation is `0.0021749`; the preregistered repeat gate
+requires an independent incumbent beat rather than matching the primary
+effect size, and it passes.
+
+The preregistered primary checkpoint then scored `0.49609375` over 128
+color-reversed development pairs against balanced-K1/update 1,581: 2 wins,
+250 draws, and 4 losses across 256 games, pentanomial `[0, 4, 122, 2, 0]`.
+Descriptive logistic Elo is `-2.71`, with a pair-aware 95% interval of
+`[-87.96, +82.20]`; seven games hit the 256-ply cap. Mean policy-call time was
+`43.73` ms for the candidate and `43.76` ms for the incumbent.
+
+One candidate loss was a frozen `no_representable_move` fault. Both models use
+the same declared `legacy_absolute_1858` codec, which cannot represent black
+promotions; in the terminal position all eight legal moves were black
+promotions. The acting-model-loses policy charged the fault to the candidate,
+and the reported score already includes it. This is not an unmasked illegal
+model choice, but it is a known symmetric action-space limitation and prevents
+interpreting the development screen as promotion evidence.
+
+Accept primary update 2,072 as the new offline incumbent because both exact
+runs clear their frozen offline gates. The arena is indistinguishable from a
+tie and does not authorize promotion. Retain only the primary selected state
+for this experiment; its SHA-256 is
+`69b11b51e7f98885deecefca541e1b8408795367bd60e89aa3f279b56e953edb`.
+Delete the repeat state and all nonselected states after preserving compact
+reports, scans, diagnostics, and arena evidence. The tail-depth line is now
+closed: one block is the accepted boundary, and depths 2 or 4--15 are not a
+priority. RMS norm matching remains off and target/`z_pred` SIGReg remain
+fixed at `5.76/1.0`.

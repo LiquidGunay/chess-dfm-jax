@@ -200,3 +200,17 @@ is only `0.0001597`, inside accepted repeat noise, and misses the strict ceiling
 by `0.0008108`. Reject without repeat, arena, collapse audit, or retained
 state. The default path returns to scanned balanced-K1, with RMS norm loss off
 and target/prediction SIGReg fixed at `5.76/1.0`.
+
+The final one-block future-gradient tail then preserves almost all zero-tail
+speed while restoring repeat-stable offline quality. Primary/repeat runs reach
+`153.075/153.450` examples/s and select CE/accuracy/legal mass
+`4.4950091/0.1104584/0.6488690` and
+`4.4971840/0.1103058/0.6468926`; both pass every frozen policy and latent
+gate. The primary's 128-pair arena against balanced K1 scores `49.609%`, or
+`-2.71` descriptive logistic Elo with pair-aware 95% interval
+`[-87.96,+82.20]`. One charged candidate fault occurs when every legal move
+is a black promotion, a symmetric known limitation of both checkpoints'
+`legacy_absolute_1858` codec. Primary update 2,072 becomes the current offline
+incumbent, not an Elo-promoted model. Only its candidate state is retained for
+this experiment, the tail-depth line closes, RMS norm matching remains off,
+and target/`z_pred` SIGReg remain `5.76/1.0`.
