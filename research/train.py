@@ -73,6 +73,8 @@ EXPERIMENT_OVERRIDES: dict[str, Any] = {
     "lr_min_ratio": 0.1,
     "jepa_target_sample_count": 1,
     "jepa_target_sampling_unit": "example_balanced",
+    "dfm_force_first_action_mask": True,
+    "dfm_training_time_power": 2.0,
     "bt4_encode_chunk_size": 0,
     # "dfm_active_layers": 3,
     # "jepa_projector_active_layers": 1,
@@ -166,6 +168,7 @@ class JointLatentSASAConfig:
     dfm_ce_coeff: float = 1.0
     dfm_first_action_loss_share: float = 0.0
     dfm_force_first_action_mask: bool = False
+    dfm_training_time_power: float = 1.0
     first_legality_coeff: float = 7.64
     horizon_legality_coeff: float = 0.0
     legality_on_masked_only: bool = True
@@ -639,6 +642,21 @@ def force_first_action_mask(
     return (
         noisy_actions.at[:, 0].set(mask_token_id),
         is_masked.at[:, 0].set(True),
+    )
+
+
+def transform_dfm_training_time(
+    uniform_time: jnp.ndarray,
+    *,
+    power: float,
+) -> jnp.ndarray:
+    """Transform a uniform DFM time draw, preserving exact identity at one."""
+
+    if power == 1.0:
+        return uniform_time
+    return jnp.power(
+        uniform_time,
+        jnp.asarray(power, dtype=uniform_time.dtype),
     )
 
 
@@ -2120,6 +2138,15 @@ def joint_stage1_loss_fn(
         z_dfm = model.dfm_latents(current_bt4_tokens)
 
     t = jax.random.uniform(rng_t, shape=(batch_size,))
+    training_time_power_active = bool(
+        sample_future_targets
+        and model.config.dfm_training_time_power != 1.0
+    )
+    if training_time_power_active:
+        t = transform_dfm_training_time(
+            t,
+            power=model.config.dfm_training_time_power,
+        )
     if "deterministic_t" in batch:
         t = jnp.full_like(t, batch["deterministic_t"])
     noisy_actions, is_masked = mask_actions(actions, 1.0 - t, model.config.action_vocab_size, rng_mask)
@@ -2782,6 +2809,11 @@ def joint_stage1_loss_fn(
             1.0,
             dtype=jnp.float32,
         )
+    if training_time_power_active:
+        aux["dfm_training_time_power"] = jnp.asarray(
+            model.config.dfm_training_time_power,
+            dtype=jnp.float32,
+        )
     if model.config.dfm_active_layers > 0:
         aux.update(
             {
@@ -3424,6 +3456,20 @@ def validate_objective_config(
     if config.dfm_force_first_action_mask and objective != "normalized":
         raise ValueError(
             "dfm_force_first_action_mask requires --objective normalized."
+        )
+    training_time_power = config.dfm_training_time_power
+    if (
+        isinstance(training_time_power, bool)
+        or not math.isfinite(training_time_power)
+        or training_time_power <= 0.0
+    ):
+        raise ValueError(
+            "dfm_training_time_power must be finite and positive, found "
+            f"{training_time_power!r}"
+        )
+    if training_time_power != 1.0 and objective != "normalized":
+        raise ValueError(
+            "dfm_training_time_power requires --objective normalized."
         )
     if (
         isinstance(config.first_legality_coeff, bool)
@@ -4515,6 +4561,8 @@ def serialized_model_config(
         payload.pop("dfm_first_action_loss_share")
     if not config.dfm_force_first_action_mask:
         payload.pop("dfm_force_first_action_mask")
+    if config.dfm_training_time_power == 1.0:
+        payload.pop("dfm_training_time_power")
     if not config.bt4_freeze_backbone:
         payload.pop("bt4_freeze_backbone")
     if not config.bt4_future_target_stop_gradient:
@@ -4606,6 +4654,26 @@ def build_research_resume_contract(
             "first_legality_coeff": float(
                 config.first_legality_coeff
             ),
+            "evaluation_affected": False,
+            "inference_affected": False,
+            "model_state_abi": "unchanged",
+            "optimizer_state_abi": "unchanged_source_compatible",
+        }
+    if config.dfm_training_time_power != 1.0:
+        objective_contract["dfm_training_time_distribution"] = {
+            "scope": "training_only",
+            "base_draw": "u~Uniform(0,1)",
+            "transform": "t=u**power",
+            "power": float(config.dfm_training_time_power),
+            "expected_time": float(
+                1.0 / (config.dfm_training_time_power + 1.0)
+            ),
+            "expected_mask_probability": float(
+                config.dfm_training_time_power
+                / (config.dfm_training_time_power + 1.0)
+            ),
+            "rng_draws": "unchanged",
+            "deterministic_validation_time": "unchanged",
             "evaluation_affected": False,
             "inference_affected": False,
             "model_state_abi": "unchanged",

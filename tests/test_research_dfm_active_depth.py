@@ -194,6 +194,42 @@ def test_force_first_action_mask_changes_only_first_slot() -> None:
     np.testing.assert_array_equal(actions, _batch()["action_indices"])
 
 
+def test_training_time_power_identity_and_mask_superset() -> None:
+    uniform_time = jnp.asarray(
+        [0.0, 0.2, 0.5, 0.8, 1.0],
+        dtype=jnp.float32,
+    )
+    identity = train.transform_dfm_training_time(
+        uniform_time,
+        power=1.0,
+    )
+    squared = train.transform_dfm_training_time(
+        uniform_time,
+        power=2.0,
+    )
+    assert identity is uniform_time
+    np.testing.assert_array_equal(squared, jnp.square(uniform_time))
+
+    actions = _batch()["action_indices"]
+    base_noisy, base_mask = train.mask_actions(
+        actions,
+        1.0 - uniform_time[: actions.shape[0]],
+        32,
+        jax.random.PRNGKey(14),
+    )
+    biased_noisy, biased_mask = train.mask_actions(
+        actions,
+        1.0 - squared[: actions.shape[0]],
+        32,
+        jax.random.PRNGKey(14),
+    )
+    assert jnp.all(jnp.logical_or(~base_mask, biased_mask))
+    np.testing.assert_array_equal(
+        jnp.where(base_mask, biased_noisy, base_noisy),
+        base_noisy,
+    )
+
+
 def test_forced_first_mask_is_training_only_and_preserves_rng_branches() -> None:
     control = train.JointLatentSASAModel(
         DeterministicEncoder(),
@@ -265,6 +301,81 @@ def test_forced_first_mask_is_training_only_and_preserves_rng_branches() -> None
     candidate_eval_loss, candidate_eval = train.normalized_stage1_loss_fn(
         candidate,
         *args,
+        sample_future_targets=False,
+    )
+    np.testing.assert_array_equal(candidate_eval_loss, control_eval_loss)
+    assert candidate_eval.keys() == control_eval.keys()
+    for name in candidate_eval:
+        np.testing.assert_array_equal(candidate_eval[name], control_eval[name])
+
+
+def test_training_time_power_is_training_only_and_preserves_rng_branches() -> None:
+    base_config = {
+        "jepa_target_sample_count": 1,
+        "jepa_target_sampling_unit": "example_balanced",
+        "dfm_force_first_action_mask": True,
+    }
+    control = train.JointLatentSASAModel(
+        DeterministicEncoder(),
+        _config(**base_config),
+        rngs=nnx.Rngs(24),
+    )
+    candidate = train.JointLatentSASAModel(
+        DeterministicEncoder(),
+        _config(**base_config, dfm_training_time_power=2.0),
+        rngs=nnx.Rngs(24),
+    )
+    _assert_tree_exact(
+        nnx.to_pure_dict(nnx.state(control, train.TrainableParam)),
+        nnx.to_pure_dict(nnx.state(candidate, train.TrainableParam)),
+    )
+    batch = dict(_batch())
+    batch.pop("deterministic_t")
+    args = (batch, jax.random.PRNGKey(26), 1.0, 1.0)
+    control_loss, control_aux = train.normalized_stage1_loss_fn(
+        control,
+        *args,
+        sample_future_targets=True,
+    )
+    candidate_loss, candidate_aux = train.normalized_stage1_loss_fn(
+        candidate,
+        *args,
+        sample_future_targets=True,
+    )
+
+    assert jnp.isfinite(control_loss)
+    assert jnp.isfinite(candidate_loss)
+    assert candidate_aux["dfm_training_time_power"] == 2.0
+    assert "dfm_training_time_power" not in control_aux
+    assert control_aux["dfm_mask_fraction_by_horizon"][0] == 1.0
+    assert candidate_aux["dfm_mask_fraction_by_horizon"][0] == 1.0
+    assert jnp.all(
+        candidate_aux["dfm_mask_fraction_by_horizon"][1:]
+        >= control_aux["dfm_mask_fraction_by_horizon"][1:]
+    )
+    assert candidate_aux["mask_prob"] > control_aux["mask_prob"]
+    np.testing.assert_array_equal(
+        candidate_aux["jepa_target_assignment_count_by_horizon"],
+        control_aux["jepa_target_assignment_count_by_horizon"],
+    )
+    for name in (
+        "jepa_positive_loss",
+        "jepa_sigreg_loss",
+        "jepa_pred_sigreg_loss",
+        "jepa_sigreg_valid_count",
+        "jepa_pred_sigreg_valid_count",
+    ):
+        np.testing.assert_array_equal(candidate_aux[name], control_aux[name])
+
+    eval_args = (_batch(), jax.random.PRNGKey(28), 1.0, 1.0)
+    control_eval_loss, control_eval = train.normalized_stage1_loss_fn(
+        control,
+        *eval_args,
+        sample_future_targets=False,
+    )
+    candidate_eval_loss, candidate_eval = train.normalized_stage1_loss_fn(
+        candidate,
+        *eval_args,
         sample_future_targets=False,
     )
     np.testing.assert_array_equal(candidate_eval_loss, control_eval_loss)
@@ -393,10 +504,25 @@ def test_force_first_action_mask_validation_fails_closed(value) -> None:
         )
 
 
+@pytest.mark.parametrize(
+    "value",
+    [True, 0.0, -1.0, float("nan"), float("inf")],
+)
+def test_training_time_power_validation_fails_closed(value) -> None:
+    with pytest.raises(ValueError, match="dfm_training_time_power"):
+        train.validate_objective_config(
+            objective="normalized",
+            config=_config(dfm_training_time_power=value),
+        )
+
+
 def test_force_first_action_mask_serialization_and_resume_contract(
     monkeypatch,
 ) -> None:
-    enabled = _config(dfm_force_first_action_mask=True)
+    enabled = _config(
+        dfm_force_first_action_mask=True,
+        dfm_training_time_power=2.0,
+    )
     train.validate_objective_config(objective="normalized", config=enabled)
     with pytest.raises(ValueError, match="requires --objective normalized"):
         train.validate_objective_config(objective="legacy", config=enabled)
@@ -406,6 +532,12 @@ def test_force_first_action_mask_serialization_and_resume_contract(
     assert train.serialized_model_config(enabled)[
         "dfm_force_first_action_mask"
     ] is True
+    assert "dfm_training_time_power" not in train.serialized_model_config(
+        _config()
+    )
+    assert train.serialized_model_config(enabled)[
+        "dfm_training_time_power"
+    ] == 2.0
 
     monkeypatch.setattr(train, "require_within_workspace", lambda path: path)
     monkeypatch.setattr(
@@ -436,6 +568,21 @@ def test_force_first_action_mask_serialization_and_resume_contract(
     assert semantics["evaluation_affected"] is False
     assert semantics["inference_affected"] is False
     assert semantics["model_state_abi"] == "unchanged"
+    time_semantics = contract["objective"]["dfm_training_time_distribution"]
+    assert time_semantics["scope"] == "training_only"
+    assert time_semantics["base_draw"] == "u~Uniform(0,1)"
+    assert time_semantics["transform"] == "t=u**power"
+    assert time_semantics["power"] == 2.0
+    assert time_semantics["expected_time"] == 1.0 / 3.0
+    assert time_semantics["expected_mask_probability"] == 2.0 / 3.0
+    assert time_semantics["evaluation_affected"] is False
+    assert time_semantics["inference_affected"] is False
+
+    with pytest.raises(ValueError, match="requires --objective normalized"):
+        train.validate_objective_config(
+            objective="legacy",
+            config=_config(dfm_training_time_power=2.0),
+        )
 
 
 def test_three_layer_output_matches_explicit_prefix_execution() -> None:
