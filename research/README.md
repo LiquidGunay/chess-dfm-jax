@@ -496,3 +496,10 @@ arrays. Thus `f9f9...b467` versus `b53b...d13` is a reporting-ABI false
 positive for compilation. A separately preregistered dedicated-cache
 compatibility test must still prove restored execution reuses the isolated
 compiler artifact before any cold compile.
+
+Experiment 031 is the minimal seeded-cache compatibility test in
+`experiment_minimal_cache_compatibility.md`. A disposable cache contains only
+the pinned active training and evaluation executables. Compile-only must hit
+the training key, then an ordinary restored one-update run must reuse it,
+match frozen metrics, and create no executable key or checkpoint. This test
+does not cold-compile a graph.

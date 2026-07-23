@@ -440,6 +440,13 @@ differs. Treat the `f9f9...b467`/`b53b...d13` reporting mismatch as irrelevant
 to compilation. Do not cold-compile yet; first preregister and prove a
 dedicated-cache compile-only/restored-execution compatibility gate.
 
+Experiment 031 is preregistered in
+`research/experiment_minimal_cache_compatibility.md`. Seed a disposable cache
+with only the pinned active train/eval executables, run compile-only, then an
+ordinary restored one-update parity check. Both must finish as cache hits,
+create no executable key or checkpoint, and retain exact metrics and cache
+bytes under the unchanged guard. No cold compilation occurs in this step.
+
 ## Editable surface
 
 During automated architecture research, edit only `research/train.py`.
