@@ -472,6 +472,17 @@ abstract-state lowering overhead from graph compilation, and consider a
 smaller physical compile batch with fixed effective-batch semantics; do not
 retry this mechanism or relax a resource gate.
 
+Experiment 033 is preregistered in
+`research/experiment_source_encoder_overlay_diagnostic.md`. A guarded
+checkpoint comparison finds only `2.5e-7`--`2.7e-6` relative L2 movement in
+the accepted BF16 BT4 encoder versus `4.96e-3` in the trained head; the last
+block changes least. Before proposing a trainable tail, evaluate the accepted
+head twice on the frozen two-pool validation set, first with its accepted
+encoder and then with only the source encoder overlaid in memory. This is a
+shared-cache, zero-checkpoint diagnostic. Its result chooses between a
+forward-identical frozen autoresearch proxy and a split-gradient/FP32-master
+systems path.
+
 ## Editable surface
 
 During automated architecture research, edit only `research/train.py`.

@@ -529,3 +529,10 @@ preserves every abstract signature and compiler field and releases
 RSS, `71.4 MiB` above the preregistered 4.5 GiB cached ceiling. It writes no
 state and does not open the source checkpoint. Do not create its dedicated
 cache, run its restored stage, retry it, or relax the gate.
+
+Experiment 033 is the read-only accepted-head/source-encoder overlay in
+`experiment_source_encoder_overlay_diagnostic.md`. The accepted BF16 encoder
+barely differs from source despite full-backbone backpropagation, and its last
+block changes least. Evaluate the accepted and in-memory source-encoder hybrid
+on identical retained validation batches through the shared cache before
+choosing a frozen proxy or a more involved split-gradient/FP32-master path.
