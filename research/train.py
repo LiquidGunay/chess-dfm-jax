@@ -77,6 +77,10 @@ EXPERIMENT_OVERRIDES: dict[str, Any] = {
     "jepa_target_sample_count": 1,
     "jepa_target_sampling_unit": "example_balanced",
     "bt4_encode_chunk_size": 0,
+    # Experiment 024 uses coefficient 1.0 only for the preregistered
+    # no-update calibration. Replace this with the frozen calibrated value
+    # before any optimizer update.
+    "root_legal_conditional_ce_coeff": 1.0,
     # "dfm_active_layers": 3,
     # "jepa_projector_active_layers": 1,
     # "jepa_sampled_target_anchors": True,
@@ -115,6 +119,7 @@ GRADIENT_COMPONENT_NAMES = (
 TARGET_VARIANCE_HINGE_COMPONENT = "target_variance_hinge"
 WDL_COMPONENT = "wdl"
 BT4_POLICY_DISTILL_COMPONENT = "bt4_policy_distill"
+ROOT_LEGAL_CONDITIONAL_COMPONENT = "root_legal_conditional_ce"
 GRADIENT_GROUP_NAMES = ("backbone", "dfm", "jepa", "other", "all")
 TARGET_VARIANCE_HINGE_EPSILON = 1e-4
 JEPA_STATE_RMS_EPSILON = 1e-6
@@ -181,6 +186,7 @@ class JointLatentSASAConfig:
     loss_horizon: int = 0
     dfm_ce_coeff: float = 1.0
     bt4_policy_distill_coeff: float = 0.0
+    root_legal_conditional_ce_coeff: float = 0.0
     dfm_first_action_loss_share: float = 0.0
     dfm_force_first_action_mask: bool = False
     dfm_training_time_power: float = 1.0
@@ -713,6 +719,19 @@ class Bt4PolicyDistillationResult(NamedTuple):
     teacher_student_top1_agreement: jax.Array
 
 
+class RootLegalConditionalCeResult(NamedTuple):
+    loss: jax.Array
+    candidate_count: jax.Array
+    eligible_count: jax.Array
+    eligible_fraction: jax.Array
+    legal_metadata_valid_fraction: jax.Array
+    legal_count_valid_fraction: jax.Array
+    played_in_legal_fraction: jax.Array
+    finite_fraction: jax.Array
+    mean_legal_count: jax.Array
+    top1_accuracy: jax.Array
+
+
 class JepaFeedbackResult(NamedTuple):
     latents: jax.Array
     delta_rms: jax.Array
@@ -756,6 +775,189 @@ def root_legal_mask_from_indices(
         dtype=jnp.int32,
     ).at[batch_indices, safe_indices].add(valid_slots.astype(jnp.int32))
     return legal_counts > 0
+
+
+def root_legal_conditional_ce_from_logits(
+    root_logits: jax.Array,
+    played_actions: jax.Array,
+    legal_idx: jax.Array,
+    legal_count: jax.Array,
+    sample_valid: jax.Array,
+    root_masked: jax.Array,
+    legal_metadata_valid: jax.Array | None = None,
+) -> RootLegalConditionalCeResult:
+    """Compute played-action CE only over each stored root legal set."""
+
+    logits = jnp.asarray(root_logits, dtype=jnp.float32)
+    if logits.ndim != 2:
+        raise ValueError(
+            "root_logits must have shape [batch, actions], found "
+            f"{logits.shape}"
+        )
+    batch_size, action_vocab_size = logits.shape
+    indices = jnp.asarray(legal_idx, dtype=jnp.int32)
+    if indices.ndim != 2 or indices.shape[0] != batch_size:
+        raise ValueError(
+            "legal_idx must have shape [batch, slots], found "
+            f"{indices.shape}"
+        )
+    actions = jnp.asarray(played_actions, dtype=jnp.int32)
+    counts = jnp.asarray(legal_count, dtype=jnp.int32)
+    valid = jnp.asarray(sample_valid, dtype=jnp.bool_)
+    masked = jnp.asarray(root_masked, dtype=jnp.bool_)
+    for name, value in (
+        ("played_actions", actions),
+        ("legal_count", counts),
+        ("sample_valid", valid),
+        ("root_masked", masked),
+    ):
+        if value.shape != (batch_size,):
+            raise ValueError(
+                f"{name} must have shape {(batch_size,)}, found "
+                f"{value.shape}"
+            )
+    if legal_metadata_valid is None:
+        metadata_valid = jnp.ones((batch_size,), dtype=jnp.bool_)
+    else:
+        metadata_valid = jnp.asarray(
+            legal_metadata_valid,
+            dtype=jnp.bool_,
+        )
+        if metadata_valid.shape != (batch_size,):
+            raise ValueError(
+                "legal_metadata_valid must have shape "
+                f"{(batch_size,)}, found {metadata_valid.shape}"
+            )
+
+    slot_count = indices.shape[1]
+    count_valid = (counts > 0) & (counts <= slot_count)
+    slot_valid = (
+        jnp.arange(slot_count, dtype=jnp.int32)[None, :]
+        < counts[:, None]
+    )
+    index_valid = (indices >= 0) & (indices < action_vocab_size)
+    legal_support = slot_valid & index_valid
+    support_nonempty = jnp.any(legal_support, axis=-1)
+    all_legal_indices_valid = jnp.all(
+        (~slot_valid) | index_valid,
+        axis=-1,
+    )
+
+    safe_indices = jnp.clip(indices, 0, action_vocab_size - 1)
+    gathered_logits = jnp.take_along_axis(
+        logits,
+        safe_indices,
+        axis=-1,
+    )
+    gathered_finite = jnp.isfinite(gathered_logits)
+    legal_logits_finite = jnp.all(
+        (~legal_support) | gathered_finite,
+        axis=-1,
+    )
+    finite_gathered_logits = jnp.nan_to_num(
+        gathered_logits,
+        nan=0.0,
+        posinf=0.0,
+        neginf=0.0,
+    )
+    safe_support = legal_support | (~support_nonempty[:, None])
+    legal_log_normalizer = jax.nn.logsumexp(
+        jnp.where(
+            safe_support,
+            finite_gathered_logits,
+            -jnp.inf,
+        ),
+        axis=-1,
+    )
+
+    action_in_range = (actions >= 0) & (actions < action_vocab_size)
+    safe_actions = jnp.clip(actions, 0, action_vocab_size - 1)
+    played_logits = jnp.take_along_axis(
+        logits,
+        safe_actions[:, None],
+        axis=-1,
+    )[:, 0]
+    played_finite = jnp.isfinite(played_logits)
+    finite_played_logits = jnp.nan_to_num(
+        played_logits,
+        nan=0.0,
+        posinf=0.0,
+        neginf=0.0,
+    )
+    played_in_legal = action_in_range & jnp.any(
+        legal_support & (indices == actions[:, None]),
+        axis=-1,
+    )
+    finite = legal_logits_finite & played_finite
+
+    candidate = valid & masked
+    eligible = (
+        candidate
+        & metadata_valid
+        & count_valid
+        & support_nonempty
+        & all_legal_indices_valid
+        & played_in_legal
+        & finite
+    )
+    candidate_weight = candidate.astype(jnp.float32)
+    eligible_weight = eligible.astype(jnp.float32)
+    candidate_count = jnp.sum(candidate_weight)
+    eligible_count = jnp.sum(eligible_weight)
+
+    loss_by_sample = legal_log_normalizer - finite_played_logits
+    loss = jnp.sum(
+        jnp.where(eligible, loss_by_sample, 0.0)
+    ) / jnp.maximum(eligible_count, 1.0)
+
+    top1_slot = jnp.argmax(
+        jnp.where(
+            safe_support,
+            finite_gathered_logits,
+            -jnp.inf,
+        ),
+        axis=-1,
+    )
+    top1_action = jnp.take_along_axis(
+        safe_indices,
+        top1_slot[:, None],
+        axis=-1,
+    )[:, 0]
+
+    def candidate_fraction(values: jax.Array) -> jax.Array:
+        return jnp.sum(
+            jnp.asarray(values, dtype=jnp.float32) * candidate_weight
+        ) / jnp.maximum(candidate_count, 1.0)
+
+    return RootLegalConditionalCeResult(
+        loss=loss,
+        candidate_count=candidate_count,
+        eligible_count=eligible_count,
+        eligible_fraction=eligible_count
+        / jnp.maximum(candidate_count, 1.0),
+        legal_metadata_valid_fraction=candidate_fraction(metadata_valid),
+        legal_count_valid_fraction=candidate_fraction(
+            count_valid
+            & support_nonempty
+            & all_legal_indices_valid
+        ),
+        played_in_legal_fraction=candidate_fraction(played_in_legal),
+        finite_fraction=candidate_fraction(finite),
+        mean_legal_count=(
+            jnp.sum(
+                jnp.asarray(counts, dtype=jnp.float32)
+                * eligible_weight
+            )
+            / jnp.maximum(eligible_count, 1.0)
+        ),
+        top1_accuracy=(
+            jnp.sum(
+                (top1_action == actions).astype(jnp.float32)
+                * eligible_weight
+            )
+            / jnp.maximum(eligible_count, 1.0)
+        ),
+    )
 
 
 def bt4_policy_distillation_from_logits(
@@ -2900,6 +3102,33 @@ def joint_stage1_loss_fn(
                     legal_metadata_valid,
                 )
             )
+    root_legal_conditional_ce: (
+        RootLegalConditionalCeResult | None
+    ) = None
+    if model.config.root_legal_conditional_ce_coeff != 0.0:
+        root_legal_metadata_valid = (
+            jnp.asarray(batch["legal_count"][:, 0], dtype=jnp.int32) > 0
+        )
+        if "legal_masks_valid" in batch:
+            root_legal_metadata_valid = (
+                root_legal_metadata_valid
+                & jnp.asarray(
+                    batch["legal_masks_valid"][:, 0],
+                    dtype=jnp.bool_,
+                )
+            )
+        with jax.named_scope("joint_dfm_root_legal_conditional_ce"):
+            root_legal_conditional_ce = (
+                root_legal_conditional_ce_from_logits(
+                    logits[:, 0, :],
+                    actions[:, 0],
+                    batch["legal_idx"][:, 0, :],
+                    batch["legal_count"][:, 0],
+                    valid > 0.0,
+                    is_masked[:, 0],
+                    root_legal_metadata_valid,
+                )
+            )
     ce_by_horizon = -jnp.take_along_axis(log_probs, actions[..., None], axis=-1)[..., 0]
     loss_mask = jnp.asarray(is_masked, dtype=jnp.float32) * loss_horizon_mask[None, :]
     weighted_loss_mask = loss_mask * valid[:, None]
@@ -3583,6 +3812,12 @@ def joint_stage1_loss_fn(
             + model.config.bt4_policy_distill_coeff
             * bt4_policy_distillation.loss
         )
+    if root_legal_conditional_ce is not None:
+        unclipped_loss = (
+            unclipped_loss
+            + model.config.root_legal_conditional_ce_coeff
+            * root_legal_conditional_ce.loss
+        )
     if target_variance_hinge is not None:
         unclipped_loss = (
             unclipped_loss
@@ -3787,6 +4022,51 @@ def joint_stage1_loss_fn(
                 ),
                 "bt4_policy_distill_teacher_student_top1_agreement": (
                     bt4_policy_distillation.teacher_student_top1_agreement
+                ),
+            }
+        )
+    if root_legal_conditional_ce is not None:
+        aux.update(
+            {
+                "root_legal_conditional_ce_loss": (
+                    root_legal_conditional_ce.loss
+                ),
+                "root_legal_conditional_ce_weighted_loss": (
+                    jnp.asarray(
+                        model.config.root_legal_conditional_ce_coeff,
+                        dtype=jnp.float32,
+                    )
+                    * root_legal_conditional_ce.loss
+                ),
+                "root_legal_conditional_ce_candidate_count": (
+                    root_legal_conditional_ce.candidate_count
+                ),
+                "root_legal_conditional_ce_eligible_count": (
+                    root_legal_conditional_ce.eligible_count
+                ),
+                "root_legal_conditional_ce_eligible_fraction": (
+                    root_legal_conditional_ce.eligible_fraction
+                ),
+                "root_legal_conditional_ce_legal_metadata_valid_fraction": (
+                    root_legal_conditional_ce
+                    .legal_metadata_valid_fraction
+                ),
+                "root_legal_conditional_ce_legal_count_valid_fraction": (
+                    root_legal_conditional_ce
+                    .legal_count_valid_fraction
+                ),
+                "root_legal_conditional_ce_played_in_legal_fraction": (
+                    root_legal_conditional_ce
+                    .played_in_legal_fraction
+                ),
+                "root_legal_conditional_ce_finite_fraction": (
+                    root_legal_conditional_ce.finite_fraction
+                ),
+                "root_legal_conditional_ce_mean_legal_count": (
+                    root_legal_conditional_ce.mean_legal_count
+                ),
+                "root_legal_conditional_ce_top1_accuracy": (
+                    root_legal_conditional_ce.top1_accuracy
                 ),
             }
         )
@@ -4502,6 +4782,26 @@ def validate_objective_config(
             "BT4 policy distillation requires action_vocab_size="
             f"{_LEGACY_TO_CANONICAL_WHITE.shape[0]}, found "
             f"{config.action_vocab_size}."
+        )
+    if (
+        isinstance(config.root_legal_conditional_ce_coeff, bool)
+        or not math.isfinite(
+            config.root_legal_conditional_ce_coeff
+        )
+        or config.root_legal_conditional_ce_coeff < 0.0
+    ):
+        raise ValueError(
+            "root_legal_conditional_ce_coeff must be finite and "
+            "non-negative, found "
+            f"{config.root_legal_conditional_ce_coeff!r}"
+        )
+    if (
+        config.root_legal_conditional_ce_coeff != 0.0
+        and objective != "normalized"
+    ):
+        raise ValueError(
+            "root_legal_conditional_ce_coeff requires "
+            "--objective normalized."
         )
     if (
         isinstance(config.wdl_coeff, bool)
@@ -5685,6 +5985,8 @@ def serialized_model_config(
         payload.pop("dfm_active_layers")
     if config.bt4_policy_distill_coeff == 0.0:
         payload.pop("bt4_policy_distill_coeff")
+    if config.root_legal_conditional_ce_coeff == 0.0:
+        payload.pop("root_legal_conditional_ce_coeff")
     if config.dfm_first_action_loss_share == 0.0:
         payload.pop("dfm_first_action_loss_share")
     if not config.dfm_force_first_action_mask:
@@ -5826,6 +6128,34 @@ def build_research_resume_contract(
             "additional_bt4_encoder_calls": 0,
             "additional_training_policy_head_calls": 1,
             "inference_policy_head_calls": 0,
+            "model_state_abi": "unchanged",
+            "optimizer_state_abi": "unchanged_source_compatible",
+            "checkpoint_state_abi": "unchanged",
+        }
+    if config.root_legal_conditional_ce_coeff != 0.0:
+        objective_contract["root_legal_conditional_ce"] = {
+            "coefficient": float(
+                config.root_legal_conditional_ce_coeff
+            ),
+            "scope": "masked_played_root_action_only",
+            "support": "stored_representable_root_legal_indices",
+            "loss": (
+                "logsumexp(stored_legal_logits)-played_action_logit"
+            ),
+            "reduction_dtype": "float32",
+            "normalization": "eligible_rows",
+            "eligibility": (
+                "valid*root_masked*legal_metadata_valid*"
+                "valid_count_and_indices*played_in_legal*finite_logits"
+            ),
+            "uniform_full_vocabulary_dfm_ce_unchanged": True,
+            "first_legality_objective_unchanged": True,
+            "direct_illegal_logit_gradient": "exact_zero",
+            "legal_logit_gradient_sum": "exact_zero",
+            "additional_encoder_calls": 0,
+            "additional_planner_calls": 0,
+            "additional_rng_draws": 0,
+            "inference_affected": False,
             "model_state_abi": "unchanged",
             "optimizer_state_abi": "unchanged_source_compatible",
             "checkpoint_state_abi": "unchanged",
@@ -6626,6 +6956,13 @@ def gradient_component_vector(
                 dtype=jnp.float32,
             )
         )
+    if model.config.root_legal_conditional_ce_coeff != 0.0:
+        components.append(
+            jnp.asarray(
+                aux["root_legal_conditional_ce_loss"],
+                dtype=jnp.float32,
+            )
+        )
     return jnp.stack(components)
 
 
@@ -6643,6 +6980,8 @@ def gradient_component_names(
         enabled_components += (WDL_COMPONENT,)
     if config.bt4_policy_distill_coeff != 0.0:
         enabled_components += (BT4_POLICY_DISTILL_COMPONENT,)
+    if config.root_legal_conditional_ce_coeff != 0.0:
+        enabled_components += (ROOT_LEGAL_CONDITIONAL_COMPONENT,)
     return GRADIENT_COMPONENT_NAMES + enabled_components
 
 
@@ -6888,6 +7227,16 @@ def parse_args(
             "Read-only evaluation sweep over one research checkpoint, a "
             "checkpoint root, or a run containing checkpoints/. The "
             "checkpoint contract defines the model and objective."
+        ),
+    )
+    parser.add_argument(
+        "--eval-root-legal-conditional-ce",
+        action="store_true",
+        help=(
+            "For read-only --eval-checkpoints only, overlay coefficient "
+            "1.0 so legacy checkpoints report the root legal-conditional "
+            "CE diagnostic. Model state and forward logits are unchanged; "
+            "the reported aggregate loss includes the unit diagnostic."
         ),
     )
     parser.add_argument("--models-dir", type=Path, default=DEFAULT_MODELS_DIR)
@@ -7250,6 +7599,33 @@ def validate_no_inert_config_overrides(
         )
 
 
+def checkpoint_evaluation_diagnostic_overlay(
+    config: JointLatentSASAConfig,
+    *,
+    root_legal_conditional_ce: bool,
+) -> tuple[JointLatentSASAConfig, dict[str, Any]]:
+    """Add explicitly read-only metrics to a checkpoint-authoritative graph."""
+
+    if not root_legal_conditional_ce:
+        return config, {}
+    overlay = {
+        "root_legal_conditional_ce": {
+            "coefficient": 1.0,
+            "purpose": "read_only_metric_overlay",
+            "model_state_mutation": False,
+            "forward_logits_affected": False,
+            "reported_aggregate_loss_includes_overlay": True,
+        }
+    }
+    return (
+        dataclasses.replace(
+            config,
+            root_legal_conditional_ce_coeff=1.0,
+        ),
+        overlay,
+    )
+
+
 def checkpoint_evaluation_contract(
     checkpoints: list[Path],
 ) -> tuple[JointLatentSASAConfig, str, float, dict[str, Any], str]:
@@ -7541,6 +7917,19 @@ def run_checkpoint_evaluation(
         checkpoint_contract,
         checkpoint_contract_sha256,
     ) = checkpoint_evaluation_contract(checkpoints)
+    checkpoint_model_config = config
+    config, diagnostic_overlays = (
+        checkpoint_evaluation_diagnostic_overlay(
+            config,
+            root_legal_conditional_ce=(
+                args.eval_root_legal_conditional_ce
+            ),
+        )
+    )
+    validate_objective_config(
+        objective=objective,
+        config=config,
+    )
 
     data_contract = checkpoint_contract.get("data")
     if not isinstance(data_contract, dict):
@@ -7653,7 +8042,11 @@ def run_checkpoint_evaluation(
         "checkpoint_count": len(checkpoints),
         "checkpoint_resume_contract": checkpoint_contract,
         "checkpoint_resume_contract_sha256": checkpoint_contract_sha256,
+        "checkpoint_model_config": serialized_model_config(
+            checkpoint_model_config
+        ),
         "model_config": serialized_model_config(config),
+        "diagnostic_overlays": diagnostic_overlays,
         "learning_rate_schedule": learning_rate_schedule_contract(config),
         "objective": objective,
         "sigreg_reference_count": sigreg_reference_count,
@@ -8300,6 +8693,10 @@ def run_gradient_audit(
         primary_coefficients[
             component_names.index(BT4_POLICY_DISTILL_COMPONENT)
         ] = model.config.bt4_policy_distill_coeff
+    if ROOT_LEGAL_CONDITIONAL_COMPONENT in component_names:
+        primary_coefficients[
+            component_names.index(ROOT_LEGAL_CONDITIONAL_COMPONENT)
+        ] = model.config.root_legal_conditional_ce_coeff
     fractions = (0.01, 0.03, 0.10, 0.30)
     suggested_coefficients: dict[str, dict[str, dict[str, float]]] = {}
     for component_index, component_name in (
@@ -8495,6 +8892,14 @@ def main() -> int:
     if args.resume_from is not None and args.eval_checkpoints is not None:
         raise ValueError(
             "--resume-from and --eval-checkpoints are mutually exclusive"
+        )
+    if (
+        args.eval_root_legal_conditional_ce
+        and args.eval_checkpoints is None
+    ):
+        raise ValueError(
+            "--eval-root-legal-conditional-ce requires "
+            "--eval-checkpoints"
         )
     if args.eval_checkpoints is not None:
         if args.eval_batches < 1:

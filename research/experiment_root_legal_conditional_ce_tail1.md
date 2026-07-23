@@ -1,7 +1,8 @@
 # Experiment 024: root legal-conditional imitation
 
-Status: preregistered on 2026-07-23. No implementation, calibration, or
-accelerator measurement has started.
+Status: preregistered and implemented on 2026-07-23. The guarded CPU
+correctness/checkpoint/parity gates pass; calibration and accelerator
+measurement have not started.
 
 ## Question and hypothesis
 
