@@ -506,6 +506,7 @@ def test_hinge_cli_contract_and_disabled_serialization() -> None:
             "jepa_projector_active_layers",
             "jepa_sampled_target_anchors",
             "jepa_target_sampling_unit",
+            "jepa_rollout_mode",
             "jepa_state_fixed_unit_rms",
             "dfm_first_action_loss_share",
             "dfm_force_first_action_mask",

@@ -258,6 +258,18 @@ H1/uniform CE `2.844706/4.496097`, and legal mass `0.647005`. Repeat update
 arena, retain no candidate state, restore `wdl_coeff=0.0`, and do not sweep
 the coefficient.
 
+Experiment 021 is preregistered in
+`research/experiment_direct_multihorizon_jepa_tail1.md`. It is the next
+original-plan architecture axis: replace the recurrent eight-step JEPA scan
+with eight direct predictions from the same `z_0`, evaluated as one parallel
+tensor and conditioned by the existing horizon-specific full-sequence DFM
+hidden states. The parameter/optimizer state ABI, one-block future tail,
+balanced K=1 target estimator, `0.0/5.76/1.0` loss, and current-only
+eight-pass DFM inference remain fixed. The resource guard permits only update
+1,200 plus terminal state. No fixed-time run is allowed until default parity,
+direct mathematics, gradient, serialization, guarded smoke, and guarded
+profile gates pass.
+
 ## Editable surface
 
 During automated architecture research, edit only `research/train.py`.

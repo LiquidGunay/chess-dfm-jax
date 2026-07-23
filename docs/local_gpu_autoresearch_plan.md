@@ -1665,3 +1665,12 @@ sweeps, held-out data, and repeated seeds.
   passes all gates, but repeat update 2,067 misses uniform CE and legal mass by
   `0.0014257/0.0010171`; reject without arena, retain no state, restore WDL
   coefficient zero, and do not sweep the coefficient.
+- [ ] Test direct parallel multi-horizon JEPA against the recurrent predictor
+  while preserving the exact parameter/checkpoint ABI, fixed
+  norm/target/`z_pred` coefficients `0.0/5.76/1.0`, balanced K=1 targets, the
+  one-block future tail, and unchanged eight-pass DFM inference. The direct
+  predictor starts every horizon from `z_0`, consumes the existing
+  horizon-specific full-sequence DFM condition, and evaluates all horizons in
+  one parallel transition tensor. The immutable systems, policy, latent,
+  repeat, arena, two-checkpoint, and cleanup gates are in
+  `research/experiment_direct_multihorizon_jepa_tail1.md`.

@@ -71,6 +71,7 @@ EXPERIMENT_OVERRIDES: dict[str, Any] = {
     "lr_decay_start_steps": 400,
     "lr_decay_steps": 800,
     "lr_min_ratio": 0.1,
+    "jepa_rollout_mode": "direct_sequence",
     "jepa_target_sample_count": 1,
     "jepa_target_sampling_unit": "example_balanced",
     "bt4_encode_chunk_size": 0,
@@ -151,6 +152,7 @@ class JointLatentSASAConfig:
     dfm_layers: int = 4
     dfm_active_layers: int = 0
     jepa_layers: int = 4
+    jepa_rollout_mode: str = "recurrent"
     jepa_num_heads: int = 0
     jepa_mlp_dim: int = 0
     num_heads: int = 4
@@ -1072,7 +1074,7 @@ class ConditionedVectorTransition(nnx.Module):
 
 
 class JointLatentSASAModel(nnx.Module):
-    """Joint DFM and recurrent projected-state JEPA model."""
+    """Joint DFM and configurable projected-state JEPA model."""
 
     def __init__(
         self,
@@ -1113,6 +1115,22 @@ class JointLatentSASAModel(nnx.Module):
         if config.jepa_target_mode not in ("projected_bt4", "current_repeat"):
             raise ValueError(
                 f"Unsupported jepa_target_mode: {config.jepa_target_mode!r}."
+            )
+        if config.jepa_rollout_mode not in (
+            "recurrent",
+            "direct_sequence",
+        ):
+            raise ValueError(
+                "jepa_rollout_mode must be 'recurrent' or "
+                f"'direct_sequence', found {config.jepa_rollout_mode!r}."
+            )
+        if (
+            config.jepa_rollout_mode == "direct_sequence"
+            and config.jepa_sampled_target_anchors
+        ):
+            raise ValueError(
+                "jepa_rollout_mode='direct_sequence' does not support "
+                "sampled-target anchors."
             )
         if (
             isinstance(config.jepa_target_sample_count, bool)
@@ -1597,6 +1615,73 @@ class JointLatentSASAModel(nnx.Module):
             (actions_seq, action_hidden_seq),
         )
         return jnp.transpose(pred_seq, (1, 0, 2))
+
+    def jepa_direct_sequence_from_latents(
+        self,
+        z0_jepa: jnp.ndarray,
+        actions: jnp.ndarray,
+        action_hidden: jnp.ndarray,
+        *,
+        z0_normalized: bool = False,
+    ) -> jnp.ndarray:
+        """Predict every horizon directly from one current-state latent."""
+
+        expected_hidden_shape = (
+            actions.shape[0],
+            actions.shape[1],
+            self.config.token_dim,
+        )
+        if action_hidden.shape != expected_hidden_shape:
+            raise ValueError(
+                "action_hidden shape must be "
+                f"{expected_hidden_shape}, found {action_hidden.shape}"
+            )
+        condition = (
+            self.jepa_action_embed(actions)
+            + self.jepa_hidden_adapter(
+                jnp.asarray(action_hidden, dtype=self.compute_dtype)
+            )
+        )
+        z0 = (
+            jnp.asarray(z0_jepa, dtype=self.compute_dtype)
+            if z0_normalized
+            else self.normalize_jepa_state(z0_jepa)
+        )
+        z0_by_horizon = jnp.broadcast_to(
+            z0[:, None, :],
+            (actions.shape[0], actions.shape[1], self.z_dim),
+        )
+        pred_z = self.jepa_transition(z0_by_horizon, condition)
+        return self.normalize_jepa_state(pred_z)
+
+    def jepa_predictions_from_latents(
+        self,
+        z0_jepa: jnp.ndarray,
+        actions: jnp.ndarray,
+        action_hidden: jnp.ndarray,
+        *,
+        z0_normalized: bool = False,
+    ) -> jnp.ndarray:
+        """Dispatch to the checkpoint-authoritative JEPA prediction graph."""
+
+        if self.config.jepa_rollout_mode == "recurrent":
+            return self.jepa_rollout_from_latents(
+                z0_jepa,
+                actions,
+                action_hidden,
+                z0_normalized=z0_normalized,
+            )
+        if self.config.jepa_rollout_mode == "direct_sequence":
+            return self.jepa_direct_sequence_from_latents(
+                z0_jepa,
+                actions,
+                action_hidden,
+                z0_normalized=z0_normalized,
+            )
+        raise ValueError(
+            f"Unsupported jepa_rollout_mode: "
+            f"{self.config.jepa_rollout_mode!r}"
+        )
 
     def jepa_rollout_from_latents_with_anchors(
         self,
@@ -2242,7 +2327,7 @@ def joint_stage1_loss_fn(
             return model.jepa_teacher_forced_from_latents(z_all[:, :horizon], actions, clean_hidden["action_tokens"])
 
         def free_rollout(_):
-            return model.jepa_rollout_from_latents(
+            return model.jepa_predictions_from_latents(
                 z_jepa,
                 actions,
                 clean_hidden["action_tokens"],
@@ -3743,6 +3828,36 @@ def validate_objective_config(
             "jepa_target_sampling_unit='example_balanced' does not "
             "support sampled-target anchors."
         )
+    rollout_mode = config.jepa_rollout_mode
+    if rollout_mode not in ("recurrent", "direct_sequence"):
+        raise ValueError(
+            "jepa_rollout_mode must be 'recurrent' or 'direct_sequence', "
+            f"found {rollout_mode!r}"
+        )
+    if rollout_mode == "direct_sequence":
+        if objective != "normalized":
+            raise ValueError(
+                "jepa_rollout_mode='direct_sequence' requires "
+                "--objective normalized."
+            )
+        if (
+            target_sample_count != 1
+            or target_sampling_unit != "example_balanced"
+        ):
+            raise ValueError(
+                "jepa_rollout_mode='direct_sequence' requires balanced "
+                "per-example K=1 target sampling."
+            )
+        if config.jepa_sampled_target_anchors:
+            raise ValueError(
+                "jepa_rollout_mode='direct_sequence' does not support "
+                "sampled-target anchors."
+            )
+        if config.jepa_teacher_forcing_steps != 0:
+            raise ValueError(
+                "jepa_rollout_mode='direct_sequence' does not support "
+                "teacher-forced recurrent carries."
+            )
     if 0 < target_sample_count < config.horizon:
         if objective != "normalized":
             raise ValueError(
@@ -4680,6 +4795,11 @@ def serialized_model_config(
         == JointLatentSASAConfig.jepa_target_sampling_unit
     ):
         payload.pop("jepa_target_sampling_unit")
+    if (
+        config.jepa_rollout_mode
+        == JointLatentSASAConfig.jepa_rollout_mode
+    ):
+        payload.pop("jepa_rollout_mode")
     if config.jepa_projector_active_layers == 0:
         payload.pop("jepa_projector_active_layers")
     if config.dfm_active_layers == 0:
@@ -4737,6 +4857,23 @@ def build_research_resume_contract(
         "target_sigreg_reference_count": float(sigreg_reference_count),
         "pred_sigreg_reference_count": float(sigreg_reference_count),
     }
+    if config.jepa_rollout_mode == "direct_sequence":
+        objective_contract["jepa_prediction_graph"] = {
+            "mode": "direct_sequence",
+            "current_state_source": "same_normalized_z0_for_every_horizon",
+            "condition": (
+                "jepa_action_embed(action_h)+"
+                "jepa_hidden_adapter(clean_full_sequence_dfm_hidden_h)"
+            ),
+            "horizon_execution": "one_parallel_batch_horizon_tensor",
+            "recurrent_prediction_carry": False,
+            "full_action_sequence_visible_through_dfm_hidden": True,
+            "parameter_state_abi": "unchanged",
+            "optimizer_state_abi": "unchanged_source_compatible",
+            "prediction_sigreg_horizons": "all",
+            "collapse_diagnostics_dispatch": "same_configured_graph",
+            "dfm_inference_affected": False,
+        }
     if config.dfm_first_action_loss_share != 0.0:
         tail_horizon_count = (
             config.horizon
@@ -5264,7 +5401,7 @@ def diagnose_joint_latents(
         clean_t,
         return_hidden=True,
     )
-    pred_z = model.jepa_rollout_from_latents(
+    pred_z = model.jepa_predictions_from_latents(
         z_all[:, 0],
         actions,
         clean_hidden["action_tokens"],
@@ -5284,7 +5421,7 @@ def diagnose_joint_latents(
     )
 
     permutation = jax.random.permutation(rng_action, actions.shape[0])
-    action_shuffled_pred = model.jepa_rollout_from_latents(
+    action_shuffled_pred = model.jepa_predictions_from_latents(
         z_all[:, 0],
         actions[permutation],
         clean_hidden["action_tokens"][permutation],

@@ -554,6 +554,7 @@ def test_local_config_and_initialized_model_match_legacy_exactly():
             "jepa_projector_active_layers",
             "jepa_sampled_target_anchors",
             "jepa_target_sampling_unit",
+            "jepa_rollout_mode",
             "jepa_state_fixed_unit_rms",
             "bt4_freeze_backbone",
             "bt4_future_target_stop_gradient",
@@ -624,6 +625,12 @@ def test_local_config_and_initialized_model_match_legacy_exactly():
             "jepa_sigreg_example_count"
         ].default
         == 0
+    )
+    assert (
+        local.JointLatentSASAConfig.__dataclass_fields__[
+            "jepa_rollout_mode"
+        ].default
+        == "recurrent"
     )
 
     kwargs = _config_kwargs()
