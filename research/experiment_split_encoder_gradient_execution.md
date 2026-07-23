@@ -1,8 +1,8 @@
 # Experiment 034: forward-identical split encoder gradients
 
-Status: preregistered on 2026-07-23. This is a training-execution and compiler
-experiment, not a loss, architecture, data, optimizer, or model-strength
-experiment.
+Status: rejected at the guarded compiler gate on 2026-07-23. This is a
+training-execution and compiler experiment, not a loss, architecture, data,
+optimizer, or model-strength experiment.
 
 ## Evidence and question
 
@@ -169,3 +169,55 @@ separately preregistered experiment may add FP32 BT4 masters on this split
 path. A failure does not authorize a frozen backbone or a last-block-only
 current tail; it sends the systems plan to a separately justified
 state-efficient update method such as an adapter or stochastic rounding.
+
+## Outcome
+
+All preregistered CPU correctness gates passed. The focused split-execution
+suite passed 34 tests in 92.57 seconds, including bitwise token parity,
+path-complete and disjoint gradient partitioning, monolithic-versus-split
+gradient and two-update parity, global clipping, nonfinite suppression,
+future-tail semantics, concrete lowering of all four components, and
+fail-closed configuration checks. The broader guarded suite passed 158 tests
+in 211.22 seconds. Its parent guard observed a 4,975,194,112-byte peak
+process-group RSS and 7,269,494,784-byte minimum MemAvailable. Lint,
+`compileall`, and diff checks were clean.
+
+CPU JIT validation had written eight CPU-backend executables and their eight
+access-time markers into the ordinary cache. Before the GPU gate, those exact
+validation byproducts were removed. This restored the previously recorded
+baseline of 67 executable entries and 157,684,302 bytes. The storage audit
+then passed with exactly seven retained state files.
+
+The first cold GPU component, `encode`, passed:
+
+- explicit compile time: 50.789 seconds;
+- process wall time: 71.834 seconds;
+- peak process-group RSS: 4,919,771,136 bytes;
+- minimum MemAvailable: 8,196,894,720 bytes;
+- compiler arguments / outputs / temporaries:
+  748,281,712 / 748,809,800 / 151,022,560 bytes;
+- compiler FLOPs / bytes accessed:
+  4,096,336,855,040 / 29,928,880,128;
+- peak JAX device allocation: 1,928,431,104 bytes; and
+- one new 1,085,760-byte executable with SHA-256
+  `f88d4f4bd39cc761969142dd129b23a4a6b68891ccf5ccf0f1dc49f909fe770c`.
+
+It wrote no checkpoint and reported no compiler-gate failure.
+
+The second cold component, `head_vjp`, failed the fixed host-RSS guard before
+compilation completed. At 34.724 seconds the process group reached
+8,006,049,792 bytes, exceeding the preregistered 7,247,757,312-byte ceiling.
+The guard terminated the process while system MemAvailable was still
+7,964,499,968 bytes. No head executable was written; its output directory
+contains only the 30,621-byte `run_config.json`. Per protocol, neither
+`encoder_vjp` nor `update` was compiled, and the failed component was not
+retried.
+
+The closing audit finds 68 executable entries—the original 67 plus the valid
+encode executable—and exactly the original seven retained state files. No
+checkpoint was written. Exp034 therefore rejects this four-component
+implementation as the safe compiler substrate. A new experiment must first
+test whether the exact head graph can omit encoder model/optimizer payload
+from its compilation ABI; if that cannot materially reduce host compilation
+state, the next candidate must be a separately justified state-efficient
+update method.
