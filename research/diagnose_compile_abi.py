@@ -7,6 +7,7 @@ import argparse
 import gc
 import hashlib
 import json
+import sys
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -14,9 +15,13 @@ from typing import Any
 import jax
 from flax import nnx
 
-from chess_dfm_jax.nnx_bt4 import TrainableParam
-from research import train
-from research.prepare import REPO_ROOT, require_within_workspace
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
+from chess_dfm_jax.nnx_bt4 import TrainableParam  # noqa: E402
+from research import train  # noqa: E402
+from research.prepare import REPO_ROOT, require_within_workspace  # noqa: E402
 
 
 CONSTRUCTOR_MODEL_ABI = (
