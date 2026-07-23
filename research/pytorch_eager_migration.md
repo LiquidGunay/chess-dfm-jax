@@ -155,6 +155,34 @@ process-group RSS. Every scalar is finite; the prediction beats zero,
 identity, target-shuffled, and action-shuffled controls at every horizon.
 This smoke writes no checkpoint.
 
+The first guarded batch-512 fixed-time control is complete. It performs 564
+finite, unskipped updates over 288,768 examples in 1,801.31 training seconds,
+or 160.310 examples/s end to end. Mean GPU utilization including startup is
+98.57% with 100% p50 utilization and 215.23 W p50 power. Peak allocated and
+reserved HBM are 12,570,979,328 and 14,971,568,128 bytes; guarded peak
+process-group RSS is 2,498,887,680 bytes. All 564 per-update total/component
+loss rows are retained. Comparing the first and last 64-update windows,
+training DFM CE changes `3.47652 -> 3.42899`, JEPA positive loss
+`0.29881 -> 0.21416`, accuracy `0.25073 -> 0.25367`, and legal mass
+`0.87280 -> 0.87942`. Target/prediction norms settle at `29.90/28.97`;
+there is no training-stream collapse claim because the frozen full-pool rank
+gate is still authoritative.
+
+Exactly one terminal checkpoint was written: 455 leaves, 705,987,352 tensor
+bytes in a 706,033,120-byte safetensors file, SHA-256
+`cd45d2ecb17d35439ec1ee54b3ad3ce02bcb5d2cdc4571e37bddcda15e34c49c`.
+The strict CPU pure-tree audit passes with combined leaf checksum
+`a3a99de695eb73b28a35eda75323a075713d0032debdaf2e3c8919a429486b3d`.
+The old update-count schedule was intentionally preserved for this control;
+at update 564 the main LR is still `2.73275e-5`. After baseline qualification,
+an example-scaled schedule/LR comparison should precede architecture changes.
+
+The immediately following elevated two-pool validation launch was rejected by
+the platform usage-limit gate, which reported availability resuming
+2026-07-28 17:03 UTC. Do not bypass that gate. The checkpoint is retained as
+the sole candidate state, and the matched PyTorch pools plus frozen JAX
+round-trip/validation/eight-pass inference remain queued.
+
 This evidence amends, rather than silently relaxes, correctness gate 3:
 
 1. FP32 remains the exact formula, source-map, representative-gradient, and
@@ -171,5 +199,5 @@ This evidence amends, rather than silently relaxes, correctness gate 3:
    claimed.
 
 `PYTORCH_AUTORESEARCH_READY` remains false. The remaining gates are
-the real-control checkpoint's strict JAX round trip and the matched fixed-time
-control plus full two-pool JAX validation/inference cross-check.
+the control checkpoint's matched full-pool PyTorch validation, exact JAX round
+trip, and full two-pool JAX validation/eight-pass inference cross-check.

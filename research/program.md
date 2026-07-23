@@ -620,6 +620,21 @@ FP32 and BF16-bit unit tests. A guarded full-horizon PyTorch source validation
 smoke also passes at batch 64, using 3.152 GB peak allocated HBM and 1.878 GB
 peak process-group RSS; the focused migration suite passes 21 tests.
 
+The first batch-512 PyTorch fixed-time control is complete: 564 finite updates,
+288,768 examples, 1,801.31 training seconds, and 160.310 end-to-end examples/s.
+All per-update loss components are retained. First-to-last 64-update means
+change DFM CE `3.47652 -> 3.42899`, JEPA MSE `0.29881 -> 0.21416`, accuracy
+`0.25073 -> 0.25367`, and legal mass `0.87280 -> 0.87942`. One terminal
+706,033,120-byte checkpoint is retained; all 455 leaves and 705,987,352 tensor
+bytes pass the strict pure-tree audit. The old update-count schedule was held
+fixed as declared, leaving main LR `2.73275e-5` at update 564; compare an
+example-scaled schedule after qualification and before architecture changes.
+
+The platform usage-limit gate rejected the next elevated full-pool evaluation
+launch and reported access resuming 2026-07-28 17:03 UTC. Do not bypass it.
+PyTorch two-pool validation and the JAX state/validation/eight-pass gates
+remain queued, so `PYTORCH_AUTORESEARCH_READY` stays false.
+
 ## Editable surface
 
 During migration, edit `research/train_torch.py` and focused parity tests.

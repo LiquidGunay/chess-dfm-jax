@@ -1883,7 +1883,8 @@ sweeps, held-out data, and repeated seeds.
   matched PyTorch control plus frozen JAX evaluation/inference cross-check as
   the amended production-runtime gate. The strict model-only round-trip,
   NNX-compatible pure-tree loader, and exact BF16-bit unit gate are complete;
-  the real fixed-time control state remains to be exercised.
+  the real fixed-time state passes the CPU pure-tree audit and still requires
+  exact JAX state verification.
 - [x] Run a guarded no-checkpoint A10G smoke/profile, then sweep physical batch
   size for throughput and safe HBM/RSS headroom. Freeze the selected batch for
   matched comparisons; batch 512 is selected for eager PyTorch.
@@ -1891,10 +1892,19 @@ sweeps, held-out data, and repeated seeds.
   batch 64. The guarded source batch completes in 2.367 seconds at 3.152 GB
   peak allocated HBM and 1.878 GB peak host RSS, with all metrics finite and
   every trivial/action-shuffled JEPA comparison ordered correctly.
+- [x] Run the first guarded eager-PyTorch batch-512 fixed-time control. It
+  completes 564 finite updates/288,768 examples at 160.310 examples/s, logs
+  every update, and writes exactly one 706,033,120-byte terminal checkpoint.
+  The exact CPU checkpoint/pure-tree audit passes for all 455 leaves and
+  705,987,352 tensor bytes.
 - [ ] Repeat the accepted fixed-time control and its frozen two-pool
   validation under PyTorch, cross-check the exported model with JAX
   validation and eight-pass inference, and set
   `PYTORCH_AUTORESEARCH_READY = True` only if every migration gate passes.
+  The first training leg is complete; the platform rejected the subsequent
+  elevated evaluation launch at its usage-limit gate and reported access
+  resuming 2026-07-28 17:03 UTC. Retain the sole final state and queue these
+  read-only GPU gates without bypassing the launcher.
 - [ ] Resume 30-minute one-change autoresearch runs in
   `research/train_torch.py`, recording every loss component and systems
   metric. Consider regional `torch.compile` only if measured end-to-end
