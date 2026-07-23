@@ -1809,3 +1809,7 @@ sweeps, held-out data, and repeated seeds.
   compile at `8.575 GB`; cancel the restored stage, remove the disposable
   cache, and reject the cross-directory method. Tighten guard polling to 50 ms
   before any further compiler trial.
+- [x] Reduce the fail-closed resource-guard polling interval from 250 ms to
+  50 ms after the Experiment 031 compiler RSS jump. Keep the two-CPU limit,
+  8/3 GiB host-memory thresholds, 7 GiB group-RSS ceiling, 30 GiB disk
+  reserve, and checkpoint limits unchanged.

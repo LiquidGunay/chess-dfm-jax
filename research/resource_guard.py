@@ -42,7 +42,7 @@ class GuardConfig:
     min_disk_reserve_bytes: int = 30 * GIB
     checkpoint_bytes: int = 2 * GIB
     max_checkpoint_writes: int = 2
-    poll_seconds: float = 0.25
+    poll_seconds: float = 0.05
     termination_grace_seconds: float = 5.0
     child_oom_score_adj: int = 500
     child_nice: int = 5
@@ -146,7 +146,7 @@ def config_from_environ(environ: Mapping[str, str] | None = None) -> GuardConfig
         poll_seconds=_env_float(
             env,
             "CHESS_DFM_GUARD_POLL_SECONDS",
-            0.25,
+            0.05,
             minimum=0.05,
             maximum=0.5,
         ),

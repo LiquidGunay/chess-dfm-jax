@@ -132,6 +132,7 @@ def test_cpu_affinity_is_sorted_deduplicated_and_capped() -> None:
 
 
 def test_environment_contract_fails_closed() -> None:
+    assert config_from_environ({}).poll_seconds == 0.05
     with pytest.raises(GuardViolation, match="must be an integer"):
         config_from_environ({"CHESS_DFM_GUARD_CPU_COUNT": "many"})
     with pytest.raises(GuardViolation, match="Runtime MemAvailable floor"):

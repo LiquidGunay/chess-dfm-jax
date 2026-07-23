@@ -511,3 +511,7 @@ that unintended isolated cold compile at `8.575 GB` group RSS before an
 executable or state write; the ordinary stage is cancelled and the disposable
 cache is removed. Tighten guard polling to 50 ms before another compiler
 trial.
+
+The resource guard now polls every 50 ms by default, including through
+`run_gpu.sh`, to reduce overshoot during rapid compiler RSS growth. All CPU,
+memory, disk, lock, and checkpoint ceilings remain unchanged.

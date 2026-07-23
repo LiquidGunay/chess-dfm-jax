@@ -6,6 +6,7 @@ source "${_research_dir}/env.sh"
 
 export JAX_PLATFORMS="${JAX_PLATFORMS:-cuda}"
 export CHESS_DFM_GUARD_CPU_COUNT="${CHESS_DFM_GUARD_CPU_COUNT:-2}"
+export CHESS_DFM_GUARD_POLL_SECONDS="${CHESS_DFM_GUARD_POLL_SECONDS:-0.05}"
 
 # These cap library thread pools; resource_guard.py additionally applies a
 # kernel-enforced CPU affinity mask, so compilation cannot consume all host
