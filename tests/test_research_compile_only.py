@@ -56,6 +56,28 @@ def test_compile_only_cli_contract_accepts_only_zero_execution_mode() -> None:
         train.validate_compile_only_args(args, save_updates=(1,))
 
 
+def test_split_compile_only_requires_exactly_one_component() -> None:
+    args = valid_compile_only_args()
+    args.gradient_execution = "split"
+    with pytest.raises(ValueError, match="requires --compile-component"):
+        train.validate_compile_only_args(args, save_updates=())
+
+    args.compile_component = "encode"
+    train.validate_compile_only_args(args, save_updates=())
+
+    args.compile_only = False
+    with pytest.raises(ValueError, match="requires --compile-only"):
+        train.validate_compile_only_args(args, save_updates=())
+
+    args = valid_compile_only_args()
+    args.compile_component = "encode"
+    with pytest.raises(
+        ValueError,
+        match="requires --gradient-execution split",
+    ):
+        train.validate_compile_only_args(args, save_updates=())
+
+
 @pytest.mark.parametrize(
     ("field", "value", "message"),
     [
@@ -343,6 +365,133 @@ def test_compile_only_report_has_no_restore_update_metrics_or_checkpoint(
     assert report["abstract_compilation_arguments"][
         "all_dynamic_leaves_abstract"
     ] is True
+    assert report["checkpoint_path"] is None
+    assert report["metrics_path"] is None
+    assert not list(output_dir.rglob("state.npz"))
+
+
+def test_split_component_compile_report_uses_concrete_args_and_zero_state(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    args = valid_compile_only_args()
+    args.gradient_execution = "split"
+    args.compile_component = "encode"
+    records: dict[str, dict[str, object]] = {}
+
+    class FakeBatches:
+        def provenance(self):
+            return {"batch_size": 128, "seed": 0}
+
+        def batch_at(self, index: int):
+            assert index == 0
+            return {"batch": np.ones((1,), dtype=np.float32)}
+
+    optimizer = types.SimpleNamespace(step=np.asarray(0, dtype=np.int64))
+    compilation = train.TrainingCompilation(
+        executable=object(),
+        seconds=2.0,
+        cost_analysis_raw={"flops": 5.0},
+        memory_analysis={
+            "argument_size_in_bytes": 11,
+            "output_size_in_bytes": 13,
+            "temp_size_in_bytes": 17,
+        },
+    )
+    before = {
+        "existing-cache": {
+            "size_bytes": 1,
+            "sha256": "old",
+        }
+    }
+    after = {
+        **before,
+        "jit__split_encode_impl-new-cache": {
+            "size_bytes": 2,
+            "sha256": "new",
+        },
+    }
+    inventories = iter((before, after))
+    monkeypatch.setenv(
+        "JAX_COMPILATION_CACHE_DIR",
+        "/mountpoint/.exp/chess-dfm-jax/.local/cache/jax",
+    )
+    monkeypatch.setattr(
+        train,
+        "training_state_footprint",
+        lambda _model, _optimizer: {"abi": "same"},
+    )
+    monkeypatch.setattr(
+        train,
+        "split_training_functions",
+        lambda **_kwargs: object(),
+    )
+    monkeypatch.setattr(
+        train,
+        "compile_split_component",
+        lambda *_args, **_kwargs: compilation,
+    )
+    monkeypatch.setattr(
+        train,
+        "compilation_cache_executable_inventory",
+        lambda _path: next(inventories),
+    )
+    monkeypatch.setattr(
+        train,
+        "gpu_memory_stats",
+        lambda: {"bytes_in_use": 0, "peak_bytes_in_use": 0},
+    )
+    monkeypatch.setattr(
+        train,
+        "import_legacy_checkpoint",
+        lambda *_args, **_kwargs: pytest.fail(
+            "split compile-only must not import the legacy checkpoint"
+        ),
+    )
+
+    def capture(path: Path, payload: dict[str, object]) -> None:
+        records[path.name] = payload
+
+    monkeypatch.setattr(train, "write_json", capture)
+    output_dir = tmp_path / "split-compile-only"
+    result = train.run_split_component_compile_only(
+        args,
+        commit="abc",
+        timestamp="20260723T000000Z",
+        run_id="split-compile-only-test",
+        output_dir=output_dir,
+        config=train.JointLatentSASAConfig(),
+        train_batches=FakeBatches(),
+        resume_contract={"contract": "same"},
+        model=object(),
+        optimizer=optimizer,
+        checkpoint_step=265_000,
+        source_checkpoint_path=Path("/unused/state.npz"),
+    )
+
+    assert result == 0
+    assert set(records) == {
+        "run_config.json",
+        "compiler_cost_analysis.json",
+        "report.json",
+    }
+    report = records["report.json"]
+    assert report["mode"] == "split_component_compile_only_concrete"
+    assert report["component"] == "encode"
+    assert report["source_checkpoint_opened"] is False
+    assert report["source_checkpoint_values_restored"] is False
+    assert report["parameter_values_are_concrete_compilation_inputs"] is True
+    assert report["abstract_compilation_arguments"] is False
+    assert report["model_or_optimizer_executed"] is False
+    assert report["optimizer_step_after_compile"] == 0
+    assert report["cache_added"] == {
+        "jit__split_encode_impl-new-cache": after[
+            "jit__split_encode_impl-new-cache"
+        ]
+    }
+    assert report["cache_gate_passed"] is True
+    assert report["completed"] is True
+    assert report["checkpoint_writes"] == 0
     assert report["checkpoint_path"] is None
     assert report["metrics_path"] is None
     assert not list(output_dir.rglob("state.npz"))

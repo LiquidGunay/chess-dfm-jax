@@ -17,12 +17,15 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 import research.train as train  # noqa: E402
-from chess_dfm_jax.nnx_bt4 import TrainableParam  # noqa: E402
+from chess_dfm_jax.nnx_bt4 import (  # noqa: E402
+    BT4TrainableParam,
+    TrainableParam,
+)
 
 
 class DummyBT4Embedding(nnx.Module):
     def __init__(self, width: int):
-        self.scale = TrainableParam(
+        self.scale = BT4TrainableParam(
             jnp.linspace(0.5, 1.5, width, dtype=jnp.float32)
         )
 
@@ -44,7 +47,7 @@ class DummyBT4Embedding(nnx.Module):
 
 class DummyBT4Layer(nnx.Module):
     def __init__(self, width: int, layer_index: int):
-        self.scale = TrainableParam(
+        self.scale = BT4TrainableParam(
             jnp.linspace(
                 0.02 + layer_index * 0.001,
                 0.04 + layer_index * 0.001,
@@ -52,7 +55,7 @@ class DummyBT4Layer(nnx.Module):
                 dtype=jnp.float32,
             )
         )
-        self.bias = TrainableParam(
+        self.bias = BT4TrainableParam(
             jnp.full((width,), 0.001 * (layer_index + 1), dtype=jnp.float32)
         )
 
@@ -137,6 +140,18 @@ def _model(*, stop_future: bool, tail_layers: int, seed: int = 7):
     )
 
 
+def _model_from_config(
+    config: train.JointLatentSASAConfig,
+    *,
+    seed: int,
+) -> train.JointLatentSASAModel:
+    return train.JointLatentSASAModel(
+        LayeredDummyBT4(),
+        config,
+        rngs=nnx.Rngs(seed),
+    )
+
+
 def _batch() -> dict[str, jax.Array]:
     current = jnp.linspace(
         -0.25,
@@ -175,6 +190,44 @@ def _tree_norm(tree: Any) -> float:
             )
         )
     )
+
+
+def _path_arrays(tree: Any) -> dict[str, np.ndarray]:
+    return {
+        jax.tree_util.keystr(path): np.asarray(leaf)
+        for path, leaf in jax.tree_util.tree_flatten_with_path(tree)[0]
+    }
+
+
+def _tree_relative_l2_and_cosine(
+    left: Any,
+    right: Any,
+) -> tuple[float, float]:
+    left_arrays = _path_arrays(left)
+    right_arrays = _path_arrays(right)
+    assert left_arrays.keys() == right_arrays.keys()
+    left_norm_sq = 0.0
+    right_norm_sq = 0.0
+    diff_norm_sq = 0.0
+    dot = 0.0
+    for path in left_arrays:
+        left_value = left_arrays[path].astype(np.float64)
+        right_value = right_arrays[path].astype(np.float64)
+        assert left_value.shape == right_value.shape
+        assert left_arrays[path].dtype == right_arrays[path].dtype
+        left_norm_sq += float(np.sum(np.square(left_value)))
+        right_norm_sq += float(np.sum(np.square(right_value)))
+        diff_norm_sq += float(np.sum(np.square(left_value - right_value)))
+        dot += float(np.sum(left_value * right_value))
+    relative_l2 = math.sqrt(diff_norm_sq) / max(
+        math.sqrt(left_norm_sq),
+        1e-30,
+    )
+    cosine = dot / max(
+        math.sqrt(left_norm_sq * right_norm_sq),
+        1e-30,
+    )
+    return relative_l2, cosine
 
 
 def _selected_vector_loss(model, current, future, future_only: bool):
@@ -390,3 +443,388 @@ def test_tail_serialization_and_resume_contract_are_explicit(monkeypatch) -> Non
     assert routing["optimizer_state_abi"] == "unchanged_source_compatible"
     assert routing["evaluation_horizons"] == "all"
     assert routing["inference_affected"] is False
+
+
+def test_split_tokens_loss_and_gradients_match_monolithic() -> None:
+    monolithic = _model(stop_future=True, tail_layers=1, seed=41)
+    split = _model(stop_future=True, tail_layers=1, seed=41)
+    batch = _batch()
+    rng = jax.random.PRNGKey(43)
+
+    future_planes = batch["future_planes"][:, : split.config.horizon]
+    future_valid = batch["future_valid"][:, : split.config.horizon]
+    _, _, rng_sigreg = jax.random.split(rng, 3)
+    selection = train.select_future_training_targets(
+        config=split.config,
+        future_planes=future_planes,
+        future_valid=future_valid,
+        rng_sigreg=rng_sigreg,
+        sample_future_targets=True,
+    )
+    expected_tokens, _ = (
+        monolithic.encode_current_and_future_tokens_and_vectors(
+            batch["current_planes"],
+            selection.target_future_planes,
+        )
+    )
+    split_tokens = train.split_training_bt4_tokens(split, batch, rng)
+    np.testing.assert_array_equal(split_tokens, expected_tokens)
+
+    monolithic_loss_and_grad = nnx.value_and_grad(
+        train.normalized_stage1_training_loss_fn,
+        argnums=nnx.DiffState(0, TrainableParam),
+        has_aux=True,
+    )
+    (monolithic_loss, monolithic_aux), monolithic_grads = (
+        monolithic_loss_and_grad(
+            monolithic,
+            batch,
+            rng,
+            1.0,
+            1.0,
+        )
+    )
+    (
+        split_loss,
+        split_aux,
+        head_grads,
+        encoder_grads,
+        token_cotangent,
+    ) = train.split_training_gradients(
+        split,
+        batch,
+        rng,
+        1.0,
+        1.0,
+    )
+    partition = train.validate_split_gradient_partitions(
+        split,
+        head_grads,
+        encoder_grads,
+    )
+    split_grads = train.merge_split_gradients(
+        head_grads,
+        encoder_grads,
+    )
+
+    assert partition["full_leaf_count"] == (
+        partition["head_leaf_count"] + partition["encoder_leaf_count"]
+    )
+    assert partition["encoder_leaf_count"] > 0
+    assert token_cotangent.shape == split_tokens.shape
+    assert token_cotangent.dtype == split_tokens.dtype
+    np.testing.assert_allclose(
+        split_loss,
+        monolithic_loss,
+        rtol=0.0,
+        atol=1e-6,
+    )
+    assert split_aux.keys() == monolithic_aux.keys()
+    for key in split_aux:
+        np.testing.assert_allclose(
+            split_aux[key],
+            monolithic_aux[key],
+            rtol=1e-6,
+            atol=1e-6,
+            err_msg=key,
+        )
+
+    relative_l2, cosine = _tree_relative_l2_and_cosine(
+        monolithic_grads,
+        split_grads,
+    )
+    assert relative_l2 <= 1e-5
+    assert cosine >= 0.999999
+
+    monolithic_pure = nnx.to_pure_dict(monolithic_grads)
+    split_pure = nnx.to_pure_dict(split_grads)
+    for partition_name, subtree in (
+        ("encoder", monolithic_pure["encoder"]),
+        (
+            "head",
+            {
+                key: value
+                for key, value in monolithic_pure.items()
+                if key != "encoder"
+            },
+        ),
+    ):
+        split_subtree = (
+            split_pure["encoder"]
+            if partition_name == "encoder"
+            else {
+                key: value
+                for key, value in split_pure.items()
+                if key != "encoder"
+            }
+        )
+        relative_l2, cosine = _tree_relative_l2_and_cosine(
+            subtree,
+            split_subtree,
+        )
+        assert relative_l2 <= 1e-5, partition_name
+        assert cosine >= 0.999999, partition_name
+
+
+def test_split_two_updates_preserve_global_optimizer_semantics() -> None:
+    config = dataclasses.replace(
+        _config(stop_future=True, trainable_tail_layers=1),
+        grad_clip_norm=0.05,
+        skip_nonfinite_updates=True,
+    )
+    monolithic = _model_from_config(config, seed=47)
+    split = _model_from_config(config, seed=47)
+    monolithic_optimizer = train.create_joint_optimizer(
+        monolithic,
+        config,
+    )
+    split_optimizer = train.create_joint_optimizer(split, config)
+    monolithic_loss_and_grad = nnx.value_and_grad(
+        train.normalized_stage1_training_loss_fn,
+        argnums=nnx.DiffState(0, TrainableParam),
+        has_aux=True,
+    )
+
+    for update in range(2):
+        batch = _batch()
+        rng = jax.random.fold_in(jax.random.PRNGKey(53), update)
+        (monolithic_loss, monolithic_aux), monolithic_grads = (
+            monolithic_loss_and_grad(
+                monolithic,
+                batch,
+                rng,
+                1.0,
+                1.0,
+            )
+        )
+        (
+            split_loss,
+            split_aux,
+            head_grads,
+            encoder_grads,
+            _,
+        ) = train.split_training_gradients(
+            split,
+            batch,
+            rng,
+            1.0,
+            1.0,
+        )
+        train.validate_split_gradient_partitions(
+            split,
+            head_grads,
+            encoder_grads,
+        )
+        monolithic_optimizer.update(monolithic, monolithic_grads)
+        split_optimizer.update(
+            split,
+            train.merge_split_gradients(head_grads, encoder_grads),
+        )
+
+        np.testing.assert_allclose(
+            split_loss,
+            monolithic_loss,
+            rtol=0.0,
+            atol=1e-6,
+        )
+        assert split_aux.keys() == monolithic_aux.keys()
+        model_relative_l2, _ = _tree_relative_l2_and_cosine(
+            nnx.state(monolithic, TrainableParam),
+            nnx.state(split, TrainableParam),
+        )
+        optimizer_relative_l2, _ = _tree_relative_l2_and_cosine(
+            nnx.state(monolithic_optimizer),
+            nnx.state(split_optimizer),
+        )
+        assert model_relative_l2 <= 1e-5
+        assert optimizer_relative_l2 <= 1e-5
+        assert int(monolithic_optimizer.step[...]) == update + 1
+        assert int(split_optimizer.step[...]) == update + 1
+
+
+def test_split_partition_validation_fails_closed() -> None:
+    model = _model(stop_future=True, tail_layers=1, seed=59)
+    _, _, head_grads, encoder_grads, _ = train.split_training_gradients(
+        model,
+        _batch(),
+        jax.random.PRNGKey(61),
+        1.0,
+        1.0,
+    )
+
+    with pytest.raises(ValueError, match="overlap"):
+        train.validate_split_gradient_partitions(
+            model,
+            train.merge_split_gradients(head_grads, encoder_grads),
+            encoder_grads,
+        )
+    with pytest.raises(ValueError, match="mismatch"):
+        train.validate_split_gradient_partitions(
+            model,
+            head_grads,
+            nnx.State({}),
+        )
+
+
+def test_donated_split_executables_complete_one_cpu_update() -> None:
+    config = dataclasses.replace(
+        _config(stop_future=True, trainable_tail_layers=1),
+        grad_clip_norm=0.05,
+        skip_nonfinite_updates=True,
+    )
+    model = _model_from_config(config, seed=67)
+    optimizer = train.create_joint_optimizer(model, config)
+
+    loss, aux, timing = train.execute_split_training_step(
+        train.split_training_functions(donate=True),
+        model=model,
+        optimizer=optimizer,
+        batch=_batch(),
+        rng=jax.random.PRNGKey(71),
+        target_reference_count=1.0,
+        pred_reference_count=1.0,
+    )
+
+    assert np.isfinite(float(loss))
+    assert np.isfinite(float(aux["dfm_ce_loss"]))
+    assert int(optimizer.step[...]) == 1
+    assert set(timing) == {
+        "split_encode_seconds",
+        "split_head_vjp_seconds",
+        "split_encoder_vjp_seconds",
+        "split_optimizer_update_seconds",
+        "split_total_seconds",
+    }
+    assert all(seconds >= 0.0 for seconds in timing.values())
+
+
+def test_split_execution_config_is_frozen_to_accepted_contract() -> None:
+    config = dataclasses.replace(
+        _config(stop_future=True, trainable_tail_layers=1),
+        horizon=8,
+        encoder_dtype="bfloat16",
+        param_dtype="float32",
+        compute_dtype="bfloat16",
+        jepa_norm_loss_coeff=0.0,
+        jepa_sigreg_coeff=5.76,
+        jepa_pred_sigreg_coeff=1.0,
+        jepa_sigreg_estimator="v_stat",
+        jepa_sigreg_example_count=64,
+        learning_rate=3e-5,
+        bt4_learning_rate=1e-6,
+        lr_decay_start_steps=400,
+        lr_decay_steps=800,
+        lr_min_ratio=0.1,
+        use_muon=True,
+        grad_clip_norm=1.0,
+        skip_nonfinite_updates=True,
+    )
+    train.validate_split_gradient_execution_config(
+        config,
+        objective="normalized",
+        batch_size=128,
+        sigreg_reference_count=1.0,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="jepa_pred_sigreg_coeff",
+    ):
+        train.validate_split_gradient_execution_config(
+            dataclasses.replace(
+                config,
+                jepa_pred_sigreg_coeff=0.0,
+            ),
+            objective="normalized",
+            batch_size=128,
+            sigreg_reference_count=1.0,
+        )
+
+
+def test_split_preserves_full_tree_nonfinite_update_suppression() -> None:
+    config = dataclasses.replace(
+        _config(stop_future=True, trainable_tail_layers=1),
+        grad_clip_norm=0.05,
+        skip_nonfinite_updates=True,
+    )
+    monolithic = _model_from_config(config, seed=73)
+    split = _model_from_config(config, seed=73)
+    monolithic_optimizer = train.create_joint_optimizer(
+        monolithic,
+        config,
+    )
+    split_optimizer = train.create_joint_optimizer(split, config)
+    before = nnx.state(monolithic, TrainableParam)
+    batch = _batch()
+    batch["current_planes"] = batch["current_planes"].at[
+        0, 0, 0, 0
+    ].set(jnp.nan)
+    rng = jax.random.PRNGKey(79)
+
+    monolithic_loss_and_grad = nnx.value_and_grad(
+        train.normalized_stage1_training_loss_fn,
+        argnums=nnx.DiffState(0, TrainableParam),
+        has_aux=True,
+    )
+    (_, _), monolithic_grads = monolithic_loss_and_grad(
+        monolithic,
+        batch,
+        rng,
+        1.0,
+        1.0,
+    )
+    _, _, head_grads, encoder_grads, _ = (
+        train.split_training_gradients(
+            split,
+            batch,
+            rng,
+            1.0,
+            1.0,
+        )
+    )
+    monolithic_optimizer.update(monolithic, monolithic_grads)
+    split_optimizer.update(
+        split,
+        train.merge_split_gradients(head_grads, encoder_grads),
+    )
+
+    for expected, monolithic_value, split_value in zip(
+        jax.tree.leaves(before),
+        jax.tree.leaves(nnx.state(monolithic, TrainableParam)),
+        jax.tree.leaves(nnx.state(split, TrainableParam)),
+        strict=True,
+    ):
+        np.testing.assert_array_equal(monolithic_value, expected)
+        np.testing.assert_array_equal(split_value, expected)
+    optimizer_relative_l2, _ = _tree_relative_l2_and_cosine(
+        nnx.state(monolithic_optimizer),
+        nnx.state(split_optimizer),
+    )
+    assert optimizer_relative_l2 <= 1e-5
+
+
+def test_split_concrete_component_arguments_lower_without_execution() -> None:
+    config = dataclasses.replace(
+        _config(stop_future=True, trainable_tail_layers=1),
+        grad_clip_norm=0.05,
+        skip_nonfinite_updates=True,
+    )
+    model = _model_from_config(config, seed=83)
+    optimizer = train.create_joint_optimizer(model, config)
+    functions = train.split_training_functions(donate=True)
+    batch = _batch()
+    rng = jax.random.PRNGKey(89)
+
+    for component in ("encode", "head_vjp", "encoder_vjp", "update"):
+        function, arguments = train.split_component_compile_arguments(
+            component,
+            functions=functions,
+            model=model,
+            optimizer=optimizer,
+            batch=batch,
+            rng=rng,
+            sigreg_reference_count=1.0,
+        )
+        lowered = function.lower(*arguments)
+        assert lowered is not None
+        assert int(optimizer.step[...]) == 0

@@ -42,6 +42,7 @@ if str(_REPO_ROOT) not in sys.path:
 from chess_dfm_jax.analysis.profile_targets import load_mapped_bt4_params  # noqa: E402
 from chess_dfm_jax.nnx_bt4 import (  # noqa: E402
     BT4Model,
+    BT4TrainableParam,
     TrainableEmbedding,
     TrainableParam,
     TrainableRMSNorm,
@@ -117,6 +118,10 @@ WDL_COMPONENT = "wdl"
 BT4_POLICY_DISTILL_COMPONENT = "bt4_policy_distill"
 ROOT_LEGAL_CONDITIONAL_COMPONENT = "root_legal_conditional_ce"
 GRADIENT_GROUP_NAMES = ("backbone", "dfm", "jepa", "other", "all")
+NON_BT4_TRAINABLE_FILTER = nnx.All(
+    TrainableParam,
+    nnx.Not(BT4TrainableParam),
+)
 TARGET_VARIANCE_HINGE_EPSILON = 1e-4
 JEPA_STATE_RMS_EPSILON = 1e-6
 JEPA_FEEDBACK_MAX_STATE_RMS_RATIO = 0.5
@@ -313,6 +318,92 @@ def balanced_example_target_horizons(
         raise ValueError(f"horizon must be positive, found {horizon}")
     tiled_horizons = jnp.arange(batch_size, dtype=jnp.int32) % horizon
     return tiled_horizons[jax.random.permutation(rng, batch_size)]
+
+
+class FutureTargetSelection(NamedTuple):
+    target_future_planes: jax.Array
+    future_valid_for_loss: jax.Array
+    selected_horizons: jax.Array
+    selected_horizons_by_example: jax.Array | None
+    target_sampling_active: bool
+    per_example_target_sampling: bool
+    rng_sigreg: jax.Array
+
+
+def select_future_training_targets(
+    *,
+    config: JointLatentSASAConfig,
+    future_planes: jax.Array,
+    future_valid: jax.Array,
+    rng_sigreg: jax.Array,
+    sample_future_targets: bool,
+) -> FutureTargetSelection:
+    """Select future targets once for monolithic and split execution."""
+
+    batch_size, horizon = future_valid.shape
+    configured_target_count = int(config.jepa_target_sample_count)
+    target_sampling_active = bool(
+        sample_future_targets
+        and 0 < configured_target_count < horizon
+    )
+    per_example_target_sampling = bool(
+        target_sampling_active
+        and config.jepa_target_sampling_unit == "example_balanced"
+    )
+    selected_horizons_by_example = None
+    if target_sampling_active:
+        rng_target_horizons, rng_sigreg = jax.random.split(rng_sigreg)
+        if per_example_target_sampling:
+            selected_horizons_by_example = (
+                balanced_example_target_horizons(
+                    rng_target_horizons,
+                    batch_size=batch_size,
+                    horizon=horizon,
+                )
+            )
+            batch_indices = jnp.arange(batch_size, dtype=jnp.int32)
+            target_future_planes = future_planes[
+                batch_indices,
+                selected_horizons_by_example,
+            ][:, None]
+            future_valid_for_loss = future_valid[
+                batch_indices,
+                selected_horizons_by_example,
+            ][:, None]
+            selected_horizons = jnp.arange(
+                configured_target_count,
+                dtype=jnp.int32,
+            )
+        else:
+            selected_horizons = jnp.sort(
+                jax.random.permutation(rng_target_horizons, horizon)[
+                    :configured_target_count
+                ]
+            )
+            target_future_planes = jnp.take(
+                future_planes,
+                selected_horizons,
+                axis=1,
+            )
+            future_valid_for_loss = jnp.take(
+                future_valid,
+                selected_horizons,
+                axis=1,
+            )
+    else:
+        selected_horizons = jnp.arange(horizon, dtype=jnp.int32)
+        target_future_planes = future_planes
+        future_valid_for_loss = future_valid
+
+    return FutureTargetSelection(
+        target_future_planes=target_future_planes,
+        future_valid_for_loss=future_valid_for_loss,
+        selected_horizons=selected_horizons,
+        selected_horizons_by_example=selected_horizons_by_example,
+        target_sampling_active=target_sampling_active,
+        per_example_target_sampling=per_example_target_sampling,
+        rng_sigreg=rng_sigreg,
+    )
 
 
 class TargetVarianceHingeResult(NamedTuple):
@@ -2037,18 +2128,9 @@ class JointLatentSASAModel(nnx.Module):
     ) -> tuple[jnp.ndarray, jnp.ndarray]:
         batch_size, horizon, channels, height, width = future_planes.shape
         if self.config.bt4_future_target_stop_gradient:
-            current_tokens = self.encode_bt4_tokens(current_planes)
-            flat_future_planes = future_planes.reshape(
-                (batch_size * horizon, channels, height, width)
-            )
-            future_tokens = self.encode_future_bt4_tokens(
-                flat_future_planes
-            ).reshape(
-                (batch_size, horizon, 64, self.encoder_dim)
-            )
-            tokens = jnp.concatenate(
-                (current_tokens[:, None, :, :], future_tokens),
-                axis=1,
+            tokens = self.encode_split_bt4_tokens(
+                current_planes,
+                future_planes,
             )
             vectors = self.state_projector(
                 tokens.reshape(
@@ -2107,6 +2189,33 @@ class JointLatentSASAModel(nnx.Module):
             (batch_size, horizon + 1, self.z_dim)
         )
         return tokens, self.normalize_jepa_state(vectors)
+
+    def encode_split_bt4_tokens(
+        self,
+        current_planes: jnp.ndarray,
+        future_planes: jnp.ndarray,
+    ) -> jnp.ndarray:
+        """Return the exact accepted current/future BT4 token boundary."""
+
+        if not self.config.bt4_future_target_stop_gradient:
+            raise ValueError(
+                "Split BT4 tokens require "
+                "bt4_future_target_stop_gradient=True"
+            )
+        batch_size, horizon, channels, height, width = future_planes.shape
+        current_tokens = self.encode_bt4_tokens(current_planes)
+        flat_future_planes = future_planes.reshape(
+            (batch_size * horizon, channels, height, width)
+        )
+        future_tokens = self.encode_future_bt4_tokens(
+            flat_future_planes
+        ).reshape(
+            (batch_size, horizon, 64, self.encoder_dim)
+        )
+        return jnp.concatenate(
+            (current_tokens[:, None, :, :], future_tokens),
+            axis=1,
+        )
 
     def normalize_jepa_state(self, z: jnp.ndarray) -> jnp.ndarray:
         """Shared bounded RMSNorm for the JEPA state manifold."""
@@ -2891,6 +3000,7 @@ def joint_stage1_loss_fn(
     compute_fp32_legality: bool = False,
     positive_target_override: jax.Array | None = None,
     sample_future_targets: bool = False,
+    bt4_tokens_override: jax.Array | None = None,
 ) -> tuple[jnp.ndarray, dict[str, jnp.ndarray]]:
     actions = batch["action_indices"][:, : model.config.horizon]
     batch_size, horizon = actions.shape
@@ -2907,65 +3017,67 @@ def joint_stage1_loss_fn(
     # key is then used exactly as the candidate's projection/sampling source.
     rng_t, rng_mask, rng_sigreg = jax.random.split(rng, 3)
     configured_target_count = int(model.config.jepa_target_sample_count)
-    target_sampling_active = bool(
-        sample_future_targets
-        and 0 < configured_target_count < horizon
+    selection = select_future_training_targets(
+        config=model.config,
+        future_planes=future_planes,
+        future_valid=future_valid,
+        rng_sigreg=rng_sigreg,
+        sample_future_targets=sample_future_targets,
     )
-    per_example_target_sampling = bool(
-        target_sampling_active
-        and model.config.jepa_target_sampling_unit
-        == "example_balanced"
+    target_future_planes = selection.target_future_planes
+    future_valid_for_loss = selection.future_valid_for_loss
+    selected_horizons = selection.selected_horizons
+    selected_horizons_by_example = (
+        selection.selected_horizons_by_example
     )
-    selected_horizons_by_example = None
-    if target_sampling_active:
-        rng_target_horizons, rng_sigreg = jax.random.split(rng_sigreg)
-        if per_example_target_sampling:
-            selected_horizons_by_example = (
-                balanced_example_target_horizons(
-                    rng_target_horizons,
-                    batch_size=batch_size,
-                    horizon=horizon,
-                )
-            )
-            batch_indices = jnp.arange(batch_size, dtype=jnp.int32)
-            target_future_planes = future_planes[
-                batch_indices,
-                selected_horizons_by_example,
-            ][:, None]
-            future_valid_for_loss = future_valid[
-                batch_indices,
-                selected_horizons_by_example,
-            ][:, None]
-            selected_horizons = jnp.arange(
-                configured_target_count,
-                dtype=jnp.int32,
-            )
-        else:
-            selected_horizons = jnp.sort(
-                jax.random.permutation(rng_target_horizons, horizon)[
-                    :configured_target_count
-                ]
-            )
-            target_future_planes = jnp.take(
-                future_planes,
-                selected_horizons,
-                axis=1,
-            )
-            future_valid_for_loss = jnp.take(
-                future_valid,
-                selected_horizons,
-                axis=1,
-            )
-    else:
-        selected_horizons = jnp.arange(horizon, dtype=jnp.int32)
-        target_future_planes = future_planes
-        future_valid_for_loss = future_valid
+    target_sampling_active = selection.target_sampling_active
+    per_example_target_sampling = (
+        selection.per_example_target_sampling
+    )
+    rng_sigreg = selection.rng_sigreg
 
     with jax.named_scope("joint_encode_project_current_future"):
-        all_bt4_tokens, z_all = model.encode_current_and_future_tokens_and_vectors(
-            batch["current_planes"],
-            target_future_planes,
-        )
+        if bt4_tokens_override is None:
+            all_bt4_tokens, z_all = (
+                model.encode_current_and_future_tokens_and_vectors(
+                    batch["current_planes"],
+                    target_future_planes,
+                )
+            )
+        else:
+            if not model.config.bt4_future_target_stop_gradient:
+                raise ValueError(
+                    "Precomputed BT4 tokens require "
+                    "bt4_future_target_stop_gradient=True"
+                )
+            target_count = target_future_planes.shape[1]
+            expected_shape = (
+                batch_size,
+                target_count + 1,
+                64,
+                model.encoder_dim,
+            )
+            if bt4_tokens_override.shape != expected_shape:
+                raise ValueError(
+                    "Precomputed BT4 token shape differs: "
+                    f"{bt4_tokens_override.shape} != {expected_shape}"
+                )
+            all_bt4_tokens = jnp.asarray(
+                bt4_tokens_override,
+                dtype=model.compute_dtype,
+            )
+            z_all = model.state_projector(
+                all_bt4_tokens.reshape(
+                    (
+                        batch_size * (target_count + 1),
+                        64,
+                        model.encoder_dim,
+                    )
+                )
+            ).reshape(
+                (batch_size, target_count + 1, model.z_dim)
+            )
+            z_all = model.normalize_jepa_state(z_all)
     current_bt4_tokens = all_bt4_tokens[:, 0]
     z_jepa = z_all[:, 0]
     target_z = z_all[:, 1:]
@@ -4442,6 +4554,83 @@ def validate_bt4_future_target_stop_gradient_config(
     if mismatches:
         raise ValueError(
             "bt4_future_target_stop_gradient requires "
+            + ", ".join(mismatches)
+        )
+
+
+def validate_split_gradient_execution_config(
+    config: JointLatentSASAConfig,
+    *,
+    objective: str,
+    batch_size: int,
+    sigreg_reference_count: float,
+) -> None:
+    """Freeze Experiment 034 to the accepted one-block-tail contract."""
+
+    requirements = {
+        "objective": (objective, "normalized"),
+        "batch_size": (batch_size, 128),
+        "sigreg_reference_count": (sigreg_reference_count, 1.0),
+        "horizon": (config.horizon, 8),
+        "jepa_target_semantics": (config.jepa_target_semantics, "online"),
+        "jepa_target_sample_count": (config.jepa_target_sample_count, 1),
+        "jepa_target_sampling_unit": (
+            config.jepa_target_sampling_unit,
+            "example_balanced",
+        ),
+        "jepa_sampled_target_anchors": (
+            config.jepa_sampled_target_anchors,
+            False,
+        ),
+        "bt4_future_target_stop_gradient": (
+            config.bt4_future_target_stop_gradient,
+            True,
+        ),
+        "bt4_future_target_trainable_tail_layers": (
+            config.bt4_future_target_trainable_tail_layers,
+            1,
+        ),
+        "bt4_freeze_backbone": (config.bt4_freeze_backbone, False),
+        "unfreeze_bt4_encoder": (config.unfreeze_bt4_encoder, True),
+        "bt4_encode_chunk_size": (config.bt4_encode_chunk_size, 0),
+        "jepa_norm_loss_coeff": (config.jepa_norm_loss_coeff, 0.0),
+        "jepa_sigreg_coeff": (config.jepa_sigreg_coeff, 5.76),
+        "jepa_pred_sigreg_coeff": (
+            config.jepa_pred_sigreg_coeff,
+            1.0,
+        ),
+        "jepa_sigreg_estimator": (
+            config.jepa_sigreg_estimator,
+            "v_stat",
+        ),
+        "jepa_sigreg_example_count": (
+            config.jepa_sigreg_example_count,
+            64,
+        ),
+        "learning_rate": (config.learning_rate, 3e-5),
+        "bt4_learning_rate": (config.bt4_learning_rate, 1e-6),
+        "lr_warmup_steps": (config.lr_warmup_steps, 0),
+        "lr_decay_start_steps": (config.lr_decay_start_steps, 400),
+        "lr_decay_steps": (config.lr_decay_steps, 800),
+        "lr_min_ratio": (config.lr_min_ratio, 0.1),
+        "use_muon": (config.use_muon, True),
+        "grad_clip_norm": (config.grad_clip_norm, 1.0),
+        "skip_nonfinite_updates": (
+            config.skip_nonfinite_updates,
+            True,
+        ),
+        "encoder_dtype": (config.encoder_dtype, "bfloat16"),
+        "param_dtype": (config.param_dtype, "float32"),
+        "compute_dtype": (config.compute_dtype, "bfloat16"),
+    }
+    mismatches = [
+        f"{name}={actual!r} (required {expected!r})"
+        for name, (actual, expected) in requirements.items()
+        if actual != expected
+    ]
+    if mismatches:
+        raise ValueError(
+            "split gradient execution requires "
             + ", ".join(mismatches)
         )
 
@@ -6795,6 +6984,7 @@ def normalized_stage1_loss_fn(
     pred_reference_count: float,
     positive_target_override: jax.Array | None = None,
     sample_future_targets: bool = False,
+    bt4_tokens_override: jax.Array | None = None,
 ) -> tuple[jax.Array, dict[str, jax.Array]]:
     """Compatibility loss with finite-sample SIGReg and legal corrections.
 
@@ -6810,6 +7000,7 @@ def normalized_stage1_loss_fn(
         compute_fp32_legality=True,
         positive_target_override=positive_target_override,
         sample_future_targets=sample_future_targets,
+        bt4_tokens_override=bt4_tokens_override,
     )
     target_official = jnp.asarray(
         compatibility_aux["jepa_sigreg_loss"],
@@ -6998,6 +7189,346 @@ def normalized_stage1_training_loss_fn(
         pred_reference_count,
         sample_future_targets=True,
     )
+
+
+def split_training_bt4_tokens(
+    model: JointLatentSASAModel,
+    batch: dict[str, jax.Array],
+    rng: jax.Array,
+) -> jax.Array:
+    """Materialize the accepted BT4 boundary for split reverse mode."""
+
+    horizon = model.config.horizon
+    future_valid = jnp.asarray(
+        batch["future_valid"],
+        dtype=jnp.float32,
+    )[:, :horizon]
+    future_planes = jnp.asarray(
+        batch["future_planes"],
+        dtype=jnp.float32,
+    )[:, :horizon]
+    _, _, rng_sigreg = jax.random.split(rng, 3)
+    selection = select_future_training_targets(
+        config=model.config,
+        future_planes=future_planes,
+        future_valid=future_valid,
+        rng_sigreg=rng_sigreg,
+        sample_future_targets=True,
+    )
+    return model.encode_split_bt4_tokens(
+        batch["current_planes"],
+        selection.target_future_planes,
+    )
+
+
+def split_head_training_loss_fn(
+    model: JointLatentSASAModel,
+    batch: dict[str, jax.Array],
+    rng: jax.Array,
+    target_reference_count: float,
+    pred_reference_count: float,
+    bt4_tokens: jax.Array,
+) -> tuple[jax.Array, dict[str, jax.Array]]:
+    """Differentiate the unchanged loss after the BT4 token boundary."""
+
+    return normalized_stage1_loss_fn(
+        model,
+        batch,
+        rng,
+        target_reference_count,
+        pred_reference_count,
+        sample_future_targets=True,
+        bt4_tokens_override=bt4_tokens,
+    )
+
+
+_split_head_loss_and_grad = nnx.value_and_grad(
+    split_head_training_loss_fn,
+    argnums=(
+        nnx.DiffState(0, NON_BT4_TRAINABLE_FILTER),
+        5,
+    ),
+    has_aux=True,
+)
+
+
+def split_encoder_cotangent_loss_fn(
+    model: JointLatentSASAModel,
+    batch: dict[str, jax.Array],
+    rng: jax.Array,
+    token_cotangent: jax.Array,
+) -> jax.Array:
+    """Contract recomputed BT4 tokens with a stopped head cotangent."""
+
+    bt4_tokens = split_training_bt4_tokens(model, batch, rng)
+    if bt4_tokens.shape != token_cotangent.shape:
+        raise ValueError(
+            "Split BT4 token/cotangent shape mismatch: "
+            f"{bt4_tokens.shape} != {token_cotangent.shape}"
+        )
+    return jnp.sum(
+        jnp.asarray(bt4_tokens, dtype=jnp.float32)
+        * jax.lax.stop_gradient(
+            jnp.asarray(token_cotangent, dtype=jnp.float32)
+        )
+    )
+
+
+_split_encoder_grad = nnx.grad(
+    split_encoder_cotangent_loss_fn,
+    argnums=nnx.DiffState(0, BT4TrainableParam),
+)
+
+
+def split_training_gradients(
+    model: JointLatentSASAModel,
+    batch: dict[str, jax.Array],
+    rng: jax.Array,
+    target_reference_count: float,
+    pred_reference_count: float,
+) -> tuple[
+    jax.Array,
+    dict[str, jax.Array],
+    nnx.State,
+    nnx.State,
+    jax.Array,
+]:
+    """Return loss, aux, disjoint gradient states, and token cotangent."""
+
+    bt4_tokens = split_training_bt4_tokens(model, batch, rng)
+    (loss, aux), (head_grads, token_cotangent) = (
+        _split_head_loss_and_grad(
+            model,
+            batch,
+            rng,
+            target_reference_count,
+            pred_reference_count,
+            bt4_tokens,
+        )
+    )
+    encoder_grads = _split_encoder_grad(
+        model,
+        batch,
+        rng,
+        token_cotangent,
+    )
+    return loss, aux, head_grads, encoder_grads, token_cotangent
+
+
+def merge_split_gradients(
+    head_grads: nnx.State,
+    encoder_grads: nnx.State,
+) -> nnx.State:
+    """Merge the disjoint split gradient partitions."""
+
+    return nnx.merge_state(head_grads, encoder_grads)
+
+
+def split_state_abstract_records(
+    state: Any,
+) -> dict[str, tuple[tuple[int, ...], str]]:
+    """Return path/shape/dtype records without reading array values."""
+
+    records = {}
+    for path, leaf in jax.tree_util.tree_flatten_with_path(state)[0]:
+        abstract = jax.typeof(leaf)
+        records[jax.tree_util.keystr(path)] = (
+            tuple(abstract.shape),
+            str(jax.dtypes.canonicalize_dtype(abstract.dtype)),
+        )
+    return records
+
+
+def validate_split_gradient_partitions(
+    model: JointLatentSASAModel,
+    head_grads: nnx.State,
+    encoder_grads: nnx.State,
+) -> dict[str, int]:
+    """Require an exact, disjoint partition of all trainable parameters."""
+
+    full_records = split_state_abstract_records(
+        nnx.state(model, TrainableParam)
+    )
+    head_records = split_state_abstract_records(head_grads)
+    encoder_records = split_state_abstract_records(encoder_grads)
+    overlap = sorted(set(head_records) & set(encoder_records))
+    if overlap:
+        raise ValueError(
+            "Split gradient partitions overlap: " + ", ".join(overlap)
+        )
+    merged_records = head_records | encoder_records
+    missing = sorted(set(full_records) - set(merged_records))
+    extra = sorted(set(merged_records) - set(full_records))
+    mismatched = sorted(
+        path
+        for path in set(full_records) & set(merged_records)
+        if full_records[path] != merged_records[path]
+    )
+    if missing or extra or mismatched:
+        raise ValueError(
+            "Split gradient partition mismatch: "
+            f"missing={missing}, extra={extra}, mismatched={mismatched}"
+        )
+    return {
+        "full_leaf_count": len(full_records),
+        "head_leaf_count": len(head_records),
+        "encoder_leaf_count": len(encoder_records),
+        "overlap_leaf_count": 0,
+    }
+
+
+def _split_encode_impl(
+    model: JointLatentSASAModel,
+    batch: dict[str, jax.Array],
+    rng: jax.Array,
+) -> jax.Array:
+    return split_training_bt4_tokens(model, batch, rng)
+
+
+def _split_head_vjp_impl(
+    model: JointLatentSASAModel,
+    batch: dict[str, jax.Array],
+    rng: jax.Array,
+    target_reference_count: float,
+    pred_reference_count: float,
+    bt4_tokens: jax.Array,
+):
+    return _split_head_loss_and_grad(
+        model,
+        batch,
+        rng,
+        target_reference_count,
+        pred_reference_count,
+        bt4_tokens,
+    )
+
+
+def _split_encoder_vjp_impl(
+    model: JointLatentSASAModel,
+    batch: dict[str, jax.Array],
+    rng: jax.Array,
+    token_cotangent: jax.Array,
+) -> nnx.State:
+    return _split_encoder_grad(
+        model,
+        batch,
+        rng,
+        token_cotangent,
+    )
+
+
+def _split_optimizer_update_impl(
+    model: JointLatentSASAModel,
+    optimizer: nnx.Optimizer,
+    head_grads: nnx.State,
+    encoder_grads: nnx.State,
+) -> jax.Array:
+    validate_split_gradient_partitions(
+        model,
+        head_grads,
+        encoder_grads,
+    )
+    optimizer.update(
+        model,
+        merge_split_gradients(head_grads, encoder_grads),
+    )
+    return optimizer.step[...]
+
+
+split_encode_step = nnx.jit(_split_encode_impl)
+split_encode_step_donated = nnx.jit(_split_encode_impl)
+split_head_vjp_step = nnx.jit(_split_head_vjp_impl)
+split_head_vjp_step_donated = nnx.jit(
+    _split_head_vjp_impl,
+    donate_argnums=(5,),
+)
+split_encoder_vjp_step = nnx.jit(_split_encoder_vjp_impl)
+split_encoder_vjp_step_donated = nnx.jit(
+    _split_encoder_vjp_impl,
+    donate_argnums=(3,),
+)
+split_optimizer_update_step = nnx.jit(_split_optimizer_update_impl)
+split_optimizer_update_step_donated = nnx.jit(
+    _split_optimizer_update_impl,
+    donate_argnums=(0, 1, 2, 3),
+)
+
+
+class SplitTrainingFunctions(NamedTuple):
+    encode: Any
+    head_vjp: Any
+    encoder_vjp: Any
+    update: Any
+
+
+def split_training_functions(*, donate: bool) -> SplitTrainingFunctions:
+    if donate:
+        return SplitTrainingFunctions(
+            encode=split_encode_step_donated,
+            head_vjp=split_head_vjp_step_donated,
+            encoder_vjp=split_encoder_vjp_step_donated,
+            update=split_optimizer_update_step_donated,
+        )
+    return SplitTrainingFunctions(
+        encode=split_encode_step,
+        head_vjp=split_head_vjp_step,
+        encoder_vjp=split_encoder_vjp_step,
+        update=split_optimizer_update_step,
+    )
+
+
+def execute_split_training_step(
+    functions: SplitTrainingFunctions,
+    *,
+    model: JointLatentSASAModel,
+    optimizer: nnx.Optimizer,
+    batch: dict[str, jax.Array],
+    rng: jax.Array,
+    target_reference_count: float,
+    pred_reference_count: float,
+) -> tuple[jax.Array, dict[str, jax.Array], dict[str, float]]:
+    """Execute and synchronize the four split components in order."""
+
+    started = time.perf_counter()
+    bt4_tokens = functions.encode(model, batch, rng)
+    jax.block_until_ready(bt4_tokens)
+    encoded = time.perf_counter()
+
+    (loss, aux), (head_grads, token_cotangent) = functions.head_vjp(
+        model,
+        batch,
+        rng,
+        target_reference_count,
+        pred_reference_count,
+        bt4_tokens,
+    )
+    jax.block_until_ready((loss, aux, head_grads, token_cotangent))
+    head_done = time.perf_counter()
+
+    encoder_grads = functions.encoder_vjp(
+        model,
+        batch,
+        rng,
+        token_cotangent,
+    )
+    jax.block_until_ready(encoder_grads)
+    encoder_done = time.perf_counter()
+
+    optimizer_step = functions.update(
+        model,
+        optimizer,
+        head_grads,
+        encoder_grads,
+    )
+    jax.block_until_ready(optimizer_step)
+    update_done = time.perf_counter()
+    return loss, aux, {
+        "split_encode_seconds": encoded - started,
+        "split_head_vjp_seconds": head_done - encoded,
+        "split_encoder_vjp_seconds": encoder_done - head_done,
+        "split_optimizer_update_seconds": update_done - encoder_done,
+        "split_total_seconds": update_done - started,
+    }
 
 
 _normalized_loss_and_grad = nnx.value_and_grad(
@@ -7403,6 +7934,23 @@ def parse_args(
         action=argparse.BooleanOptionalAction,
         default=False,
         help="Lower/compile the training step explicitly and record compiler cost analysis.",
+    )
+    parser.add_argument(
+        "--gradient-execution",
+        choices=("monolithic", "split"),
+        default="monolithic",
+        help=(
+            "Run the ordinary fused update or the preregistered "
+            "forward-identical encoder/head split."
+        ),
+    )
+    parser.add_argument(
+        "--compile-component",
+        choices=("encode", "head_vjp", "encoder_vjp", "update"),
+        help=(
+            "With split --compile-only, compile exactly one component "
+            "using concrete arguments."
+        ),
     )
     parser.add_argument(
         "--compile-only",
@@ -8182,6 +8730,10 @@ def validate_compile_only_args(
     """Fail closed unless compile-only is a zero-state, zero-execution mode."""
 
     if not args.compile_only:
+        if args.compile_component is not None:
+            raise ValueError(
+                "--compile-component requires --compile-only"
+            )
         return
     if not args.compile_ahead:
         raise ValueError("--compile-only requires --compile-ahead")
@@ -8228,6 +8780,15 @@ def validate_compile_only_args(
         raise ValueError("--compile-only cannot run collapse diagnostics")
     if not args.donate:
         raise ValueError("--compile-only requires the ordinary donated graph")
+    if args.gradient_execution == "split":
+        if args.compile_component is None:
+            raise ValueError(
+                "split --compile-only requires --compile-component"
+            )
+    elif args.compile_component is not None:
+        raise ValueError(
+            "--compile-component requires --gradient-execution split"
+        )
 
 
 def should_save_checkpoint(
@@ -8284,6 +8845,13 @@ class TrainingCompilation(NamedTuple):
     seconds: float
     cost_analysis_raw: dict[str, float]
     memory_analysis: dict[str, int]
+
+
+class SplitTrainingCompilation(NamedTuple):
+    functions: SplitTrainingFunctions
+    seconds_by_component: dict[str, float]
+    cost_analysis_by_component: dict[str, dict[str, float]]
+    memory_analysis_by_component: dict[str, dict[str, int]]
 
 
 def current_process_rss_bytes(
@@ -8516,6 +9084,186 @@ def compile_training_executable(
         cost_analysis_raw=cost_analysis_raw,
         memory_analysis=memory_analysis,
     )
+
+
+def zero_state_like(state: nnx.State) -> nnx.State:
+    """Create concrete zero arrays with one state's exact ABI."""
+
+    return jax.tree.map(
+        lambda value: jax.device_put(
+            np.zeros(
+                value.shape,
+                dtype=np.dtype(value.dtype),
+            )
+        ),
+        state,
+    )
+
+
+def split_component_compile_arguments(
+    component: str,
+    *,
+    functions: SplitTrainingFunctions,
+    model: JointLatentSASAModel,
+    optimizer: nnx.Optimizer,
+    batch: dict[str, jax.Array],
+    rng: jax.Array,
+    sigreg_reference_count: float,
+) -> tuple[Any, tuple[Any, ...]]:
+    """Build concrete, execution-free arguments for one split component."""
+
+    token_shape = (
+        batch["current_planes"].shape[0],
+        int(model.config.jepa_target_sample_count) + 1,
+        64,
+        model.encoder_dim,
+    )
+    tokens = jax.device_put(
+        np.zeros(
+            token_shape,
+            dtype=np.dtype(model.compute_dtype),
+        )
+    )
+    if component == "encode":
+        return functions.encode, (model, batch, rng)
+    if component == "head_vjp":
+        return functions.head_vjp, (
+            model,
+            batch,
+            rng,
+            sigreg_reference_count,
+            sigreg_reference_count,
+            tokens,
+        )
+    if component == "encoder_vjp":
+        return functions.encoder_vjp, (
+            model,
+            batch,
+            rng,
+            tokens,
+        )
+    if component == "update":
+        head_grads = zero_state_like(
+            nnx.state(model, NON_BT4_TRAINABLE_FILTER)
+        )
+        encoder_grads = zero_state_like(
+            nnx.state(model, BT4TrainableParam)
+        )
+        validate_split_gradient_partitions(
+            model,
+            head_grads,
+            encoder_grads,
+        )
+        return functions.update, (
+            model,
+            optimizer,
+            head_grads,
+            encoder_grads,
+        )
+    raise ValueError(f"Unsupported split compile component {component!r}")
+
+
+def compile_split_component(
+    component: str,
+    *,
+    functions: SplitTrainingFunctions,
+    model: JointLatentSASAModel,
+    optimizer: nnx.Optimizer,
+    batch: dict[str, jax.Array],
+    rng: jax.Array,
+    sigreg_reference_count: float,
+) -> TrainingCompilation:
+    """Lower and compile exactly one concrete split executable."""
+
+    function, compile_args = split_component_compile_arguments(
+        component,
+        functions=functions,
+        model=model,
+        optimizer=optimizer,
+        batch=batch,
+        rng=rng,
+        sigreg_reference_count=sigreg_reference_count,
+    )
+    started = time.perf_counter()
+    executable = function.lower(*compile_args).compile()
+    seconds = time.perf_counter() - started
+    cost_analysis_raw = (
+        normalize_cost_analysis(executable.cost_analysis())
+        if hasattr(executable, "cost_analysis")
+        else {}
+    )
+    memory_analysis = (
+        normalize_memory_analysis(executable.memory_analysis())
+        if hasattr(executable, "memory_analysis")
+        else {}
+    )
+    return TrainingCompilation(
+        executable=executable,
+        seconds=seconds,
+        cost_analysis_raw=cost_analysis_raw,
+        memory_analysis=memory_analysis,
+    )
+
+
+def compile_split_training_executables(
+    *,
+    model: JointLatentSASAModel,
+    optimizer: nnx.Optimizer,
+    batch: dict[str, jax.Array],
+    rng: jax.Array,
+    sigreg_reference_count: float,
+    donate: bool,
+) -> SplitTrainingCompilation:
+    """Compile every split component in its execution order."""
+
+    source_functions = split_training_functions(donate=donate)
+    compilations = {
+        component: compile_split_component(
+            component,
+            functions=source_functions,
+            model=model,
+            optimizer=optimizer,
+            batch=batch,
+            rng=rng,
+            sigreg_reference_count=sigreg_reference_count,
+        )
+        for component in ("encode", "head_vjp", "encoder_vjp", "update")
+    }
+    return SplitTrainingCompilation(
+        functions=SplitTrainingFunctions(
+            encode=compilations["encode"].executable,
+            head_vjp=compilations["head_vjp"].executable,
+            encoder_vjp=compilations["encoder_vjp"].executable,
+            update=compilations["update"].executable,
+        ),
+        seconds_by_component={
+            component: compilation.seconds
+            for component, compilation in compilations.items()
+        },
+        cost_analysis_by_component={
+            component: compilation.cost_analysis_raw
+            for component, compilation in compilations.items()
+        },
+        memory_analysis_by_component={
+            component: compilation.memory_analysis
+            for component, compilation in compilations.items()
+        },
+    )
+
+
+def compilation_cache_executable_inventory(
+    cache_dir: Path,
+) -> dict[str, dict[str, Any]]:
+    """Hash top-level persistent executables, excluding atime markers."""
+
+    return {
+        path.name: {
+            "size_bytes": path.stat().st_size,
+            "sha256": sha256_file(path),
+        }
+        for path in sorted(cache_dir.glob("*-cache"))
+        if path.is_file()
+    }
 
 
 def start_gpu_monitor(
@@ -9280,6 +10028,212 @@ def run_compile_only(
     return 0
 
 
+def run_split_component_compile_only(
+    args: argparse.Namespace,
+    *,
+    commit: str,
+    timestamp: str,
+    run_id: str,
+    output_dir: Path,
+    config: JointLatentSASAConfig,
+    train_batches: FixedTrajectoryBatches,
+    resume_contract: dict[str, Any],
+    model: JointLatentSASAModel,
+    optimizer: nnx.Optimizer,
+    checkpoint_step: int,
+    source_checkpoint_path: Path,
+) -> int:
+    """Compile one concrete split component without executing model state."""
+
+    component = args.compile_component
+    if component is None:
+        raise ValueError("Split compile-only requires one component")
+    output_dir.mkdir(parents=True, exist_ok=False)
+    cache_dir = require_within_workspace(
+        os.environ["JAX_COMPILATION_CACHE_DIR"]
+    )
+    args_payload = {
+        key: str(value) if isinstance(value, Path) else value
+        for key, value in (
+            vars(args) | {"output_dir": str(output_dir)}
+        ).items()
+    }
+    compile_batch = train_batches.batch_at(0)
+    compile_rng = jax.random.fold_in(jax.random.PRNGKey(args.seed), 0)
+    functions = split_training_functions(donate=True)
+    state_footprint = training_state_footprint(model, optimizer)
+    initial_optimizer_step = int(optimizer.step[...])
+    cache_before = compilation_cache_executable_inventory(cache_dir)
+    run_config = {
+        "format": "chess-dfm-split-component-compile-only-v1",
+        "mode": "split_component_compile_only_concrete",
+        "component": component,
+        "autoresearch_ready": AUTORESEARCH_READY,
+        "architecture_source": ARCHITECTURE_SOURCE,
+        "git_commit": commit,
+        "run_id": run_id,
+        "timestamp_utc": timestamp,
+        "args": args_payload,
+        "model_config": serialized_model_config(config),
+        "learning_rate_schedule": learning_rate_schedule_contract(config),
+        "training_state_footprint": state_footprint,
+        "checkpoint_step": checkpoint_step,
+        "source_checkpoint_path": str(source_checkpoint_path),
+        "source_checkpoint_opened": False,
+        "source_checkpoint_values_restored": False,
+        "constructor_parameter_payload_released": True,
+        "parameter_values_are_concrete_compilation_inputs": True,
+        "abstract_compilation_arguments": False,
+        "initial_optimizer_step": initial_optimizer_step,
+        "initial_data_cursor": 0,
+        "resume_contract": resume_contract,
+        "resume_contract_sha256": _json_sha256(resume_contract),
+        "train_data": train_batches.provenance(),
+        "jax_compilation_cache_dir": str(cache_dir),
+        "cache_executables_before": cache_before,
+        "checkpoint_writes": 0,
+        "updates": 0,
+        "validation_batches": 0,
+    }
+    write_json(output_dir / "run_config.json", run_config)
+    try:
+        compilation = compile_split_component(
+            component,
+            functions=functions,
+            model=model,
+            optimizer=optimizer,
+            batch=compile_batch,
+            rng=compile_rng,
+            sigreg_reference_count=args.sigreg_reference_count,
+        )
+    except BaseException as error:
+        cache_after_error = compilation_cache_executable_inventory(
+            cache_dir
+        )
+        write_json(
+            output_dir / "report.json",
+            {
+                **run_config,
+                "completed": False,
+                "error_type": type(error).__name__,
+                "error": str(error),
+                "cache_executables_after": cache_after_error,
+                "checkpoint_path": None,
+                "metrics_path": None,
+            },
+        )
+        raise
+
+    cache_after = compilation_cache_executable_inventory(cache_dir)
+    added = sorted(set(cache_after) - set(cache_before))
+    removed = sorted(set(cache_before) - set(cache_after))
+    changed = sorted(
+        name
+        for name in set(cache_before) & set(cache_after)
+        if cache_before[name] != cache_after[name]
+    )
+    memory = compilation.memory_analysis
+    limits = {
+        "argument_size_in_bytes": (
+            int(2.5 * 1024**3)
+            if component == "update"
+            else 1_894_455_276
+        ),
+        "output_size_in_bytes": 1_860_899_661,
+        "temp_size_in_bytes": int(8.5 * 1024**3),
+    }
+    memory_checks = {
+        key: {
+            "observed": memory.get(key),
+            "limit": limit,
+            "passed": (
+                key in memory and int(memory[key]) < limit
+                if key == "temp_size_in_bytes"
+                else key in memory and int(memory[key]) <= limit
+            ),
+        }
+        for key, limit in limits.items()
+    }
+    failures = []
+    if len(added) > 1:
+        failures.append(
+            f"component added {len(added)} executable cache entries"
+        )
+    if removed:
+        failures.append(f"component removed cache entries: {removed}")
+    if changed:
+        failures.append(f"component changed cache entries: {changed}")
+    failures.extend(
+        f"{key} exceeds or lacks limit"
+        for key, check in memory_checks.items()
+        if not check["passed"]
+    )
+    optimizer_step_after_compile = int(optimizer.step[...])
+    if optimizer_step_after_compile != initial_optimizer_step:
+        failures.append(
+            "optimizer step changed during compile-only: "
+            f"{initial_optimizer_step} -> {optimizer_step_after_compile}"
+        )
+    if compilation.cost_analysis_raw:
+        write_json(
+            output_dir / "compiler_cost_analysis.json",
+            compilation.cost_analysis_raw,
+        )
+    report = {
+        **run_config,
+        "explicit_compile_seconds": compilation.seconds,
+        "compiler_cost_analysis": compiler_cost_summary(
+            compilation.cost_analysis_raw
+        ),
+        "compiler_memory_analysis": memory,
+        "compiler_memory_checks": memory_checks,
+        "cache_executables_after": cache_after,
+        "cache_added": {
+            name: cache_after[name]
+            for name in added
+        },
+        "cache_removed": removed,
+        "cache_changed": changed,
+        "cache_gate_passed": not (len(added) > 1 or removed or changed),
+        "gpu_memory": gpu_memory_stats(),
+        "completed": not failures,
+        "failures": failures,
+        "optimizer_step_after_compile": optimizer_step_after_compile,
+        "model_or_optimizer_executed": False,
+        "checkpoint_path": None,
+        "metrics_path": None,
+    }
+    write_json(output_dir / "report.json", report)
+    print(
+        json.dumps(
+            {
+                "run_id": run_id,
+                "output_dir": str(output_dir),
+                "mode": report["mode"],
+                "component": component,
+                "completed": report["completed"],
+                "failures": failures,
+                "explicit_compile_seconds": compilation.seconds,
+                "compiler_cost_analysis": report[
+                    "compiler_cost_analysis"
+                ],
+                "compiler_memory_analysis": memory,
+                "cache_added": report["cache_added"],
+                "gpu_memory": report["gpu_memory"],
+                "checkpoint_writes": 0,
+            },
+            indent=2,
+            sort_keys=True,
+        )
+    )
+    if failures:
+        raise RuntimeError(
+            f"Split component {component} failed preregistered gates: "
+            + "; ".join(failures)
+        )
+    return 0
+
+
 def main() -> int:
     args = parse_args()
     validate_environment()
@@ -9328,6 +10282,45 @@ def main() -> int:
         raise ValueError("--save-every must be non-negative")
     save_updates = validate_save_updates(args.save_updates)
     validate_compile_only_args(args, save_updates=save_updates)
+    if args.gradient_execution == "split":
+        if args.init != "model-only":
+            raise ValueError(
+                "split gradient execution requires --init model-only"
+            )
+        if args.resume_from is not None:
+            raise ValueError(
+                "split gradient execution cannot resume a checkpoint "
+                "during Experiment 034"
+            )
+        if args.eval_only or args.eval_checkpoints is not None:
+            raise ValueError(
+                "split gradient execution is a training-only "
+                "Experiment 034 path"
+            )
+        if args.gradient_audit:
+            raise ValueError(
+                "split gradient execution cannot run --gradient-audit"
+            )
+        if not args.compile_ahead:
+            raise ValueError(
+                "split gradient execution requires --compile-ahead"
+            )
+        if not args.donate:
+            raise ValueError(
+                "split gradient execution requires the donated components"
+            )
+        if args.eval_batches != 0:
+            raise ValueError(
+                "split gradient execution requires --eval-batches 0"
+            )
+        if (
+            args.save_every != 0
+            or save_updates
+            or args.save_final
+        ):
+            raise ValueError(
+                "Experiment 034 split execution forbids checkpoint writes"
+            )
     if args.max_checkpoints < 0:
         raise ValueError("--max-checkpoints must be non-negative")
     if args.resume_from is not None and args.init != "exact":
@@ -9399,6 +10392,13 @@ def main() -> int:
     )
     validate_bt4_freeze_config(config)
     validate_bt4_future_target_stop_gradient_config(config)
+    if args.gradient_execution == "split":
+        validate_split_gradient_execution_config(
+            config,
+            objective=args.objective,
+            batch_size=args.batch_size,
+            sigreg_reference_count=args.sigreg_reference_count,
+        )
     if resume_from is None:
         validate_legacy_init_for_config(config, args.init)
     if (
@@ -9464,6 +10464,21 @@ def main() -> int:
             raise ValueError(
                 "Compile-only supports only the checksum-pinned "
                 "step-265,000 model-only source contract."
+            )
+        if args.gradient_execution == "split":
+            return run_split_component_compile_only(
+                args,
+                commit=commit,
+                timestamp=timestamp,
+                run_id=run_id,
+                output_dir=output_dir,
+                config=config,
+                train_batches=train_batches,
+                resume_contract=resume_contract,
+                model=model,
+                optimizer=optimizer,
+                checkpoint_step=checkpoint_step,
+                source_checkpoint_path=source_checkpoint_path,
             )
         return run_compile_only(
             args,
@@ -9770,46 +10785,160 @@ def main() -> int:
         "train_data": train_batches.provenance(),
         "val_data": val_batches.provenance(),
     }
+    if args.gradient_execution == "split":
+        head_records = split_state_abstract_records(
+            nnx.state(model, NON_BT4_TRAINABLE_FILTER)
+        )
+        encoder_records = split_state_abstract_records(
+            nnx.state(model, BT4TrainableParam)
+        )
+        full_records = split_state_abstract_records(
+            nnx.state(model, TrainableParam)
+        )
+        if (
+            set(head_records) & set(encoder_records)
+            or (set(head_records) | set(encoder_records))
+            != set(full_records)
+        ):
+            raise ValueError(
+                "Split parameter filters do not partition the model"
+            )
+        run_config["training_execution"] = {
+            "mode": "split_encoder_gradient_v1",
+            "components": [
+                "encode",
+                "head_vjp",
+                "encoder_vjp",
+                "update",
+            ],
+            "head_leaf_count": len(head_records),
+            "encoder_leaf_count": len(encoder_records),
+            "full_trainable_leaf_count": len(full_records),
+            "gradient_clip": "single_existing_global_clip_after_merge",
+            "optimizer": "single_existing_optimizer_update_after_merge",
+            "model_checkpoint_abi_changed": False,
+        }
+    else:
+        run_config["training_execution"] = {
+            "mode": "monolithic",
+        }
     run_config["args"] = {
         key: str(value) if isinstance(value, Path) else value
         for key, value in run_config["args"].items()
     }
     write_json(output_dir / "run_config.json", run_config)
 
-    train_fn = training_function(
-        objective=args.objective,
-        donate=args.donate,
-        target_semantics=config.jepa_target_semantics,
+    train_fn = (
+        None
+        if args.gradient_execution == "split"
+        else training_function(
+            objective=args.objective,
+            donate=args.donate,
+            target_semantics=config.jepa_target_semantics,
+        )
     )
     executable = train_fn
+    split_functions = (
+        split_training_functions(donate=args.donate)
+        if args.gradient_execution == "split"
+        else None
+    )
     explicit_compile_seconds: float | None = None
     compiler_cost_analysis_raw: dict[str, float] = {}
     compiler_memory_analysis: dict[str, int] = {}
+    split_compile_seconds_by_component: dict[str, float] = {}
+    split_compiler_cost_by_component: dict[str, dict[str, float]] = {}
+    split_compiler_memory_by_component: dict[str, dict[str, int]] = {}
+    split_compile_cache_unchanged: bool | None = None
     if args.compile_ahead and not args.eval_only:
         compile_batch = train_batches.batch_at(next_data_cursor)
         compile_rng = jax.random.fold_in(
             jax.random.PRNGKey(args.seed),
             next_data_cursor,
         )
-        compilation = compile_training_executable(
-            train_fn,
-            objective=args.objective,
-            model=model,
-            optimizer=optimizer,
-            batch=compile_batch,
-            rng=compile_rng,
-            sigreg_reference_count=args.sigreg_reference_count,
-            ema_target=ema_target,
-        )
-        executable = compilation.executable
-        explicit_compile_seconds = compilation.seconds
-        compiler_cost_analysis_raw = compilation.cost_analysis_raw
-        compiler_memory_analysis = compilation.memory_analysis
-        if compiler_cost_analysis_raw:
-            write_json(
-                output_dir / "compiler_cost_analysis.json",
-                compiler_cost_analysis_raw,
+        if args.gradient_execution == "split":
+            cache_dir = require_within_workspace(
+                os.environ["JAX_COMPILATION_CACHE_DIR"]
             )
+            cache_before = compilation_cache_executable_inventory(
+                cache_dir
+            )
+            split_compilation = compile_split_training_executables(
+                model=model,
+                optimizer=optimizer,
+                batch=compile_batch,
+                rng=compile_rng,
+                sigreg_reference_count=args.sigreg_reference_count,
+                donate=args.donate,
+            )
+            cache_after = compilation_cache_executable_inventory(
+                cache_dir
+            )
+            split_compile_cache_unchanged = cache_after == cache_before
+            if not split_compile_cache_unchanged:
+                raise RuntimeError(
+                    "Cached split compile created or changed an executable"
+                )
+            split_functions = split_compilation.functions
+            split_compile_seconds_by_component = (
+                split_compilation.seconds_by_component
+            )
+            split_compiler_cost_by_component = (
+                split_compilation.cost_analysis_by_component
+            )
+            split_compiler_memory_by_component = (
+                split_compilation.memory_analysis_by_component
+            )
+            explicit_compile_seconds = math.fsum(
+                split_compile_seconds_by_component.values()
+            )
+            compiler_cost_analysis_raw = normalize_cost_analysis(
+                list(split_compiler_cost_by_component.values())
+            )
+            compiler_memory_analysis = {
+                key: max(
+                    component_memory.get(key, 0)
+                    for component_memory in (
+                        split_compiler_memory_by_component.values()
+                    )
+                )
+                for key in {
+                    field
+                    for component_memory in (
+                        split_compiler_memory_by_component.values()
+                    )
+                    for field in component_memory
+                }
+            }
+            write_json(
+                output_dir / "split_compiler_cost_analysis.json",
+                split_compiler_cost_by_component,
+            )
+            write_json(
+                output_dir / "split_compiler_memory_analysis.json",
+                split_compiler_memory_by_component,
+            )
+        else:
+            assert train_fn is not None
+            compilation = compile_training_executable(
+                train_fn,
+                objective=args.objective,
+                model=model,
+                optimizer=optimizer,
+                batch=compile_batch,
+                rng=compile_rng,
+                sigreg_reference_count=args.sigreg_reference_count,
+                ema_target=ema_target,
+            )
+            executable = compilation.executable
+            explicit_compile_seconds = compilation.seconds
+            compiler_cost_analysis_raw = compilation.cost_analysis_raw
+            compiler_memory_analysis = compilation.memory_analysis
+            if compiler_cost_analysis_raw:
+                write_json(
+                    output_dir / "compiler_cost_analysis.json",
+                    compiler_cost_analysis_raw,
+                )
 
     updates = 0
     examples = 0
@@ -9818,6 +10947,13 @@ def main() -> int:
     steady_fetch_seconds: list[float] = []
     steady_update_seconds: list[float] = []
     steady_iteration_seconds: list[float] = []
+    steady_split_component_seconds: dict[str, list[float]] = {
+        "split_encode_seconds": [],
+        "split_head_vjp_seconds": [],
+        "split_encoder_vjp_seconds": [],
+        "split_optimizer_update_seconds": [],
+        "split_total_seconds": [],
+    }
     final_train_metrics: dict[str, float] = {}
     deadline: float | None = float("inf") if args.train_seconds > 0 else None
     training_wall_started = time.perf_counter()
@@ -9867,17 +11003,39 @@ def main() -> int:
                 fetch_seconds = time.perf_counter() - fetch_started
                 step_rng = jax.random.fold_in(jax.random.PRNGKey(args.seed), data_step)
                 update_started = time.perf_counter()
-                call_args = training_call_args(
-                    objective=args.objective,
-                    model=model,
-                    optimizer=optimizer,
-                    batch=batch,
-                    rng=step_rng,
-                    sigreg_reference_count=args.sigreg_reference_count,
-                    ema_target=ema_target,
-                )
-                loss, aux = executable(*call_args)
-                jax.block_until_ready((loss, aux))
+                split_timing: dict[str, float] = {}
+                if args.gradient_execution == "split":
+                    assert split_functions is not None
+                    loss, aux, split_timing = (
+                        execute_split_training_step(
+                            split_functions,
+                            model=model,
+                            optimizer=optimizer,
+                            batch=batch,
+                            rng=step_rng,
+                            target_reference_count=(
+                                args.sigreg_reference_count
+                            ),
+                            pred_reference_count=(
+                                args.sigreg_reference_count
+                            ),
+                        )
+                    )
+                else:
+                    assert executable is not None
+                    call_args = training_call_args(
+                        objective=args.objective,
+                        model=model,
+                        optimizer=optimizer,
+                        batch=batch,
+                        rng=step_rng,
+                        sigreg_reference_count=(
+                            args.sigreg_reference_count
+                        ),
+                        ema_target=ema_target,
+                    )
+                    loss, aux = executable(*call_args)
+                    jax.block_until_ready((loss, aux))
                 update_seconds = time.perf_counter() - update_started
 
                 updates += 1
@@ -9895,6 +11053,10 @@ def main() -> int:
                     steady_iteration_seconds.append(
                         fetch_seconds + update_seconds
                     )
+                    for name, seconds in split_timing.items():
+                        steady_split_component_seconds[name].append(
+                            seconds
+                        )
 
                 final_train_metrics = {
                     "loss": float(loss),
@@ -9913,6 +11075,7 @@ def main() -> int:
                         args.batch_size
                         / max(fetch_seconds + update_seconds, 1e-12)
                     ),
+                    **split_timing,
                     **final_train_metrics,
                 }
                 metrics_log.write(json.dumps(record, sort_keys=True) + "\n")
@@ -9990,6 +11153,16 @@ def main() -> int:
         if steady_iteration_seconds
         else None
     )
+    split_component_timing = {
+        name: {
+            "mean": float(np.mean(values)),
+            "p50": float(np.quantile(values, 0.50)),
+            "p95": float(np.quantile(values, 0.95)),
+            "count": len(values),
+        }
+        for name, values in steady_split_component_seconds.items()
+        if values
+    }
     performance_seconds = steady_update_seconds_mean or first_update_seconds
     compiler_cost_analysis = compiler_cost_summary(compiler_cost_analysis_raw)
     performance = compiler_performance(compiler_cost_analysis, performance_seconds)
@@ -10100,6 +11273,24 @@ def main() -> int:
         "steady_iteration_seconds_p95": steady_iteration_seconds_p95,
         "compiler_cost_analysis": compiler_cost_analysis,
         "compiler_memory_analysis": compiler_memory_analysis,
+        "split_compile_seconds_by_component": (
+            split_compile_seconds_by_component
+        ),
+        "split_compiler_cost_analysis_by_component": (
+            split_compiler_cost_by_component
+        ),
+        "split_compiler_memory_analysis_by_component": (
+            split_compiler_memory_by_component
+        ),
+        "split_compiler_memory_aggregate_semantics": (
+            "per_field_maximum_not_sum"
+            if split_compiler_memory_by_component
+            else None
+        ),
+        "split_compile_cache_unchanged": (
+            split_compile_cache_unchanged
+        ),
+        "split_component_timing": split_component_timing,
         "gpu_monitor": gpu_monitor_summary,
         "gpu_samples_path": str(gpu_samples_path) if gpu_samples_path.is_file() else None,
         **performance,

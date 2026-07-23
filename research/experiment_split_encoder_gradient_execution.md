@@ -120,8 +120,17 @@ memory analysis. Require:
   most four across the experiment;
 - compiler temporary bytes below `8.5 GiB` for every individual component,
   versus `10,957,716,808` monolithic bytes; and
-- no component whose compiler arguments or outputs exceed the monolithic
-  values.
+- encode, head-VJP, and encoder-VJP arguments and every component output at or
+  below the monolithic values; and
+- update-component arguments at or below `2.5 GiB`.
+
+The update exception is fixed before implementation reaches a GPU: its
+interface necessarily contains the unchanged `1,851,623,817`-byte
+model/optimizer state plus the `705,987,352`-byte merged gradient state, or
+about `2.558 GB` before negligible scalar metadata. The `2.5 GiB` bound is
+therefore an ABI-derived ceiling, not a post-result relaxation. Donation must
+keep its output at or below the monolithic output size, and the temporary/RSS
+gates remain the actual compiler-safety criteria.
 
 Do not compile the next component if the current one fails. Do not relax a
 resource gate or retry a failed component with another batch size, abstract
@@ -160,4 +169,3 @@ separately preregistered experiment may add FP32 BT4 masters on this split
 path. A failure does not authorize a frozen backbone or a last-block-only
 current tail; it sends the systems plan to a separately justified
 state-efficient update method such as an adapter or stochastic rounding.
-
