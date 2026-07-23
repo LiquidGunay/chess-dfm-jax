@@ -1,9 +1,10 @@
 # Experiment 036: split head projection VJP
 
-Status: preregistered on 2026-07-23. This is an exact reverse-mode
-composition and compiler-memory experiment. It changes no model parameter,
-loss term, coefficient, data path, optimizer rule, precision, batch, or
-inference function.
+Status: CPU implementation and all preregistered CPU gates passed on
+2026-07-23; the guarded GPU compiler gate is pending. This is an exact
+reverse-mode composition and compiler-memory experiment. It changes no model
+parameter, loss term, coefficient, data path, optimizer rule, precision,
+batch, or inference function.
 
 ## Evidence and hypothesis
 
@@ -51,8 +52,8 @@ bytes minimum MemAvailable. Its temporary launcher was deleted.
 For the accepted precomputed BT4 tokens, define:
 
 ```text
-(z_all, z_dfm) = P(tokens; theta_projection)
-loss, aux      = L(z_all, z_dfm; theta_core)
+(z_all, z_dfm, s_rms) = P(tokens; theta_projection)
+loss, aux             = L(z_all, z_dfm, s_rms; theta_core)
 ```
 
 Here `P` is exactly the existing `state_projector`,
@@ -61,16 +62,21 @@ entire unchanged remainder of the normalized loss. It retains both noisy and
 clean DFM planner calls, DFM CE and legality, the action-token conditioning of
 the JEPA transition, JEPA positive loss, target SIGReg, z_pred SIGReg, and all
 metrics. Thus the DFM-to-JEPA coupling remains inside one core graph.
+`s_rms` is the projector-owned 4,096-byte FP32 RMS-scale vector needed to
+preserve four existing auxiliary diagnostics. It is a forward-only boundary
+argument excluded from the core VJP `argnums`; its trainable gradient still
+flows exactly through `z_all`. It adds no parameter partition, cotangent, or
+optimizer state.
 
 Compose one logical update from six sequential JIT executables:
 
 1. **Encode:** unchanged encoder-view current/K=1-future BT4 tokens.
-2. **Project:** compute the exact `z_all` and `z_dfm` from those tokens using a
-   projection-only shared-variable view.
+2. **Project:** compute the exact `z_all`, `z_dfm`, and diagnostic `s_rms`
+   from those tokens using a projection-only shared-variable view.
 3. **Core VJP:** run the unchanged normalized loss from those latent
-   overrides. Differentiate the 34 core leaves plus `z_all` and `z_dfm`,
-   returning loss, every auxiliary metric, core gradients, and both latent
-   cotangents.
+   overrides and the nondifferentiated diagnostic scale. Differentiate the
+   34 core leaves plus `z_all` and `z_dfm`, returning loss, every auxiliary
+   metric, core gradients, and both latent cotangents.
 4. **Projection VJP:** recompute `P`, contract its outputs with the stopped
    latent cotangents, and differentiate the 17 projection leaves plus the BT4
    token input.
@@ -159,6 +165,51 @@ Before any GPU compile:
 
 No CPU process may initialize CUDA. All temporary files and caches remain
 under `/mountpoint/.exp`.
+
+## Implementation and CPU-gate result
+
+The implementation preserves the legacy two-part gradient helper as a CPU
+reference and adds the exact three-part production path. The encoder,
+projector, and core views contain only their respective trainable Variables,
+share every retained canonical `Variable` object, and contain no copied array
+or fixed legacy head. The accepted production ABI passed exactly:
+
+```text
+encoder      404 leaves   390,611,456 bytes
+projection    17 leaves   108,385,280 bytes
+core          34 leaves   206,990,616 bytes
+full         455 leaves   705,987,352 bytes
+```
+
+The small-model exactness suite passed bitwise BT4-token and latent equality,
+loss and full auxiliary-metric parity, merged monolithic/head/six-stage
+gradient parity, latent and token cotangent checks, one- and two-update model
+and optimizer parity, global clipping, nonfinite suppression, donated
+execution, restored-view identity, and all six concrete lowerings. Ten focused
+split tests and 17 compile-only tests passed. The broader gate covered 162
+tests: 161 passed under the outer exclusive guard, while the test that must
+itself acquire and challenge that lock passed separately under the same
+two-CPU/RAM guard without an outer lock.
+
+The production batch-128 CPU lowering audit passed every frozen argument
+ceiling without executing a component or changing optimizer step:
+
+```text
+encode             427,868,168 bytes
+project            141,939,712 bytes
+core VJP           248,970,016 bytes
+projection VJP     146,658,304 bytes
+encoder VJP        461,422,600 bytes
+update           2,566,875,381 bytes
+```
+
+The audit completed in 28.237 seconds with 3,592,171,520 bytes peak
+process-group RSS and 8,035,336,192 bytes minimum MemAvailable. Persistent
+CPU cache writes were disabled, optimizer step remained zero, and the
+temporary launcher was deleted. Lint, `compileall`, and diff checks pass.
+The shared cache remains exactly 67 executable files / 157,686,153 apparent
+bytes, and the closing storage audit passes with exactly the seven retained
+state files.
 
 ## Guarded compiler gate
 

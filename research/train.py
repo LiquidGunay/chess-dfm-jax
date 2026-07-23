@@ -122,12 +122,32 @@ NON_BT4_TRAINABLE_FILTER = nnx.All(
     TrainableParam,
     nnx.Not(BT4TrainableParam),
 )
+SPLIT_PROJECTOR_ROOTS = frozenset(
+    {
+        "state_projector",
+        "jepa_state_norm",
+        "dfm_state_projector",
+    }
+)
+SPLIT_PROJECTOR_PATH_FILTER = tuple(
+    nnx.PathContains(root) for root in sorted(SPLIT_PROJECTOR_ROOTS)
+)
+SPLIT_PROJECTOR_TRAINABLE_FILTER = nnx.All(
+    NON_BT4_TRAINABLE_FILTER,
+    SPLIT_PROJECTOR_PATH_FILTER,
+)
+SPLIT_CORE_TRAINABLE_FILTER = nnx.All(
+    NON_BT4_TRAINABLE_FILTER,
+    nnx.Not(SPLIT_PROJECTOR_PATH_FILTER),
+)
 SPLIT_ACCEPTED_FULL_MODEL_NBYTES = 705_987_352
 SPLIT_ACCEPTED_ENCODER_MODEL_NBYTES = 390_611_456
-SPLIT_ACCEPTED_HEAD_MODEL_NBYTES = 315_375_896
+SPLIT_ACCEPTED_PROJECTOR_MODEL_NBYTES = 108_385_280
+SPLIT_ACCEPTED_CORE_MODEL_NBYTES = 206_990_616
 SPLIT_ACCEPTED_FULL_LEAF_COUNT = 455
 SPLIT_ACCEPTED_ENCODER_LEAF_COUNT = 404
-SPLIT_ACCEPTED_HEAD_LEAF_COUNT = 51
+SPLIT_ACCEPTED_PROJECTOR_LEAF_COUNT = 17
+SPLIT_ACCEPTED_CORE_LEAF_COUNT = 34
 TARGET_VARIANCE_HINGE_EPSILON = 1e-4
 JEPA_STATE_RMS_EPSILON = 1e-6
 JEPA_FEEDBACK_MAX_STATE_RMS_RATIO = 0.5
@@ -3007,6 +3027,10 @@ def joint_stage1_loss_fn(
     positive_target_override: jax.Array | None = None,
     sample_future_targets: bool = False,
     bt4_tokens_override: jax.Array | None = None,
+    projected_latents_override: (
+        tuple[jax.Array, jax.Array] | None
+    ) = None,
+    jepa_state_rms_scale_override: jax.Array | None = None,
 ) -> tuple[jnp.ndarray, dict[str, jnp.ndarray]]:
     actions = batch["action_indices"][:, : model.config.horizon]
     batch_size, horizon = actions.shape
@@ -3042,53 +3066,117 @@ def joint_stage1_loss_fn(
     )
     rng_sigreg = selection.rng_sigreg
 
-    with jax.named_scope("joint_encode_project_current_future"):
-        if bt4_tokens_override is None:
-            all_bt4_tokens, z_all = (
-                model.encode_current_and_future_tokens_and_vectors(
-                    batch["current_planes"],
-                    target_future_planes,
-                )
-            )
-        else:
-            if not model.config.bt4_future_target_stop_gradient:
-                raise ValueError(
-                    "Precomputed BT4 tokens require "
-                    "bt4_future_target_stop_gradient=True"
-                )
-            target_count = target_future_planes.shape[1]
-            expected_shape = (
-                batch_size,
-                target_count + 1,
-                64,
-                model.encoder_dim,
-            )
-            if bt4_tokens_override.shape != expected_shape:
-                raise ValueError(
-                    "Precomputed BT4 token shape differs: "
-                    f"{bt4_tokens_override.shape} != {expected_shape}"
-                )
-            all_bt4_tokens = jnp.asarray(
-                bt4_tokens_override,
-                dtype=model.compute_dtype,
-            )
-            z_all = model.state_projector(
-                all_bt4_tokens.reshape(
-                    (
-                        batch_size * (target_count + 1),
-                        64,
-                        model.encoder_dim,
+    if (
+        bt4_tokens_override is not None
+        and projected_latents_override is not None
+    ):
+        raise ValueError(
+            "BT4-token and projected-latent overrides are mutually exclusive"
+        )
+    if (
+        projected_latents_override is None
+        and jepa_state_rms_scale_override is not None
+    ):
+        raise ValueError(
+            "JEPA RMS-scale override requires projected-latent overrides"
+        )
+    if projected_latents_override is None:
+        with jax.named_scope("joint_encode_project_current_future"):
+            if bt4_tokens_override is None:
+                all_bt4_tokens, z_all = (
+                    model.encode_current_and_future_tokens_and_vectors(
+                        batch["current_planes"],
+                        target_future_planes,
                     )
                 )
-            ).reshape(
-                (batch_size, target_count + 1, model.z_dim)
+            else:
+                if not model.config.bt4_future_target_stop_gradient:
+                    raise ValueError(
+                        "Precomputed BT4 tokens require "
+                        "bt4_future_target_stop_gradient=True"
+                    )
+                target_count = target_future_planes.shape[1]
+                expected_shape = (
+                    batch_size,
+                    target_count + 1,
+                    64,
+                    model.encoder_dim,
+                )
+                if bt4_tokens_override.shape != expected_shape:
+                    raise ValueError(
+                        "Precomputed BT4 token shape differs: "
+                        f"{bt4_tokens_override.shape} != {expected_shape}"
+                    )
+                all_bt4_tokens = jnp.asarray(
+                    bt4_tokens_override,
+                    dtype=model.compute_dtype,
+                )
+                z_all = model.state_projector(
+                    all_bt4_tokens.reshape(
+                        (
+                            batch_size * (target_count + 1),
+                            64,
+                            model.encoder_dim,
+                        )
+                    )
+                ).reshape(
+                    (batch_size, target_count + 1, model.z_dim)
+                )
+                z_all = model.normalize_jepa_state(z_all)
+        current_bt4_tokens = all_bt4_tokens[:, 0]
+        with jax.named_scope("joint_dfm_state_projector"):
+            z_dfm = model.dfm_latents(current_bt4_tokens)
+    else:
+        if model.config.bt4_policy_distill_coeff != 0.0:
+            raise ValueError(
+                "Projected-latent overrides do not support BT4 policy "
+                "distillation"
             )
-            z_all = model.normalize_jepa_state(z_all)
-    current_bt4_tokens = all_bt4_tokens[:, 0]
+        z_all_override, z_dfm_override = projected_latents_override
+        if jepa_state_rms_scale_override is None:
+            raise ValueError(
+                "Projected-latent overrides require the JEPA RMS-scale "
+                "diagnostic boundary value"
+            )
+        target_count = target_future_planes.shape[1]
+        expected_z_all_shape = (
+            batch_size,
+            target_count + 1,
+            model.z_dim,
+        )
+        expected_z_dfm_shape = (
+            batch_size,
+            64,
+            model.config.token_dim,
+        )
+        if z_all_override.shape != expected_z_all_shape:
+            raise ValueError(
+                "Precomputed z_all shape differs: "
+                f"{z_all_override.shape} != {expected_z_all_shape}"
+            )
+        if z_dfm_override.shape != expected_z_dfm_shape:
+            raise ValueError(
+                "Precomputed z_dfm shape differs: "
+                f"{z_dfm_override.shape} != {expected_z_dfm_shape}"
+            )
+        expected_scale_shape = (model.z_dim,)
+        if jepa_state_rms_scale_override.shape != expected_scale_shape:
+            raise ValueError(
+                "Precomputed JEPA RMS-scale shape differs: "
+                f"{jepa_state_rms_scale_override.shape} != "
+                f"{expected_scale_shape}"
+            )
+        z_all = jnp.asarray(
+            z_all_override,
+            dtype=model.compute_dtype,
+        )
+        z_dfm = jnp.asarray(
+            z_dfm_override,
+            dtype=model.compute_dtype,
+        )
+        current_bt4_tokens = None
     z_jepa = z_all[:, 0]
     target_z = z_all[:, 1:]
-    with jax.named_scope("joint_dfm_state_projector"):
-        z_dfm = model.dfm_latents(current_bt4_tokens)
 
     t = jax.random.uniform(rng_t, shape=(batch_size,))
     training_time_power_active = bool(
@@ -3190,6 +3278,10 @@ def joint_stage1_loss_fn(
         log_probs = jax.nn.log_softmax(logits, axis=-1)
     bt4_policy_distillation: Bt4PolicyDistillationResult | None = None
     if model.config.bt4_policy_distill_coeff != 0.0:
+        if current_bt4_tokens is None:
+            raise ValueError(
+                "BT4 policy distillation requires current BT4 tokens"
+            )
         with jax.named_scope("joint_bt4_frozen_policy_head_teacher"):
             teacher_canonical_logits = model.encoder.policy_head(
                 jax.lax.stop_gradient(current_bt4_tokens)
@@ -3893,6 +3985,22 @@ def joint_stage1_loss_fn(
             dtype=jnp.float32,
         )
         jepa_state_rms_scale = jepa_state_rms_scale_raw
+    elif jepa_state_rms_scale_override is not None:
+        jepa_state_rms_scale_raw = jnp.asarray(
+            jepa_state_rms_scale_override,
+            dtype=jnp.float32,
+        )
+        jepa_state_rms_scale = jepa_state_rms_scale_raw
+        if model.config.jepa_state_rms_scale_max > 0.0:
+            jepa_state_rms_scale_cap = jnp.asarray(
+                model.config.jepa_state_rms_scale_max,
+                dtype=jnp.float32,
+            )
+            jepa_state_rms_scale = jnp.clip(
+                jepa_state_rms_scale_raw,
+                1.0 / jepa_state_rms_scale_cap,
+                jepa_state_rms_scale_cap,
+            )
     else:
         jepa_state_rms_scale_raw = jnp.asarray(
             model.jepa_state_norm.scale[...],
@@ -4579,6 +4687,21 @@ def validate_split_gradient_execution_config(
         "sigreg_reference_count": (sigreg_reference_count, 1.0),
         "horizon": (config.horizon, 8),
         "jepa_target_semantics": (config.jepa_target_semantics, "online"),
+        "jepa_feedback_mode": (config.jepa_feedback_mode, "none"),
+        "bt4_policy_distill_coeff": (
+            config.bt4_policy_distill_coeff,
+            0.0,
+        ),
+        "root_legal_conditional_ce_coeff": (
+            config.root_legal_conditional_ce_coeff,
+            0.0,
+        ),
+        "value_coeff": (config.value_coeff, 0.0),
+        "wdl_coeff": (config.wdl_coeff, 0.0),
+        "jepa_target_variance_hinge_coeff": (
+            config.jepa_target_variance_hinge_coeff,
+            0.0,
+        ),
         "jepa_target_sample_count": (config.jepa_target_sample_count, 1),
         "jepa_target_sampling_unit": (
             config.jepa_target_sampling_unit,
@@ -6991,6 +7114,10 @@ def normalized_stage1_loss_fn(
     positive_target_override: jax.Array | None = None,
     sample_future_targets: bool = False,
     bt4_tokens_override: jax.Array | None = None,
+    projected_latents_override: (
+        tuple[jax.Array, jax.Array] | None
+    ) = None,
+    jepa_state_rms_scale_override: jax.Array | None = None,
 ) -> tuple[jax.Array, dict[str, jax.Array]]:
     """Compatibility loss with finite-sample SIGReg and legal corrections.
 
@@ -7007,6 +7134,8 @@ def normalized_stage1_loss_fn(
         positive_target_override=positive_target_override,
         sample_future_targets=sample_future_targets,
         bt4_tokens_override=bt4_tokens_override,
+        projected_latents_override=projected_latents_override,
+        jepa_state_rms_scale_override=jepa_state_rms_scale_override,
     )
     target_official = jnp.asarray(
         compatibility_aux["jepa_sigreg_loss"],
@@ -7258,6 +7387,143 @@ _split_head_loss_and_grad = nnx.value_and_grad(
 )
 
 
+def split_projected_latents(
+    model: JointLatentSASAModel,
+    bt4_tokens: jax.Array,
+) -> tuple[jax.Array, jax.Array]:
+    """Compute the exact JEPA and DFM latents from precomputed BT4 tokens."""
+
+    if bt4_tokens.ndim != 4:
+        raise ValueError(
+            "Split BT4 tokens must have rank four, found "
+            f"{bt4_tokens.shape}"
+        )
+    batch_size, board_count, square_count, encoder_dim = (
+        bt4_tokens.shape
+    )
+    expected_shape = (
+        batch_size,
+        int(model.config.jepa_target_sample_count) + 1,
+        64,
+        model.encoder_dim,
+    )
+    if bt4_tokens.shape != expected_shape:
+        raise ValueError(
+            "Split BT4 token shape differs: "
+            f"{bt4_tokens.shape} != {expected_shape}"
+        )
+    z_all = model.state_projector(
+        jnp.asarray(
+            bt4_tokens,
+            dtype=model.compute_dtype,
+        ).reshape(
+            (
+                batch_size * board_count,
+                square_count,
+                encoder_dim,
+            )
+        )
+    ).reshape(
+        (batch_size, board_count, model.z_dim)
+    )
+    z_all = model.normalize_jepa_state(z_all)
+    z_dfm = model.dfm_latents(bt4_tokens[:, 0])
+    return z_all, z_dfm
+
+
+def split_projection_outputs(
+    model: JointLatentSASAModel,
+    bt4_tokens: jax.Array,
+) -> tuple[jax.Array, jax.Array, jax.Array]:
+    """Return latents plus the projector-owned diagnostic scale boundary."""
+
+    z_all, z_dfm = split_projected_latents(model, bt4_tokens)
+    jepa_state_rms_scale = jnp.asarray(
+        model.jepa_state_norm.scale[...],
+        dtype=jnp.float32,
+    )
+    return z_all, z_dfm, jepa_state_rms_scale
+
+
+def split_core_training_loss_fn(
+    model: JointLatentSASAModel,
+    batch: dict[str, jax.Array],
+    rng: jax.Array,
+    target_reference_count: float,
+    pred_reference_count: float,
+    z_all: jax.Array,
+    z_dfm: jax.Array,
+    jepa_state_rms_scale: jax.Array,
+) -> tuple[jax.Array, dict[str, jax.Array]]:
+    """Run the unchanged coupled loss after the latent projection boundary."""
+
+    return normalized_stage1_loss_fn(
+        model,
+        batch,
+        rng,
+        target_reference_count,
+        pred_reference_count,
+        sample_future_targets=True,
+        projected_latents_override=(z_all, z_dfm),
+        jepa_state_rms_scale_override=jepa_state_rms_scale,
+    )
+
+
+_split_core_loss_and_grad = nnx.value_and_grad(
+    split_core_training_loss_fn,
+    argnums=(
+        nnx.DiffState(0, SPLIT_CORE_TRAINABLE_FILTER),
+        5,
+        6,
+    ),
+    has_aux=True,
+)
+
+
+def split_projection_cotangent_loss_fn(
+    model: JointLatentSASAModel,
+    bt4_tokens: jax.Array,
+    z_all_cotangent: jax.Array,
+    z_dfm_cotangent: jax.Array,
+) -> jax.Array:
+    """Contract recomputed projected latents with stopped core cotangents."""
+
+    z_all, z_dfm = split_projected_latents(model, bt4_tokens)
+    if z_all.shape != z_all_cotangent.shape:
+        raise ValueError(
+            "Split z_all/cotangent shape mismatch: "
+            f"{z_all.shape} != {z_all_cotangent.shape}"
+        )
+    if z_dfm.shape != z_dfm_cotangent.shape:
+        raise ValueError(
+            "Split z_dfm/cotangent shape mismatch: "
+            f"{z_dfm.shape} != {z_dfm_cotangent.shape}"
+        )
+    return (
+        jnp.sum(
+            jnp.asarray(z_all, dtype=jnp.float32)
+            * jax.lax.stop_gradient(
+                jnp.asarray(z_all_cotangent, dtype=jnp.float32)
+            )
+        )
+        + jnp.sum(
+            jnp.asarray(z_dfm, dtype=jnp.float32)
+            * jax.lax.stop_gradient(
+                jnp.asarray(z_dfm_cotangent, dtype=jnp.float32)
+            )
+        )
+    )
+
+
+_split_projection_grad = nnx.grad(
+    split_projection_cotangent_loss_fn,
+    argnums=(
+        nnx.DiffState(0, SPLIT_PROJECTOR_TRAINABLE_FILTER),
+        1,
+    ),
+)
+
+
 def split_encoder_cotangent_loss_fn(
     model: JointLatentSASAModel,
     batch: dict[str, jax.Array],
@@ -7286,6 +7552,70 @@ _split_encoder_grad = nnx.grad(
 )
 
 
+def split_partitioned_training_gradients(
+    model: JointLatentSASAModel,
+    batch: dict[str, jax.Array],
+    rng: jax.Array,
+    target_reference_count: float,
+    pred_reference_count: float,
+    views: SplitModelViews | None = None,
+) -> tuple[
+    jax.Array,
+    dict[str, jax.Array],
+    nnx.State,
+    nnx.State,
+    nnx.State,
+    jax.Array,
+    jax.Array,
+    jax.Array,
+]:
+    """Return the exact core, projection, and encoder reverse-mode pieces."""
+
+    if views is None:
+        views = build_split_model_views(model)
+    bt4_tokens = split_training_bt4_tokens(views.encoder, batch, rng)
+    z_all, z_dfm, jepa_state_rms_scale = split_projection_outputs(
+        views.projector,
+        bt4_tokens,
+    )
+    (loss, aux), (
+        core_grads,
+        z_all_cotangent,
+        z_dfm_cotangent,
+    ) = _split_core_loss_and_grad(
+        views.core,
+        batch,
+        rng,
+        target_reference_count,
+        pred_reference_count,
+        z_all,
+        z_dfm,
+        jepa_state_rms_scale,
+    )
+    projector_grads, token_cotangent = _split_projection_grad(
+        views.projector,
+        bt4_tokens,
+        z_all_cotangent,
+        z_dfm_cotangent,
+    )
+    encoder_grads = _split_encoder_grad(
+        views.encoder,
+        batch,
+        rng,
+        token_cotangent,
+    )
+    return (
+        loss,
+        aux,
+        core_grads,
+        projector_grads,
+        encoder_grads,
+        token_cotangent,
+        z_all_cotangent,
+        z_dfm_cotangent,
+    )
+
+
 def split_training_gradients(
     model: JointLatentSASAModel,
     batch: dict[str, jax.Array],
@@ -7300,37 +7630,40 @@ def split_training_gradients(
     nnx.State,
     jax.Array,
 ]:
-    """Return loss, aux, disjoint gradient states, and token cotangent."""
+    """Return the legacy two-part interface over the exact six-stage VJP."""
 
-    if views is None:
-        views = build_split_model_views(model)
-    bt4_tokens = split_training_bt4_tokens(views.encoder, batch, rng)
-    (loss, aux), (head_grads, token_cotangent) = (
-        _split_head_loss_and_grad(
-            views.head,
-            batch,
-            rng,
-            target_reference_count,
-            pred_reference_count,
-            bt4_tokens,
-        )
-    )
-    encoder_grads = _split_encoder_grad(
-        views.encoder,
+    (
+        loss,
+        aux,
+        core_grads,
+        projector_grads,
+        encoder_grads,
+        token_cotangent,
+        _,
+        _,
+    ) = split_partitioned_training_gradients(
+        model,
         batch,
         rng,
+        target_reference_count,
+        pred_reference_count,
+        views,
+    )
+    return (
+        loss,
+        aux,
+        merge_split_gradients(core_grads, projector_grads),
+        encoder_grads,
         token_cotangent,
     )
-    return loss, aux, head_grads, encoder_grads, token_cotangent
 
 
-def merge_split_gradients(
-    head_grads: nnx.State,
-    encoder_grads: nnx.State,
-) -> nnx.State:
+def merge_split_gradients(*gradient_states: nnx.State) -> nnx.State:
     """Merge the disjoint split gradient partitions."""
 
-    return nnx.merge_state(head_grads, encoder_grads)
+    if not gradient_states:
+        raise ValueError("At least one split gradient state is required")
+    return nnx.merge_state(*gradient_states)
 
 
 def split_state_abstract_records(
@@ -7378,22 +7711,33 @@ class SplitModelViews(NamedTuple):
     """Transient shared-variable graph views for split compilation."""
 
     encoder: JointLatentSASAModel
-    head: JointLatentSASAModel
+    projector: JointLatentSASAModel
+    core: JointLatentSASAModel
 
 
 def _split_trainable_variable_objects(
     model: JointLatentSASAModel,
     *,
-    encoder: bool,
+    partition: str,
 ) -> dict[tuple[Any, ...], TrainableParam]:
     """Map trainable graph paths to the live Variable objects."""
 
-    return {
-        path: value
-        for path, value in nnx.iter_graph(model)
-        if isinstance(value, TrainableParam)
-        and isinstance(value, BT4TrainableParam) is encoder
-    }
+    if partition not in {"encoder", "projector", "core"}:
+        raise ValueError(f"Unknown split Variable partition {partition!r}")
+    variables = {}
+    for path, value in nnx.iter_graph(model):
+        if not isinstance(value, TrainableParam):
+            continue
+        root = str(path[0]) if path else ""
+        if isinstance(value, BT4TrainableParam):
+            actual_partition = "encoder"
+        elif root in SPLIT_PROJECTOR_ROOTS:
+            actual_partition = "projector"
+        else:
+            actual_partition = "core"
+        if actual_partition == partition:
+            variables[path] = value
+    return variables
 
 
 def validate_split_model_views(
@@ -7404,32 +7748,44 @@ def validate_split_model_views(
 ) -> dict[str, Any]:
     """Require exact disjoint state and shared identity in split graph views."""
 
-    canonical_head = nnx.state(model, NON_BT4_TRAINABLE_FILTER)
     canonical_encoder = nnx.state(model, BT4TrainableParam)
+    canonical_projector = nnx.state(
+        model,
+        SPLIT_PROJECTOR_TRAINABLE_FILTER,
+    )
+    canonical_core = nnx.state(
+        model,
+        SPLIT_CORE_TRAINABLE_FILTER,
+    )
     canonical_full = nnx.state(model, TrainableParam)
-    view_head = nnx.state(views.head, TrainableParam)
     view_encoder = nnx.state(views.encoder, TrainableParam)
-    view_head_all_variables = nnx.state(views.head)
+    view_projector = nnx.state(views.projector, TrainableParam)
+    view_core = nnx.state(views.core, TrainableParam)
     view_encoder_all_variables = nnx.state(views.encoder)
+    view_projector_all_variables = nnx.state(views.projector)
+    view_core_all_variables = nnx.state(views.core)
 
-    canonical_head_records = split_state_abstract_records(canonical_head)
     canonical_encoder_records = split_state_abstract_records(
         canonical_encoder
     )
+    canonical_projector_records = split_state_abstract_records(
+        canonical_projector
+    )
+    canonical_core_records = split_state_abstract_records(canonical_core)
     canonical_full_records = split_state_abstract_records(canonical_full)
-    view_head_records = split_state_abstract_records(view_head)
     view_encoder_records = split_state_abstract_records(view_encoder)
-    if view_head_records != canonical_head_records:
-        raise ValueError("Split head view state differs from canonical head")
+    view_projector_records = split_state_abstract_records(view_projector)
+    view_core_records = split_state_abstract_records(view_core)
     if view_encoder_records != canonical_encoder_records:
         raise ValueError(
             "Split encoder view state differs from canonical encoder"
         )
-    if (
-        split_state_abstract_records(view_head_all_variables)
-        != view_head_records
-    ):
-        raise ValueError("Split head view retains non-trainable Variables")
+    if view_projector_records != canonical_projector_records:
+        raise ValueError(
+            "Split projector view state differs from canonical projector"
+        )
+    if view_core_records != canonical_core_records:
+        raise ValueError("Split core view state differs from canonical core")
     if (
         split_state_abstract_records(view_encoder_all_variables)
         != view_encoder_records
@@ -7437,68 +7793,98 @@ def validate_split_model_views(
         raise ValueError(
             "Split encoder view retains non-trainable Variables"
         )
-    if set(view_head_records) & set(view_encoder_records):
+    if (
+        split_state_abstract_records(view_projector_all_variables)
+        != view_projector_records
+    ):
+        raise ValueError(
+            "Split projector view retains non-trainable Variables"
+        )
+    if (
+        split_state_abstract_records(view_core_all_variables)
+        != view_core_records
+    ):
+        raise ValueError("Split core view retains non-trainable Variables")
+
+    partition_paths = {
+        "encoder": set(view_encoder_records),
+        "projector": set(view_projector_records),
+        "core": set(view_core_records),
+    }
+    overlap = (
+        (partition_paths["encoder"] & partition_paths["projector"])
+        | (partition_paths["encoder"] & partition_paths["core"])
+        | (partition_paths["projector"] & partition_paths["core"])
+    )
+    if overlap:
         raise ValueError("Split model views have overlapping trainable paths")
     if (
-        set(view_head_records) | set(view_encoder_records)
+        partition_paths["encoder"]
+        | partition_paths["projector"]
+        | partition_paths["core"]
         != set(canonical_full_records)
     ):
         raise ValueError(
             "Split model views do not partition canonical trainable paths"
         )
 
-    canonical_head_variables = _split_trainable_variable_objects(
-        model,
-        encoder=False,
-    )
-    canonical_encoder_variables = _split_trainable_variable_objects(
-        model,
-        encoder=True,
-    )
-    view_head_variables = _split_trainable_variable_objects(
-        views.head,
-        encoder=False,
-    )
-    view_encoder_variables = _split_trainable_variable_objects(
-        views.encoder,
-        encoder=True,
-    )
-    if set(view_head_variables) != set(canonical_head_variables):
-        raise ValueError(
-            "Split head view Variable paths differ from canonical head"
-        )
-    if set(view_encoder_variables) != set(canonical_encoder_variables):
-        raise ValueError(
-            "Split encoder view Variable paths differ from canonical encoder"
-        )
-    if any(
-        view_head_variables[path] is not canonical_head_variables[path]
-        for path in canonical_head_variables
+    for partition, view in (
+        ("encoder", views.encoder),
+        ("projector", views.projector),
+        ("core", views.core),
     ):
-        raise ValueError("Split head view copied a Variable object")
-    if any(
-        view_encoder_variables[path] is not canonical_encoder_variables[path]
-        for path in canonical_encoder_variables
-    ):
-        raise ValueError("Split encoder view copied a Variable object")
-    if _split_trainable_variable_objects(views.head, encoder=True):
-        raise ValueError("Split head view retains BT4 Variables")
-    if _split_trainable_variable_objects(views.encoder, encoder=False):
-        raise ValueError("Split encoder view retains non-BT4 Variables")
+        canonical_variables = _split_trainable_variable_objects(
+            model,
+            partition=partition,
+        )
+        view_variables = _split_trainable_variable_objects(
+            view,
+            partition=partition,
+        )
+        if set(view_variables) != set(canonical_variables):
+            raise ValueError(
+                f"Split {partition} view Variable paths differ from "
+                f"canonical {partition}"
+            )
+        if any(
+            view_variables[path] is not canonical_variables[path]
+            for path in canonical_variables
+        ):
+            raise ValueError(
+                f"Split {partition} view copied a Variable object"
+            )
+        for other_partition in {
+            "encoder",
+            "projector",
+            "core",
+        } - {partition}:
+            if _split_trainable_variable_objects(
+                view,
+                partition=other_partition,
+            ):
+                raise ValueError(
+                    f"Split {partition} view retains "
+                    f"{other_partition} Variables"
+                )
 
     nbytes = {
         "full": split_state_abstract_nbytes(canonical_full),
-        "head": split_state_abstract_nbytes(view_head),
         "encoder": split_state_abstract_nbytes(view_encoder),
+        "projector": split_state_abstract_nbytes(view_projector),
+        "core": split_state_abstract_nbytes(view_core),
     }
-    if nbytes["head"] + nbytes["encoder"] != nbytes["full"]:
+    if (
+        nbytes["encoder"] + nbytes["projector"] + nbytes["core"]
+        != nbytes["full"]
+    ):
         raise ValueError(
             "Split model view bytes do not sum to canonical model bytes"
         )
     expected_nbytes = {
         "full": SPLIT_ACCEPTED_FULL_MODEL_NBYTES,
-        "head": SPLIT_ACCEPTED_HEAD_MODEL_NBYTES,
         "encoder": SPLIT_ACCEPTED_ENCODER_MODEL_NBYTES,
+        "projector": SPLIT_ACCEPTED_PROJECTOR_MODEL_NBYTES,
+        "core": SPLIT_ACCEPTED_CORE_MODEL_NBYTES,
     }
     if require_accepted_abi and nbytes != expected_nbytes:
         raise ValueError(
@@ -7507,13 +7893,15 @@ def validate_split_model_views(
         )
     leaf_counts = {
         "full": len(canonical_full_records),
-        "head": len(view_head_records),
         "encoder": len(view_encoder_records),
+        "projector": len(view_projector_records),
+        "core": len(view_core_records),
     }
     expected_leaf_counts = {
         "full": SPLIT_ACCEPTED_FULL_LEAF_COUNT,
-        "head": SPLIT_ACCEPTED_HEAD_LEAF_COUNT,
         "encoder": SPLIT_ACCEPTED_ENCODER_LEAF_COUNT,
+        "projector": SPLIT_ACCEPTED_PROJECTOR_LEAF_COUNT,
+        "core": SPLIT_ACCEPTED_CORE_LEAF_COUNT,
     }
     if require_accepted_abi and leaf_counts != expected_leaf_counts:
         raise ValueError(
@@ -7524,8 +7912,9 @@ def validate_split_model_views(
         "shared_variable_objects": True,
         "copied_array_storage": False,
         "full_leaf_count": leaf_counts["full"],
-        "head_leaf_count": leaf_counts["head"],
         "encoder_leaf_count": leaf_counts["encoder"],
+        "projector_leaf_count": leaf_counts["projector"],
+        "core_leaf_count": leaf_counts["core"],
         "nbytes": nbytes,
     }
 
@@ -7538,7 +7927,8 @@ def build_split_model_views(
     """Create exact graph partitions that share canonical Variable objects."""
 
     encoder_view = nnx.clone(model, variables=False)
-    head_view = nnx.clone(model, variables=False)
+    projector_view = nnx.clone(model, variables=False)
+    core_view = nnx.clone(model, variables=False)
     head_roots = tuple(
         nnx.to_pure_dict(
             nnx.state(model, NON_BT4_TRAINABLE_FILTER)
@@ -7553,12 +7943,34 @@ def build_split_model_views(
     for root in ("policy_head", "value_head", "moves_left_head"):
         if hasattr(encoder_view.encoder, root):
             delattr(encoder_view.encoder, root)
-    if not hasattr(head_view, "encoder"):
-        raise ValueError("Canonical model has no encoder root")
-    del head_view.encoder
+    for name, view in (
+        ("projector", projector_view),
+        ("core", core_view),
+    ):
+        if not hasattr(view, "encoder"):
+            raise ValueError(
+                f"Canonical model has no encoder root for {name} view"
+            )
+        del view.encoder
+    for root in head_roots:
+        if root not in SPLIT_PROJECTOR_ROOTS:
+            if not hasattr(projector_view, root):
+                raise ValueError(
+                    "Invalid core root while building projector view: "
+                    f"{root!r}"
+                )
+            delattr(projector_view, root)
+        else:
+            if not hasattr(core_view, root):
+                raise ValueError(
+                    "Invalid projector root while building core view: "
+                    f"{root!r}"
+                )
+            delattr(core_view, root)
     views = SplitModelViews(
         encoder=encoder_view,
-        head=head_view,
+        projector=projector_view,
+        core=core_view,
     )
     validate_split_model_views(
         model,
@@ -7606,6 +8018,67 @@ def validate_split_gradient_partitions(
     }
 
 
+def validate_partitioned_split_gradient_partitions(
+    model: JointLatentSASAModel,
+    core_grads: nnx.State,
+    projector_grads: nnx.State,
+    encoder_grads: nnx.State,
+) -> dict[str, int]:
+    """Require the exact three-part Exp036 trainable-state partition."""
+
+    core_records = split_state_abstract_records(core_grads)
+    projector_records = split_state_abstract_records(projector_grads)
+    encoder_records = split_state_abstract_records(encoder_grads)
+    overlap = (
+        (set(core_records) & set(projector_records))
+        | (set(core_records) & set(encoder_records))
+        | (set(projector_records) & set(encoder_records))
+    )
+    if overlap:
+        raise ValueError(
+            "Partitioned split gradients overlap: "
+            + ", ".join(sorted(overlap))
+        )
+    validate_split_gradient_partitions(
+        model,
+        merge_split_gradients(core_grads, projector_grads),
+        encoder_grads,
+    )
+    expected = {
+        "core": split_state_abstract_records(
+            nnx.state(model, SPLIT_CORE_TRAINABLE_FILTER)
+        ),
+        "projector": split_state_abstract_records(
+            nnx.state(model, SPLIT_PROJECTOR_TRAINABLE_FILTER)
+        ),
+        "encoder": split_state_abstract_records(
+            nnx.state(model, BT4TrainableParam)
+        ),
+    }
+    observed = {
+        "core": core_records,
+        "projector": projector_records,
+        "encoder": encoder_records,
+    }
+    mismatched = [
+        partition
+        for partition in expected
+        if observed[partition] != expected[partition]
+    ]
+    if mismatched:
+        raise ValueError(
+            "Partitioned split gradient ABI mismatch: "
+            + ", ".join(mismatched)
+        )
+    return {
+        "full_leaf_count": sum(len(records) for records in observed.values()),
+        "core_leaf_count": len(core_records),
+        "projector_leaf_count": len(projector_records),
+        "encoder_leaf_count": len(encoder_records),
+        "overlap_leaf_count": 0,
+    }
+
+
 def _split_encode_impl(
     model: JointLatentSASAModel,
     batch: dict[str, jax.Array],
@@ -7614,21 +8087,46 @@ def _split_encode_impl(
     return split_training_bt4_tokens(model, batch, rng)
 
 
-def _split_head_vjp_impl(
+def _split_project_impl(
+    model: JointLatentSASAModel,
+    bt4_tokens: jax.Array,
+) -> tuple[jax.Array, jax.Array, jax.Array]:
+    return split_projection_outputs(model, bt4_tokens)
+
+
+def _split_core_vjp_impl(
     model: JointLatentSASAModel,
     batch: dict[str, jax.Array],
     rng: jax.Array,
     target_reference_count: float,
     pred_reference_count: float,
-    bt4_tokens: jax.Array,
+    z_all: jax.Array,
+    z_dfm: jax.Array,
+    jepa_state_rms_scale: jax.Array,
 ):
-    return _split_head_loss_and_grad(
+    return _split_core_loss_and_grad(
         model,
         batch,
         rng,
         target_reference_count,
         pred_reference_count,
+        z_all,
+        z_dfm,
+        jepa_state_rms_scale,
+    )
+
+
+def _split_projection_vjp_impl(
+    model: JointLatentSASAModel,
+    bt4_tokens: jax.Array,
+    z_all_cotangent: jax.Array,
+    z_dfm_cotangent: jax.Array,
+):
+    return _split_projection_grad(
+        model,
         bt4_tokens,
+        z_all_cotangent,
+        z_dfm_cotangent,
     )
 
 
@@ -7649,27 +8147,40 @@ def _split_encoder_vjp_impl(
 def _split_optimizer_update_impl(
     model: JointLatentSASAModel,
     optimizer: nnx.Optimizer,
-    head_grads: nnx.State,
+    core_grads: nnx.State,
+    projector_grads: nnx.State,
     encoder_grads: nnx.State,
 ) -> jax.Array:
-    validate_split_gradient_partitions(
+    validate_partitioned_split_gradient_partitions(
         model,
-        head_grads,
+        core_grads,
+        projector_grads,
         encoder_grads,
     )
     optimizer.update(
         model,
-        merge_split_gradients(head_grads, encoder_grads),
+        merge_split_gradients(
+            core_grads,
+            projector_grads,
+            encoder_grads,
+        ),
     )
     return optimizer.step[...]
 
 
 split_encode_step = nnx.jit(_split_encode_impl)
 split_encode_step_donated = nnx.jit(_split_encode_impl)
-split_head_vjp_step = nnx.jit(_split_head_vjp_impl)
-split_head_vjp_step_donated = nnx.jit(
-    _split_head_vjp_impl,
-    donate_argnums=(5,),
+split_project_step = nnx.jit(_split_project_impl)
+split_project_step_donated = nnx.jit(_split_project_impl)
+split_core_vjp_step = nnx.jit(_split_core_vjp_impl)
+split_core_vjp_step_donated = nnx.jit(
+    _split_core_vjp_impl,
+    donate_argnums=(5, 6),
+)
+split_projection_vjp_step = nnx.jit(_split_projection_vjp_impl)
+split_projection_vjp_step_donated = nnx.jit(
+    _split_projection_vjp_impl,
+    donate_argnums=(1, 2, 3),
 )
 split_encoder_vjp_step = nnx.jit(_split_encoder_vjp_impl)
 split_encoder_vjp_step_donated = nnx.jit(
@@ -7679,13 +8190,15 @@ split_encoder_vjp_step_donated = nnx.jit(
 split_optimizer_update_step = nnx.jit(_split_optimizer_update_impl)
 split_optimizer_update_step_donated = nnx.jit(
     _split_optimizer_update_impl,
-    donate_argnums=(0, 1, 2, 3),
+    donate_argnums=(0, 1, 2, 3, 4),
 )
 
 
 class SplitTrainingFunctions(NamedTuple):
     encode: Any
-    head_vjp: Any
+    project: Any
+    core_vjp: Any
+    projection_vjp: Any
     encoder_vjp: Any
     update: Any
 
@@ -7694,13 +8207,17 @@ def split_training_functions(*, donate: bool) -> SplitTrainingFunctions:
     if donate:
         return SplitTrainingFunctions(
             encode=split_encode_step_donated,
-            head_vjp=split_head_vjp_step_donated,
+            project=split_project_step_donated,
+            core_vjp=split_core_vjp_step_donated,
+            projection_vjp=split_projection_vjp_step_donated,
             encoder_vjp=split_encoder_vjp_step_donated,
             update=split_optimizer_update_step_donated,
         )
     return SplitTrainingFunctions(
         encode=split_encode_step,
-        head_vjp=split_head_vjp_step,
+        project=split_project_step,
+        core_vjp=split_core_vjp_step,
+        projection_vjp=split_projection_vjp_step,
         encoder_vjp=split_encoder_vjp_step,
         update=split_optimizer_update_step,
     )
@@ -7717,23 +8234,55 @@ def execute_split_training_step(
     target_reference_count: float,
     pred_reference_count: float,
 ) -> tuple[jax.Array, dict[str, jax.Array], dict[str, float]]:
-    """Execute and synchronize the four split components in order."""
+    """Execute and synchronize the six split components in order."""
 
     started = time.perf_counter()
     bt4_tokens = functions.encode(views.encoder, batch, rng)
     jax.block_until_ready(bt4_tokens)
     encoded = time.perf_counter()
 
-    (loss, aux), (head_grads, token_cotangent) = functions.head_vjp(
-        views.head,
+    z_all, z_dfm, jepa_state_rms_scale = functions.project(
+        views.projector,
+        bt4_tokens,
+    )
+    jax.block_until_ready(
+        (z_all, z_dfm, jepa_state_rms_scale)
+    )
+    projected = time.perf_counter()
+
+    (loss, aux), (
+        core_grads,
+        z_all_cotangent,
+        z_dfm_cotangent,
+    ) = functions.core_vjp(
+        views.core,
         batch,
         rng,
         target_reference_count,
         pred_reference_count,
-        bt4_tokens,
+        z_all,
+        z_dfm,
+        jepa_state_rms_scale,
     )
-    jax.block_until_ready((loss, aux, head_grads, token_cotangent))
-    head_done = time.perf_counter()
+    jax.block_until_ready(
+        (
+            loss,
+            aux,
+            core_grads,
+            z_all_cotangent,
+            z_dfm_cotangent,
+        )
+    )
+    core_done = time.perf_counter()
+
+    projector_grads, token_cotangent = functions.projection_vjp(
+        views.projector,
+        bt4_tokens,
+        z_all_cotangent,
+        z_dfm_cotangent,
+    )
+    jax.block_until_ready((projector_grads, token_cotangent))
+    projector_done = time.perf_counter()
 
     encoder_grads = functions.encoder_vjp(
         views.encoder,
@@ -7747,15 +8296,18 @@ def execute_split_training_step(
     optimizer_step = functions.update(
         model,
         optimizer,
-        head_grads,
+        core_grads,
+        projector_grads,
         encoder_grads,
     )
     jax.block_until_ready(optimizer_step)
     update_done = time.perf_counter()
     return loss, aux, {
         "split_encode_seconds": encoded - started,
-        "split_head_vjp_seconds": head_done - encoded,
-        "split_encoder_vjp_seconds": encoder_done - head_done,
+        "split_project_seconds": projected - encoded,
+        "split_core_vjp_seconds": core_done - projected,
+        "split_projection_vjp_seconds": projector_done - core_done,
+        "split_encoder_vjp_seconds": encoder_done - projector_done,
         "split_optimizer_update_seconds": update_done - encoder_done,
         "split_total_seconds": update_done - started,
     }
@@ -8171,12 +8723,19 @@ def parse_args(
         default="monolithic",
         help=(
             "Run the ordinary fused update or the preregistered "
-            "forward-identical encoder/head split."
+            "forward-identical six-component gradient split."
         ),
     )
     parser.add_argument(
         "--compile-component",
-        choices=("encode", "head_vjp", "encoder_vjp", "update"),
+        choices=(
+            "encode",
+            "project",
+            "core_vjp",
+            "projection_vjp",
+            "encoder_vjp",
+            "update",
+        ),
         help=(
             "With split --compile-only, compile exactly one component "
             "using concrete arguments."
@@ -9352,52 +9911,92 @@ def split_component_compile_arguments(
 ) -> tuple[Any, tuple[Any, ...]]:
     """Build concrete, execution-free arguments for one split component."""
 
+    batch_size = batch["current_planes"].shape[0]
     token_shape = (
-        batch["current_planes"].shape[0],
+        batch_size,
         int(model.config.jepa_target_sample_count) + 1,
         64,
         model.encoder_dim,
     )
-    tokens = jax.device_put(
-        np.zeros(
-            token_shape,
-            dtype=np.dtype(model.compute_dtype),
-        )
+    z_all_shape = (
+        batch_size,
+        int(model.config.jepa_target_sample_count) + 1,
+        model.z_dim,
     )
+    z_dfm_shape = (
+        batch_size,
+        64,
+        model.config.token_dim,
+    )
+    jepa_state_rms_scale_shape = (model.z_dim,)
+
+    def zeros(
+        shape: tuple[int, ...],
+        *,
+        dtype: Any | None = None,
+    ) -> jax.Array:
+        return jax.device_put(
+            np.zeros(
+                shape,
+                dtype=np.dtype(
+                    model.compute_dtype if dtype is None else dtype
+                ),
+            )
+        )
+
     if component == "encode":
         return functions.encode, (views.encoder, batch, rng)
-    if component == "head_vjp":
-        return functions.head_vjp, (
-            views.head,
+    if component == "project":
+        return functions.project, (
+            views.projector,
+            zeros(token_shape),
+        )
+    if component == "core_vjp":
+        return functions.core_vjp, (
+            views.core,
             batch,
             rng,
             sigreg_reference_count,
             sigreg_reference_count,
-            tokens,
+            zeros(z_all_shape),
+            zeros(z_dfm_shape),
+            zeros(jepa_state_rms_scale_shape, dtype=np.float32),
+        )
+    if component == "projection_vjp":
+        return functions.projection_vjp, (
+            views.projector,
+            zeros(token_shape),
+            zeros(z_all_shape),
+            zeros(z_dfm_shape),
         )
     if component == "encoder_vjp":
         return functions.encoder_vjp, (
             views.encoder,
             batch,
             rng,
-            tokens,
+            zeros(token_shape),
         )
     if component == "update":
-        head_grads = zero_state_like(
-            nnx.state(model, NON_BT4_TRAINABLE_FILTER)
+        core_grads = zero_state_like(
+            nnx.state(model, SPLIT_CORE_TRAINABLE_FILTER)
+        )
+        projector_grads = zero_state_like(
+            nnx.state(model, SPLIT_PROJECTOR_TRAINABLE_FILTER)
         )
         encoder_grads = zero_state_like(
             nnx.state(model, BT4TrainableParam)
         )
-        validate_split_gradient_partitions(
+        validate_partitioned_split_gradient_partitions(
             model,
-            head_grads,
+            core_grads,
+            projector_grads,
             encoder_grads,
         )
         return functions.update, (
             model,
             optimizer,
-            head_grads,
+            core_grads,
+            projector_grads,
             encoder_grads,
         )
     raise ValueError(f"Unsupported split compile component {component!r}")
@@ -9473,12 +10072,21 @@ def compile_split_training_executables(
             rng=rng,
             sigreg_reference_count=sigreg_reference_count,
         )
-        for component in ("encode", "head_vjp", "encoder_vjp", "update")
+        for component in (
+            "encode",
+            "project",
+            "core_vjp",
+            "projection_vjp",
+            "encoder_vjp",
+            "update",
+        )
     }
     return SplitTrainingCompilation(
         functions=SplitTrainingFunctions(
             encode=compilations["encode"].executable,
-            head_vjp=compilations["head_vjp"].executable,
+            project=compilations["project"].executable,
+            core_vjp=compilations["core_vjp"].executable,
+            projection_vjp=compilations["projection_vjp"].executable,
             encoder_vjp=compilations["encoder_vjp"].executable,
             update=compilations["update"].executable,
         ),
@@ -10324,8 +10932,8 @@ def run_split_component_compile_only(
     initial_optimizer_step = int(optimizer.step[...])
     cache_before = compilation_cache_executable_inventory(cache_dir)
     run_config = {
-        "format": "chess-dfm-split-component-compile-only-v2",
-        "mode": "partitioned_split_component_compile_only_concrete",
+        "format": "chess-dfm-split-component-compile-only-v3",
+        "mode": "split_head_projection_component_compile_only_concrete",
         "component": component,
         "autoresearch_ready": AUTORESEARCH_READY,
         "architecture_source": ARCHITECTURE_SOURCE,
@@ -10396,7 +11004,9 @@ def run_split_component_compile_only(
     memory = compilation.memory_analysis
     argument_limits = {
         "encode": 432_905_816,
-        "head_vjp": 400 * 1024**2,
+        "project": 150 * 1024**2,
+        "core_vjp": 260 * 1024**2,
+        "projection_vjp": 150 * 1024**2,
         "encoder_vjp": 450 * 1024**2,
         "update": int(2.5 * 1024**3),
     }
@@ -10564,12 +11174,12 @@ def main() -> int:
         if args.resume_from is not None:
             raise ValueError(
                 "split gradient execution cannot resume a checkpoint "
-                "during Experiment 035"
+                "during Experiment 036"
             )
         if args.eval_only or args.eval_checkpoints is not None:
             raise ValueError(
                 "split gradient execution is a training-only "
-                "Experiment 035 path"
+                "Experiment 036 path"
             )
         if args.gradient_audit:
             raise ValueError(
@@ -10593,7 +11203,7 @@ def main() -> int:
             or args.save_final
         ):
             raise ValueError(
-                "Experiment 035 split execution forbids checkpoint writes"
+                "Experiment 036 split execution forbids checkpoint writes"
             )
     if args.max_checkpoints < 0:
         raise ValueError("--max-checkpoints must be non-negative")
@@ -11075,10 +11685,12 @@ def main() -> int:
         assert split_views is not None
         assert split_view_report is not None
         run_config["training_execution"] = {
-            "mode": "partitioned_split_encoder_gradient_v2",
+            "mode": "split_head_projection_gradient_v3",
             "components": [
                 "encode",
-                "head_vjp",
+                "project",
+                "core_vjp",
+                "projection_vjp",
                 "encoder_vjp",
                 "update",
             ],
@@ -11224,7 +11836,9 @@ def main() -> int:
     steady_iteration_seconds: list[float] = []
     steady_split_component_seconds: dict[str, list[float]] = {
         "split_encode_seconds": [],
-        "split_head_vjp_seconds": [],
+        "split_project_seconds": [],
+        "split_core_vjp_seconds": [],
+        "split_projection_vjp_seconds": [],
         "split_encoder_vjp_seconds": [],
         "split_optimizer_update_seconds": [],
         "split_total_seconds": [],

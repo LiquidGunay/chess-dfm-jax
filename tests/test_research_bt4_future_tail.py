@@ -461,7 +461,8 @@ def test_split_model_views_partition_and_share_canonical_variables() -> None:
     views = train.build_split_model_views(model)
     report = train.validate_split_model_views(model, views)
 
-    assert not hasattr(views.head, "encoder")
+    assert not hasattr(views.projector, "encoder")
+    assert not hasattr(views.core, "encoder")
     assert hasattr(model.encoder, "policy_head")
     assert not hasattr(views.encoder.encoder, "policy_head")
     assert not hasattr(views.encoder.encoder, "value_head")
@@ -471,21 +472,43 @@ def test_split_model_views_partition_and_share_canonical_variables() -> None:
             nnx.state(views.encoder, TrainableParam)
         )
     ) == {"encoder"}
-    assert "encoder" not in nnx.to_pure_dict(
-        nnx.state(views.head, TrainableParam)
+    assert set(
+        nnx.to_pure_dict(
+            nnx.state(views.projector, TrainableParam)
+        )
+    ) == train.SPLIT_PROJECTOR_ROOTS
+    assert set(
+        nnx.to_pure_dict(nnx.state(views.core, TrainableParam))
+    ) == (
+        set(
+            nnx.to_pure_dict(
+                nnx.state(model, train.NON_BT4_TRAINABLE_FILTER)
+            )
+        )
+        - train.SPLIT_PROJECTOR_ROOTS
     )
-    assert views.head.out_bias is model.out_bias
+    assert views.core.out_bias is model.out_bias
+    assert (
+        views.projector.jepa_state_norm.scale
+        is model.jepa_state_norm.scale
+    )
     assert (
         views.encoder.encoder.embedding.scale
         is model.encoder.embedding.scale
     )
     assert report["shared_variable_objects"] is True
     assert report["copied_array_storage"] is False
-    assert report["head_leaf_count"] + report["encoder_leaf_count"] == (
-        report["full_leaf_count"]
+    assert (
+        report["core_leaf_count"]
+        + report["projector_leaf_count"]
+        + report["encoder_leaf_count"]
+        == report["full_leaf_count"]
     )
-    assert report["nbytes"]["head"] + report["nbytes"]["encoder"] == (
-        report["nbytes"]["full"]
+    assert (
+        report["nbytes"]["core"]
+        + report["nbytes"]["projector"]
+        + report["nbytes"]["encoder"]
+        == report["nbytes"]["full"]
     )
     assert train.split_state_abstract_records(
         nnx.state(model, TrainableParam)
@@ -495,15 +518,15 @@ def test_split_model_views_partition_and_share_canonical_variables() -> None:
 def test_split_model_view_validation_rejects_copied_variables() -> None:
     model = _model(stop_future=True, tail_layers=1, seed=39)
     views = train.build_split_model_views(model)
-    copied_head = nnx.clone(model, variables=True)
-    del copied_head.encoder
+    copied_projector = nnx.clone(views.projector, variables=True)
 
     with pytest.raises(ValueError, match="copied"):
         train.validate_split_model_views(
             model,
             train.SplitModelViews(
                 encoder=views.encoder,
-                head=copied_head,
+                projector=copied_projector,
+                core=views.core,
             ),
         )
 
@@ -516,14 +539,16 @@ def test_split_model_views_rebuild_after_state_restore() -> None:
     views = train.build_split_model_views(restored)
     report = train.validate_split_model_views(restored, views)
 
-    for expected, head_value in zip(
-        jax.tree.leaves(
-            nnx.state(source, train.NON_BT4_TRAINABLE_FILTER)
-        ),
-        jax.tree.leaves(nnx.state(views.head, TrainableParam)),
-        strict=True,
+    for state_filter, view in (
+        (train.SPLIT_PROJECTOR_TRAINABLE_FILTER, views.projector),
+        (train.SPLIT_CORE_TRAINABLE_FILTER, views.core),
     ):
-        np.testing.assert_array_equal(head_value, expected)
+        for expected, view_value in zip(
+            jax.tree.leaves(nnx.state(source, state_filter)),
+            jax.tree.leaves(nnx.state(view, TrainableParam)),
+            strict=True,
+        ):
+            np.testing.assert_array_equal(view_value, expected)
     for expected, encoder_value in zip(
         jax.tree.leaves(nnx.state(source, BT4TrainableParam)),
         jax.tree.leaves(nnx.state(views.encoder, TrainableParam)),
@@ -557,6 +582,31 @@ def test_split_tokens_loss_and_gradients_match_monolithic() -> None:
     )
     split_tokens = train.split_training_bt4_tokens(split, batch, rng)
     np.testing.assert_array_equal(split_tokens, expected_tokens)
+    views = train.build_split_model_views(split)
+    canonical_z_all, canonical_z_dfm = train.split_projected_latents(
+        split,
+        split_tokens,
+    )
+    view_z_all, view_z_dfm = train.split_projected_latents(
+        views.projector,
+        split_tokens,
+    )
+    (
+        projection_z_all,
+        projection_z_dfm,
+        projection_rms_scale,
+    ) = train.split_projection_outputs(
+        views.projector,
+        split_tokens,
+    )
+    np.testing.assert_array_equal(view_z_all, canonical_z_all)
+    np.testing.assert_array_equal(view_z_dfm, canonical_z_dfm)
+    np.testing.assert_array_equal(projection_z_all, canonical_z_all)
+    np.testing.assert_array_equal(projection_z_dfm, canonical_z_dfm)
+    np.testing.assert_array_equal(
+        projection_rms_scale,
+        split.jepa_state_norm.scale[...],
+    )
     (full_split_loss, full_split_aux), (
         full_split_head_grads,
         full_split_token_cotangent,
@@ -586,15 +636,31 @@ def test_split_tokens_loss_and_gradients_match_monolithic() -> None:
     (
         split_loss,
         split_aux,
-        head_grads,
+        core_grads,
+        projector_grads,
         encoder_grads,
         token_cotangent,
-    ) = train.split_training_gradients(
+        z_all_cotangent,
+        z_dfm_cotangent,
+    ) = train.split_partitioned_training_gradients(
         split,
         batch,
         rng,
         1.0,
         1.0,
+        views,
+    )
+    partitioned = (
+        train.validate_partitioned_split_gradient_partitions(
+            split,
+            core_grads,
+            projector_grads,
+            encoder_grads,
+        )
+    )
+    head_grads = train.merge_split_gradients(
+        core_grads,
+        projector_grads,
     )
     partition = train.validate_split_gradient_partitions(
         split,
@@ -640,6 +706,13 @@ def test_split_tokens_loss_and_gradients_match_monolithic() -> None:
     assert partition["encoder_leaf_count"] > 0
     assert token_cotangent.shape == split_tokens.shape
     assert token_cotangent.dtype == split_tokens.dtype
+    assert z_all_cotangent.shape == canonical_z_all.shape
+    assert z_dfm_cotangent.shape == canonical_z_dfm.shape
+    assert partitioned["full_leaf_count"] == (
+        partitioned["core_leaf_count"]
+        + partitioned["projector_leaf_count"]
+        + partitioned["encoder_leaf_count"]
+    )
     np.testing.assert_allclose(
         split_loss,
         monolithic_loss,
@@ -817,14 +890,20 @@ def test_donated_split_executables_complete_one_cpu_update() -> None:
     assert np.isfinite(float(loss))
     assert np.isfinite(float(aux["dfm_ce_loss"]))
     assert int(optimizer.step[...]) == 1
-    assert views.head.out_bias is model.out_bias
+    assert views.core.out_bias is model.out_bias
+    assert (
+        views.projector.jepa_state_norm.scale
+        is model.jepa_state_norm.scale
+    )
     assert (
         views.encoder.encoder.embedding.scale
         is model.encoder.embedding.scale
     )
     assert set(timing) == {
         "split_encode_seconds",
-        "split_head_vjp_seconds",
+        "split_project_seconds",
+        "split_core_vjp_seconds",
+        "split_projection_vjp_seconds",
         "split_encoder_vjp_seconds",
         "split_optimizer_update_seconds",
         "split_total_seconds",
@@ -873,6 +952,22 @@ def test_split_execution_config_is_frozen_to_accepted_contract() -> None:
             batch_size=128,
             sigreg_reference_count=1.0,
         )
+
+    for field, value in (
+        ("jepa_feedback_mode", "final_pass_adjoint"),
+        ("bt4_policy_distill_coeff", 1.0),
+        ("root_legal_conditional_ce_coeff", 1.0),
+        ("value_coeff", 1.0),
+        ("wdl_coeff", 1.0),
+        ("jepa_target_variance_hinge_coeff", 1.0),
+    ):
+        with pytest.raises(ValueError, match=field):
+            train.validate_split_gradient_execution_config(
+                dataclasses.replace(config, **{field: value}),
+                objective="normalized",
+                batch_size=128,
+                sigreg_reference_count=1.0,
+            )
 
 
 def test_split_preserves_full_tree_nonfinite_update_suppression() -> None:
@@ -951,7 +1046,15 @@ def test_split_concrete_component_arguments_lower_without_execution() -> None:
     rng = jax.random.PRNGKey(89)
     arguments_by_component = {}
 
-    for component in ("encode", "head_vjp", "encoder_vjp", "update"):
+    components = (
+        "encode",
+        "project",
+        "core_vjp",
+        "projection_vjp",
+        "encoder_vjp",
+        "update",
+    )
+    for component in components:
         function, arguments = train.split_component_compile_arguments(
             component,
             functions=functions,
@@ -967,39 +1070,25 @@ def test_split_concrete_component_arguments_lower_without_execution() -> None:
         assert lowered is not None
         assert int(optimizer.step[...]) == 0
 
-    head_nbytes = train.split_state_abstract_nbytes(
-        nnx.state(model, train.NON_BT4_TRAINABLE_FILTER)
-    )
-    encoder_nbytes = train.split_state_abstract_nbytes(
-        nnx.state(model, BT4TrainableParam)
-    )
-    fixed_head_nbytes = (
-        train.split_state_abstract_nbytes(nnx.state(model))
-        - train.split_state_abstract_nbytes(
-            nnx.state(model, TrainableParam)
+    component_views = {
+        "encode": views.encoder,
+        "project": views.projector,
+        "core_vjp": views.core,
+        "projection_vjp": views.projector,
+        "encoder_vjp": views.encoder,
+    }
+    full_model_nbytes = train.split_dynamic_argument_nbytes(model)
+    for component, view in component_views.items():
+        arguments = arguments_by_component[component]
+        observed_reduction = (
+            train.split_dynamic_argument_nbytes(
+                (model, *arguments[1:])
+            )
+            - train.split_dynamic_argument_nbytes(arguments)
         )
-    )
-    encode_arguments = arguments_by_component["encode"]
-    head_arguments = arguments_by_component["head_vjp"]
-    encoder_arguments = arguments_by_component["encoder_vjp"]
-    assert (
-        train.split_dynamic_argument_nbytes(
-            (model, *encode_arguments[1:])
+        expected_reduction = (
+            full_model_nbytes
+            - train.split_dynamic_argument_nbytes(view)
         )
-        - train.split_dynamic_argument_nbytes(encode_arguments)
-        == head_nbytes + fixed_head_nbytes
-    )
-    assert (
-        train.split_dynamic_argument_nbytes(
-            (model, *head_arguments[1:])
-        )
-        - train.split_dynamic_argument_nbytes(head_arguments)
-        == encoder_nbytes + fixed_head_nbytes
-    )
-    assert (
-        train.split_dynamic_argument_nbytes(
-            (model, *encoder_arguments[1:])
-        )
-        - train.split_dynamic_argument_nbytes(encoder_arguments)
-        == head_nbytes + fixed_head_nbytes
-    )
+        assert observed_reduction == expected_reduction
+        assert observed_reduction > 0

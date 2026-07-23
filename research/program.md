@@ -550,6 +550,16 @@ scientific knobs and checkpoint state remain fixed. Prove full gradient and
 two-update parity plus six production concrete lowerings on CPU before six
 sequential 6.75-GiB cold GPU compiler gates.
 
+Experiment 036's implementation and CPU gates now pass. The exact production
+views remain `404 / 17 / 34` encoder/projector/core leaves, the merged
+six-stage gradient and optimizer updates match the monolithic reference, and
+all six batch-128 concrete lowerings fit their preregistered argument
+ceilings. The next action is the cold GPU compiler sequence—encode, project,
+core VJP, projection VJP, encoder VJP, then update—stopping permanently at
+the first failed component. No training or SAE work is authorized before all
+six compile gates and the subsequent zero-checkpoint parity/profile gates
+pass.
+
 ## Editable surface
 
 During automated architecture research, edit only `research/train.py`.

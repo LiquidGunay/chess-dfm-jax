@@ -439,8 +439,11 @@ def test_split_component_compile_report_uses_concrete_args_and_zero_state(
             "shared_variable_objects": True,
             "nbytes": {
                 "full": train.SPLIT_ACCEPTED_FULL_MODEL_NBYTES,
-                "head": train.SPLIT_ACCEPTED_HEAD_MODEL_NBYTES,
                 "encoder": train.SPLIT_ACCEPTED_ENCODER_MODEL_NBYTES,
+                "projector": (
+                    train.SPLIT_ACCEPTED_PROJECTOR_MODEL_NBYTES
+                ),
+                "core": train.SPLIT_ACCEPTED_CORE_MODEL_NBYTES,
             },
         },
     )
@@ -496,7 +499,7 @@ def test_split_component_compile_report_uses_concrete_args_and_zero_state(
     report = records["report.json"]
     assert (
         report["mode"]
-        == "partitioned_split_component_compile_only_concrete"
+        == "split_head_projection_component_compile_only_concrete"
     )
     assert report["component"] == "encode"
     assert report["source_checkpoint_opened"] is False
