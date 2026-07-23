@@ -455,6 +455,14 @@ is written, and the restored stage is cancelled. Remove the disposable cache
 and reduce guard polling from 250 ms to 50 ms before any further compiler
 trial.
 
+Experiment 032 is preregistered in
+`research/experiment_abstract_compile_arguments.md`. Only the disposable
+compiler may replace concrete dynamic arguments with exact
+`ShapeDtypeStruct` signatures before lowering. Require shared-cache
+compiler/HLO parity and at least 1.5 GiB live-buffer release first. A single
+fresh-cache batch-128 trial is then allowed only under 50 ms polling and an
+enforced 6.75 GiB group-RSS ceiling; ordinary training remains unchanged.
+
 ## Editable surface
 
 During automated architecture research, edit only `research/train.py`.

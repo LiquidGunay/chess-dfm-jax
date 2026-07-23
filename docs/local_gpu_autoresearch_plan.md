@@ -1813,3 +1813,10 @@ sweeps, held-out data, and repeated seeds.
   50 ms after the Experiment 031 compiler RSS jump. Keep the two-CPU limit,
   8/3 GiB host-memory thresholds, 7 GiB group-RSS ceiling, 30 GiB disk
   reserve, and checkpoint limits unchanged.
+- [ ] Replace concrete values only in the disposable compiler with
+  `ShapeDtypeStruct` leaves, as preregistered in
+  `research/experiment_abstract_compile_arguments.md`. First require exact
+  shared-cache HLO/compiler parity and at least 1.5 GiB live-buffer release.
+  Only then permit one fresh-cache batch-128 compile with 50 ms polling and a
+  stricter enforced 6.75 GiB RSS ceiling, followed on success by an ordinary
+  restored no-eval update using the same cache.

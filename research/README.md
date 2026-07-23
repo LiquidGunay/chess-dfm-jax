@@ -515,3 +515,10 @@ trial.
 The resource guard now polls every 50 ms by default, including through
 `run_gpu.sh`, to reduce overshoot during rapid compiler RSS growth. All CPU,
 memory, disk, lock, and checkpoint ceilings remain unchanged.
+
+Experiment 032 is the abstract-argument compiler test in
+`experiment_abstract_compile_arguments.md`. Only compile-only replaces dynamic
+model, optimizer, batch, and RNG values with signature-identical
+`ShapeDtypeStruct` leaves before lowering. A shared-cache parity/memory-release
+gate is mandatory before one batch-128 cold trial under a stricter enforced
+6.75 GiB RSS ceiling.
