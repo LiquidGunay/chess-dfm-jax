@@ -339,14 +339,15 @@ def test_distillation_preserves_state_abi_and_serializes_only_when_active() -> N
     assert policy_trainable == {}
 
 
-def test_active_coefficient_matches_the_preregistered_calibration() -> None:
+def test_calibration_formula_and_active_surface_restoration() -> None:
     pooled_root_kl = 0.8656389850657433
     expected = min(1.0, max(0.05, 0.25 / pooled_root_kl))
+    assert expected == 0.2888039983331077
+    assert pooled_root_kl * expected == 0.25
     active = train.apply_experiment_overrides(
         train.JointLatentSASAConfig()
     )
-    assert active.bt4_policy_distill_coeff == expected
-    assert pooled_root_kl * active.bt4_policy_distill_coeff == 0.25
+    assert active.bt4_policy_distill_coeff == 0.0
 
 
 def test_active_distillation_gradients_reach_student_paths_not_teacher_head() -> None:

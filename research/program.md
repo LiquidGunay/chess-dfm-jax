@@ -298,6 +298,15 @@ teacher/student top-1 agreement `0.5622558594`. Pooled
 `0.2888039983331077`, for weighted source KL exactly `0.25`. No optimizer
 update or checkpoint was written.
 
+Experiment 023 is rejected at the guarded training-compilation gate. With the
+frozen coefficient, the batch-128 one-update graph reaches
+`10,945,781,760` bytes process-group RSS after `78.9626` seconds, above the
+fixed `7,516,192,768`-byte ceiling; the guard exits while host
+`MemAvailable` is still `5,851,963,392` bytes. No report, compiler artifact,
+checkpoint, state, GPU process, or nonempty run directory survives. Run no
+profile, fixed-time rescue, repeat, or arena. Restore coefficient zero and
+retain the codec-aware distillation capability default-off.
+
 ## Editable surface
 
 During automated architecture research, edit only `research/train.py`.

@@ -1,8 +1,8 @@
 # Experiment 023: frozen BT4 policy-head distillation at the DFM root
 
-Status: preregistered and implemented on 2026-07-23. Codec/data/model audits,
-the guarded CPU gate, and the no-update coefficient calibration are complete;
-the training smoke and later accelerator gates have not started.
+Status: completed and rejected at the guarded compilation/smoke gate on
+2026-07-23. No profile, fixed-time run, checkpoint evaluation, repeat, or
+arena was run; the capability remains available default-off.
 
 ## Question and hypothesis
 
@@ -270,3 +270,32 @@ closes this one-shot distillation test rather than authorizing a weight or
 temperature sweep. Keep every mutable file, cache, compiler artifact,
 temporary file, and checkpoint under `/mountpoint/.exp`, and never overlap
 GPU workloads.
+
+## Outcome
+
+Commit `d668f58` froze the calibrated coefficient
+`0.2888039983331077`. The guarded real-checkpoint batch-128 one-update smoke
+started with zero checkpoint writes, CPUs `[0,1]`, `63,830,687,744` bytes free
+disk, and `11,721,957,376` bytes host `MemAvailable`. The launcher enforced
+the immutable `7,516,192,768`-byte process-group RSS ceiling and
+`3,221,225,472`-byte runtime available-memory floor.
+
+The training graph did not finish XLA compilation. After `78.9626` seconds,
+process-group RSS reached `10,945,781,760` bytes and the guard exited `75`;
+minimum host `MemAvailable` remained `5,851,963,392` bytes. The server stayed
+safe. The additional source policy-head forward and legal KL are modest on
+device, but their training/backward compilation graph is not viable under the
+host-memory contract.
+
+No report, compiler artifact, checkpoint, or model state was written. The
+empty 4 KiB run directory was removed, and host-wide process plus NVIDIA
+compute-process checks found no survivor. Per the frozen staged decision, run
+no 30-update profile, fixed-time training, checkpoint scan, repeat, arena,
+smaller batch, relaxed guard, coefficient change, or temperature sweep.
+
+Keep the two compact 56 KiB no-update calibration directories as evidence,
+restore `bt4_policy_distill_coeff=0.0`, retain the implementation
+default-off, and keep update 2,072 as the sole current offline incumbent. The
+closing storage audit finds exactly the seven allowlisted `state.npz` files,
+no missing or extra state, and `155,447,437` bytes in the JAX cache against
+its 4 GiB budget.

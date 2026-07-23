@@ -77,9 +77,6 @@ EXPERIMENT_OVERRIDES: dict[str, Any] = {
     "jepa_target_sample_count": 1,
     "jepa_target_sampling_unit": "example_balanced",
     "bt4_encode_chunk_size": 0,
-    # Experiment 023 one-shot calibration:
-    # clip(0.25 / 0.8656389850657433, 0.05, 1.0).
-    "bt4_policy_distill_coeff": 0.2888039983331077,
     # "dfm_active_layers": 3,
     # "jepa_projector_active_layers": 1,
     # "jepa_sampled_target_anchors": True,

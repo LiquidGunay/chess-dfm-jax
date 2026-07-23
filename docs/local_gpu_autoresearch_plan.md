@@ -1692,7 +1692,7 @@ sweeps, held-out data, and repeated seeds.
   Reject at the systems gate: run no profile, inference benchmark, fixed-time
   training, repeat, evaluation, or arena; write no state; remove the empty run
   directory; and restore feedback mode `none`.
-- [ ] Test training-only frozen-source-policy-head distillation at the DFM
+- [x] Test training-only frozen-source-policy-head distillation at the DFM
   root. Reuse current-board BT4 tokens, recover side to move from exact
   classical plane 108, remap canonical logits onto stored representable
   legacy legal support, and add stopped-teacher KL only when the root is
@@ -1701,4 +1701,9 @@ sweeps, held-out data, and repeated seeds.
   `clip(0.25 / pooled_root_KL, 0.05, 1.0)`, then retain a candidate only after
   guarded systems gates, repeated offline gates, and both incumbent/raw-BT4
   arena point gates. The immutable contract is in
-  `research/experiment_bt4_policy_distillation_tail1.md`.
+  `research/experiment_bt4_policy_distillation_tail1.md`. The two no-update
+  pools calibrate `K0=0.8656389851` and coefficient `0.2888039983` with full
+  eligibility. The guarded batch-128 training compile then reaches
+  `10.946 GB` process-group RSS versus the fixed `7.516 GB` ceiling and exits
+  safely before any update or state write. Reject at the systems gate, run no
+  smaller-batch rescue or later stage, and restore coefficient zero.

@@ -366,3 +366,11 @@ two-pool calibration sets the single coefficient to
 The pools measure KL `0.8583731093/0.8729048609` with full eligibility, so
 the exact frozen coefficient is `0.2888039983331077`; both runs perform zero
 updates and write no checkpoint.
+
+The guarded batch-128 training smoke is a terminal systems rejection. XLA
+compilation reaches `10.946 GB` process-group RSS after `78.96` seconds versus
+the frozen `7.516 GB` ceiling, while host `MemAvailable` remains `5.852 GB`.
+The guard exits safely; no report, checkpoint, state, process, or nonempty run
+directory remains. Run no smaller-batch rescue, profile, fixed-time training,
+repeat, or arena. The implementation remains default-off and coefficient zero
+is restored.
