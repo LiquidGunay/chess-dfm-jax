@@ -370,6 +370,22 @@ as a cache hit. Batch, graph, loss, data, guard, and zero-checkpoint contracts
 remain fixed; one fresh-cache compile is allowed only after CPU and cached
 parity gates pass.
 
+Experiment 026 stops at cached parity. Compile-only fits at
+`4,531,879,936` bytes group RSS with exact compiler costs and no source-state
+access, but its constructor model ABI digest differs from the restored digest.
+The preregistered in-place mapping clear also changes one-update final CE from
+`4.4934930801` to `4.4944372177`. Run no fresh-cache cold compile. Commit
+`029f501` restores the ordinary process exactly; its cache-hit result returns
+the retained CE and peaks at `6,156,472,320` bytes.
+
+Experiment 027 is the single non-mutating correction in
+`research/experiment_nonmutating_compile_process.md`. Only the disposable
+compile process drops its local mapping reference; it cannot clear the mapping
+or alter the ordinary trainer. It must first reproduce exact restored model
+and optimizer ABI digests plus the cached systems gate. Only then may it spend
+one fresh-cache guarded cold compile, followed on success by an ordinary
+one-update cache-hit parity check.
+
 ## Editable surface
 
 During automated architecture research, edit only `research/train.py`.

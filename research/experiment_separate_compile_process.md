@@ -1,8 +1,9 @@
 # Experiment 026: separate shape-equivalent compilation process
 
-Status: preregistered on 2026-07-23. This is a training-systems experiment;
-it must not change model values, gradients, updates, data, loss, batch size,
-checkpoint ABI, or inference.
+Status: completed and rejected at cached state/update parity on 2026-07-23.
+No fresh-cache cold compile was run. This was a training-systems experiment;
+it was not allowed to change model values, gradients, updates, data, loss,
+batch size, checkpoint ABI, or inference.
 
 ## Evidence and hypothesis
 
@@ -126,3 +127,44 @@ evidence. On success, keep the `--compile-only` path and use the ordinary
 bounded cache for future new graphs; remove the dedicated validation cache.
 This systems experiment never appends a model result row or changes the
 offline incumbent.
+
+## Outcome
+
+Commit `56f96ad` implemented the preregistered compile-only path after 152
+focused CPU tests passed. The cached compile-only process completed with zero
+updates, checkpoint writes, validation batches, or legacy-state access. It
+reproduced the accepted compiler FLOPs, bytes, and temp/output sizes, took
+`14.9691` seconds, peaked at `4,531,879,936` bytes group RSS and
+`1,894,689,280` bytes JAX HBM, and kept host `MemAvailable` at or above
+`7,734,702,080` bytes. It passed the cached systems threshold.
+
+Two parity failures stop the experiment before the fresh-cache stage:
+
+1. the compile-only constructor model ABI digest is
+   `f9f9bde96785c9b9bb24a3b12ac10bde16ec5761f501f3783fc45733c0f1b467`,
+   while the restored authoritative model ABI is
+   `b53b21a8113b74655bb897e8171315503d31f4434d33eb2b579d83bb38614d13`;
+   leaf count and byte count match, but the immutable shape/dtype/path schema
+   digest does not; and
+2. clearing the mapped construction tree on the ordinary path preserves
+   initial validation CE `4.5041475296` and pre-update loss
+   `4.3671379089`, but post-update validation CE becomes `4.4944372177`
+   instead of `4.4934930801`, an absolute failure of `0.0009441376` versus
+   the frozen `1e-6` tolerance.
+
+The guard records `5,418,979,328` bytes peak group RSS and
+`6,971,273,216` bytes minimum `MemAvailable` for that failed execution gate.
+No state or checkpoint is written.
+
+Per the immutable contract, run no fresh-cache cold compile and do not use the
+shared payload-clearing behavior. Commit `029f501` restores the ordinary
+trainer and evaluation lifetime exactly. Its guarded one-update cache hit
+returns initial/final validation CE `4.5041475296/4.4934930801`, peak group
+RSS `6,156,472,320` bytes, and the accepted compiler/GPU-memory fields. Keep
+`--compile-only` default-off, but do not call its mutating payload-clear helper
+without a new preregistration.
+
+The closing storage audit still finds exactly seven allowlisted states and
+`157,684,302` bytes in the ordinary JAX cache. The next bounded variant may
+drop only the compile process's local Python reference without mutating the
+mapping and must prove the exact restored ABI digest before any cold compile.

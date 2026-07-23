@@ -1741,7 +1741,7 @@ sweeps, held-out data, and repeated seeds.
   unchanged. Kernel autotuning is not the source of the cold-compile working
   set. Measure and reduce host initialization/import/compiler lifetimes before
   another cold graph.
-- [ ] Separate cold compilation from source-state decoding. Add a
+- [x] Separate cold compilation from source-state decoding. Add a
   fail-closed `--compile-only` mode that constructs the exact graph and
   optimizer shapes, releases the raw mapped NumPy tree, compiles without
   opening the 1.8 GiB legacy checkpoint, populates the persistent cache, and
@@ -1749,4 +1749,14 @@ sweeps, held-out data, and repeated seeds.
   and execute the cached graph. First prove cached-path/ABI/metric parity,
   then spend one fresh-cache cold compile with the same 7 GiB guard and zero
   checkpoints. The immutable contract is in
-  `research/experiment_separate_compile_process.md`.
+  `research/experiment_separate_compile_process.md`. The cached compiler
+  process fits at `4.532 GB`, but in-place clearing changes its model ABI
+  digest and moves ordinary one-update final CE by `0.0009441`. Reject before
+  the cold-cache stage. Restore the authoritative path in `029f501`; it
+  returns exact retained metrics at `6.156 GB` peak RSS.
+- [ ] Test the one allowed non-mutating correction in
+  `research/experiment_nonmutating_compile_process.md`: only the disposable
+  compile process drops its local Python mapping reference; no dictionary is
+  cleared and the ordinary trainer is untouched. Require the exact restored
+  model/optimizer ABI digests and cached systems gate before one fresh-cache
+  cold compile. Do not run the cold stage on any ABI mismatch.

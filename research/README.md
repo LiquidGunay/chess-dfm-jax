@@ -430,3 +430,17 @@ the JAX cache without opening the 1.8 GiB legacy state, and exits. The normal
 trainer then verifies/restores the source and executes the cache hit. The two
 GPU processes are sequential, use the unchanged guard, and write no
 checkpoint during validation.
+
+Experiment 026 is rejected before a cold compile. Compile-only fits the cached
+graph at `4.532 GB` group RSS, but in-place clearing changes its model ABI and
+moves ordinary one-update final CE by `0.0009441`. The ordinary path is
+restored in `029f501` and exactly returns final CE `4.4934930801` at
+`6.156 GB` peak group RSS. The default-off compile-only capability remains,
+but its mutating release helper is not valid.
+
+Experiment 027, preregistered in
+`experiment_nonmutating_compile_process.md`, permits only the disposable
+compiler to drop its local mapping reference without clearing the mapping.
+The ordinary trainer stays unchanged. Exact restored model/optimizer ABI and
+cached compiler gates are mandatory before the one allowed fresh-cache cold
+compile.
