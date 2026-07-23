@@ -337,6 +337,17 @@ fixed-time run, repeat, or arena. Restore coefficient zero and retain the
 sparse legal-ranking capability default-off. Four consecutive new training
 graphs now identify cold XLA compilation as the immediate systems bottleneck.
 
+Experiment 025 is a compiler-only recovery gate, preregistered in
+`research/experiment_xla_autotune0_compile_memory.md`. Preflight inspection
+shows that this XLA build already has LLVM-module parallel compilation
+disabled, so the initially considered single-thread flags would be redundant.
+The one allowed cold-cache trial instead sets stable GPU autotuning level from
+`4` to `0` on the unchanged accepted one-block-tail graph. It retains batch
+128, the fixed `0.0/5.76/1.0` latent objective, all data and schedule
+contracts, the 7 GiB guard, and zero checkpoint writes. A successful compile
+still cannot be adopted unless it matches the retained smoke numerically and
+keeps at least 95% of cached profile throughput.
+
 ## Editable surface
 
 During automated architecture research, edit only `research/train.py`.

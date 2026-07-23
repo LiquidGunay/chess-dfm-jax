@@ -1724,3 +1724,14 @@ sweeps, held-out data, and repeated seeds.
   `7.516 GB` ceiling and exits safely before any update or state write.
   Reject at the systems gate, run no smaller-batch rescue or later stage, and
   restore coefficient zero.
+- [ ] Test one compiler-only recovery before another model graph. The four
+  consecutive cold failures at `10.944--11.095 GB` make compilation the
+  immediate blocker, while cached incumbent executables remain safe. The
+  installed XLA build already defaults LLVM-module compilation to
+  single-threaded, so do not spend a trial on redundant parallelism flags.
+  Run one fresh-cache batch-128 compile with stable GPU autotuning disabled,
+  the existing guard unchanged, a 900-second timeout, and zero checkpoint
+  writes. Adopt it only if it retains 256 MiB RSS headroom, matches the
+  incumbent smoke numerically, and preserves at least 95% of cached profile
+  throughput. The frozen contract is in
+  `research/experiment_xla_autotune0_compile_memory.md`.

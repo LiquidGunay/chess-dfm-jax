@@ -401,3 +401,13 @@ when the guard exits safely. No update, report, compiler artifact, checkpoint,
 state, process, or nonempty run directory survives. Run no smaller-batch
 rescue, profile, fixed-time training, repeat, or arena. The implementation
 remains default-off and coefficient zero is restored.
+
+Experiment 025 is the bounded compiler-memory recovery in
+`experiment_xla_autotune0_compile_memory.md`. The installed XLA build already
+uses single-threaded LLVM-module compilation, making the initially considered
+parallelism flags redundant. The one preregistered fresh-cache trial disables
+stable GPU kernel autotuning on the otherwise unchanged accepted graph. It
+uses the same 7 GiB guard, batch 128, a 900-second timeout, and no checkpoints.
+The setting is adopted only if the compile has 256 MiB guard headroom, the
+one-update metrics match the retained smoke within `1e-6`, and a cached
+30-update profile retains at least 95% throughput.
