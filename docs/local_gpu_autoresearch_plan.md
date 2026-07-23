@@ -29,6 +29,19 @@ The agreed critical path is now:
 The A10G is single-tenant throughout this sequence. Training, profiling,
 arena evaluation, and SAE work do not run concurrently.
 
+Host-safety update, 2026-07-23: kernel evidence confirms that two overlapping
+JAX processes caused a global OOM on 2026-07-22; the older process held about
+4.7 GiB anonymous RAM and the duplicate held about 4.5 GiB. Process-namespace
+visibility was not a safe concurrency check. `research/run_gpu.sh` now holds a
+host-visible exclusive lock for the full prepare/compile/run lifetime and
+launches through a fail-closed watchdog. The fixed ceilings are two CPUs,
+7 GiB process-group RSS, an 8 GiB launch MemAvailable floor, a 3 GiB runtime
+floor, and a 30 GiB projected disk reserve. Periodic checkpointing is
+forbidden; future runs may write at most one sparse intermediate plus terminal
+and must prune to one accepted state or zero rejected states before another
+model run. Safety thresholds may only be made stricter through environment
+configuration.
+
 Execution update, 2026-07-20: critical-path steps 1--5 are complete. The norm
 coefficient is explicit, normalized SIGReg uses a fixed random example count,
 batch 128 is the selected throughput knee, and the matched objective screens
@@ -429,11 +442,13 @@ The durable local set is intentionally small:
 Downloaded tar files and split checkpoint parts are staging objects, not
 durable assets. Delete them after extraction and digest verification; their
 Drive IDs, source locations, sizes, and digests remain in
-`research/assets.json` and the source sidecars. During a run,
-`--max-checkpoints` bounds temporary selection candidates. Once fixed-pool
-selection is complete, retain one state for each accepted comparison role and
-delete states from rejected runs. Metrics and reports remain because they are
-the evidence needed to interpret later phase transitions and scaling curves.
+`research/assets.json` and the source sidecars. During a future run, the
+guarded maximum is two writes and two retained candidates: one sparse
+intermediate plus terminal. Periodic `--save-every` is refused. Once
+fixed-pool selection is complete, retain one state for each accepted
+comparison role and delete states from rejected runs before launching another
+model run. Metrics and reports remain because they are the evidence needed to
+interpret later phase transitions and scaling curves.
 
 `research/storage_retention.json` is the exact current allowlist.
 `research/storage_audit.py` checks required sizes, dataset shard counts and

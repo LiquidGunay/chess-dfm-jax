@@ -268,7 +268,17 @@ baseline version.
 ## Runtime contract
 
 - Run entirely under `/mountpoint/.exp`.
-- Source `research/env.sh` or use `research/run_gpu.sh`.
+- Run every GPU process through `research/run_gpu.sh`; direct GPU Python
+  commands are forbidden.
+- Hold the launcher's host-visible single-workload lock across prepare,
+  compilation, training, evaluation, and arena work.
+- Limit each GPU job to two host CPUs, require at least 8 GiB MemAvailable at
+  launch, and stop it above 7 GiB process-group RSS or below 3 GiB host
+  MemAvailable.
+- Refuse launch unless projected free disk remains at least 30 GiB.
+- Disable periodic checkpointing. Write at most one sparse intermediate plus
+  the terminal state, retain no more than two during selection, and prune to
+  one accepted state or zero rejected states before the next model run.
 - Use one NVIDIA A10G.
 - Measure compilation separately.
 - Give each accepted quick experiment 30 minutes of steady-state training.

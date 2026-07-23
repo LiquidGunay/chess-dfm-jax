@@ -21,6 +21,7 @@ prepare.py        fixed data and asset validation
 storage_audit.py  exact retained-state, dataset, archive, and cache audit
 import_legacy.py  checksummed, restricted source-checkpoint boundary
 train.py          single editable model/objective/training surface
+resource_guard.py fail-closed host RAM/CPU/disk/checkpoint watchdog
 inference.py      checked cached-BT4 multi-pass inference and profiling
 arena.py          frozen pools, paired outcomes, and arena statistics
 arena_history_trust.py sealed O(1) internal history attestations
@@ -37,6 +38,19 @@ warmup executable instead of compiling new batch shapes.
 
 All mutable state, including Python and JAX caches, remains below
 `/mountpoint/.exp`.
+
+Every GPU command must go through `research/run_gpu.sh`; sourcing `env.sh` and
+calling a GPU Python entry point directly is not sufficient. The launcher holds
+one host-visible lock across prepare, compilation, and execution, restricts the
+job to two CPUs, refuses to start below 8 GiB MemAvailable, and terminates the
+job if its process group exceeds 7 GiB RSS or host MemAvailable falls below
+3 GiB. It also preserves at least 30 GiB projected free disk. These defaults
+can only be made stricter through environment variables.
+
+Periodic `--save-every` schedules are refused. A training run may write at
+most two states: normally one sparse `--save-updates` state plus
+`--save-final`, with `--max-checkpoints 2`. Scan them, retain at most one
+selected state, and prune the other before starting another model run.
 
 Check the lightweight storage contract before and after an experiment:
 
