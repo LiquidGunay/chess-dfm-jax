@@ -503,3 +503,11 @@ the pinned active training and evaluation executables. Compile-only must hit
 the training key, then an ordinary restored one-update run must reuse it,
 match frozen metrics, and create no executable key or checkpoint. This test
 does not cold-compile a graph.
+
+Experiment 031 is rejected at the first gate. JAX includes the per-fusion
+autotune-cache directory in the persistent executable key, so copying an
+otherwise exact entry to a new cache directory forces a miss. The guard stops
+that unintended isolated cold compile at `8.575 GB` group RSS before an
+executable or state write; the ordinary stage is cancelled and the disposable
+cache is removed. Tighten guard polling to 50 ms before another compiler
+trial.

@@ -1,7 +1,7 @@
 # Experiment 031: minimal seeded-cache compatibility
 
-Status: preregistered on 2026-07-23. This tests cache-key compatibility only;
-it does not compile a fresh graph or change training code.
+Status: completed and rejected at the first cache-hit gate on 2026-07-23. The
+ordinary restored stage was not run. This changed no training code.
 
 ## Evidence and hypothesis
 
@@ -98,3 +98,41 @@ change, metric mismatch, source access in compile-only, checkpoint, or extra
 state rejects the experiment. Do not rescue it with another cache seed, flag,
 batch, graph, timeout, or resource limit. Keep exactly seven state files and
 leave the offline incumbent unchanged.
+
+## Outcome
+
+The dedicated cache was created with exactly the four preregistered files.
+Both executable sizes and SHA-256 digests matched, its total size was
+`8,734,661` bytes, the shared cache remained unchanged, and exactly seven
+state files were present.
+
+The compile-only process did not hit the copied training executable. It
+entered cold compilation and the unchanged guard stopped it after `90.6187`
+seconds when process-group RSS reached `8,575,094,784` bytes versus the
+`7,516,192,768`-byte ceiling. Host `MemAvailable` remained
+`7,946,801,152` bytes. The process completed no compile, update, validation,
+or checkpoint; its partial run contains only a `14,669`-byte run
+configuration. Per the immutable rule, do not run the ordinary restored stage
+and do not retry with another seed.
+
+The post-stop cache inventory contains the original two executable pairs,
+whose cache bytes and digests remain exact, plus 13 new per-fusion autotune
+records totaling 1,278 bytes. No new top-level executable completed. Remove
+the entire disposable cache; the shared cache returns to exactly
+`157,684,302` bytes and the state count remains seven.
+
+Installed JAX source identifies the reason this cross-directory seed cannot
+work. `jax._src.compiler.get_compile_options` sets
+`xla_gpu_per_fusion_autotune_cache_dir` from the persistent compilation-cache
+directory. `jax._src.cache_key._hash_serialized_compile_options` clears the
+experimental autotune *mode* but does not clear that directory path.
+Changing the cache directory therefore changes the persistent executable key
+even when the StableHLO and all abstract signatures are identical.
+
+This rejection does not contradict Experiment 030 or same-directory
+compile-only/restored compatibility; it invalidates the seeded
+cross-directory method. It also accidentally measures the isolated cold
+compiler above the existing ceiling. Before any new compiler experiment,
+tighten the guard polling interval from 250 ms to 50 ms and retain or lower
+every memory threshold. Do not perform another batch-128 cold retry under
+this experiment.

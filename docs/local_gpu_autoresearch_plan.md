@@ -1797,10 +1797,15 @@ sweeps, held-out data, and repeated seeds.
   definitions share `213b0a...f1a4`; only concrete JAX-versus-NumPy storage
   differs. Replace the false reporting-ABI gate only in a separately
   preregistered dedicated-cache compatibility test.
-- [ ] Prove compile-only/restored execution reuse one minimal cache in
+- [x] Test compile-only/restored execution reuse with one minimal cache in
   `research/experiment_minimal_cache_compatibility.md`. Seed a disposable
   directory with only the exact active training and evaluation executable
   pairs, run compile-only, then an ordinary restored one-update parity check.
   Require zero new executable keys, exact cache bytes, sub-30-second cache
   loads, frozen metrics, zero checkpoints, and the unchanged resource guard.
-  This stage still performs no cold compile.
+  This stage intended no cold compile, but JAX includes its per-fusion
+  autotune-cache directory in the persistent key, so moving the pinned
+  executable forces a miss. The guard stops the unintended isolated cold
+  compile at `8.575 GB`; cancel the restored stage, remove the disposable
+  cache, and reject the cross-directory method. Tighten guard polling to 50 ms
+  before any further compiler trial.

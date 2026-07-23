@@ -447,6 +447,14 @@ ordinary restored one-update parity check. Both must finish as cache hits,
 create no executable key or checkpoint, and retain exact metrics and cache
 bytes under the unchanged guard. No cold compilation occurs in this step.
 
+Experiment 031 is rejected at its first gate. The installed JAX cache key
+includes the cache-directory-derived per-fusion autotune path, so an exact
+executable copied to a different directory misses. The guard stops the
+unintended isolated cold compile at `8.575 GB`; no executable, update, or state
+is written, and the restored stage is cancelled. Remove the disposable cache
+and reduce guard polling from 250 ms to 50 ms before any further compiler
+trial.
+
 ## Editable surface
 
 During automated architecture research, edit only `research/train.py`.
