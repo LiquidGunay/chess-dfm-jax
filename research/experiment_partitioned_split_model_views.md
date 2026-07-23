@@ -1,8 +1,8 @@
 # Experiment 035: partitioned model views for split reverse mode
 
-Status: preregistered on 2026-07-23. This is an exact execution-ABI and
-compiler-memory experiment. It does not change the model, loss, data,
-optimizer, precision, batch, or inference function.
+Status: rejected at the guarded head-VJP compiler gate on 2026-07-23. This is
+an exact execution-ABI and compiler-memory experiment. It does not change the
+model, loss, data, optimizer, precision, batch, or inference function.
 
 ## Evidence and question
 
@@ -235,3 +235,50 @@ Failure only at the full update routes the next systems experiment to an
 exact optimizer-state/update partition. If exact partitioning cannot satisfy
 the guard, only then consider a separately justified state-efficient
 scientific method such as adapters or stochastic rounding.
+
+## GPU outcome
+
+The partitioned encode component passed:
+
+- explicit compile time: 50.440 seconds;
+- process wall time: 73.501 seconds;
+- peak process-group RSS: 4,918,267,904 bytes;
+- minimum MemAvailable: 7,988,039,680 bytes;
+- independent dynamic arguments: 427,868,168 bytes;
+- compiler arguments / outputs / temporaries:
+  423,641,608 / 424,169,128 / 302,016,936 bytes;
+- compiler FLOPs / bytes accessed:
+  4,096,336,855,040 / 29,279,604,736;
+- peak JAX device allocation: 1,929,288,192 bytes; and
+- one 1,076,336-byte executable with SHA-256
+  `469c0ac8bdf82b92268bf2160c675a78b8c2914a1a76b57ca05be9dae9c3be09`.
+
+All component gates passed and no checkpoint was written. Relative to
+Experiment 034 encode, compiler argument bytes fell by 324,640,104 and output
+bytes fell by 324,640,672.
+
+The partitioned head VJP still failed the fixed host-RSS gate before
+compilation completed. The guard terminated it after 30.040 seconds at
+7,676,387,328 bytes process-group RSS, above the fixed 7,247,757,312-byte
+ceiling. Minimum system MemAvailable remained 8,149,041,152 bytes. This is a
+329,662,464-byte reduction from Experiment 034's observed abort RSS, but still
+428,630,016 bytes over the limit. The head run wrote only its 30,929-byte
+`run_config.json`; it produced no executable or checkpoint.
+
+Per protocol, encoder VJP and update were not compiled, and head VJP was not
+retried. The valid encode executable and access marker were deleted after
+their compact report and hash were preserved, returning the shared cache to
+the exact 67-file executable manifest. The cache directory's apparent size is
+157,686,153 bytes because of the previously documented nonshrinking directory
+metadata. The closing storage audit finds exactly the original seven retained
+state files.
+
+Exp035 therefore rejects model-graph partitioning as a safe batch-128
+compiler substrate. Its forward-identical implementation remains useful
+evidence but is not authorized for training. The preregistered decision rule
+forbids another head graph-view retry. The next proposal must materially
+reduce differentiated head state or activation/compiler complexity, with a
+scientific tradeoff stated explicitly—for example, a parameter-efficient
+adapter/low-rank update—or use a separately justified stochastic update
+method. It must preserve the fixed loss, data, evaluation, legality, and
+zero-excess-checkpoint contracts.

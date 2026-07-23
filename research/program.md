@@ -530,6 +530,16 @@ encoder-VJP, and update arguments are `427.9 MB`, `386.2 MB`, `461.4 MB`, and
 count remains seven. Proceed to the four sequential guarded GPU compiles;
 stop at the first failure.
 
+Experiment 035 is rejected at head-VJP compilation. Partitioned encode passes
+at `4.918 GB` peak group RSS, but head VJP is stopped at `7.676 GB` against
+the unchanged 6.75 GiB ceiling. This is `330 MB` below Experiment 034's abort
+RSS but still unsafe. It creates no head executable or state; later components
+are cancelled, the encode cache entry is removed after preserving its report,
+and the 67-executable/seven-state baselines are restored. Do not try another
+graph-view variant. Preregister a method that materially reduces
+differentiated head state or activation/compiler complexity and state its
+scientific tradeoff explicitly.
+
 ## Editable surface
 
 During automated architecture research, edit only `research/train.py`.
