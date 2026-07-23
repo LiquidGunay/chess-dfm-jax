@@ -402,6 +402,14 @@ Apply the restore round-trip to constructor-owned arrays, compare complete and
 leaf-only schemas plus array identity, and do not lower or compile a training
 graph. Any leaf-level or value-identity change blocks another compile attempt.
 
+Experiment 028 is blocked: constructor, accepted checkpoint manifest, and
+self-round-trip are identical full `f9f9...b467` schemas, share leaf-only
+signature `2888...0d3`, and retain all 455 array objects. The round-trip alone
+does not produce `b53b...d13`, so no compile is justified. Next compare the
+live model immediately before and after the actual checksum-verified legacy
+model-only restore under the unchanged guard, without data, lowering,
+execution, or state writes.
+
 ## Editable surface
 
 During automated architecture research, edit only `research/train.py`.

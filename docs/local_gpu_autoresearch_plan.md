@@ -1765,10 +1765,19 @@ sweeps, held-out data, and repeated seeds.
   `f9f9...b467`; reject before creating the dedicated cache. First locate the
   exact constructor/restored path/shape/dtype difference with a guarded,
   read-only schema diagnostic.
-- [ ] Run the no-training schema diagnostic preregistered in
+- [x] Run the no-training schema diagnostic preregistered in
   `research/experiment_compile_abi_schema_diagnostic.md`. Compare the full
   constructor model ABI with the same state after the value-preserving
   pure-dictionary round-trip used by legacy restore. Require identical leaf
   path/shape/dtype/byte records and array objects before treating
   `f9f9...b467` versus `b53b...d13` as container metadata rather than a JIT
   signature difference. Do not lower or cold-compile a graph in this step.
+  The constructor, accepted checkpoint manifest, and self-round-trip are
+  exactly the same full and leaf-only schemas, with all 455 array objects
+  retained. This does not produce `b53b...d13`; stop before compilation.
+- [ ] Compare full live-model schemas immediately before and after the actual
+  checksum-verified legacy model-only restore. This next read-only diagnostic
+  may open the pinned `state.npz` once under the unchanged guard, but may not
+  create data batches, lower/compile the training graph, execute an update, or
+  write state. Use its exact path/shape/dtype/container diff to decide whether
+  compile-only canonicalization is possible.

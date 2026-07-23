@@ -1,7 +1,7 @@
 # Experiment 028: compile-state ABI schema diagnostic
 
-Status: preregistered on 2026-07-23. This is a read-only systems diagnostic,
-not a model or compiler experiment.
+Status: completed and blocked on 2026-07-23. This was a read-only systems
+diagnostic, not a model or compiler experiment.
 
 ## Evidence and question
 
@@ -67,3 +67,38 @@ If any path, shape, dtype, byte count, array object, optimizer ABI, reference
 digest, or checkpoint-manifest comparison differs, stop. Do not compile and
 inspect the exact discrepancy first. In either case keep exactly seven state
 files and leave the offline incumbent unchanged.
+
+## Outcome
+
+Commit `ec04ebd` added the standalone diagnostic after 106 guarded focused
+CPU tests passed at `3,153,174,528` bytes peak process-group RSS and
+`9,226,035,200` bytes minimum `MemAvailable`; Ruff, byte-compilation, and diff
+checks also passed. Commit `0b6210d` added the same direct-script repo-root
+bootstrap used by `research/train.py` after the first invocation exited
+before model construction. That failed launcher attempt peaked at only
+`202,199,040` bytes RSS and wrote nothing.
+
+The corrected guarded diagnostic completed its measurements in `19.3314`
+seconds and deliberately returned the blocked decision:
+
+- peak process-group RSS was `3,559,596,032` bytes;
+- minimum host `MemAvailable` was `8,838,500,352` bytes;
+- peak JAX GPU memory was `1,894,688,768` bytes;
+- persistent compilation-cache writes were disabled;
+- the constructor model ABI and accepted update-2,072 manifest were exactly
+  the same full `f9f9...b467` schema;
+- the constructor, self-round-trip, and manifest leaf-only signature was
+  `2888cc219245647e4f645ee13ac7cdafa628f737d95334a9a9da0bf4728eb0d3`;
+- the self-round-trip remained full ABI `f9f9...b467`, with zero missing,
+  extra, changed, or leaf-different schema records;
+- all 455 pure-dictionary leaves retained identical Python array objects; and
+- optimizer ABI remained exact `6d45...707e`.
+
+Thus the NNX pure-dictionary round-trip with constructor arrays is not the
+cause. A one-leaf CPU check also preserved its schema after replacing a JAX
+array with a host NumPy array, but that does not substitute for the actual
+restore. The required `b53b...d13` state cannot be synthesized or justified
+from this evidence. Do not compile. The compact report is `2,327` bytes, the
+shared cache remains `157,684,302` bytes, and exactly seven state files
+remain. The next bounded diagnostic must compare the live model immediately
+before and after the actual verified legacy model-only restore.

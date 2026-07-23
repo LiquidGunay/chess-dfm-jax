@@ -459,3 +459,10 @@ update-2,072 checkpoint manifest both use the constructor digest
 The diagnostic applies the restore round-trip to the constructor's own arrays
 and separates leaf signature changes from container metadata. It performs no
 training-graph lowering, state read, update, or checkpoint write.
+
+Experiment 028 is blocked. Constructor, accepted checkpoint manifest, and
+self-round-tripped state are exactly the same full `f9f9...b467` schema and
+leaf-only `2888...0d3` signature; all 455 array objects remain identical and
+there are zero schema-record differences. The generic NNX round-trip is not
+the source of live post-restore `b53b...d13`. No compile is run. The next
+diagnostic must inspect the actual verified legacy restore before and after.
