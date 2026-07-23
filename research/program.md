@@ -523,6 +523,13 @@ two-update, restore, and concrete-argument parity on CPU before repeating the
 four sequential 6.75-GiB cold compiler gates. This changes no scientific knob
 or checkpoint state.
 
+Experiment 035 passes its CPU gates. The production views contain the exact
+`404/51` encoder/head leaf partition, and their concrete encode, head-VJP,
+encoder-VJP, and update arguments are `427.9 MB`, `386.2 MB`, `461.4 MB`, and
+`2.567 GB`. The shared cache remains at 67 executables and the retained-state
+count remains seven. Proceed to the four sequential guarded GPU compiles;
+stop at the first failure.
+
 ## Editable surface
 
 During automated architecture research, edit only `research/train.py`.

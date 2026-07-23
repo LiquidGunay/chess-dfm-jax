@@ -388,7 +388,7 @@ def test_split_component_compile_report_uses_concrete_args_and_zero_state(
             return {"batch": np.ones((1,), dtype=np.float32)}
 
     optimizer = types.SimpleNamespace(step=np.asarray(0, dtype=np.int64))
-    compilation = train.TrainingCompilation(
+    compilation = train.SplitComponentCompilation(
         executable=object(),
         seconds=2.0,
         cost_analysis_raw={"flops": 5.0},
@@ -397,6 +397,7 @@ def test_split_component_compile_report_uses_concrete_args_and_zero_state(
             "output_size_in_bytes": 13,
             "temp_size_in_bytes": 17,
         },
+        dynamic_argument_nbytes=11,
     )
     before = {
         "existing-cache": {
@@ -425,6 +426,23 @@ def test_split_component_compile_report_uses_concrete_args_and_zero_state(
         train,
         "split_training_functions",
         lambda **_kwargs: object(),
+    )
+    monkeypatch.setattr(
+        train,
+        "build_split_model_views",
+        lambda *_args, **_kwargs: object(),
+    )
+    monkeypatch.setattr(
+        train,
+        "validate_split_model_views",
+        lambda *_args, **_kwargs: {
+            "shared_variable_objects": True,
+            "nbytes": {
+                "full": train.SPLIT_ACCEPTED_FULL_MODEL_NBYTES,
+                "head": train.SPLIT_ACCEPTED_HEAD_MODEL_NBYTES,
+                "encoder": train.SPLIT_ACCEPTED_ENCODER_MODEL_NBYTES,
+            },
+        },
     )
     monkeypatch.setattr(
         train,
@@ -476,7 +494,10 @@ def test_split_component_compile_report_uses_concrete_args_and_zero_state(
         "report.json",
     }
     report = records["report.json"]
-    assert report["mode"] == "split_component_compile_only_concrete"
+    assert (
+        report["mode"]
+        == "partitioned_split_component_compile_only_concrete"
+    )
     assert report["component"] == "encode"
     assert report["source_checkpoint_opened"] is False
     assert report["source_checkpoint_values_restored"] is False
@@ -490,6 +511,7 @@ def test_split_component_compile_report_uses_concrete_args_and_zero_state(
         ]
     }
     assert report["cache_gate_passed"] is True
+    assert report["dynamic_argument_nbytes"] == 11
     assert report["completed"] is True
     assert report["checkpoint_writes"] == 0
     assert report["checkpoint_path"] is None

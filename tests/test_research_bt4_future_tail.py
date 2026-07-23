@@ -66,6 +66,11 @@ class DummyBT4Layer(nnx.Module):
         return tokens + jnp.asarray(alpha, dtype=jnp.float32) * residual
 
 
+class DummyFixedHead(nnx.Module):
+    def __init__(self):
+        self.weight = nnx.Param(jnp.ones((3,), dtype=jnp.float32))
+
+
 class LayeredDummyBT4(nnx.Module):
     def __init__(self, width: int = 16, layer_count: int = 15):
         self.embedding_size = width
@@ -73,6 +78,9 @@ class LayeredDummyBT4(nnx.Module):
         self.layers = nnx.List(
             [DummyBT4Layer(width, index) for index in range(layer_count)]
         )
+        self.policy_head = DummyFixedHead()
+        self.value_head = DummyFixedHead()
+        self.moves_left_head = DummyFixedHead()
 
     def encode_tokens(self, planes: jax.Array) -> jax.Array:
         alpha = float(math.pow(2.0 * len(self.layers), -0.25))
@@ -445,6 +453,86 @@ def test_tail_serialization_and_resume_contract_are_explicit(monkeypatch) -> Non
     assert routing["inference_affected"] is False
 
 
+def test_split_model_views_partition_and_share_canonical_variables() -> None:
+    model = _model(stop_future=True, tail_layers=1, seed=37)
+    full_before = train.split_state_abstract_records(
+        nnx.state(model, TrainableParam)
+    )
+    views = train.build_split_model_views(model)
+    report = train.validate_split_model_views(model, views)
+
+    assert not hasattr(views.head, "encoder")
+    assert hasattr(model.encoder, "policy_head")
+    assert not hasattr(views.encoder.encoder, "policy_head")
+    assert not hasattr(views.encoder.encoder, "value_head")
+    assert not hasattr(views.encoder.encoder, "moves_left_head")
+    assert set(
+        nnx.to_pure_dict(
+            nnx.state(views.encoder, TrainableParam)
+        )
+    ) == {"encoder"}
+    assert "encoder" not in nnx.to_pure_dict(
+        nnx.state(views.head, TrainableParam)
+    )
+    assert views.head.out_bias is model.out_bias
+    assert (
+        views.encoder.encoder.embedding.scale
+        is model.encoder.embedding.scale
+    )
+    assert report["shared_variable_objects"] is True
+    assert report["copied_array_storage"] is False
+    assert report["head_leaf_count"] + report["encoder_leaf_count"] == (
+        report["full_leaf_count"]
+    )
+    assert report["nbytes"]["head"] + report["nbytes"]["encoder"] == (
+        report["nbytes"]["full"]
+    )
+    assert train.split_state_abstract_records(
+        nnx.state(model, TrainableParam)
+    ) == full_before
+
+
+def test_split_model_view_validation_rejects_copied_variables() -> None:
+    model = _model(stop_future=True, tail_layers=1, seed=39)
+    views = train.build_split_model_views(model)
+    copied_head = nnx.clone(model, variables=True)
+    del copied_head.encoder
+
+    with pytest.raises(ValueError, match="copied"):
+        train.validate_split_model_views(
+            model,
+            train.SplitModelViews(
+                encoder=views.encoder,
+                head=copied_head,
+            ),
+        )
+
+
+def test_split_model_views_rebuild_after_state_restore() -> None:
+    source = _model(stop_future=True, tail_layers=1, seed=40)
+    restored = _model(stop_future=True, tail_layers=1, seed=42)
+    nnx.update(restored, nnx.state(source))
+
+    views = train.build_split_model_views(restored)
+    report = train.validate_split_model_views(restored, views)
+
+    for expected, head_value in zip(
+        jax.tree.leaves(
+            nnx.state(source, train.NON_BT4_TRAINABLE_FILTER)
+        ),
+        jax.tree.leaves(nnx.state(views.head, TrainableParam)),
+        strict=True,
+    ):
+        np.testing.assert_array_equal(head_value, expected)
+    for expected, encoder_value in zip(
+        jax.tree.leaves(nnx.state(source, BT4TrainableParam)),
+        jax.tree.leaves(nnx.state(views.encoder, TrainableParam)),
+        strict=True,
+    ):
+        np.testing.assert_array_equal(encoder_value, expected)
+    assert report["shared_variable_objects"] is True
+
+
 def test_split_tokens_loss_and_gradients_match_monolithic() -> None:
     monolithic = _model(stop_future=True, tail_layers=1, seed=41)
     split = _model(stop_future=True, tail_layers=1, seed=41)
@@ -469,6 +557,17 @@ def test_split_tokens_loss_and_gradients_match_monolithic() -> None:
     )
     split_tokens = train.split_training_bt4_tokens(split, batch, rng)
     np.testing.assert_array_equal(split_tokens, expected_tokens)
+    (full_split_loss, full_split_aux), (
+        full_split_head_grads,
+        full_split_token_cotangent,
+    ) = train._split_head_loss_and_grad(
+        split,
+        batch,
+        rng,
+        1.0,
+        1.0,
+        split_tokens,
+    )
 
     monolithic_loss_and_grad = nnx.value_and_grad(
         train.normalized_stage1_training_loss_fn,
@@ -505,6 +604,34 @@ def test_split_tokens_loss_and_gradients_match_monolithic() -> None:
     split_grads = train.merge_split_gradients(
         head_grads,
         encoder_grads,
+    )
+
+    np.testing.assert_allclose(
+        split_loss,
+        full_split_loss,
+        rtol=0.0,
+        atol=1e-6,
+    )
+    assert split_aux.keys() == full_split_aux.keys()
+    for key in split_aux:
+        np.testing.assert_allclose(
+            split_aux[key],
+            full_split_aux[key],
+            rtol=1e-6,
+            atol=1e-6,
+            err_msg=f"full split {key}",
+        )
+    head_relative_l2, head_cosine = _tree_relative_l2_and_cosine(
+        head_grads,
+        full_split_head_grads,
+    )
+    assert head_relative_l2 <= 1e-5
+    assert head_cosine >= 0.999999
+    np.testing.assert_allclose(
+        token_cotangent,
+        full_split_token_cotangent,
+        rtol=1e-6,
+        atol=1e-6,
     )
 
     assert partition["full_leaf_count"] == (
@@ -674,10 +801,12 @@ def test_donated_split_executables_complete_one_cpu_update() -> None:
     )
     model = _model_from_config(config, seed=67)
     optimizer = train.create_joint_optimizer(model, config)
+    views = train.build_split_model_views(model)
 
     loss, aux, timing = train.execute_split_training_step(
         train.split_training_functions(donate=True),
         model=model,
+        views=views,
         optimizer=optimizer,
         batch=_batch(),
         rng=jax.random.PRNGKey(71),
@@ -688,6 +817,11 @@ def test_donated_split_executables_complete_one_cpu_update() -> None:
     assert np.isfinite(float(loss))
     assert np.isfinite(float(aux["dfm_ce_loss"]))
     assert int(optimizer.step[...]) == 1
+    assert views.head.out_bias is model.out_bias
+    assert (
+        views.encoder.encoder.embedding.scale
+        is model.encoder.embedding.scale
+    )
     assert set(timing) == {
         "split_encode_seconds",
         "split_head_vjp_seconds",
@@ -812,19 +946,60 @@ def test_split_concrete_component_arguments_lower_without_execution() -> None:
     model = _model_from_config(config, seed=83)
     optimizer = train.create_joint_optimizer(model, config)
     functions = train.split_training_functions(donate=True)
+    views = train.build_split_model_views(model)
     batch = _batch()
     rng = jax.random.PRNGKey(89)
+    arguments_by_component = {}
 
     for component in ("encode", "head_vjp", "encoder_vjp", "update"):
         function, arguments = train.split_component_compile_arguments(
             component,
             functions=functions,
             model=model,
+            views=views,
             optimizer=optimizer,
             batch=batch,
             rng=rng,
             sigreg_reference_count=1.0,
         )
+        arguments_by_component[component] = arguments
         lowered = function.lower(*arguments)
         assert lowered is not None
         assert int(optimizer.step[...]) == 0
+
+    head_nbytes = train.split_state_abstract_nbytes(
+        nnx.state(model, train.NON_BT4_TRAINABLE_FILTER)
+    )
+    encoder_nbytes = train.split_state_abstract_nbytes(
+        nnx.state(model, BT4TrainableParam)
+    )
+    fixed_head_nbytes = (
+        train.split_state_abstract_nbytes(nnx.state(model))
+        - train.split_state_abstract_nbytes(
+            nnx.state(model, TrainableParam)
+        )
+    )
+    encode_arguments = arguments_by_component["encode"]
+    head_arguments = arguments_by_component["head_vjp"]
+    encoder_arguments = arguments_by_component["encoder_vjp"]
+    assert (
+        train.split_dynamic_argument_nbytes(
+            (model, *encode_arguments[1:])
+        )
+        - train.split_dynamic_argument_nbytes(encode_arguments)
+        == head_nbytes + fixed_head_nbytes
+    )
+    assert (
+        train.split_dynamic_argument_nbytes(
+            (model, *head_arguments[1:])
+        )
+        - train.split_dynamic_argument_nbytes(head_arguments)
+        == encoder_nbytes + fixed_head_nbytes
+    )
+    assert (
+        train.split_dynamic_argument_nbytes(
+            (model, *encoder_arguments[1:])
+        )
+        - train.split_dynamic_argument_nbytes(encoder_arguments)
+        == head_nbytes + fixed_head_nbytes
+    )

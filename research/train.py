@@ -122,6 +122,12 @@ NON_BT4_TRAINABLE_FILTER = nnx.All(
     TrainableParam,
     nnx.Not(BT4TrainableParam),
 )
+SPLIT_ACCEPTED_FULL_MODEL_NBYTES = 705_987_352
+SPLIT_ACCEPTED_ENCODER_MODEL_NBYTES = 390_611_456
+SPLIT_ACCEPTED_HEAD_MODEL_NBYTES = 315_375_896
+SPLIT_ACCEPTED_FULL_LEAF_COUNT = 455
+SPLIT_ACCEPTED_ENCODER_LEAF_COUNT = 404
+SPLIT_ACCEPTED_HEAD_LEAF_COUNT = 51
 TARGET_VARIANCE_HINGE_EPSILON = 1e-4
 JEPA_STATE_RMS_EPSILON = 1e-6
 JEPA_FEEDBACK_MAX_STATE_RMS_RATIO = 0.5
@@ -4565,7 +4571,7 @@ def validate_split_gradient_execution_config(
     batch_size: int,
     sigreg_reference_count: float,
 ) -> None:
-    """Freeze Experiment 034 to the accepted one-block-tail contract."""
+    """Freeze split execution to the accepted one-block-tail contract."""
 
     requirements = {
         "objective": (objective, "normalized"),
@@ -7286,6 +7292,7 @@ def split_training_gradients(
     rng: jax.Array,
     target_reference_count: float,
     pred_reference_count: float,
+    views: SplitModelViews | None = None,
 ) -> tuple[
     jax.Array,
     dict[str, jax.Array],
@@ -7295,10 +7302,12 @@ def split_training_gradients(
 ]:
     """Return loss, aux, disjoint gradient states, and token cotangent."""
 
-    bt4_tokens = split_training_bt4_tokens(model, batch, rng)
+    if views is None:
+        views = build_split_model_views(model)
+    bt4_tokens = split_training_bt4_tokens(views.encoder, batch, rng)
     (loss, aux), (head_grads, token_cotangent) = (
         _split_head_loss_and_grad(
-            model,
+            views.head,
             batch,
             rng,
             target_reference_count,
@@ -7307,7 +7316,7 @@ def split_training_gradients(
         )
     )
     encoder_grads = _split_encoder_grad(
-        model,
+        views.encoder,
         batch,
         rng,
         token_cotangent,
@@ -7337,6 +7346,226 @@ def split_state_abstract_records(
             str(jax.dtypes.canonicalize_dtype(abstract.dtype)),
         )
     return records
+
+
+def split_state_abstract_nbytes(state: Any) -> int:
+    """Count array payload bytes from shapes and dtypes without reading values."""
+
+    total = 0
+    for leaf in jax.tree.leaves(state):
+        abstract = jax.typeof(leaf)
+        total += int(math.prod(abstract.shape)) * np.dtype(
+            abstract.dtype
+        ).itemsize
+    return total
+
+
+def split_dynamic_argument_nbytes(value: Any) -> int:
+    """Count concrete dynamic-array bytes presented to a split component."""
+
+    total = 0
+    for leaf in jax.tree.leaves(value):
+        if not hasattr(leaf, "shape") or not hasattr(leaf, "dtype"):
+            continue
+        abstract = jax.typeof(leaf)
+        total += int(math.prod(abstract.shape)) * np.dtype(
+            abstract.dtype
+        ).itemsize
+    return total
+
+
+class SplitModelViews(NamedTuple):
+    """Transient shared-variable graph views for split compilation."""
+
+    encoder: JointLatentSASAModel
+    head: JointLatentSASAModel
+
+
+def _split_trainable_variable_objects(
+    model: JointLatentSASAModel,
+    *,
+    encoder: bool,
+) -> dict[tuple[Any, ...], TrainableParam]:
+    """Map trainable graph paths to the live Variable objects."""
+
+    return {
+        path: value
+        for path, value in nnx.iter_graph(model)
+        if isinstance(value, TrainableParam)
+        and isinstance(value, BT4TrainableParam) is encoder
+    }
+
+
+def validate_split_model_views(
+    model: JointLatentSASAModel,
+    views: SplitModelViews,
+    *,
+    require_accepted_abi: bool = False,
+) -> dict[str, Any]:
+    """Require exact disjoint state and shared identity in split graph views."""
+
+    canonical_head = nnx.state(model, NON_BT4_TRAINABLE_FILTER)
+    canonical_encoder = nnx.state(model, BT4TrainableParam)
+    canonical_full = nnx.state(model, TrainableParam)
+    view_head = nnx.state(views.head, TrainableParam)
+    view_encoder = nnx.state(views.encoder, TrainableParam)
+    view_head_all_variables = nnx.state(views.head)
+    view_encoder_all_variables = nnx.state(views.encoder)
+
+    canonical_head_records = split_state_abstract_records(canonical_head)
+    canonical_encoder_records = split_state_abstract_records(
+        canonical_encoder
+    )
+    canonical_full_records = split_state_abstract_records(canonical_full)
+    view_head_records = split_state_abstract_records(view_head)
+    view_encoder_records = split_state_abstract_records(view_encoder)
+    if view_head_records != canonical_head_records:
+        raise ValueError("Split head view state differs from canonical head")
+    if view_encoder_records != canonical_encoder_records:
+        raise ValueError(
+            "Split encoder view state differs from canonical encoder"
+        )
+    if (
+        split_state_abstract_records(view_head_all_variables)
+        != view_head_records
+    ):
+        raise ValueError("Split head view retains non-trainable Variables")
+    if (
+        split_state_abstract_records(view_encoder_all_variables)
+        != view_encoder_records
+    ):
+        raise ValueError(
+            "Split encoder view retains non-trainable Variables"
+        )
+    if set(view_head_records) & set(view_encoder_records):
+        raise ValueError("Split model views have overlapping trainable paths")
+    if (
+        set(view_head_records) | set(view_encoder_records)
+        != set(canonical_full_records)
+    ):
+        raise ValueError(
+            "Split model views do not partition canonical trainable paths"
+        )
+
+    canonical_head_variables = _split_trainable_variable_objects(
+        model,
+        encoder=False,
+    )
+    canonical_encoder_variables = _split_trainable_variable_objects(
+        model,
+        encoder=True,
+    )
+    view_head_variables = _split_trainable_variable_objects(
+        views.head,
+        encoder=False,
+    )
+    view_encoder_variables = _split_trainable_variable_objects(
+        views.encoder,
+        encoder=True,
+    )
+    if set(view_head_variables) != set(canonical_head_variables):
+        raise ValueError(
+            "Split head view Variable paths differ from canonical head"
+        )
+    if set(view_encoder_variables) != set(canonical_encoder_variables):
+        raise ValueError(
+            "Split encoder view Variable paths differ from canonical encoder"
+        )
+    if any(
+        view_head_variables[path] is not canonical_head_variables[path]
+        for path in canonical_head_variables
+    ):
+        raise ValueError("Split head view copied a Variable object")
+    if any(
+        view_encoder_variables[path] is not canonical_encoder_variables[path]
+        for path in canonical_encoder_variables
+    ):
+        raise ValueError("Split encoder view copied a Variable object")
+    if _split_trainable_variable_objects(views.head, encoder=True):
+        raise ValueError("Split head view retains BT4 Variables")
+    if _split_trainable_variable_objects(views.encoder, encoder=False):
+        raise ValueError("Split encoder view retains non-BT4 Variables")
+
+    nbytes = {
+        "full": split_state_abstract_nbytes(canonical_full),
+        "head": split_state_abstract_nbytes(view_head),
+        "encoder": split_state_abstract_nbytes(view_encoder),
+    }
+    if nbytes["head"] + nbytes["encoder"] != nbytes["full"]:
+        raise ValueError(
+            "Split model view bytes do not sum to canonical model bytes"
+        )
+    expected_nbytes = {
+        "full": SPLIT_ACCEPTED_FULL_MODEL_NBYTES,
+        "head": SPLIT_ACCEPTED_HEAD_MODEL_NBYTES,
+        "encoder": SPLIT_ACCEPTED_ENCODER_MODEL_NBYTES,
+    }
+    if require_accepted_abi and nbytes != expected_nbytes:
+        raise ValueError(
+            "Split model view ABI differs from accepted production ABI: "
+            f"{nbytes} != {expected_nbytes}"
+        )
+    leaf_counts = {
+        "full": len(canonical_full_records),
+        "head": len(view_head_records),
+        "encoder": len(view_encoder_records),
+    }
+    expected_leaf_counts = {
+        "full": SPLIT_ACCEPTED_FULL_LEAF_COUNT,
+        "head": SPLIT_ACCEPTED_HEAD_LEAF_COUNT,
+        "encoder": SPLIT_ACCEPTED_ENCODER_LEAF_COUNT,
+    }
+    if require_accepted_abi and leaf_counts != expected_leaf_counts:
+        raise ValueError(
+            "Split model view leaf counts differ from accepted production "
+            f"ABI: {leaf_counts} != {expected_leaf_counts}"
+        )
+    return {
+        "shared_variable_objects": True,
+        "copied_array_storage": False,
+        "full_leaf_count": leaf_counts["full"],
+        "head_leaf_count": leaf_counts["head"],
+        "encoder_leaf_count": leaf_counts["encoder"],
+        "nbytes": nbytes,
+    }
+
+
+def build_split_model_views(
+    model: JointLatentSASAModel,
+    *,
+    require_accepted_abi: bool = False,
+) -> SplitModelViews:
+    """Create exact graph partitions that share canonical Variable objects."""
+
+    encoder_view = nnx.clone(model, variables=False)
+    head_view = nnx.clone(model, variables=False)
+    head_roots = tuple(
+        nnx.to_pure_dict(
+            nnx.state(model, NON_BT4_TRAINABLE_FILTER)
+        ).keys()
+    )
+    for root in head_roots:
+        if not isinstance(root, str) or not hasattr(encoder_view, root):
+            raise ValueError(
+                f"Invalid non-BT4 root while building encoder view: {root!r}"
+            )
+        delattr(encoder_view, root)
+    for root in ("policy_head", "value_head", "moves_left_head"):
+        if hasattr(encoder_view.encoder, root):
+            delattr(encoder_view.encoder, root)
+    if not hasattr(head_view, "encoder"):
+        raise ValueError("Canonical model has no encoder root")
+    del head_view.encoder
+    views = SplitModelViews(
+        encoder=encoder_view,
+        head=head_view,
+    )
+    validate_split_model_views(
+        model,
+        views,
+        require_accepted_abi=require_accepted_abi,
+    )
+    return views
 
 
 def validate_split_gradient_partitions(
@@ -7481,6 +7710,7 @@ def execute_split_training_step(
     functions: SplitTrainingFunctions,
     *,
     model: JointLatentSASAModel,
+    views: SplitModelViews,
     optimizer: nnx.Optimizer,
     batch: dict[str, jax.Array],
     rng: jax.Array,
@@ -7490,12 +7720,12 @@ def execute_split_training_step(
     """Execute and synchronize the four split components in order."""
 
     started = time.perf_counter()
-    bt4_tokens = functions.encode(model, batch, rng)
+    bt4_tokens = functions.encode(views.encoder, batch, rng)
     jax.block_until_ready(bt4_tokens)
     encoded = time.perf_counter()
 
     (loss, aux), (head_grads, token_cotangent) = functions.head_vjp(
-        model,
+        views.head,
         batch,
         rng,
         target_reference_count,
@@ -7506,7 +7736,7 @@ def execute_split_training_step(
     head_done = time.perf_counter()
 
     encoder_grads = functions.encoder_vjp(
-        model,
+        views.encoder,
         batch,
         rng,
         token_cotangent,
@@ -8847,11 +9077,20 @@ class TrainingCompilation(NamedTuple):
     memory_analysis: dict[str, int]
 
 
+class SplitComponentCompilation(NamedTuple):
+    executable: Any
+    seconds: float
+    cost_analysis_raw: dict[str, float]
+    memory_analysis: dict[str, int]
+    dynamic_argument_nbytes: int
+
+
 class SplitTrainingCompilation(NamedTuple):
     functions: SplitTrainingFunctions
     seconds_by_component: dict[str, float]
     cost_analysis_by_component: dict[str, dict[str, float]]
     memory_analysis_by_component: dict[str, dict[str, int]]
+    argument_nbytes_by_component: dict[str, int]
 
 
 def current_process_rss_bytes(
@@ -9105,6 +9344,7 @@ def split_component_compile_arguments(
     *,
     functions: SplitTrainingFunctions,
     model: JointLatentSASAModel,
+    views: SplitModelViews,
     optimizer: nnx.Optimizer,
     batch: dict[str, jax.Array],
     rng: jax.Array,
@@ -9125,10 +9365,10 @@ def split_component_compile_arguments(
         )
     )
     if component == "encode":
-        return functions.encode, (model, batch, rng)
+        return functions.encode, (views.encoder, batch, rng)
     if component == "head_vjp":
         return functions.head_vjp, (
-            model,
+            views.head,
             batch,
             rng,
             sigreg_reference_count,
@@ -9137,7 +9377,7 @@ def split_component_compile_arguments(
         )
     if component == "encoder_vjp":
         return functions.encoder_vjp, (
-            model,
+            views.encoder,
             batch,
             rng,
             tokens,
@@ -9168,22 +9408,25 @@ def compile_split_component(
     *,
     functions: SplitTrainingFunctions,
     model: JointLatentSASAModel,
+    views: SplitModelViews,
     optimizer: nnx.Optimizer,
     batch: dict[str, jax.Array],
     rng: jax.Array,
     sigreg_reference_count: float,
-) -> TrainingCompilation:
+) -> SplitComponentCompilation:
     """Lower and compile exactly one concrete split executable."""
 
     function, compile_args = split_component_compile_arguments(
         component,
         functions=functions,
         model=model,
+        views=views,
         optimizer=optimizer,
         batch=batch,
         rng=rng,
         sigreg_reference_count=sigreg_reference_count,
     )
+    dynamic_argument_nbytes = split_dynamic_argument_nbytes(compile_args)
     started = time.perf_counter()
     executable = function.lower(*compile_args).compile()
     seconds = time.perf_counter() - started
@@ -9197,17 +9440,19 @@ def compile_split_component(
         if hasattr(executable, "memory_analysis")
         else {}
     )
-    return TrainingCompilation(
+    return SplitComponentCompilation(
         executable=executable,
         seconds=seconds,
         cost_analysis_raw=cost_analysis_raw,
         memory_analysis=memory_analysis,
+        dynamic_argument_nbytes=dynamic_argument_nbytes,
     )
 
 
 def compile_split_training_executables(
     *,
     model: JointLatentSASAModel,
+    views: SplitModelViews,
     optimizer: nnx.Optimizer,
     batch: dict[str, jax.Array],
     rng: jax.Array,
@@ -9222,6 +9467,7 @@ def compile_split_training_executables(
             component,
             functions=source_functions,
             model=model,
+            views=views,
             optimizer=optimizer,
             batch=batch,
             rng=rng,
@@ -9246,6 +9492,10 @@ def compile_split_training_executables(
         },
         memory_analysis_by_component={
             component: compilation.memory_analysis
+            for component, compilation in compilations.items()
+        },
+        argument_nbytes_by_component={
+            component: compilation.dynamic_argument_nbytes
             for component, compilation in compilations.items()
         },
     )
@@ -10061,12 +10311,21 @@ def run_split_component_compile_only(
     compile_batch = train_batches.batch_at(0)
     compile_rng = jax.random.fold_in(jax.random.PRNGKey(args.seed), 0)
     functions = split_training_functions(donate=True)
+    views = build_split_model_views(
+        model,
+        require_accepted_abi=True,
+    )
+    view_report = validate_split_model_views(
+        model,
+        views,
+        require_accepted_abi=True,
+    )
     state_footprint = training_state_footprint(model, optimizer)
     initial_optimizer_step = int(optimizer.step[...])
     cache_before = compilation_cache_executable_inventory(cache_dir)
     run_config = {
-        "format": "chess-dfm-split-component-compile-only-v1",
-        "mode": "split_component_compile_only_concrete",
+        "format": "chess-dfm-split-component-compile-only-v2",
+        "mode": "partitioned_split_component_compile_only_concrete",
         "component": component,
         "autoresearch_ready": AUTORESEARCH_READY,
         "architecture_source": ARCHITECTURE_SOURCE,
@@ -10077,6 +10336,7 @@ def run_split_component_compile_only(
         "model_config": serialized_model_config(config),
         "learning_rate_schedule": learning_rate_schedule_contract(config),
         "training_state_footprint": state_footprint,
+        "split_model_views": view_report,
         "checkpoint_step": checkpoint_step,
         "source_checkpoint_path": str(source_checkpoint_path),
         "source_checkpoint_opened": False,
@@ -10101,6 +10361,7 @@ def run_split_component_compile_only(
             component,
             functions=functions,
             model=model,
+            views=views,
             optimizer=optimizer,
             batch=compile_batch,
             rng=compile_rng,
@@ -10133,12 +10394,14 @@ def run_split_component_compile_only(
         if cache_before[name] != cache_after[name]
     )
     memory = compilation.memory_analysis
+    argument_limits = {
+        "encode": 432_905_816,
+        "head_vjp": 400 * 1024**2,
+        "encoder_vjp": 450 * 1024**2,
+        "update": int(2.5 * 1024**3),
+    }
     limits = {
-        "argument_size_in_bytes": (
-            int(2.5 * 1024**3)
-            if component == "update"
-            else 1_894_455_276
-        ),
+        "argument_size_in_bytes": argument_limits[component],
         "output_size_in_bytes": 1_860_899_661,
         "temp_size_in_bytes": int(8.5 * 1024**3),
     }
@@ -10163,6 +10426,12 @@ def run_split_component_compile_only(
         failures.append(f"component removed cache entries: {removed}")
     if changed:
         failures.append(f"component changed cache entries: {changed}")
+    if compilation.dynamic_argument_nbytes > argument_limits[component]:
+        failures.append(
+            "dynamic argument bytes exceed limit: "
+            f"{compilation.dynamic_argument_nbytes} > "
+            f"{argument_limits[component]}"
+        )
     failures.extend(
         f"{key} exceeds or lacks limit"
         for key, check in memory_checks.items()
@@ -10187,6 +10456,8 @@ def run_split_component_compile_only(
         ),
         "compiler_memory_analysis": memory,
         "compiler_memory_checks": memory_checks,
+        "dynamic_argument_nbytes": compilation.dynamic_argument_nbytes,
+        "dynamic_argument_nbytes_limit": argument_limits[component],
         "cache_executables_after": cache_after,
         "cache_added": {
             name: cache_after[name]
@@ -10218,6 +10489,9 @@ def run_split_component_compile_only(
                     "compiler_cost_analysis"
                 ],
                 "compiler_memory_analysis": memory,
+                "dynamic_argument_nbytes": (
+                    compilation.dynamic_argument_nbytes
+                ),
                 "cache_added": report["cache_added"],
                 "gpu_memory": report["gpu_memory"],
                 "checkpoint_writes": 0,
@@ -10290,12 +10564,12 @@ def main() -> int:
         if args.resume_from is not None:
             raise ValueError(
                 "split gradient execution cannot resume a checkpoint "
-                "during Experiment 034"
+                "during Experiment 035"
             )
         if args.eval_only or args.eval_checkpoints is not None:
             raise ValueError(
                 "split gradient execution is a training-only "
-                "Experiment 034 path"
+                "Experiment 035 path"
             )
         if args.gradient_audit:
             raise ValueError(
@@ -10319,7 +10593,7 @@ def main() -> int:
             or args.save_final
         ):
             raise ValueError(
-                "Experiment 034 split execution forbids checkpoint writes"
+                "Experiment 035 split execution forbids checkpoint writes"
             )
     if args.max_checkpoints < 0:
         raise ValueError("--max-checkpoints must be non-negative")
@@ -10584,6 +10858,18 @@ def main() -> int:
     initial_research_update = research_update
     initial_data_cursor = next_data_cursor
     state_footprint = training_state_footprint(model, optimizer)
+    split_views: SplitModelViews | None = None
+    split_view_report: dict[str, Any] | None = None
+    if args.gradient_execution == "split":
+        split_views = build_split_model_views(
+            model,
+            require_accepted_abi=True,
+        )
+        split_view_report = validate_split_model_views(
+            model,
+            split_views,
+            require_accepted_abi=True,
+        )
     output_dir.mkdir(parents=True, exist_ok=False)
 
     if args.gradient_audit:
@@ -10786,34 +11072,17 @@ def main() -> int:
         "val_data": val_batches.provenance(),
     }
     if args.gradient_execution == "split":
-        head_records = split_state_abstract_records(
-            nnx.state(model, NON_BT4_TRAINABLE_FILTER)
-        )
-        encoder_records = split_state_abstract_records(
-            nnx.state(model, BT4TrainableParam)
-        )
-        full_records = split_state_abstract_records(
-            nnx.state(model, TrainableParam)
-        )
-        if (
-            set(head_records) & set(encoder_records)
-            or (set(head_records) | set(encoder_records))
-            != set(full_records)
-        ):
-            raise ValueError(
-                "Split parameter filters do not partition the model"
-            )
+        assert split_views is not None
+        assert split_view_report is not None
         run_config["training_execution"] = {
-            "mode": "split_encoder_gradient_v1",
+            "mode": "partitioned_split_encoder_gradient_v2",
             "components": [
                 "encode",
                 "head_vjp",
                 "encoder_vjp",
                 "update",
             ],
-            "head_leaf_count": len(head_records),
-            "encoder_leaf_count": len(encoder_records),
-            "full_trainable_leaf_count": len(full_records),
+            "model_views": split_view_report,
             "gradient_clip": "single_existing_global_clip_after_merge",
             "optimizer": "single_existing_optimizer_update_after_merge",
             "model_checkpoint_abi_changed": False,
@@ -10849,6 +11118,7 @@ def main() -> int:
     split_compile_seconds_by_component: dict[str, float] = {}
     split_compiler_cost_by_component: dict[str, dict[str, float]] = {}
     split_compiler_memory_by_component: dict[str, dict[str, int]] = {}
+    split_argument_nbytes_by_component: dict[str, int] = {}
     split_compile_cache_unchanged: bool | None = None
     if args.compile_ahead and not args.eval_only:
         compile_batch = train_batches.batch_at(next_data_cursor)
@@ -10857,6 +11127,7 @@ def main() -> int:
             next_data_cursor,
         )
         if args.gradient_execution == "split":
+            assert split_views is not None
             cache_dir = require_within_workspace(
                 os.environ["JAX_COMPILATION_CACHE_DIR"]
             )
@@ -10865,6 +11136,7 @@ def main() -> int:
             )
             split_compilation = compile_split_training_executables(
                 model=model,
+                views=split_views,
                 optimizer=optimizer,
                 batch=compile_batch,
                 rng=compile_rng,
@@ -10888,6 +11160,9 @@ def main() -> int:
             )
             split_compiler_memory_by_component = (
                 split_compilation.memory_analysis_by_component
+            )
+            split_argument_nbytes_by_component = (
+                split_compilation.argument_nbytes_by_component
             )
             explicit_compile_seconds = math.fsum(
                 split_compile_seconds_by_component.values()
@@ -11006,10 +11281,12 @@ def main() -> int:
                 split_timing: dict[str, float] = {}
                 if args.gradient_execution == "split":
                     assert split_functions is not None
+                    assert split_views is not None
                     loss, aux, split_timing = (
                         execute_split_training_step(
                             split_functions,
                             model=model,
+                            views=split_views,
                             optimizer=optimizer,
                             batch=batch,
                             rng=step_rng,
@@ -11281,6 +11558,9 @@ def main() -> int:
         ),
         "split_compiler_memory_analysis_by_component": (
             split_compiler_memory_by_component
+        ),
+        "split_dynamic_argument_nbytes_by_component": (
+            split_argument_nbytes_by_component
         ),
         "split_compiler_memory_aggregate_semantics": (
             "per_field_maximum_not_sum"

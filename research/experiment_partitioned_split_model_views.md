@@ -119,6 +119,54 @@ Before any GPU compile:
 No CPU process may initialize CUDA. All temporary files and caches remain
 under `/mountpoint/.exp`.
 
+## Implementation and CPU-gate result
+
+The initial 53-leaf design probe used the small correctness model. The
+production model has 455 trainable leaves: 404 encoder leaves and 51 head
+leaves. The byte accounting in the preregistration was already the production
+accounting and remains unchanged.
+
+The first production argument audit also exposed `4,226,560` bytes of fixed
+legacy policy, value, and moves-left head variables nested inside `BT4Model`.
+Those heads are not called by `encode_tokens` or by the token-cotangent encoder
+VJP. The transient encoder view now removes those three fixed heads as well as
+all non-BT4 trainable roots. The canonical model retains them for inference
+and checkpoint compatibility. This change satisfies the original argument
+ceiling; no ceiling was raised.
+
+The guarded production CPU probe passed with the exact trainable ABI:
+
+```text
+full model       455 leaves   705,987,352 bytes
+encoder view     404 leaves   390,611,456 bytes
+head view         51 leaves   315,375,896 bytes
+```
+
+All retained view leaves share the canonical `Variable` objects. Neither view
+contains a copied array or an extra non-trainable variable. Concrete
+production arguments lowered without execution at:
+
+```text
+encode          427,868,168 bytes
+head VJP        386,187,040 bytes
+encoder VJP     461,422,600 bytes
+update        2,566,875,381 bytes
+```
+
+All are below their frozen ceilings, and optimizer step remained zero. The
+probe completed in 28.738 seconds with 3,686,354,944 bytes peak process-group
+RSS and 8,310,370,304 bytes minimum MemAvailable. Its temporary launcher was
+deleted.
+
+The focused view/split/compile-only suite passed 38 tests. The broader
+checkpoint, model-parity, future-tail, SIGReg, target-sampling, compile-only,
+resource-guard, import, and storage suite passed 162 tests in 242.39 seconds.
+The parent guard observed 4,938,330,112 bytes peak process-group RSS and
+7,066,775,552 bytes minimum MemAvailable. Lint, `compileall`, and diff checks
+passed. Persistent CPU cache writes were disabled; the shared GPU cache
+remains at exactly 67 executable files, and the storage audit finds exactly
+the original seven retained states.
+
 ## Guarded compiler gate
 
 Start from an exact manifest of 67 retained executable cache files. The
