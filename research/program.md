@@ -550,15 +550,16 @@ scientific knobs and checkpoint state remain fixed. Prove full gradient and
 two-update parity plus six production concrete lowerings on CPU before six
 sequential 6.75-GiB cold GPU compiler gates.
 
-Experiment 036's implementation and CPU gates now pass. The exact production
-views remain `404 / 17 / 34` encoder/projector/core leaves, the merged
-six-stage gradient and optimizer updates match the monolithic reference, and
-all six batch-128 concrete lowerings fit their preregistered argument
-ceilings. The next action is the cold GPU compiler sequence—encode, project,
-core VJP, projection VJP, encoder VJP, then update—stopping permanently at
-the first failed component. No training or SAE work is authorized before all
-six compile gates and the subsequent zero-checkpoint parity/profile gates
-pass.
+Experiment 036 is rejected at the cold core-VJP compiler gate. Encode and
+project pass independently, but core VJP jumps to `11,656,556,544` bytes
+process-group RSS against the unchanged `7,247,757,312`-byte ceiling. The
+guard stops it, no core executable or state is written, later components are
+cancelled, and the exact 67-executable/seven-state baselines are restored.
+Do not retry or further split the exact core graph. Before another production
+compile, preregister either a parameter-efficient scientific method that
+materially reduces differentiated state/activation scope or a separately
+reviewed execution-framework change. Preserve the fixed loss/data/evaluation
+contract, and keep SAE work behind a trained-model Elo gate.
 
 ## Editable surface
 
@@ -626,6 +627,16 @@ seeds 30,000 and 40,000. Never choose an extra seed after inspecting only one
 candidate.
 
 The weighted training loss is not by itself a promotion metric.
+
+Every actual training experiment must nevertheless retain its full loss
+record: per-update total and unclipped loss plus DFM CE, JEPA positive,
+target-SIGReg, prediction-SIGReg, legality, and any enabled auxiliary
+component in `metrics.jsonl`; final training and initial/final validation
+aggregates in `report.json`; and the primary validation DFM CE in
+`research/results.tsv` for accepted 30-minute experiments. Build consolidated
+loss comparisons from those immutable run reports rather than hand-editing
+historical summaries. Compiler-only experiments execute zero model updates
+and therefore record compiler/resource metrics with no synthetic loss value.
 
 The strength gate consumes complete color-reversed pairs from the repinned
 promotion pool. Only the normalized-Elo GSPRT may promote a checkpoint:

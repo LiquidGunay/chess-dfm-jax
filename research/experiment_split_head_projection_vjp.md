@@ -1,10 +1,11 @@
 # Experiment 036: split head projection VJP
 
-Status: CPU implementation and all preregistered CPU gates passed on
-2026-07-23; the guarded GPU compiler gate is pending. This is an exact
-reverse-mode composition and compiler-memory experiment. It changes no model
-parameter, loss term, coefficient, data path, optimizer rule, precision,
-batch, or inference function.
+Status: rejected at the guarded core-VJP GPU compiler gate on 2026-07-23.
+The CPU implementation and every preregistered CPU gate passed, but the core
+compiler exceeded the fixed host-RAM ceiling. This is an exact reverse-mode
+composition and compiler-memory experiment. It changes no model parameter,
+loss term, coefficient, data path, optimizer rule, precision, batch, or
+inference function.
 
 ## Evidence and hypothesis
 
@@ -242,6 +243,56 @@ Each component uses concrete arguments and the ordinary shared cache. Require:
 Do not retry a failed component, relax a resource/ABI gate, change batch size,
 use abstract arguments, create a path-distinct cache, or compile a later
 component after failure.
+
+## GPU outcome
+
+The first cold component, `encode`, passed:
+
+- explicit compile time: 52.310 seconds;
+- guarded process wall time: 74.936 seconds;
+- peak process-group RSS: 4,010,414,080 bytes;
+- minimum MemAvailable: 7,842,000,896 bytes;
+- dynamic / compiler arguments: 427,868,168 / 423,641,608 bytes;
+- compiler outputs / temporaries: 424,169,128 / 302,016,936 bytes;
+- peak JAX device allocation: 1,893,640,704 bytes; and
+- one new 1,076,350-byte executable with SHA-256
+  `f462541eedde3e273a95432972a7b7496230e146df5cb64d5c394f369926da77`.
+
+The second cold component, `project`, also passed:
+
+- explicit compile time: 10.483 seconds;
+- guarded process wall time: 32.201 seconds;
+- peak process-group RSS: 3,791,073,280 bytes;
+- minimum MemAvailable: 8,100,466,688 bytes;
+- dynamic / compiler arguments: 141,939,712 / 141,939,712 bytes;
+- compiler outputs / temporaries: 113,108,128 / 491,390,624 bytes;
+- peak JAX device allocation: 2,199,305,472 bytes; and
+- one new 311,510-byte executable with SHA-256
+  `b8ebda4f2c550070be671600b55ede92ee93a7cded8a426c6292974e2a503c3e`.
+
+The third component, `core_vjp`, failed the fixed host-RSS guard before
+compilation completed. At 33.752 seconds the process group jumped to
+11,656,556,544 bytes, exceeding the unchanged 7,247,757,312-byte ceiling.
+The guard terminated the process while system MemAvailable remained
+7,948,034,048 bytes. The server remained responsive. The component wrote no
+executable, compiler report, model state, or checkpoint; its run directory
+contains only the 31,229-byte `run_config.json`.
+
+Per protocol, `projection_vjp`, `encoder_vjp`, and `update` were not compiled,
+and the failed core was not retried. After preserving the two successful
+reports and executable hashes above, their cache entries and access markers
+were deleted. The current 67 executable names, sizes, and hashes exactly match
+the pre-experiment manifest. Directory inode metadata is nonshrinking, so the
+cache's apparent size is now 157,691,751 bytes, 5,598 bytes above the prior
+apparent baseline despite identical executable contents. The closing storage
+audit passes with exactly the original seven retained state files.
+
+Experiment 036 therefore rejects exact head-graph splitting as the safe local
+A10G compiler substrate. Its preregistered decision rule forbids another
+exact core/projection split or a relaxed retry. The next experiment must use a
+scientifically explicit parameter-efficient training method, or change the
+execution framework in a separately reviewed systems plan, before any new
+production compile.
 
 ## Real-checkpoint parity and speed gates
 
