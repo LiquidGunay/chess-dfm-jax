@@ -1,9 +1,13 @@
 # Local GPU Autoresearch Plan
 
 Status: implementation in progress. The plan was approved on 2026-07-18 and
-revised through 2026-07-23; the frozen loop is now enabled with
-`AUTORESEARCH_READY = True`. Compatibility v2/update 300 remains the
-repeat-qualified control. The no-norm target-SIGReg-5.76,
+revised through 2026-07-23. The JAX scientific loop and its historical results
+remain valid, but exact new JAX graphs cannot cold-compile within the server
+guard. The current execution gate is therefore
+`PYTORCH_AUTORESEARCH_READY = False`: migrate the unchanged control to eager
+PyTorch, pass cross-framework parity and guarded baseline gates, then reopen
+short-run research. Compatibility v2/update 300 remains the repeat-qualified
+control. The no-norm target-SIGReg-5.76,
 prediction-SIGReg-1.0 v2/update-400 checkpoint is now the repeat-qualified
 corrected baseline. Its 128-pair searchless strength anchors are complete: it
 is indistinguishable from the recovered DFM/JEPA source at this resolution,
@@ -13,7 +17,7 @@ future-gradient-tail primary/update 2,072; two exact runs beat balanced K=1 on
 the frozen offline metric, while its direct 128-pair arena against balanced K=1
 is indistinguishable from a tie and does not constitute Elo promotion.
 
-The agreed critical path is now:
+The original scientific critical path, now completed, was:
 
 1. replace the per-state prediction/target RMS-matching term with calibrated
    prediction SIGReg while retaining raw JEPA MSE and target SIGReg;
@@ -25,6 +29,12 @@ The agreed critical path is now:
 5. measure relative Elo against the recovered DFM/JEPA model and raw BT4
    anchor under identical searchless inference budgets; and
 6. begin the SAE/representation study only after those strength anchors exist.
+
+The current systems critical path is to implement the one-file eager PyTorch
+path, prove it against the frozen JAX oracle, profile and select physical batch
+size under the resource guard, repeat the fixed-time control, and only then
+resume one-change 30-minute architecture research. JAX remains the target for
+long hero runs once autoresearch selects a promising model.
 
 The A10G is single-tenant throughout this sequence. Training, profiling,
 arena evaluation, and SAE work do not run concurrently.
@@ -1813,10 +1823,41 @@ sweeps, held-out data, and repeated seeds.
   50 ms after the Experiment 031 compiler RSS jump. Keep the two-CPU limit,
   8/3 GiB host-memory thresholds, 7 GiB group-RSS ceiling, 30 GiB disk
   reserve, and checkpoint limits unchanged.
-- [ ] Replace concrete values only in the disposable compiler with
+- [x] Replace concrete values only in the disposable compiler with
   `ShapeDtypeStruct` leaves, as preregistered in
   `research/experiment_abstract_compile_arguments.md`. First require exact
   shared-cache HLO/compiler parity and at least 1.5 GiB live-buffer release.
   Only then permit one fresh-cache batch-128 compile with 50 ms polling and a
   stricter enforced 6.75 GiB RSS ceiling, followed on success by an ordinary
-  restored no-eval update using the same cache.
+  restored no-eval update using the same cache. Abstractification releases
+  `1,894,688,512` live JAX GPU bytes and preserves signatures, but misses its
+  preregistered cached-process RSS gate by `71.4 MiB`; reject before a cold
+  compile or update.
+- [x] Exhaust the exact split-gradient execution path in Experiments 034--036.
+  Exact encoder and projection components compile safely, but head/core
+  reverse-mode compilation still crosses the 6.75 GiB process-group ceiling,
+  culminating at `11,656,556,544` bytes. Restore the exact 67-executable cache
+  and seven retained states; do not retry or further split this JAX graph.
+- [x] Choose eager PyTorch as the short-run autoresearch execution framework.
+  Freeze JAX as the numerical/checkpoint/evaluation/inference oracle and
+  eventual hero-run framework. The migration contract is
+  `research/pytorch_eager_migration.md`; the change creates no model-result
+  row.
+- [ ] Implement the readable one-file `research/train_torch.py` production
+  path without `torch.compile`, with strict source-leaf mapping and no runtime
+  dependency on the upstream repository.
+- [ ] Pass CPU FP32 and production-BF16 intermediate/loss parity, explicit
+  stochastic-choice parity, representative full-gradient parity, one- and
+  two-update parity, and sparse checkpoint/JAX round-trip gates.
+- [ ] Run a guarded no-checkpoint A10G smoke/profile, then sweep physical batch
+  size for throughput and safe HBM/RSS headroom. Freeze the selected batch for
+  matched comparisons; do not assume batch 128.
+- [ ] Repeat the accepted fixed-time control and its frozen two-pool
+  validation under PyTorch, cross-check the exported model with JAX
+  validation and eight-pass inference, and set
+  `PYTORCH_AUTORESEARCH_READY = True` only if every migration gate passes.
+- [ ] Resume 30-minute one-change autoresearch runs in
+  `research/train_torch.py`, recording every loss component and systems
+  metric. Consider regional `torch.compile` only if measured end-to-end
+  payback occurs within a typical run; return selected architectures to JAX
+  for hero runs.

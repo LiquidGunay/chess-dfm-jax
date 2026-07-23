@@ -4,10 +4,12 @@ The goal is to improve the fixed held-out chess metrics of the local-GPU
 BT4/DFM/JEPA model while preserving latent diversity and making training and
 inference faster.
 
-Current gate: `AUTORESEARCH_READY = True`. The dense source-parity gate and
-first-experiment preregistration are complete, and the frozen 30-minute
-autoresearch loop is active. Promotion still requires every offline and arena
-gate below; readiness alone is not a strength claim.
+Current execution gate: `PYTORCH_AUTORESEARCH_READY = False`. The completed
+JAX experiments remain valid historical evidence, but exact new JAX training
+graphs cannot cold-compile inside the server's resource guard. Eager PyTorch is
+therefore the candidate execution path for short autoresearch runs. It must
+pass the migration gates below before the 30-minute loop reopens. Keep JAX as
+the numerical, checkpoint, validation, arena, and eventual hero-run oracle.
 
 The first accepted experiment samples two of eight future BT4 targets during
 training while preserving all eight DFM/JEPA prediction horizons and
@@ -561,12 +563,38 @@ materially reduces differentiated state/activation scope or a separately
 reviewed execution-framework change. Preserve the fixed loss/data/evaluation
 contract, and keep SAE work behind a trained-model Elo gate.
 
+## PyTorch eager execution migration
+
+The separately reviewed execution-framework change is specified in
+`research/pytorch_eager_migration.md`. It is a systems change only and does
+not create a model-result row.
+
+- Start with ordinary eager PyTorch. Do not use `torch.compile` for the
+  baseline. Consider regional compilation only after the eager profiler finds
+  a stable region whose measured gain justifies its compilation cost.
+- Restore the pinned update-265000 source weights exactly, model only, and
+  initialize a fresh optimizer. Preserve the accepted data, loss, gradient,
+  validation, inference, and checkpoint contracts.
+- Prove source-weight mapping, CPU forward/loss parity, explicit stochastic
+  choice parity, full gradients, one- and two-update parity, strict checkpoint
+  round trips, and JAX evaluation/inference parity before scientific use.
+- Run every CUDA check through `research/run_gpu.sh`. First perform a
+  no-checkpoint smoke/profile, then select physical batch size by measured
+  throughput and memory headroom rather than freezing batch 128.
+- Repeat the accepted fixed-time control on the new runtime before changing
+  architecture or loss. Only that matched control can establish the PyTorch
+  autoresearch baseline.
+
 ## Editable surface
 
-During automated architecture research, edit only `research/train.py`.
+During migration, edit `research/train_torch.py` and focused parity tests.
+Support-file changes require explicit review. Once
+`PYTORCH_AUTORESEARCH_READY = True`, automated architecture research edits
+only `research/train_torch.py`.
 
 Treat these as immutable:
 
+- `research/train.py` (the JAX oracle)
 - `research/prepare.py`
 - `research/program.md`
 - the fixed data splits and arena FENs
