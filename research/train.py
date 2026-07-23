@@ -8033,8 +8033,6 @@ def run_checkpoint_evaluation(
     model, unused_optimizer = create_joint_components(
         model_params, config, seed=args.seed
     )
-    release_construction_parameter_payload(model_params)
-    del model_params
     del unused_optimizer
     gc.collect()
     ema_target = (
@@ -9262,14 +9260,14 @@ def main() -> int:
 
     model_params = load_mapped_bt4_params(models_dir=models_dir)
     model, optimizer = create_joint_components(model_params, config, seed=args.seed)
-    release_construction_parameter_payload(model_params)
-    del model_params
     ema_target = (
         EmaTargetModel(model)
         if config.jepa_target_semantics == "ema"
         else None
     )
     if args.compile_only:
+        release_construction_parameter_payload(model_params)
+        del model_params
         checkpoint_step = int(metadata["latest_step"])
         source_checkpoint_path = require_within_workspace(
             checkpoint_dir / f"step{checkpoint_step:07d}" / "state.npz"
