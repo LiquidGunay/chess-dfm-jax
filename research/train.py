@@ -92,6 +92,7 @@ EXPERIMENT_OVERRIDES: dict[str, Any] = {
     # "jepa_state_fixed_unit_rms": True,
     "bt4_future_target_stop_gradient": True,
     "bt4_future_target_trainable_tail_layers": 1,
+    "jepa_feedback_mode": "final_pass_adjoint",
 }
 
 DEFAULT_RUN_ROOT = REPO_ROOT / "checkpoints" / "source" / "step0265000"
@@ -114,6 +115,7 @@ WDL_COMPONENT = "wdl"
 GRADIENT_GROUP_NAMES = ("backbone", "dfm", "jepa", "other", "all")
 TARGET_VARIANCE_HINGE_EPSILON = 1e-4
 JEPA_STATE_RMS_EPSILON = 1e-6
+JEPA_FEEDBACK_MAX_STATE_RMS_RATIO = 0.5
 
 UNEVALUATED_LEGACY_AUX_METRICS = frozenset(
     {
@@ -152,6 +154,7 @@ class JointLatentSASAConfig:
     dfm_active_layers: int = 0
     jepa_layers: int = 4
     jepa_rollout_mode: str = "recurrent"
+    jepa_feedback_mode: str = "none"
     jepa_num_heads: int = 0
     jepa_mlp_dim: int = 0
     num_heads: int = 4
@@ -678,6 +681,110 @@ def legal_mass_from_indices(
     return jnp.sum(jnp.where(slot_valid, legal_probs, 0.0), axis=-1)
 
 
+class RootProposal(NamedTuple):
+    action: jax.Array
+    confidence: jax.Array
+    feedback_gate: jax.Array
+
+
+class JepaFeedbackResult(NamedTuple):
+    latents: jax.Array
+    delta_rms: jax.Array
+    raw_feedback_rms: jax.Array
+    applied_feedback_rms: jax.Array
+    state_rms: jax.Array
+    cap_fraction: jax.Array
+
+
+def root_legal_mask_from_indices(
+    legal_idx: jax.Array,
+    legal_count: jax.Array,
+    *,
+    action_vocab_size: int,
+) -> jax.Array:
+    """Build one dense root mask without allowing invalid padding to overwrite."""
+
+    indices = jnp.asarray(legal_idx, dtype=jnp.int32)
+    counts = jnp.asarray(legal_count, dtype=jnp.int32)
+    if indices.ndim != 2:
+        raise ValueError(
+            "root legal_idx must have shape [batch, slots], found "
+            f"{indices.shape}"
+        )
+    if counts.shape != (indices.shape[0],):
+        raise ValueError(
+            "root legal_count must have shape "
+            f"{(indices.shape[0],)}, found {counts.shape}"
+        )
+    safe_indices = jnp.clip(indices, 0, action_vocab_size - 1)
+    valid_slots = (
+        jnp.arange(indices.shape[1], dtype=jnp.int32)[None, :]
+        < counts[:, None]
+    )
+    batch_indices = jnp.broadcast_to(
+        jnp.arange(indices.shape[0], dtype=jnp.int32)[:, None],
+        safe_indices.shape,
+    )
+    legal_counts = jnp.zeros(
+        (indices.shape[0], action_vocab_size),
+        dtype=jnp.int32,
+    ).at[batch_indices, safe_indices].add(valid_slots.astype(jnp.int32))
+    return legal_counts > 0
+
+
+def proposal_from_root_logits(
+    root_logits: jax.Array,
+    current_root_action: jax.Array,
+    root_legal_mask: jax.Array,
+    root_legal_valid: jax.Array,
+    *,
+    mask_token_id: int,
+) -> RootProposal:
+    """Select a target-independent root proposal and stopped confidence gate."""
+
+    logits = jnp.asarray(root_logits, dtype=jnp.float32)
+    current = jnp.asarray(current_root_action, dtype=jnp.int32)
+    legal_mask = jnp.asarray(root_legal_mask, dtype=jnp.bool_)
+    legal_valid = jnp.asarray(root_legal_valid, dtype=jnp.bool_)
+    expected_mask_shape = (logits.shape[0], logits.shape[-1])
+    if legal_mask.shape != expected_mask_shape:
+        raise ValueError(
+            "root_legal_mask must have shape "
+            f"{expected_mask_shape}, found {legal_mask.shape}"
+        )
+    if current.shape != (logits.shape[0],):
+        raise ValueError(
+            "current_root_action must have shape "
+            f"{(logits.shape[0],)}, found {current.shape}"
+        )
+    if legal_valid.shape != (logits.shape[0],):
+        raise ValueError(
+            "root_legal_valid must have shape "
+            f"{(logits.shape[0],)}, found {legal_valid.shape}"
+        )
+
+    # Invalid training metadata uses an all-action numerical fallback only to
+    # keep softmax finite. Its feedback gate is exactly zero below.
+    safe_mask = legal_mask | ~legal_valid[:, None]
+    legal_log_probs = jax.nn.log_softmax(
+        jnp.where(safe_mask, logits, -jnp.inf),
+        axis=-1,
+    )
+    prediction = jnp.argmax(legal_log_probs, axis=-1).astype(jnp.int32)
+    confidence = jax.lax.stop_gradient(
+        jnp.exp(jnp.max(legal_log_probs, axis=-1))
+    )
+    root_is_masked = current == mask_token_id
+    action = jnp.where(root_is_masked, prediction, current)
+    gate = jnp.where(root_is_masked, confidence, 1.0)
+    gate = jnp.where(legal_valid, gate, 0.0)
+    return RootProposal(
+        action=jax.lax.stop_gradient(action),
+        confidence=confidence,
+        feedback_gate=jax.lax.stop_gradient(gate),
+    )
+
+
 def _jepa_positive_target_vectors(
     z_jepa: jax.Array,
     target_z: jax.Array,
@@ -1131,6 +1238,23 @@ class JointLatentSASAModel(nnx.Module):
                 "jepa_rollout_mode='direct_sequence' does not support "
                 "sampled-target anchors."
             )
+        if config.jepa_feedback_mode not in (
+            "none",
+            "final_pass_adjoint",
+        ):
+            raise ValueError(
+                "jepa_feedback_mode must be 'none' or "
+                f"'final_pass_adjoint', found "
+                f"{config.jepa_feedback_mode!r}."
+            )
+        if (
+            config.jepa_feedback_mode == "final_pass_adjoint"
+            and config.jepa_rollout_mode != "recurrent"
+        ):
+            raise ValueError(
+                "jepa_feedback_mode='final_pass_adjoint' requires "
+                "jepa_rollout_mode='recurrent'."
+            )
         if (
             isinstance(config.jepa_target_sample_count, bool)
             or not isinstance(
@@ -1208,6 +1332,15 @@ class JointLatentSASAModel(nnx.Module):
             if config.jepa_condition_dim > 0
             else config.z_dim
         )
+        if (
+            config.jepa_feedback_mode == "final_pass_adjoint"
+            and condition_dim != config.z_dim
+        ):
+            raise ValueError(
+                "jepa_feedback_mode='final_pass_adjoint' requires the "
+                "effective jepa_condition_dim to equal z_dim: "
+                f"{condition_dim} != {config.z_dim}."
+            )
         jepa_mlp_dim = (
             config.jepa_mlp_dim if config.jepa_mlp_dim > 0 else config.z_dim * 4
         )
@@ -1376,9 +1509,12 @@ class JointLatentSASAModel(nnx.Module):
     def encode_current_jepa(self, current_planes: jnp.ndarray) -> jnp.ndarray:
         """Return projected current-state JEPA vectors."""
 
-        return self.normalize_jepa_state(
-            self.state_projector(self.encode_bt4_tokens(current_planes))
-        )
+        return self.jepa_latents(self.encode_bt4_tokens(current_planes))
+
+    def jepa_latents(self, bt4_tokens: jnp.ndarray) -> jnp.ndarray:
+        """Project already encoded BT4 tokens onto the JEPA state manifold."""
+
+        return self.normalize_jepa_state(self.state_projector(bt4_tokens))
 
     def encode_current_targets(self, current_planes: jnp.ndarray) -> jnp.ndarray:
         return self.encode_current_jepa(current_planes)
@@ -1614,6 +1750,135 @@ class JointLatentSASAModel(nnx.Module):
             (actions_seq, action_hidden_seq),
         )
         return jnp.transpose(pred_seq, (1, 0, 2))
+
+    def jepa_step_from_latents(
+        self,
+        z0_jepa: jnp.ndarray,
+        action: jnp.ndarray,
+        action_hidden: jnp.ndarray,
+        *,
+        z0_normalized: bool = False,
+    ) -> jnp.ndarray:
+        """Run one proposal-conditioned recurrent JEPA transition."""
+
+        expected_hidden_shape = (
+            action.shape[0],
+            self.config.token_dim,
+        )
+        if action_hidden.shape != expected_hidden_shape:
+            raise ValueError(
+                "action_hidden shape must be "
+                f"{expected_hidden_shape}, found {action_hidden.shape}"
+            )
+        condition = (
+            self.jepa_action_embed(action)
+            + self.jepa_hidden_adapter(
+                jnp.asarray(action_hidden, dtype=self.compute_dtype)
+            )
+        )
+        z0 = (
+            jnp.asarray(z0_jepa, dtype=self.compute_dtype)
+            if z0_normalized
+            else self.normalize_jepa_state(z0_jepa)
+        )
+        return self.normalize_jepa_state(
+            self.jepa_transition(z0, condition)
+        )
+
+    def dfm_latents_with_jepa_feedback(
+        self,
+        z_dfm: jnp.ndarray,
+        z0_jepa: jnp.ndarray,
+        z1_jepa: jnp.ndarray,
+        feedback_gate: jnp.ndarray,
+    ) -> JepaFeedbackResult:
+        """Apply the frozen, capped adjoint JEPA residual to DFM state tokens."""
+
+        if self.config.jepa_feedback_mode != "final_pass_adjoint":
+            raise ValueError(
+                "JEPA feedback latents require "
+                "jepa_feedback_mode='final_pass_adjoint'."
+            )
+        expected_jepa_shape = (z_dfm.shape[0], self.z_dim)
+        if z0_jepa.shape != expected_jepa_shape:
+            raise ValueError(
+                f"z0_jepa must have shape {expected_jepa_shape}, "
+                f"found {z0_jepa.shape}"
+            )
+        if z1_jepa.shape != expected_jepa_shape:
+            raise ValueError(
+                f"z1_jepa must have shape {expected_jepa_shape}, "
+                f"found {z1_jepa.shape}"
+            )
+        if feedback_gate.shape != (z_dfm.shape[0],):
+            raise ValueError(
+                "feedback_gate must have shape "
+                f"{(z_dfm.shape[0],)}, found {feedback_gate.shape}"
+            )
+
+        adapter_w = jnp.asarray(
+            self.jepa_hidden_adapter.w[...],
+            dtype=jnp.float32,
+        )
+        if adapter_w.shape[1] != self.z_dim:
+            raise ValueError(
+                "The JEPA hidden adapter output must equal z_dim for "
+                "adjoint feedback: "
+                f"{adapter_w.shape[1]} != {self.z_dim}."
+            )
+        delta = (
+            jnp.asarray(z1_jepa, dtype=jnp.float32)
+            - jnp.asarray(z0_jepa, dtype=jnp.float32)
+        )
+        variance_correction = jnp.sqrt(
+            jnp.asarray(
+                adapter_w.shape[0] / adapter_w.shape[1],
+                dtype=jnp.float32,
+            )
+        )
+        raw_feedback = delta @ jnp.swapaxes(adapter_w, -1, -2)
+        raw_feedback = raw_feedback * variance_correction
+
+        z_dfm_f32 = jnp.asarray(z_dfm, dtype=jnp.float32)
+        delta_rms = jnp.sqrt(
+            jnp.mean(jnp.square(delta), axis=-1)
+        )
+        raw_feedback_rms = jnp.sqrt(
+            jnp.mean(jnp.square(raw_feedback), axis=-1)
+        )
+        state_rms = jnp.sqrt(
+            jnp.mean(jnp.square(z_dfm_f32), axis=(1, 2))
+        )
+        max_feedback_rms = (
+            JEPA_FEEDBACK_MAX_STATE_RMS_RATIO * state_rms
+        )
+        cap_scale = jnp.minimum(
+            1.0,
+            max_feedback_rms
+            / jnp.maximum(raw_feedback_rms, JEPA_STATE_RMS_EPSILON),
+        )
+        gate = jnp.clip(
+            jnp.asarray(feedback_gate, dtype=jnp.float32),
+            0.0,
+            1.0,
+        )
+        applied_feedback = (
+            raw_feedback * cap_scale[:, None] * gate[:, None]
+        )
+        applied_feedback_rms = jnp.sqrt(
+            jnp.mean(jnp.square(applied_feedback), axis=-1)
+        )
+        latents = z_dfm_f32 + applied_feedback[:, None, :]
+        return JepaFeedbackResult(
+            latents=jnp.asarray(latents, dtype=self.compute_dtype),
+            delta_rms=delta_rms,
+            raw_feedback_rms=raw_feedback_rms,
+            applied_feedback_rms=applied_feedback_rms,
+            state_rms=state_rms,
+            cap_fraction=jnp.mean(
+                (cap_scale < 1.0).astype(jnp.float32)
+            ),
+        )
 
     def jepa_direct_sequence_from_latents(
         self,
@@ -2244,8 +2509,78 @@ def joint_stage1_loss_fn(
             mask_token_id=model.config.action_vocab_size,
         )
 
+    feedback_active = (
+        model.config.jepa_feedback_mode == "final_pass_adjoint"
+    )
     with jax.named_scope("joint_dfm_noisy_planner"):
-        logits = model.planner_from_latents(z_dfm, noisy_actions, t)
+        if feedback_active:
+            preliminary_logits, preliminary_hidden = (
+                model.planner_from_latents(
+                    z_dfm,
+                    noisy_actions,
+                    t,
+                    return_hidden=True,
+                )
+            )
+        else:
+            preliminary_logits = model.planner_from_latents(
+                z_dfm,
+                noisy_actions,
+                t,
+            )
+            preliminary_hidden = None
+
+    feedback_result: JepaFeedbackResult | None = None
+    root_proposal: RootProposal | None = None
+    if feedback_active:
+        assert preliminary_hidden is not None
+        with jax.named_scope("joint_dfm_root_proposal"):
+            root_legal_mask = root_legal_mask_from_indices(
+                batch["legal_idx"][:, 0, :],
+                batch["legal_count"][:, 0],
+                action_vocab_size=model.config.action_vocab_size,
+            )
+            root_legal_valid = (
+                jnp.asarray(batch["legal_count"][:, 0], dtype=jnp.int32)
+                > 0
+            )
+            if "legal_masks_valid" in batch:
+                root_legal_valid = root_legal_valid & (
+                    jnp.asarray(
+                        batch["legal_masks_valid"][:, 0],
+                        dtype=jnp.bool_,
+                    )
+                )
+            root_legal_valid = root_legal_valid & (valid > 0.0)
+            root_proposal = proposal_from_root_logits(
+                preliminary_logits[:, 0, :],
+                noisy_actions[:, 0],
+                root_legal_mask,
+                root_legal_valid,
+                mask_token_id=model.config.action_vocab_size,
+            )
+        with jax.named_scope("joint_jepa_proposal_step"):
+            proposal_z = model.jepa_step_from_latents(
+                z_jepa,
+                root_proposal.action,
+                preliminary_hidden["action_tokens"][:, 0, :],
+                z0_normalized=True,
+            )
+        with jax.named_scope("joint_jepa_adjoint_feedback"):
+            feedback_result = model.dfm_latents_with_jepa_feedback(
+                z_dfm,
+                z_jepa,
+                proposal_z,
+                root_proposal.feedback_gate,
+            )
+        with jax.named_scope("joint_dfm_feedback_planner"):
+            logits = model.planner_from_latents(
+                feedback_result.latents,
+                noisy_actions,
+                t,
+            )
+    else:
+        logits = preliminary_logits
     with jax.named_scope("joint_dfm_ce_loss"):
         log_probs = jax.nn.log_softmax(logits, axis=-1)
     ce_by_horizon = -jnp.take_along_axis(log_probs, actions[..., None], axis=-1)[..., 0]
@@ -2259,6 +2594,35 @@ def joint_stage1_loss_fn(
         jnp.sum(dfm_ce_horizon_valid),
         1.0,
     )
+    preliminary_dfm_ce_loss = dfm_ce_loss
+    preliminary_dfm_ce_loss_by_horizon = dfm_ce_loss_by_horizon
+    if feedback_active:
+        preliminary_log_probs = jax.nn.log_softmax(
+            jax.lax.stop_gradient(
+                jnp.asarray(preliminary_logits, dtype=jnp.float32)
+            ),
+            axis=-1,
+        )
+        preliminary_ce_by_horizon = -jnp.take_along_axis(
+            preliminary_log_probs,
+            actions[..., None],
+            axis=-1,
+        )[..., 0]
+        preliminary_dfm_ce_num_by_horizon = jnp.sum(
+            preliminary_ce_by_horizon * weighted_loss_mask,
+            axis=0,
+        )
+        preliminary_dfm_ce_loss_by_horizon = (
+            preliminary_dfm_ce_num_by_horizon
+            / jnp.maximum(dfm_ce_den_by_horizon, 1.0)
+        )
+        preliminary_dfm_ce_loss = jnp.sum(
+            preliminary_dfm_ce_loss_by_horizon
+            * dfm_ce_horizon_valid
+        ) / jnp.maximum(
+            jnp.sum(dfm_ce_horizon_valid),
+            1.0,
+        )
     if model.config.dfm_first_action_loss_share == 0.0:
         # Preserve the compatibility path's exact reduction arithmetic.
         dfm_objective_weight_by_horizon = None
@@ -2991,6 +3355,73 @@ def joint_stage1_loss_fn(
         "mask_prob": jnp.mean(1.0 - t),
         "loss_horizon": jnp.asarray(loss_horizon, dtype=jnp.float32),
     }
+    if feedback_active:
+        assert feedback_result is not None
+        assert root_proposal is not None
+        aux.update(
+            {
+                "jepa_feedback_active": jnp.asarray(
+                    1.0,
+                    dtype=jnp.float32,
+                ),
+                "jepa_feedback_preliminary_planner_calls": jnp.asarray(
+                    1.0,
+                    dtype=jnp.float32,
+                ),
+                "jepa_feedback_conditioned_planner_calls": jnp.asarray(
+                    1.0,
+                    dtype=jnp.float32,
+                ),
+                "jepa_feedback_preliminary_dfm_ce_loss": (
+                    preliminary_dfm_ce_loss
+                ),
+                "jepa_feedback_preliminary_dfm_ce_loss_by_horizon": (
+                    preliminary_dfm_ce_loss_by_horizon
+                ),
+                "jepa_feedback_dfm_ce_gain": (
+                    preliminary_dfm_ce_loss - dfm_ce_loss
+                ),
+                "jepa_feedback_dfm_ce_gain_by_horizon": (
+                    preliminary_dfm_ce_loss_by_horizon
+                    - dfm_ce_loss_by_horizon
+                ),
+                "jepa_feedback_proposal_confidence_mean": jnp.mean(
+                    root_proposal.confidence
+                ),
+                "jepa_feedback_gate_mean": jnp.mean(
+                    root_proposal.feedback_gate
+                ),
+                "jepa_feedback_gate_nonzero_fraction": jnp.mean(
+                    (
+                        root_proposal.feedback_gate > 0.0
+                    ).astype(jnp.float32)
+                ),
+                "jepa_feedback_delta_rms_mean": jnp.mean(
+                    feedback_result.delta_rms
+                ),
+                "jepa_feedback_raw_rms_mean": jnp.mean(
+                    feedback_result.raw_feedback_rms
+                ),
+                "jepa_feedback_applied_rms_mean": jnp.mean(
+                    feedback_result.applied_feedback_rms
+                ),
+                "jepa_feedback_state_rms_mean": jnp.mean(
+                    feedback_result.state_rms
+                ),
+                "jepa_feedback_applied_to_state_rms_ratio": (
+                    jnp.mean(
+                        feedback_result.applied_feedback_rms
+                        / jnp.maximum(
+                            feedback_result.state_rms,
+                            JEPA_STATE_RMS_EPSILON,
+                        )
+                    )
+                ),
+                "jepa_feedback_cap_fraction": (
+                    feedback_result.cap_fraction
+                ),
+            }
+        )
     if wdl_diagnostics is not None:
         aux.update(wdl_diagnostics)
     if dfm_objective_weight_by_horizon is not None:
@@ -3856,6 +4287,56 @@ def validate_objective_config(
             raise ValueError(
                 "jepa_rollout_mode='direct_sequence' does not support "
                 "teacher-forced recurrent carries."
+            )
+    feedback_mode = config.jepa_feedback_mode
+    if feedback_mode not in ("none", "final_pass_adjoint"):
+        raise ValueError(
+            "jepa_feedback_mode must be 'none' or 'final_pass_adjoint', "
+            f"found {feedback_mode!r}"
+        )
+    if feedback_mode == "final_pass_adjoint":
+        effective_condition_dim = (
+            config.jepa_condition_dim
+            if config.jepa_condition_dim > 0
+            else config.z_dim
+        )
+        if objective != "normalized":
+            raise ValueError(
+                "jepa_feedback_mode='final_pass_adjoint' requires "
+                "--objective normalized."
+            )
+        if rollout_mode != "recurrent":
+            raise ValueError(
+                "jepa_feedback_mode='final_pass_adjoint' requires "
+                "jepa_rollout_mode='recurrent'."
+            )
+        if effective_condition_dim != config.z_dim:
+            raise ValueError(
+                "jepa_feedback_mode='final_pass_adjoint' requires the "
+                "effective jepa_condition_dim to equal z_dim."
+            )
+        if (
+            target_sample_count != 1
+            or target_sampling_unit != "example_balanced"
+        ):
+            raise ValueError(
+                "jepa_feedback_mode='final_pass_adjoint' requires "
+                "balanced per-example K=1 target sampling."
+            )
+        if config.jepa_sampled_target_anchors:
+            raise ValueError(
+                "jepa_feedback_mode='final_pass_adjoint' does not "
+                "support sampled-target anchors."
+            )
+        if config.jepa_teacher_forcing_steps != 0:
+            raise ValueError(
+                "jepa_feedback_mode='final_pass_adjoint' does not "
+                "support teacher-forced recurrent carries."
+            )
+        if config.horizon != 8:
+            raise ValueError(
+                "jepa_feedback_mode='final_pass_adjoint' is frozen for "
+                f"horizon=8, found horizon={config.horizon}."
             )
     if 0 < target_sample_count < config.horizon:
         if objective != "normalized":
@@ -4799,6 +5280,11 @@ def serialized_model_config(
         == JointLatentSASAConfig.jepa_rollout_mode
     ):
         payload.pop("jepa_rollout_mode")
+    if (
+        config.jepa_feedback_mode
+        == JointLatentSASAConfig.jepa_feedback_mode
+    ):
+        payload.pop("jepa_feedback_mode")
     if config.jepa_projector_active_layers == 0:
         payload.pop("jepa_projector_active_layers")
     if config.dfm_active_layers == 0:
@@ -4840,6 +5326,10 @@ def build_research_resume_contract(
         REPO_ROOT / "chess_dfm_jax" / "nnx_bt4.py",
         REPO_ROOT / "chess_dfm_jax" / "data" / "trajectory_v3.py",
     )
+    if config.jepa_feedback_mode == "final_pass_adjoint":
+        source_files = source_files + (
+            REPO_ROOT / "research" / "inference.py",
+        )
     objective_contract = {
         "name": objective,
         "jepa_target_semantics": config.jepa_target_semantics,
@@ -4872,6 +5362,39 @@ def build_research_resume_contract(
             "prediction_sigreg_horizons": "all",
             "collapse_diagnostics_dispatch": "same_configured_graph",
             "dfm_inference_affected": False,
+        }
+    if config.jepa_feedback_mode == "final_pass_adjoint":
+        objective_contract["jepa_closed_loop_feedback"] = {
+            "mode": "final_pass_adjoint",
+            "proposal_source": (
+                "legal_masked_preliminary_dfm_root_argmax_or_revealed_token"
+            ),
+            "teacher_action_visible_when_masked": False,
+            "proposal_index_gradient": "stopped",
+            "proposal_confidence_gradient": "stopped",
+            "invalid_training_legality_feedback_gate": 0.0,
+            "jepa_steps_per_feedback": 1,
+            "feedback_latent": "normalized_z1_minus_normalized_z0",
+            "bridge": "transpose(jepa_hidden_adapter.w)",
+            "bridge_bias": "unused",
+            "variance_correction": (
+                "sqrt(token_dim/jepa_condition_dim)"
+            ),
+            "maximum_feedback_to_state_rms_ratio": (
+                JEPA_FEEDBACK_MAX_STATE_RMS_RATIO
+            ),
+            "feedback_broadcast_tokens": 64,
+            "training_noisy_planner_calls": 2,
+            "training_dfm_ce_source": "feedback_conditioned_logits_only",
+            "preliminary_dfm_ce": "detached_diagnostic_only",
+            "inference_dfm_planner_calls": 8,
+            "inference_feedback_after_pass": 7,
+            "inference_feedback_applied_to_pass": 8,
+            "inference_additional_bt4_encodes": 0,
+            "inference_additional_jepa_projector_calls": 1,
+            "inference_additional_jepa_transition_steps": 1,
+            "model_state_abi": "unchanged",
+            "optimizer_state_abi": "unchanged_source_compatible",
         }
     if config.dfm_first_action_loss_share != 0.0:
         tail_horizon_count = (

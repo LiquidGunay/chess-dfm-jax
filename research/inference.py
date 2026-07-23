@@ -30,6 +30,7 @@ from chess_dfm_jax.policy import (
 class _DFMConfig(Protocol):
     horizon: int
     action_vocab_size: int
+    jepa_feedback_mode: str
 
 
 class LocalDFMInferenceModel(Protocol):
@@ -41,11 +42,32 @@ class LocalDFMInferenceModel(Protocol):
 
     def dfm_latents(self, bt4_tokens: jax.Array) -> jax.Array: ...
 
+    def jepa_latents(self, bt4_tokens: jax.Array) -> jax.Array: ...
+
+    def jepa_step_from_latents(
+        self,
+        z0_jepa: jax.Array,
+        action: jax.Array,
+        action_hidden: jax.Array,
+        *,
+        z0_normalized: bool = False,
+    ) -> jax.Array: ...
+
+    def dfm_latents_with_jepa_feedback(
+        self,
+        z_dfm: jax.Array,
+        z0_jepa: jax.Array,
+        z1_jepa: jax.Array,
+        feedback_gate: jax.Array,
+    ) -> Any: ...
+
     def planner_from_latents(
         self,
         z_dfm: jax.Array,
         action_tokens: jax.Array,
         t: jax.Array,
+        *,
+        return_hidden: bool = False,
     ) -> jax.Array: ...
 
 
@@ -102,7 +124,37 @@ def _model_dimensions(model: LocalDFMInferenceModel) -> tuple[int, int]:
             "legacy_absolute_1858 inference requires "
             f"action_vocab_size={ACTION_VOCAB_SIZE}, got {action_vocab_size}"
         )
+    feedback_mode = getattr(model.config, "jepa_feedback_mode", "none")
+    if feedback_mode not in ("none", "final_pass_adjoint"):
+        raise ValueError(
+            "Unsupported jepa_feedback_mode for local inference: "
+            f"{feedback_mode!r}"
+        )
+    if feedback_mode == "final_pass_adjoint" and horizon != 8:
+        raise ValueError(
+            "jepa_feedback_mode='final_pass_adjoint' requires horizon=8, "
+            f"got {horizon}"
+        )
     return horizon, action_vocab_size
+
+
+def _feedback_mode(model: LocalDFMInferenceModel) -> str:
+    return str(getattr(model.config, "jepa_feedback_mode", "none"))
+
+
+def _validate_feedback_refinement_count(
+    model: LocalDFMInferenceModel,
+    *,
+    refinement_passes: int,
+) -> None:
+    if (
+        _feedback_mode(model) == "final_pass_adjoint"
+        and refinement_passes != 8
+    ):
+        raise ValueError(
+            "jepa_feedback_mode='final_pass_adjoint' requires exactly "
+            f"8 refinement passes, got {refinement_passes}"
+        )
 
 
 def _validate_refinement_options(
@@ -209,6 +261,47 @@ def _selection_distributions(
     )
 
 
+def _proposal_feedback_latents(
+    model: LocalDFMInferenceModel,
+    z_dfm: jax.Array,
+    z_jepa: jax.Array,
+    root_action_before_update: jax.Array,
+    root_action_after_update: jax.Array,
+    root_prediction: jax.Array,
+    root_legal_log_probs: jax.Array,
+    root_action_hidden: jax.Array,
+) -> jax.Array:
+    """Return DFM latents conditioned on pass-7's legal root proposal."""
+
+    mask_token = int(model.config.action_vocab_size)
+    proposal = jnp.where(
+        root_action_after_update == mask_token,
+        root_prediction,
+        root_action_after_update,
+    )
+    proposal_confidence = jnp.exp(
+        jnp.max(root_legal_log_probs, axis=-1)
+    )
+    feedback_gate = jnp.where(
+        root_action_before_update == mask_token,
+        proposal_confidence,
+        1.0,
+    )
+    proposal_z = model.jepa_step_from_latents(
+        z_jepa,
+        jax.lax.stop_gradient(proposal),
+        root_action_hidden,
+        z0_normalized=True,
+    )
+    feedback = model.dfm_latents_with_jepa_feedback(
+        z_dfm,
+        z_jepa,
+        proposal_z,
+        jax.lax.stop_gradient(feedback_gate),
+    )
+    return feedback.latents
+
+
 def _refine_dfm_from_latents_impl(
     model: LocalDFMInferenceModel,
     z_dfm: jax.Array,
@@ -216,17 +309,30 @@ def _refine_dfm_from_latents_impl(
     *,
     refinement_passes: int,
     trace_top_k: int,
+    z_jepa: jax.Array | None = None,
 ) -> DFMInferenceResult:
     """Compiled-kernel implementation; inputs must already be validated."""
 
     batch_size = z_dfm.shape[0]
     horizon = int(model.config.horizon)
     mask_token = int(model.config.action_vocab_size)
+    feedback_active = _feedback_mode(model) == "final_pass_adjoint"
+    if feedback_active:
+        if refinement_passes != 8:
+            raise ValueError(
+                "jepa_feedback_mode='final_pass_adjoint' requires exactly "
+                f"8 refinement passes, got {refinement_passes}"
+            )
+        if z_jepa is None:
+            raise ValueError(
+                "Closed-loop refinement requires current JEPA latents."
+            )
     action_tokens = jnp.full(
         (batch_size, horizon),
         mask_token,
         dtype=jnp.int32,
     )
+    planner_z_dfm = z_dfm
 
     times: list[jax.Array] = []
     actions_before: list[jax.Array] = []
@@ -244,7 +350,23 @@ def _refine_dfm_from_latents_impl(
             dtype=jnp.float32,
         )
         t = jnp.full((batch_size,), t_scalar, dtype=jnp.float32)
-        logits = model.planner_from_latents(z_dfm, action_tokens, t)
+        feedback_source_pass = (
+            feedback_active and pass_index == refinement_passes - 2
+        )
+        if feedback_source_pass:
+            logits, hidden = model.planner_from_latents(
+                planner_z_dfm,
+                action_tokens,
+                t,
+                return_hidden=True,
+            )
+        else:
+            logits = model.planner_from_latents(
+                planner_z_dfm,
+                action_tokens,
+                t,
+            )
+            hidden = None
         (
             selection_log_probs,
             root_raw_entropy,
@@ -297,6 +419,19 @@ def _refine_dfm_from_latents_impl(
             predictions,
             action_tokens,
         )
+        if feedback_source_pass:
+            assert hidden is not None
+            assert z_jepa is not None
+            planner_z_dfm = _proposal_feedback_latents(
+                model,
+                z_dfm,
+                z_jepa,
+                before[:, 0],
+                action_tokens[:, 0],
+                predictions[:, 0],
+                root_legal_log_probs,
+                hidden["action_tokens"][:, 0, :],
+            )
 
         times.append(t_scalar)
         actions_before.append(before)
@@ -328,6 +463,7 @@ def _refine_dfm_actions_from_latents_impl(
     root_legal_mask: jax.Array,
     *,
     refinement_passes: int,
+    z_jepa: jax.Array | None = None,
 ) -> jax.Array:
     """Return only final actions while preserving the checked refinement rule.
 
@@ -339,11 +475,23 @@ def _refine_dfm_actions_from_latents_impl(
     batch_size = z_dfm.shape[0]
     horizon = int(model.config.horizon)
     mask_token = int(model.config.action_vocab_size)
+    feedback_active = _feedback_mode(model) == "final_pass_adjoint"
+    if feedback_active:
+        if refinement_passes != 8:
+            raise ValueError(
+                "jepa_feedback_mode='final_pass_adjoint' requires exactly "
+                f"8 refinement passes, got {refinement_passes}"
+            )
+        if z_jepa is None:
+            raise ValueError(
+                "Closed-loop refinement requires current JEPA latents."
+            )
     action_tokens = jnp.full(
         (batch_size, horizon),
         mask_token,
         dtype=jnp.int32,
     )
+    planner_z_dfm = z_dfm
 
     for pass_index in range(refinement_passes):
         t = jnp.full(
@@ -351,10 +499,27 @@ def _refine_dfm_actions_from_latents_impl(
             jnp.asarray(pass_index / refinement_passes, dtype=jnp.float32),
             dtype=jnp.float32,
         )
-        logits = jnp.asarray(
-            model.planner_from_latents(z_dfm, action_tokens, t),
-            dtype=jnp.float32,
+        feedback_source_pass = (
+            feedback_active and pass_index == refinement_passes - 2
         )
+        if feedback_source_pass:
+            logits, hidden = model.planner_from_latents(
+                planner_z_dfm,
+                action_tokens,
+                t,
+                return_hidden=True,
+            )
+            logits = jnp.asarray(logits, dtype=jnp.float32)
+        else:
+            logits = jnp.asarray(
+                model.planner_from_latents(
+                    planner_z_dfm,
+                    action_tokens,
+                    t,
+                ),
+                dtype=jnp.float32,
+            )
+            hidden = None
         root_logits = jnp.where(root_legal_mask, logits[:, 0, :], -jnp.inf)
         if horizon == 1:
             selection_logits = root_logits[:, None, :]
@@ -386,11 +551,25 @@ def _refine_dfm_actions_from_latents_impl(
             axis=-1,
             stable=True,
         )
+        before = action_tokens
         action_tokens = jnp.where(
             position_ranks < target_unmasked,
             predictions,
             action_tokens,
         )
+        if feedback_source_pass:
+            assert hidden is not None
+            assert z_jepa is not None
+            planner_z_dfm = _proposal_feedback_latents(
+                model,
+                z_dfm,
+                z_jepa,
+                before[:, 0],
+                action_tokens[:, 0],
+                predictions[:, 0],
+                jax.nn.log_softmax(root_logits, axis=-1),
+                hidden["action_tokens"][:, 0, :],
+            )
     return action_tokens
 
 
@@ -406,12 +585,18 @@ def _infer_dfm_from_current_impl(
 
     bt4_tokens = model.encode_bt4_tokens(current_planes)
     z_dfm = model.dfm_latents(bt4_tokens)
+    z_jepa = (
+        model.jepa_latents(bt4_tokens)
+        if _feedback_mode(model) == "final_pass_adjoint"
+        else None
+    )
     return _refine_dfm_from_latents_impl(
         model,
         z_dfm,
         root_legal_mask,
         refinement_passes=refinement_passes,
         trace_top_k=trace_top_k,
+        z_jepa=z_jepa,
     )
 
 
@@ -424,11 +609,17 @@ def _infer_dfm_actions_from_current_impl(
 ) -> jax.Array:
     bt4_tokens = model.encode_bt4_tokens(current_planes)
     z_dfm = model.dfm_latents(bt4_tokens)
+    z_jepa = (
+        model.jepa_latents(bt4_tokens)
+        if _feedback_mode(model) == "final_pass_adjoint"
+        else None
+    )
     return _refine_dfm_actions_from_latents_impl(
         model,
         z_dfm,
         root_legal_mask,
         refinement_passes=refinement_passes,
+        z_jepa=z_jepa,
     )
 
 
@@ -462,6 +653,10 @@ def _validated_current_inputs(
         refinement_passes=refinement_passes,
         trace_top_k=trace_top_k,
         action_vocab_size=action_vocab_size,
+    )
+    _validate_feedback_refinement_count(
+        model,
+        refinement_passes=refinement_passes,
     )
     planes = jnp.asarray(current_planes)
     if planes.ndim != 4:
@@ -555,6 +750,16 @@ def refine_dfm_from_latents(
         trace_top_k=trace_top_k,
         action_vocab_size=action_vocab_size,
     )
+    _validate_feedback_refinement_count(
+        model,
+        refinement_passes=refinement_passes,
+    )
+    if _feedback_mode(model) == "final_pass_adjoint":
+        raise ValueError(
+            "refine_dfm_from_latents cannot run "
+            "jepa_feedback_mode='final_pass_adjoint' because current JEPA "
+            "latents are not part of this API; use current-board inference."
+        )
     latents = jnp.asarray(z_dfm)
     if latents.ndim != 3:
         raise ValueError(f"z_dfm must have shape [batch, tokens, width], got {latents.shape}")

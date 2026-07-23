@@ -555,6 +555,7 @@ def test_local_config_and_initialized_model_match_legacy_exactly():
             "jepa_sampled_target_anchors",
             "jepa_target_sampling_unit",
             "jepa_rollout_mode",
+            "jepa_feedback_mode",
             "jepa_state_fixed_unit_rms",
             "bt4_freeze_backbone",
             "bt4_future_target_stop_gradient",
@@ -631,6 +632,12 @@ def test_local_config_and_initialized_model_match_legacy_exactly():
             "jepa_rollout_mode"
         ].default
         == "recurrent"
+    )
+    assert (
+        local.JointLatentSASAConfig.__dataclass_fields__[
+            "jepa_feedback_mode"
+        ].default
+        == "none"
     )
 
     kwargs = _config_kwargs()

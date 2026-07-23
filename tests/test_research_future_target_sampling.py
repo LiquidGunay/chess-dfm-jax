@@ -275,6 +275,7 @@ def test_active_experiment_uses_one_block_future_gradient_tail() -> None:
     )
     assert config.jepa_target_sample_count == 1
     assert config.jepa_target_sampling_unit == "example_balanced"
+    assert config.jepa_feedback_mode == "final_pass_adjoint"
     assert config.dfm_first_action_loss_share == 0.0
     assert config.dfm_force_first_action_mask is False
     assert config.dfm_training_time_power == 1.0
