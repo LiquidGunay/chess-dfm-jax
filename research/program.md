@@ -307,6 +307,17 @@ checkpoint, state, GPU process, or nonempty run directory survives. Run no
 profile, fixed-time rescue, repeat, or arena. Restore coefficient zero and
 retain the codec-aware distillation capability default-off.
 
+Experiment 024 is preregistered in
+`research/experiment_root_legal_conditional_ce_tail1.md`. It leaves uniform
+full-vocabulary CE and the existing legality objective unchanged, then adds a
+root-only played-action CE normalized over stored legal actions. This directly
+optimizes the ranking used by legal-masked inference with zero direct gradient
+on illegal logits and no additional model call or inference work. A two-pool,
+no-update source calibration freezes its one coefficient to make the initial
+weighted component `0.25`; no coefficient sweep is allowed. The fixed guard,
+offline gates, repeat, and both incumbent/raw-BT4 point-score gates remain in
+force, with at most one intermediate plus one terminal state.
+
 ## Editable surface
 
 During automated architecture research, edit only `research/train.py`.

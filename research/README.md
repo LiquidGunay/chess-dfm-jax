@@ -374,3 +374,12 @@ The guard exits safely; no report, checkpoint, state, process, or nonempty run
 directory remains. Run no smaller-batch rescue, profile, fixed-time training,
 repeat, or arena. The implementation remains default-off and coefficient zero
 is restored.
+
+Experiment 024 is preregistered in
+`experiment_root_legal_conditional_ce_tail1.md`. It adds no teacher or model
+call: the played root action is ranked only against the stored legal actions,
+while uniform full-vocabulary CE and the existing legality loss remain
+unchanged. Its one coefficient is frozen by two source-init no-update pools to
+an initial weighted scale of `0.25`. The sparse legal reduction must compile
+under the existing guard before any fixed-time run, and at most update 1,600
+plus terminal may be written temporarily.

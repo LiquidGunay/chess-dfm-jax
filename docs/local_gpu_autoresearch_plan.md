@@ -1707,3 +1707,13 @@ sweeps, held-out data, and repeated seeds.
   `10.946 GB` process-group RSS versus the fixed `7.516 GB` ceiling and exits
   safely before any update or state write. Reject at the systems gate, run no
   smaller-batch rescue or later stage, and restore coefficient zero.
+- [ ] Test root legal-conditional imitation without enlarging the model
+  graph. Keep uniform full-vocabulary CE and `2.0 * (1 - legal_mass)`
+  unchanged, and add played-action CE normalized only over stored root legal
+  moves. Calibrate its single coefficient on the two no-update source pools
+  to initial weighted scale `0.25`, require exact zero direct gradient on
+  illegal logits, then apply the guarded smoke/profile, repeat-qualified
+  offline gates, and both incumbent/raw-BT4 point-score gates in
+  `research/experiment_root_legal_conditional_ce_tail1.md`. Write at most one
+  intermediate plus one terminal state; do not sweep the coefficient or
+  relax the resource guard.
