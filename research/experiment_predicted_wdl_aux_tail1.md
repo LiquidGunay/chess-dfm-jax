@@ -132,3 +132,37 @@ evidence; delete all nonselected and repeat states. A failure restores
 `wdl_coeff=0.0` and closes this single-coefficient joint-auxiliary test rather
 than authorizing a WDL-weight sweep. Keep every mutable file below
 `/mountpoint/.exp`, and never overlap GPU workloads.
+
+## Outcome
+
+Experiment 020 is complete and rejected at the exact-repeat policy gate. The
+one-update smoke was finite and unclipped with exactly 1,024 valid one-hot WDL
+labels, weighted WDL loss equal to `0.25 * CE`, balanced 16-per-horizon JEPA
+targets, and fixed norm/target/`z_pred` coefficients `0.0/5.76/1.0`. The
+30-update profile reached `151.131` end-to-end examples/s with
+`12,878,287,104` peak JAX HBM bytes, clearing both systems gates.
+
+H1-first selection chose the terminal state in both fixed-time runs:
+
+| run | update | WDL CE/accuracy | H1/uniform CE | action accuracy | legal mass |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| primary | 2,065 | 0.972390 / 0.511017 | 2.844706 / 4.496097 | 0.110870 | 0.647005 |
+| repeat | 2,067 | 0.973708 / 0.510025 | 2.848543 / 4.498610 | 0.110321 | 0.645706 |
+
+Both selected states beat the empirical WDL prior on each frozen seed. Both
+also pass the H1, accuracy, rank, feature-tail, target-RMS, prediction/target
+RMS-ratio, and all-horizon trivial-baseline gates. The repeat nevertheless
+misses the uniform-CE ceiling by `0.0014257450` and the legal-mass floor by
+`0.0010171198`. Per the frozen decision, run no arena and do not sweep the WDL
+coefficient. Restore `wdl_coeff=0.0` and delete every candidate state; compact
+reports and two-seed scans remain.
+
+During the initial smoke sequence, a disconnected launch remained alive while
+a duplicate launch compiled. Kernel logs confirm a global OOM with the two JAX
+processes holding roughly 4.7 and 4.5 GiB anonymous RAM. This did not overlap
+either fixed-time run, but exposed an unsafe launcher boundary. Commit
+`65e9752` adds a host-visible exclusive GPU lock, two-CPU affinity, parent-death
+handling, a 7 GiB process-group RSS ceiling, 8/3 GiB launch/runtime
+MemAvailable floors, a 30 GiB disk reserve, and a maximum of two checkpoint
+writes. The guarded repeat scan measured 4.83 GiB peak process-group RSS and
+8.06 GiB minimum MemAvailable.

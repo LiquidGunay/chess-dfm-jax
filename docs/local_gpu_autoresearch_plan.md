@@ -1,7 +1,7 @@
 # Local GPU Autoresearch Plan
 
 Status: implementation in progress. The plan was approved on 2026-07-18 and
-revised through 2026-07-22; the frozen loop is now enabled with
+revised through 2026-07-23; the frozen loop is now enabled with
 `AUTORESEARCH_READY = True`. Compatibility v2/update 300 remains the
 repeat-qualified control. The no-norm target-SIGReg-5.76,
 prediction-SIGReg-1.0 v2/update-400 checkpoint is now the repeat-qualified
@@ -1654,11 +1654,14 @@ sweeps, held-out data, and repeated seeds.
   BT4, below the frozen `36.523%` anchor. Reject it as an Elo-aligned
   incumbent, retain no candidate state, restore power `1.0` with H1 forcing
   off, and close corruption-power tuning.
-- [ ] Test a checkpoint-compatible WDL auxiliary on every free-rollout
+- [x] Test a checkpoint-compatible WDL auxiliary on every free-rollout
   predicted state. The shards contain played-game outcome labels but no engine
   or counterfactual action values. Add categorical WDL CE at coefficient
   `0.25`, keep norm/target/`z_pred` coefficients `0.0/5.76/1.0`, leave
   inference unchanged, require the head to beat fixed class-prior baselines,
   and retain a candidate only if repeated offline gates plus both incumbent
   and raw-BT4 arena point gates pass. The frozen contract is in
-  `research/experiment_predicted_wdl_aux_tail1.md`.
+  `research/experiment_predicted_wdl_aux_tail1.md`. Primary update 2,065
+  passes all gates, but repeat update 2,067 misses uniform CE and legal mass by
+  `0.0014257/0.0010171`; reject without arena, retain no state, restore WDL
+  coefficient zero, and do not sweep the coefficient.

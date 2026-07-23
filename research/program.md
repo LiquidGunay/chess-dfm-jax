@@ -250,6 +250,14 @@ the 25% first-action CE allocation and changes only first-legality coefficient
 legal-mass, latent, repeat, and two matched arena gates remain frozen; the
 preceding CE gain does not authorize weakening any threshold.
 
+Experiment 020's predicted-state WDL auxiliary is rejected at its
+exact-repeat gate. Primary update 2,065 passes at WDL CE `0.972390`,
+H1/uniform CE `2.844706/4.496097`, and legal mass `0.647005`. Repeat update
+2,067 still passes WDL, H1, accuracy, and every latent gate, but uniform CE
+`4.498610` and legal mass `0.645706` fail their frozen thresholds. Run no
+arena, retain no candidate state, restore `wdl_coeff=0.0`, and do not sweep
+the coefficient.
+
 ## Editable surface
 
 During automated architecture research, edit only `research/train.py`.

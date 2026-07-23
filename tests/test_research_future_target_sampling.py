@@ -279,7 +279,7 @@ def test_active_experiment_uses_one_block_future_gradient_tail() -> None:
     assert config.dfm_force_first_action_mask is False
     assert config.dfm_training_time_power == 1.0
     assert config.value_coeff == 0.0
-    assert config.wdl_coeff == 0.25
+    assert config.wdl_coeff == 0.0
     assert config.bt4_future_target_stop_gradient is True
     assert config.bt4_future_target_trainable_tail_layers == 1
     assert config.bt4_freeze_backbone is False
@@ -287,7 +287,7 @@ def test_active_experiment_uses_one_block_future_gradient_tail() -> None:
     assert config.lr_decay_start_steps == 400
     assert config.lr_decay_steps == 800
     assert config.lr_min_ratio == 0.1
-    assert train.serialized_model_config(config)["wdl_coeff"] == 0.25
+    assert train.serialized_model_config(config)["wdl_coeff"] == 0.0
 
 
 def test_sampled_target_subset_changes_across_predeclared_rng_keys() -> None:

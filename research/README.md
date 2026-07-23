@@ -323,3 +323,13 @@ coefficient `0.25`, adds outcome-quality metrics, and leaves eight-pass
 inference unchanged. Policy, legality, latent, repeat, and matched incumbent/
 raw-BT4 arena gates remain frozen; failure restores WDL coefficient zero
 rather than opening a weight sweep.
+
+Experiment 020 is complete and rejected at its exact-repeat gate. Primary
+update 2,065 passes every frozen gate at WDL CE/accuracy
+`0.972390/0.511017`, H1/uniform CE `2.844706/4.496097`, action accuracy
+`0.110870`, and legal mass `0.647005`. Repeat update 2,067 again learns WDL
+and passes H1 plus every latent gate, but its uniform CE `4.498610` and legal
+mass `0.645706` miss their frozen thresholds by `0.0014257/0.0010171`.
+Therefore run no arena, retain no candidate state, restore WDL coefficient
+zero, and do not open a coefficient sweep. Target and `z_pred` SIGReg remain
+fixed at `5.76/1.0`, with RMS norm matching off.
