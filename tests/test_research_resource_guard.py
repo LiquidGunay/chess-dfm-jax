@@ -48,6 +48,20 @@ def test_checkpoint_plan_counts_sparse_and_final_writes() -> None:
         save_every=0,
         max_retained=2,
     )
+    assert checkpoint_plan(
+        [
+            ".venv/bin/python",
+            "research/train_torch.py",
+            "train",
+            "--save-final",
+            "--max-checkpoints",
+            "1",
+        ]
+    ) == CheckpointPlan(
+        planned_writes=1,
+        save_every=0,
+        max_retained=1,
+    )
 
 
 def test_checkpoint_plan_ignores_evaluators_and_respects_no_save_final() -> None:

@@ -263,7 +263,8 @@ def _save_updates(command: Sequence[str]) -> tuple[int, ...]:
 
 
 def _is_research_train(command: Sequence[str]) -> bool:
-    return any(Path(argument).name == "train.py" for argument in command)
+    trainer_names = {"train.py", "train_torch.py"}
+    return any(Path(argument).name in trainer_names for argument in command)
 
 
 def checkpoint_plan(command: Sequence[str]) -> CheckpointPlan:
