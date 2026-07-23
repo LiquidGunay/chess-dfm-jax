@@ -1,7 +1,8 @@
 # Experiment 022: proposal-derived JEPA feedback before the final DFM pass
 
-Status: preregistered on 2026-07-23. No GPU smoke, profile, fixed-time run,
-checkpoint evaluation, repeat, or arena has been run.
+Status: completed and rejected at the guarded compilation/smoke gate on
+2026-07-23. No profile, inference benchmark, fixed-time run, checkpoint
+evaluation, repeat, or arena was run.
 
 ## Question and hypothesis
 
@@ -235,4 +236,37 @@ and never overlap GPU workloads.
 
 ## Outcome
 
-Pending.
+Commit `803a3be` preregisters and implements the parameter-free feedback
+graph. One hundred fifty-five guarded focused CPU tests pass. They cover the
+exact adjoint and cap mathematics, sparse legality construction, proposal
+selection and revealed-token preservation, the explicit no-target-leak
+boundary, zero invalid-metadata feedback, finite gradients through every
+intended path, unchanged parameter state ABI, default-off training/inference
+parity, explicit serialization/resume semantics, exactly eight inference
+planner calls, feedback before only the eighth call, diagnostic/action-only
+agreement, and fail-closed incompatible configs, pass counts, and latent-only
+inference. The CPU guard observed `4,733,784,064` bytes peak process-group RSS
+and at least `7,632,736,256` bytes host `MemAvailable`.
+
+The guarded real-checkpoint batch-128 one-update smoke did not reach XLA
+compilation completion. The launcher began with `12,104,175,616` bytes
+`MemAvailable`, `63,833,243,648` bytes free disk, zero checkpoint writes, two
+CPUs, and the frozen `7,516,192,768`-byte process-group RSS ceiling. After
+`83.417` seconds, the feedback training graph reached `11,095,023,616` bytes
+process-group RSS. The guard terminated it with exit 75 while host
+`MemAvailable` remained at least `6,095,749,120` bytes, safely above the
+`3,221,225,472`-byte runtime floor.
+
+This is the preregistered terminal condition. Run no cached profile, inference
+benchmark, 30-minute training, checkpoint evaluation, repeat, or arena, and
+do not rescue the experiment by changing batch size, graph, or guard. The
+command wrote no report, compiler analysis, checkpoint, or state; its empty
+4 KiB run directory was removed. Host process and A10G compute-process checks
+are empty after termination.
+
+Restore the active override to `jepa_feedback_mode="none"` while retaining the
+tested capability default-off. Experiments 021 and 022 independently show
+that increasing the compiled graph in these two forms exceeds the host-memory
+budget before device execution. A future closed-loop revisit therefore needs
+a separately preregistered low-host-memory lowering or a smaller model family;
+it is not an authorized rescue of this result.

@@ -1679,3 +1679,16 @@ sweeps, held-out data, and repeated seeds.
   MemAvailable still `6.194 GB`. Reject at the systems gate: run no profile,
   fixed-time training, repeat, checkpoint evaluation, or arena; write no
   state; remove the empty run directory; and restore recurrent mode.
+- [x] Test a parameter-free closed loop without target leakage or a ninth DFM
+  inference call. Use pass 7's own legal root proposal and hidden state, one
+  recurrent JEPA step, and a capped adjoint of the existing hidden adapter to
+  condition pass 8 only. Keep the parameter/checkpoint ABI, balanced K=1,
+  one-block future tail, eight-pass count, and `0.0/5.76/1.0` loss fixed. The
+  immutable contract is in
+  `research/experiment_closed_loop_final_pass_adjoint_tail1.md`. One hundred
+  fifty-five guarded focused CPU tests pass, but the batch-128 smoke aborts
+  safely during compilation at `11.095 GB` process-group RSS versus the
+  `7.516 GB` ceiling, with minimum host `MemAvailable` still `6.096 GB`.
+  Reject at the systems gate: run no profile, inference benchmark, fixed-time
+  training, repeat, evaluation, or arena; write no state; remove the empty run
+  directory; and restore feedback mode `none`.

@@ -342,3 +342,14 @@ ceiling. The guard terminates it before host MemAvailable falls below
 `6.194 GB`; no process, report, or checkpoint survives. Per the immutable
 contract, run no profile or fixed-time rescue. Direct execution remains
 available default-off and recurrent JEPA is restored as the active graph.
+
+Experiment 022 is also complete and rejected at its guarded compilation gate.
+Its parameter-free closed loop uses the model's own legal proposal, one
+recurrent JEPA step, and the adjoint of the existing hidden adapter before
+only the eighth DFM inference call. One hundred fifty-five guarded focused CPU
+tests pass, but the batch-128 one-update compile reaches `11.095 GB`
+process-group RSS after `83.417` seconds versus the frozen `7.516 GB` ceiling.
+The guard exits while host `MemAvailable` is still `6.096 GB`; no report,
+checkpoint, state, or process survives. Run no profile, inference benchmark,
+fixed-time rescue, repeat, or arena. The capability remains default-off and
+the active graph restores `jepa_feedback_mode="none"`.

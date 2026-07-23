@@ -412,7 +412,7 @@ def test_feedback_mode_preserves_parameter_state_abi() -> None:
         train.apply_experiment_overrides(
             train.JointLatentSASAConfig()
         ).jepa_feedback_mode
-        == "final_pass_adjoint"
+        == "none"
     )
 
 

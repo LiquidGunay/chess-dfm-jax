@@ -268,6 +268,18 @@ no checkpoint/report is written. Per preregistration, run no profile,
 fixed-time training, repeat, evaluation, or arena. Remove the empty run
 directory, restore recurrent mode, and retain direct execution default-off.
 
+Experiment 022's proposal-derived final-pass JEPA feedback is rejected at
+guarded compilation. Commit `803a3be` adds no parameter or optimizer leaves,
+keeps exactly eight DFM inference calls, and passes 155 guarded focused CPU
+tests. Its batch-128 one-update smoke reaches `11,095,023,616` bytes
+process-group RSS after `83.417` seconds, above the frozen
+`7,516,192,768`-byte ceiling. The guard exits 75 while host `MemAvailable`
+remains at least `6,095,749,120` bytes; no process, report, compiler artifact,
+checkpoint, or state survives. Per preregistration, run no profile, inference
+benchmark, fixed-time rescue, repeat, evaluation, or arena. Remove the empty
+run directory, restore `jepa_feedback_mode="none"`, and retain the capability
+default-off.
+
 ## Editable surface
 
 During automated architecture research, edit only `research/train.py`.

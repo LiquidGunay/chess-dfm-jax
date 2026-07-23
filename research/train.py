@@ -92,7 +92,6 @@ EXPERIMENT_OVERRIDES: dict[str, Any] = {
     # "jepa_state_fixed_unit_rms": True,
     "bt4_future_target_stop_gradient": True,
     "bt4_future_target_trainable_tail_layers": 1,
-    "jepa_feedback_mode": "final_pass_adjoint",
 }
 
 DEFAULT_RUN_ROOT = REPO_ROOT / "checkpoints" / "source" / "step0265000"
