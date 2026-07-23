@@ -356,11 +356,11 @@ def test_serialization_audit_component_and_calibration_surface() -> None:
     active = train.apply_experiment_overrides(
         train.JointLatentSASAConfig()
     )
-    assert active.root_legal_conditional_ce_coeff == 1.0
-    source_statistic = 2.0
+    source_statistic = 2.0873505054041743
     calibrated = min(1.0, max(0.05, 0.25 / source_statistic))
-    assert calibrated == 0.125
+    assert calibrated == 0.11976905620438309
     assert calibrated * source_statistic == 0.25
+    assert active.root_legal_conditional_ce_coeff == calibrated
 
 
 def test_resume_contract_records_enabled_only_semantics(monkeypatch) -> None:

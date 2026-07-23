@@ -318,6 +318,12 @@ weighted component `0.25`; no coefficient sweep is allowed. The fixed guard,
 offline gates, repeat, and both incumbent/raw-BT4 point-score gates remain in
 force, with at most one intermediate plus one terminal state.
 
+The two 4,096-position calibration pools pass with conditional CE
+`2.1329845171/2.0417164937` and full eligibility. Pooled
+`C0=2.0873505054041743` freezes the coefficient at
+`0.11976905620438309`, for weighted source loss exactly `0.25`. Pooled
+legal-only top-1 is `0.4224853516`; no update or checkpoint was written.
+
 ## Editable surface
 
 During automated architecture research, edit only `research/train.py`.

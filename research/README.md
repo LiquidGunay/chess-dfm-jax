@@ -383,3 +383,9 @@ unchanged. Its one coefficient is frozen by two source-init no-update pools to
 an initial weighted scale of `0.25`. The sparse legal reduction must compile
 under the existing guard before any fixed-time run, and at most update 1,600
 plus terminal may be written temporarily.
+
+The two no-update source pools measure conditional CE
+`2.1329845171/2.0417164937` with full eligibility. Their pooled
+`C0=2.0873505054041743` fixes the sole coefficient at
+`0.11976905620438309`, making the initial weighted component exactly `0.25`.
+No optimizer update or checkpoint was written.

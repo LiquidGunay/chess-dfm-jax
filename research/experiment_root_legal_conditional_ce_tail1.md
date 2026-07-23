@@ -1,8 +1,8 @@
 # Experiment 024: root legal-conditional imitation
 
 Status: preregistered and implemented on 2026-07-23. The guarded CPU
-correctness/checkpoint/parity gates pass; calibration and accelerator
-measurement have not started.
+correctness/checkpoint/parity gates and the no-update coefficient calibration
+pass; the incumbent diagnostic and training smoke have not started.
 
 ## Question and hypothesis
 
@@ -172,3 +172,26 @@ On any failure, run no later stage, delete all candidate states after
 preserving compact evidence, restore coefficient zero, and retain update
 2,072. On success, retain only the primary selected state. Never overlap GPU
 workloads, and do no SAE or pass-count work during this experiment.
+
+## Calibration result
+
+The two source-init pools use seeds 10,000 and 20,000 with 4,096 positions
+each and coefficient `1.0`. Both have eligibility, legal-metadata,
+legal-count/index, played-in-legal, and finite coverage exactly `1.0`; neither
+performs an optimizer update or writes a checkpoint.
+
+| seed | conditional CE | legal top-1 | mean legal count | peak group RSS | minimum `MemAvailable` | peak JAX HBM |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 10,000 | 2.1329845171 | 0.4199218750 | 27.70654297 | 6,067,646,464 | 6,225,584,128 | 3,837,367,296 |
+| 20,000 | 2.0417164937 | 0.4250488281 | 29.01782227 | 6,138,916,864 | 5,730,623,488 | 3,836,318,464 |
+
+Equal pool sizes give `C0=2.0873505054041743`, pooled legal top-1
+`0.4224853515625`, and mean legal count `28.3621826171875`. The frozen
+coefficient is therefore:
+
+```text
+0.25 / C0 = 0.11976905620438309
+```
+
+Its source-init weighted contribution is exactly `0.25`. The two compact
+calibration directories are 48 KiB each and contain no model state.

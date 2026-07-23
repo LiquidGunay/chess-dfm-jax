@@ -1716,4 +1716,5 @@ sweeps, held-out data, and repeated seeds.
   offline gates, and both incumbent/raw-BT4 point-score gates in
   `research/experiment_root_legal_conditional_ce_tail1.md`. Write at most one
   intermediate plus one terminal state; do not sweep the coefficient or
-  relax the resource guard.
+  relax the resource guard. The two source pools pass with full eligibility,
+  pooled `C0=2.0873505054`, and frozen coefficient `0.1197690562`.
