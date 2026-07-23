@@ -1786,10 +1786,14 @@ sweeps, held-out data, and repeated seeds.
   shape, and byte count fixed. Because the current ABI helper observes NNX
   wrappers rather than raw JAX leaves, measure the actual JIT abstract
   signature before treating this as a compiler incompatibility.
-- [ ] Run the final no-compile signature diagnostic in
+- [x] Run the final no-compile signature diagnostic in
   `research/experiment_jax_restore_signature_diagnostic.md`. Around one
   verified model-only restore, compare raw JAX PyTree paths, `jax.typeof`
   shape/dtype/weak-type/sharding/memory-space records, PyTree definitions, and
   NNX graph definitions. Only an exact match can reclassify the 404
   `bfloat16`/`void16` wrapper records as irrelevant to the persistent JIT
-  cache key.
+  cache key. It passes: all 455 abstract records share digest
+  `5fc368...0817`, PyTree definitions share `775dd6...29f7`, and NNX graph
+  definitions share `213b0a...f1a4`; only concrete JAX-versus-NumPy storage
+  differs. Replace the false reporting-ABI gate only in a separately
+  preregistered dedicated-cache compatibility test.

@@ -433,6 +433,13 @@ dtype, weak type, sharding, and memory-space records plus PyTree and NNX graph
 definitions around the verified restore. Only exact equality can replace the
 broad reporting-ABI gate in a later separately preregistered compile test.
 
+Experiment 030 passes exactly: all 455 JAX abstract records share digest
+`5fc368...0817`, PyTree definitions share `775dd6...29f7`, and equal NNX graph
+definitions share `213b0a...f1a4`; only concrete JAX-versus-NumPy storage
+differs. Treat the `f9f9...b467`/`b53b...d13` reporting mismatch as irrelevant
+to compilation. Do not cold-compile yet; first preregister and prove a
+dedicated-cache compile-only/restored-execution compatibility gate.
+
 ## Editable surface
 
 During automated architecture research, edit only `research/train.py`.

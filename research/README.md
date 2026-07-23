@@ -488,3 +488,11 @@ paths and `jax.typeof` abstract values, PyTree definitions, and NNX graph
 definitions around the same verified restore. Exact equality is required
 before replacing the overly broad reporting-ABI gate; the diagnostic itself
 does not authorize a cold compile.
+
+Experiment 030 passes. All 455 raw JAX abstract leaf records, the PyTree
+definition, and the NNX graph definition are exactly identical across the
+verified restore. Only concrete storage changes from JAX arrays to NumPy
+arrays. Thus `f9f9...b467` versus `b53b...d13` is a reporting-ABI false
+positive for compilation. A separately preregistered dedicated-cache
+compatibility test must still prove restored execution reuses the isolated
+compiler artifact before any cold compile.
