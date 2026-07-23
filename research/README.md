@@ -393,3 +393,11 @@ No optimizer update or checkpoint was written.
 The read-only update-2,072 control measures pooled legal-conditional CE
 `2.0518385936` and legal-only top-1 `0.4296875`, again with full coverage.
 Both a primary and repeat must beat that conditional-CE value.
+
+The guarded batch-128 training smoke is a terminal systems rejection. Cold
+XLA compilation reaches `10.944 GB` process-group RSS after `79.01` seconds
+versus the fixed `7.516 GB` ceiling; host `MemAvailable` remains `6.316 GB`
+when the guard exits safely. No update, report, compiler artifact, checkpoint,
+state, process, or nonempty run directory survives. Run no smaller-batch
+rescue, profile, fixed-time training, repeat, or arena. The implementation
+remains default-off and coefficient zero is restored.

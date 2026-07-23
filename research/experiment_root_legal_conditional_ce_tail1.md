@@ -1,8 +1,8 @@
 # Experiment 024: root legal-conditional imitation
 
-Status: preregistered and implemented on 2026-07-23. The guarded CPU
-correctness/checkpoint/parity gates and the no-update coefficient calibration
-pass; the incumbent diagnostic and training smoke have not started.
+Status: completed and rejected at the guarded training-compilation/smoke gate
+on 2026-07-23. No profile, fixed-time run, checkpoint evaluation, repeat, or
+arena was run; the capability remains available default-off.
 
 ## Question and hypothesis
 
@@ -206,3 +206,34 @@ must each beat the former exact value. The overlay changes no state or
 forward logits, writes 60 KiB of evidence and no checkpoint, peaks at
 `3,791,794,176` bytes group RSS, and keeps host `MemAvailable` at or above
 `8,274,141,184` bytes.
+
+## Outcome
+
+Commit `37d7f6c` froze the one-shot coefficient
+`0.11976905620438309` before any optimizer update. The real-checkpoint
+batch-128 one-update smoke started with zero permitted checkpoint writes,
+CPUs `[0,1]`, `63,827,337,216` bytes free disk, and
+`12,059,062,272` bytes host `MemAvailable`. The launcher enforced the
+immutable `7,516,192,768`-byte process-group RSS ceiling and
+`3,221,225,472`-byte available-memory floor.
+
+The training graph did not finish XLA compilation. After `79.0055` seconds,
+process-group RSS reached `10,943,864,832` bytes and the guard exited `75`;
+minimum host `MemAvailable` remained `6,315,798,528` bytes. The server stayed
+safe. This tiny sparse gather/log-sum-exp branch reaches essentially the same
+roughly 10.9--11.1 GB cold training-compilation footprint as Experiments
+021--023, so cold compilation—not the runtime size of this auxiliary—is now
+the binding research-system constraint.
+
+No update, report, compiler artifact, checkpoint, or model state was written.
+The empty 4 KiB run directory was removed, and host process plus NVIDIA
+compute-process checks found no survivor. Per the frozen decision, run no
+profile, smaller-batch rescue, relaxed guard, fixed-time training, checkpoint
+scan, repeat, arena, coefficient change, or alternate legal loss.
+
+Keep the two compact 48 KiB calibration directories and 60 KiB incumbent
+control as evidence. Restore `root_legal_conditional_ce_coeff=0.0`, retain
+the implementation and read-only overlay default-off, and keep update 2,072
+as the sole current offline incumbent. The closing storage audit finds
+exactly the seven allowlisted `state.npz` files, no missing or extra state,
+and `157,684,302` bytes in the JAX cache against its 4 GiB budget.

@@ -327,6 +327,16 @@ The read-only accepted-update-2,072 control has conditional CE
 `2.0518385936`, legal-only top-1 `0.4296875`, and full coverage. That exact CE
 is the frozen candidate/repeat conditional-ranking gate.
 
+Experiment 024 is rejected at its guarded training-compilation gate. The
+batch-128 one-update graph reaches `10,943,864,832` bytes process-group RSS
+after `79.0055` seconds, above the fixed `7,516,192,768`-byte ceiling; the
+guard exits while host `MemAvailable` remains `6,315,798,528` bytes. No
+update, report, compiler artifact, checkpoint, state, GPU process, or
+nonempty run directory survives. Run no profile, smaller-batch rescue,
+fixed-time run, repeat, or arena. Restore coefficient zero and retain the
+sparse legal-ranking capability default-off. Four consecutive new training
+graphs now identify cold XLA compilation as the immediate systems bottleneck.
+
 ## Editable surface
 
 During automated architecture research, edit only `research/train.py`.

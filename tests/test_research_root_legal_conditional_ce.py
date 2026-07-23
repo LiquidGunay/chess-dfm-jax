@@ -360,7 +360,7 @@ def test_serialization_audit_component_and_calibration_surface() -> None:
     calibrated = min(1.0, max(0.05, 0.25 / source_statistic))
     assert calibrated == 0.11976905620438309
     assert calibrated * source_statistic == 0.25
-    assert active.root_legal_conditional_ce_coeff == calibrated
+    assert active.root_legal_conditional_ce_coeff == 0.0
 
 
 def test_resume_contract_records_enabled_only_semantics(monkeypatch) -> None:

@@ -1707,7 +1707,7 @@ sweeps, held-out data, and repeated seeds.
   `10.946 GB` process-group RSS versus the fixed `7.516 GB` ceiling and exits
   safely before any update or state write. Reject at the systems gate, run no
   smaller-batch rescue or later stage, and restore coefficient zero.
-- [ ] Test root legal-conditional imitation without enlarging the model
+- [x] Test root legal-conditional imitation without enlarging the model
   graph. Keep uniform full-vocabulary CE and `2.0 * (1 - legal_mass)`
   unchanged, and add played-action CE normalized only over stored root legal
   moves. Calibrate its single coefficient on the two no-update source pools
@@ -1719,4 +1719,8 @@ sweeps, held-out data, and repeated seeds.
   relax the resource guard. The two source pools pass with full eligibility,
   pooled `C0=2.0873505054`, and frozen coefficient `0.1197690562`. The
   read-only accepted-update-2,072 control is conditional CE `2.0518385936`
-  and legal-only top-1 `0.4296875`, with full coverage.
+  and legal-only top-1 `0.4296875`, with full coverage. The guarded batch-128
+  training compile reaches `10.944 GB` process-group RSS versus the fixed
+  `7.516 GB` ceiling and exits safely before any update or state write.
+  Reject at the systems gate, run no smaller-batch rescue or later stage, and
+  restore coefficient zero.
