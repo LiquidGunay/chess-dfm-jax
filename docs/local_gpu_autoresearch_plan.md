@@ -1775,10 +1775,14 @@ sweeps, held-out data, and repeated seeds.
   The constructor, accepted checkpoint manifest, and self-round-trip are
   exactly the same full and leaf-only schemas, with all 455 array objects
   retained. This does not produce `b53b...d13`; stop before compilation.
-- [ ] Compare full live-model schemas immediately before and after the actual
+- [x] Compare full live-model schemas immediately before and after the actual
   checksum-verified legacy model-only restore. This next read-only diagnostic
   may open the pinned `state.npz` once under the unchanged guard, but may not
   create data batches, lower/compile the training graph, execute an update, or
   write state. Use its exact path/shape/dtype/container diff to decide whether
   compile-only canonicalization is possible. The immutable contract is in
-  `research/experiment_legacy_restore_abi_diagnostic.md`.
+  `research/experiment_legacy_restore_abi_diagnostic.md`. It safely finds 404
+  encoder-only `bfloat16` to `void16` leaf-record changes, with every path,
+  shape, and byte count fixed. Because the current ABI helper observes NNX
+  wrappers rather than raw JAX leaves, measure the actual JIT abstract
+  signature before treating this as a compiler incompatibility.

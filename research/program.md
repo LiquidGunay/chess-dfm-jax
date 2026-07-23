@@ -418,6 +418,14 @@ Persistent cache writes, data, lowering, model execution, updates, and state
 writes are forbidden. No later compile is authorized by this diagnostic
 alone.
 
+Experiment 029 completes safely and finds 404 encoder-only leaf-record changes,
+all `bfloat16` to `void16` with identical paths, shapes, and bytes. Source and
+fresh-optimizer contracts remain exact. This blocks compilation under its
+rule. The current ABI helper converts live NNX wrappers, whereas JAX PyTree
+flattening exposes raw `.value` leaves; compare those canonical abstract
+signatures next before deciding whether the mismatch affects an `nnx.jit`
+cache key.
+
 ## Editable surface
 
 During automated architecture research, edit only `research/train.py`.

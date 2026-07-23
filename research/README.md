@@ -473,3 +473,11 @@ legacy state once in production model-only mode, records complete before/after
 model schemas and fresh-optimizer invariants, and writes one compact report.
 It disables persistent cache writes and performs no data loading, model
 execution, training-graph lowering, update, or checkpoint write.
+
+Experiment 029 completes safely and finds exactly 404 changed model leaf
+records, all encoder-only `bfloat16` to `void16` transitions with identical
+paths, shapes, and bytes. The verified source ABIs and fresh optimizer remain
+exact. Under the preregistered rule this blocks compilation. Because
+`research_state_abi` converts live NNX wrappers while JAX flattening exposes
+their raw values, the next diagnostic must compare actual JAX abstract leaf
+signatures before interpreting `void16` as a cache-key difference.

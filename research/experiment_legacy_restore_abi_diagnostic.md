@@ -1,7 +1,8 @@
 # Experiment 029: actual legacy-restore ABI diagnostic
 
-Status: preregistered on 2026-07-23. This is a read-only checkpoint/schema
-diagnostic, not a model, training, or compiler experiment.
+Status: completed and blocked at the leaf-signature rule on 2026-07-23. This
+was a read-only checkpoint/schema diagnostic, not a model, training, or
+compiler experiment.
 
 ## Evidence and question
 
@@ -67,3 +68,45 @@ be constructed without source values; do not compile until that mechanism is
 explicit and tested. Any unexpected digest, optimizer mutation, guard stop,
 or artifact also blocks compilation. Keep exactly seven state files and leave
 the offline incumbent unchanged.
+
+## Outcome
+
+Commit `0f107f0` added the diagnostic after 112 guarded focused CPU tests
+passed at `3,154,632,704` bytes peak process-group RSS and
+`9,217,970,176` bytes minimum `MemAvailable`; direct invocation, Ruff,
+byte-compilation, and diff checks also passed.
+
+The single guarded production import completed in `24.3518` seconds with:
+
+- `5,426,556,928` bytes peak process-group RSS;
+- `6,862,241,792` bytes minimum host `MemAvailable`;
+- `1,894,688,768` bytes peak JAX GPU memory;
+- exact source size `1,851,704,172` bytes, SHA-256
+  `16a3c7e77e411a8a7577ff04dac1ca5173ce24ecb343b5fa4938e2d2b5fb8906`,
+  and step 265,000;
+- exact source model/optimizer ABIs `f9f9...b467`/`3e79...0b65`; and
+- unchanged fresh runtime optimizer ABI `6d45...707e` and step zero.
+
+The live model changes from full ABI `f9f9...b467` to the expected
+`b53b...d13`, so the diagnostic itself is authoritative. Its exact schema
+diff has no missing or extra path and changes 404 leaf records:
+
+- all 404 paths are below `encoder`;
+- 248 are rank-one and 156 are rank-two;
+- all 404 shapes and byte counts are identical; and
+- every recorded dtype transition is `bfloat16` to `void16`.
+
+The other 51 model leaves are unchanged. Consequently the aggregate
+455-leaf/705,987,352-byte equality hid a uniform live-wrapper dtype-name
+distinction, and Experiment 029 must remain blocked under its leaf-difference
+rule. Code inspection gives a narrower next question: `research_state_abi`
+walks the NNX mapping manually and applies `np.asarray` to its variable
+objects, while JAX flattening exposes each variable's raw `.value` leaf. The
+`void16` record may therefore be a reporting artifact rather than the JAX
+abstract input dtype used by `nnx.jit`, but that has not yet been measured.
+
+Do not compile. The complete report is `1,489,929` bytes, persistent cache
+writes were disabled and the shared cache remains `157,684,302` bytes, and
+exactly seven state files remain. The next bounded diagnostic must compare
+raw JAX PyTree paths, shapes, canonical dtypes, weak types, and tree
+definitions before and after the same verified restore.
