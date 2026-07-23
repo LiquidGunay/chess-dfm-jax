@@ -15,9 +15,9 @@ The first PyTorch control must preserve:
 
 - the checksum-pinned update-265000 model-only initialization and a fresh
   optimizer;
-- the accepted K=2-of-8 target sampling, all eight recurrent JEPA horizons,
-  projector depth two, DFM depth four, one-block future-gradient tail, and
-  eight-pass inference;
+- the accepted balanced per-example K=1-of-8 target sampling, all eight
+  recurrent JEPA horizons, projector depth two, DFM depth four, one-block
+  future-gradient tail, and eight-pass inference;
 - objective coefficients `norm=0`, `target_sigreg=5.76`,
   `pred_sigreg=1.0`, SIGReg V-statistic size 64, and legality coefficient 2;
 - main and BT4 learning rates `3e-5` and `1e-6`, the 400-to-1200 update cosine
@@ -86,3 +86,64 @@ evaluation/inference cross-check pass. Later, profile before considering
 regional `torch.compile`; a compiled variant is acceptable only if warm
 throughput gain pays back compile time within a typical 30-minute experiment
 and remains inside the same guard.
+
+## Execution evidence, 2026-07-23
+
+The one-file eager implementation, strict 455-leaf source map, custom
+Muon/AdamW update, stochastic-choice materialization, model-only checkpoint
+format, guarded trainer, and focused tests are implemented. CPU FP32 batch-2
+parity passes for all named intermediates and every loss component. The worst
+tensor relative-L2 error is `2.72e-5`; the total-loss error is `1.48e-4`
+absolute and `2.00e-5` relative. Two consecutive optimizer updates match
+Optax, including the accepted partition and schedule. A NaN in any gradient
+skips the entire update.
+
+The guarded A10G sweep measured physical batches 64, 128, 256, 512, and 768.
+Batch 512 is selected:
+
+- warm device throughput is `160.790` examples/s and sequential
+  fetch-inclusive throughput is `150.663` examples/s;
+- warm step time is `3.1843` seconds: `1.0644` forward, `1.9103` backward,
+  `0.2096` optimizer, and less than `0.0001` measured in-step host overhead;
+- peak HBM is `12,570,979,328` bytes allocated and `14,971,568,128` bytes
+  reserved; peak process-group RSS is `1,992,486,912` bytes;
+- 100 ms monitoring reports 100% median/p95 GPU utilization, 86.96% mean
+  utilization including startup and input gaps, and 205.72/215.04 W
+  median/p95 power; and
+- batch 768 adds only a few percent throughput, consumes about 5.2 GB more
+  allocated HBM, leaves unsafe headroom, and—because 768 does not divide the
+  1,024-row shards—would silently omit 25% of every shard. Batch 1024 is
+  projected beyond safe memory and was deliberately not attempted.
+
+The preregistered production-BF16 intermediate gate does **not** pass. In two
+sequential guarded GPU processes, source-weight PyTorch versus JAX batch-2
+comparison reaches `0.1142/0.0965` relative-L2 error for current/future BT4
+tokens, `5.82%` DFM-CE error, and `0.0522` absolute legality-loss error. CPU
+BF16 reproduces the same effect, ruling out a GPU-only defect. A 16-stage
+trace starts at `0.00757` after the embedding, drifts to `0.03322` after layer
+13, then jumps to `0.10626` after layer 14. The recovered final block has an
+FFN layer-normalization scale maximum of `6.125` versus at most about `1.2`
+for the preceding blocks, amplifying normal cross-framework BF16 rounding.
+Matching JAX's primitive activation structure worsens the endpoint to
+`0.12594`; computing only the final block in FP32 also worsens it to
+`0.11068`. Both changes are rejected.
+
+This evidence amends, rather than silently relaxes, correctness gate 3:
+
+1. FP32 remains the exact formula, source-map, representative-gradient, and
+   optimizer oracle.
+2. BF16 is a documented runtime-specific numerical trajectory. Its failed
+   tight-intermediate result remains recorded as a known difference and is
+   not relabeled a pass.
+3. Before scientific use, the unchanged PyTorch fixed-time control must pass
+   the frozen validation/latent gates in PyTorch, then its exported checkpoint
+   must pass the same frozen validation and eight-pass inference gates in JAX.
+   Candidate promotion must survive that JAX checkpoint cross-check as well.
+4. A selected architecture may return to JAX for a fresh hero run; exact
+   continuation of a BF16 PyTorch optimization trajectory in JAX is not
+   claimed.
+
+`PYTORCH_AUTORESEARCH_READY` remains false. The remaining gates are
+representative FP32 parameter-gradient parity, strict checkpoint restore/JAX
+round trip, deterministic input prefetch profiling, and the matched
+fixed-time control plus JAX validation/inference cross-check.

@@ -585,6 +585,26 @@ not create a model-result row.
   architecture or loss. Only that matched control can establish the PyTorch
   autoresearch baseline.
 
+Migration execution update, 2026-07-23: the one-file eager trainer, strict
+source mapping, CPU FP32 forward/loss parity, stochastic choices, custom
+Muon/AdamW parity, guarded smoke, component profiler, and physical-batch sweep
+are complete. Freeze PyTorch training batch 512: the final profile reaches
+`160.790` warm device and `150.663` sequential end-to-end examples/s at
+`12.571/14.972 GB` peak allocated/reserved HBM and `1.992 GB` peak host RSS.
+Reject batch 768 because its small throughput gain costs about 5.2 GB more
+allocated HBM and drops 25% of each 1,024-row shard.
+
+The tight BF16 cross-framework gate fails and must not be relabeled. CPU and
+GPU traces identify gradual rounding drift amplified by the recovered final
+BT4 block, whose FFN layer-norm scale peaks at `6.125`; primitive-composition
+and final-block-FP32 remedies both worsen parity and are rejected. Per the
+evidence amendment in `research/pytorch_eager_migration.md`, retain exact FP32
+formula/gradient/optimizer parity, treat BF16 optimization as
+runtime-specific, and require the matched PyTorch control plus exported JAX
+validation/eight-pass inference before opening readiness. Remaining work is
+representative FP32 gradient parity, strict checkpoint/JAX round trip,
+deterministic prefetch, and that matched fixed-time control.
+
 ## Editable surface
 
 During migration, edit `research/train_torch.py` and focused parity tests.

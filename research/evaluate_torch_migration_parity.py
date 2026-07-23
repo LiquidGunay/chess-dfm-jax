@@ -16,6 +16,7 @@ import dataclasses
 import gc
 import hashlib
 import json
+import math
 import os
 import sys
 from pathlib import Path
@@ -39,6 +40,7 @@ import jax  # noqa: E402
 import jax.numpy as jnp  # noqa: E402
 import numpy as np  # noqa: E402
 import torch  # noqa: E402
+import torch.nn.functional as F  # noqa: E402
 from flax import nnx  # noqa: E402
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -80,7 +82,7 @@ BF16_SCALAR_ABSOLUTE_MAX = 1e-2
 SOURCE_MAPPING_SHA256 = (
     "697c0944786a208eb22a290d01c9889c9c02564d43068d1b67cb30d8ae565261"
 )
-_TENSOR_NAMES = (
+_CORE_TENSOR_NAMES = (
     "current_tokens",
     "future_tokens",
     "z_all",
@@ -90,6 +92,18 @@ _TENSOR_NAMES = (
     "clean_action_hidden",
     "pred_z",
 )
+_TRACE_TENSOR_NAMES = (
+    "encoder_trace",
+    "last_layer_attention_out",
+    "last_layer_resid_mid",
+    "last_layer_mlp_out",
+)
+
+
+def _tensor_names(*, encoder_trace: bool) -> tuple[str, ...]:
+    if encoder_trace:
+        return (*_TRACE_TENSOR_NAMES, *_CORE_TENSOR_NAMES)
+    return _CORE_TENSOR_NAMES
 
 
 def _jax_config(compute_dtype: str) -> JointLatentSASAConfig:
@@ -158,25 +172,133 @@ def _numpy_choices(choices: StepChoices) -> dict[str, np.ndarray]:
     }
 
 
+def _torch_bt4_layer_capture(
+    layer: torch.nn.Module,
+    x: torch.Tensor,
+    *,
+    alpha: float,
+    compute_dtype: torch.dtype,
+) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
+    """Mirror one production BT4 layer and expose the JAX capture boundaries."""
+
+    batch, sequence, _ = x.shape
+    q = x @ layer.wq.to(compute_dtype) + layer.wq_b.to(compute_dtype)
+    k = x @ layer.wk.to(compute_dtype) + layer.wk_b.to(compute_dtype)
+    v = x @ layer.wv.to(compute_dtype) + layer.wv_b.to(compute_dtype)
+    q = q.reshape(batch, sequence, 32, 32).transpose(1, 2)
+    k = k.reshape(batch, sequence, 32, 32).transpose(1, 2)
+    v = v.reshape(batch, sequence, 32, 32).transpose(1, 2)
+    logits = (q @ k.transpose(-2, -1)) / math.sqrt(32.0)
+    logits = logits + layer.smolgen(x, compute_dtype)
+    attention = F.softmax(logits, dim=-1)
+    attention_out = attention @ v
+    attention_out = attention_out.transpose(1, 2).reshape(
+        batch * sequence, 1024
+    )
+    attention_out = layer.wo(attention_out, compute_dtype).reshape(
+        batch, sequence, 1024
+    )
+    resid_mid = layer.ln_attn(attention_out * alpha + x, compute_dtype)
+    flat = resid_mid.reshape(batch * sequence, 1024)
+    mlp_out = layer.ffn2(
+        F.mish(layer.ffn1(flat, compute_dtype)),
+        compute_dtype,
+    ).reshape(batch, sequence, 1024)
+    resid_post = layer.ln_ffn(mlp_out * alpha + resid_mid, compute_dtype)
+    return resid_post, {
+        "last_layer_attention_out": attention_out,
+        "last_layer_resid_mid": resid_mid,
+        "last_layer_mlp_out": mlp_out,
+    }
+
+
 def _torch_intermediates(
     model: JointModel,
     batch: Mapping[str, torch.Tensor],
     choices: StepChoices,
     *,
     compute_dtype: torch.dtype,
+    encoder_trace: bool = False,
+    final_bt4_fp32: bool = False,
 ) -> dict[str, torch.Tensor]:
+    if final_bt4_fp32 and not encoder_trace:
+        raise ValueError("Final-BT4-FP32 diagnostic requires encoder tracing")
     dtype = compute_dtype
     actions = batch["action_indices"][:, : CONFIG.horizon].long()
     rows = torch.arange(actions.shape[0])
     selected_planes = batch["future_planes"][rows, choices.target_horizon]
-    current_tokens = model.encoder.encode_current(
-        batch["current_planes"], compute_dtype=dtype, remat=False
-    )
-    future_tokens = model.encoder.encode_future_tail(
-        selected_planes,
-        compute_dtype=dtype,
-        trainable_tail_layers=CONFIG.future_trainable_tail_layers,
-    )
+    diagnostics: dict[str, torch.Tensor] = {}
+    if encoder_trace:
+        current_tokens = model.encoder.embedding(
+            batch["current_planes"],
+            model.encoder.alpha,
+            dtype,
+        )
+        trace_values = [current_tokens]
+        last_layer_capture: dict[str, torch.Tensor] | None = None
+        for index, layer in enumerate(model.encoder.layers):
+            if index == len(model.encoder.layers) - 1:
+                layer_dtype = torch.float32 if final_bt4_fp32 else dtype
+                layer_input = current_tokens.to(layer_dtype)
+                captured_output, last_layer_capture = _torch_bt4_layer_capture(
+                    layer,
+                    layer_input,
+                    alpha=model.encoder.alpha,
+                    compute_dtype=layer_dtype,
+                )
+                current_tokens = layer(
+                    layer_input,
+                    model.encoder.alpha,
+                    layer_dtype,
+                )
+                torch.testing.assert_close(
+                    current_tokens,
+                    captured_output,
+                    rtol=0.0,
+                    atol=0.0,
+                )
+            else:
+                current_tokens = layer(
+                    current_tokens,
+                    model.encoder.alpha,
+                    dtype,
+                )
+            trace_values.append(current_tokens)
+        assert last_layer_capture is not None
+        diagnostics = {
+            "encoder_trace": torch.stack(trace_values),
+            **last_layer_capture,
+        }
+    else:
+        current_tokens = model.encoder.encode_current(
+            batch["current_planes"],
+            compute_dtype=dtype,
+            remat=False,
+        )
+
+    if encoder_trace and final_bt4_fp32:
+        future_tokens = model.encoder.embedding(
+            selected_planes,
+            model.encoder.alpha,
+            dtype,
+        )
+        for layer in model.encoder.layers[:-1]:
+            future_tokens = layer(
+                future_tokens,
+                model.encoder.alpha,
+                dtype,
+            )
+        future_tokens = model.encoder.layers[-1](
+            future_tokens.float(),
+            model.encoder.alpha,
+            torch.float32,
+        )
+    else:
+        future_tokens = model.encoder.encode_future_tail(
+            selected_planes,
+            compute_dtype=dtype,
+            trainable_tail_layers=CONFIG.future_trainable_tail_layers,
+        )
     all_tokens = torch.stack((current_tokens, future_tokens), dim=1)
     z_all = model.state_projector(
         all_tokens.reshape(actions.shape[0] * 2, 64, 1024), dtype
@@ -198,6 +320,7 @@ def _torch_intermediates(
     clean_logits, clean_hidden = clean
     pred_z = model.jepa_rollout(z_all[:, 0], actions, clean_hidden, dtype)
     return {
+        **diagnostics,
         "current_tokens": current_tokens,
         "future_tokens": future_tokens,
         "z_all": z_all,
@@ -214,12 +337,45 @@ def _jax_intermediates(
     model: JointLatentSASAModel,
     batch: Mapping[str, np.ndarray],
     choices: Mapping[str, np.ndarray],
+    *,
+    encoder_trace: bool = False,
 ) -> dict[str, jax.Array]:
     actions = jnp.asarray(batch["action_indices"][:, : CONFIG.horizon])
     rows = jnp.arange(actions.shape[0])
     selected = jnp.asarray(choices["target_horizon"])
     selected_planes = jnp.asarray(batch["future_planes"])[rows, selected]
-    current_tokens = model.encode_bt4_tokens(jnp.asarray(batch["current_planes"]))
+    diagnostics: dict[str, jax.Array] = {}
+    if encoder_trace:
+        alpha = float((2.0 * len(model.encoder.layers)) ** -0.25)
+        current_tokens, current_batch = model.encoder.embedding(
+            jnp.asarray(batch["current_planes"]),
+            alpha,
+        )
+        current_tokens = current_tokens.reshape(
+            (current_batch, 64, model.encoder_dim)
+        )
+        trace_values = [current_tokens]
+        last_layer_capture = None
+        for index, layer in enumerate(model.encoder.layers):
+            if index == len(model.encoder.layers) - 1:
+                current_tokens, last_layer_capture = layer.forward_with_capture(
+                    current_tokens,
+                    alpha,
+                )
+            else:
+                current_tokens = layer(current_tokens, alpha)
+            trace_values.append(current_tokens)
+        assert last_layer_capture is not None
+        diagnostics = {
+            "encoder_trace": jnp.stack(trace_values),
+            "last_layer_attention_out": last_layer_capture.hook_attn_out,
+            "last_layer_resid_mid": last_layer_capture.resid_mid_after_ln,
+            "last_layer_mlp_out": last_layer_capture.hook_mlp_out,
+        }
+    else:
+        current_tokens = model.encode_bt4_tokens(
+            jnp.asarray(batch["current_planes"])
+        )
     future_tokens = model.encode_future_bt4_tokens(selected_planes)
     all_tokens = jnp.stack((current_tokens, future_tokens), axis=1)
     z_all = model.state_projector(
@@ -243,6 +399,7 @@ def _jax_intermediates(
         z0_normalized=True,
     )
     return {
+        **diagnostics,
         "current_tokens": current_tokens,
         "future_tokens": future_tokens,
         "z_all": z_all,
@@ -580,7 +737,7 @@ def _comparison_result(
     source_mapping_sha256: str,
 ) -> dict[str, Any]:
     tensors: dict[str, dict[str, float | bool]] = {}
-    for name in _TENSOR_NAMES:
+    for name in _tensor_names(encoder_trace=args.encoder_trace):
         candidate = torch_values[name]
         if isinstance(candidate, torch.Tensor):
             candidate = candidate.detach().float().cpu().numpy()
@@ -589,6 +746,25 @@ def _comparison_result(
             candidate,
             compute_dtype=args.compute_dtype,
         )
+    trace_stages: list[dict[str, Any]] = []
+    if args.encoder_trace:
+        trace_reference = np.asarray(jax_values["encoder_trace"])
+        trace_candidate = torch_values["encoder_trace"]
+        if isinstance(trace_candidate, torch.Tensor):
+            trace_candidate = trace_candidate.detach().float().cpu().numpy()
+        trace_stages = [
+            {
+                "stage": (
+                    "embedding" if index == 0 else f"layer_{index - 1:02d}"
+                ),
+                **_array_metrics(
+                    trace_reference[index],
+                    trace_candidate[index],
+                    compute_dtype=args.compute_dtype,
+                ),
+            }
+            for index in range(trace_reference.shape[0])
+        ]
     scalars: dict[str, dict[str, float | bool]] = {}
     for name in jax_losses:
         candidate = torch_losses[name]
@@ -602,7 +778,7 @@ def _comparison_result(
     gate_pass = all(row["pass"] for row in tensors.values()) and all(
         row["pass"] for row in scalars.values()
     )
-    return {
+    result = {
         "schema_version": "torch-jax-source-parity-v2",
         "gate_pass": gate_pass,
         "compute_dtype": args.compute_dtype,
@@ -610,11 +786,16 @@ def _comparison_result(
         "seed": args.seed,
         "data_step": args.data_step,
         "update": args.update,
+        "encoder_trace": args.encoder_trace,
+        "torch_final_bt4_fp32": args.torch_final_bt4_fp32,
         "source_mapping_sha256": source_mapping_sha256,
         "tolerances": _tolerances(args.compute_dtype),
         "tensors": tensors,
         "loss_components": scalars,
     }
+    if args.encoder_trace:
+        result["encoder_trace_stages"] = trace_stages
+    return result
 
 
 def _write_result(args: argparse.Namespace, result: Mapping[str, Any]) -> int:
@@ -653,9 +834,16 @@ def _run_cpu_compare(args: argparse.Namespace) -> int:
                 if args.compute_dtype == "float32"
                 else torch.bfloat16
             ),
+            encoder_trace=args.encoder_trace,
+            final_bt4_fp32=args.torch_final_bt4_fp32,
         )
         torch_losses = _torch_loss_components(torch_values, torch_batch, choices)
-    jax_values = _jax_intermediates(jax_model, numpy_batch, numpy_choices)
+    jax_values = _jax_intermediates(
+        jax_model,
+        numpy_batch,
+        numpy_choices,
+        encoder_trace=args.encoder_trace,
+    )
     jax_losses = _jax_loss_components(jax_values, numpy_batch, numpy_choices)
     jax_values, jax_losses = jax.device_get(
         jax.block_until_ready((jax_values, jax_losses))
@@ -701,6 +889,8 @@ def _run_torch_export(args: argparse.Namespace) -> int:
             torch_batch,
             choices,
             compute_dtype=torch.bfloat16,
+            encoder_trace=args.encoder_trace,
+            final_bt4_fp32=args.torch_final_bt4_fp32,
         )
         torch_losses = _torch_loss_components(
             torch_values,
@@ -716,6 +906,8 @@ def _run_torch_export(args: argparse.Namespace) -> int:
         "seed": args.seed,
         "data_step": args.data_step,
         "update": args.update,
+        "encoder_trace": args.encoder_trace,
+        "torch_final_bt4_fp32": args.torch_final_bt4_fp32,
         "source_mapping_sha256": source_mapping["combined_sha256"],
         "torch_version": torch.__version__,
         "cuda_version": torch.version.cuda,
@@ -725,7 +917,7 @@ def _run_torch_export(args: argparse.Namespace) -> int:
     payload: dict[str, Any] = {
         "metadata_json": np.asarray(json.dumps(metadata, sort_keys=True)),
     }
-    for name in _TENSOR_NAMES:
+    for name in _tensor_names(encoder_trace=args.encoder_trace):
         payload[f"tensor__{name}"] = (
             torch_values[name].detach().float().cpu().numpy()
         )
@@ -757,7 +949,8 @@ def _load_exchange(
     with np.load(exchange, allow_pickle=False) as archive:
         metadata = json.loads(str(archive["metadata_json"].item()))
         torch_values = {
-            name: np.asarray(archive[f"tensor__{name}"]) for name in _TENSOR_NAMES
+            name: np.asarray(archive[f"tensor__{name}"])
+            for name in _tensor_names(encoder_trace=args.encoder_trace)
         }
         loss_names = (
             "dfm_ce",
@@ -776,6 +969,8 @@ def _load_exchange(
         "seed": args.seed,
         "data_step": args.data_step,
         "update": args.update,
+        "encoder_trace": args.encoder_trace,
+        "torch_final_bt4_fp32": args.torch_final_bt4_fp32,
         "source_mapping_sha256": SOURCE_MAPPING_SHA256,
         "tolerances": _tolerances(args.compute_dtype),
     }
@@ -803,7 +998,12 @@ def _run_jax_compare(args: argparse.Namespace) -> int:
     )
     del source
     gc.collect()
-    jax_values = _jax_intermediates(jax_model, numpy_batch, numpy_choices)
+    jax_values = _jax_intermediates(
+        jax_model,
+        numpy_batch,
+        numpy_choices,
+        encoder_trace=args.encoder_trace,
+    )
     jax_losses = _jax_loss_components(jax_values, numpy_batch, numpy_choices)
     jax_values, jax_losses = jax.device_get(
         jax.block_until_ready((jax_values, jax_losses))
@@ -823,6 +1023,8 @@ def _run_jax_compare(args: argparse.Namespace) -> int:
 
 
 def run(args: argparse.Namespace) -> int:
+    if args.torch_final_bt4_fp32 and not args.encoder_trace:
+        raise ValueError("--torch-final-bt4-fp32 requires --encoder-trace")
     if args.mode == "cpu-compare":
         return _run_cpu_compare(args)
     if args.mode == "torch-export":
@@ -871,6 +1073,8 @@ def build_parser() -> argparse.ArgumentParser:
         choices=("float32", "bfloat16"),
         default="float32",
     )
+    parser.add_argument("--encoder-trace", action="store_true")
+    parser.add_argument("--torch-final-bt4-fp32", action="store_true")
     return parser
 
 

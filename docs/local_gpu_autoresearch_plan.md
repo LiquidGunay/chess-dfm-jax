@@ -33,8 +33,14 @@ The original scientific critical path, now completed, was:
 The current systems critical path is to implement the one-file eager PyTorch
 path, prove it against the frozen JAX oracle, profile and select physical batch
 size under the resource guard, repeat the fixed-time control, and only then
-resume one-change 30-minute architecture research. JAX remains the target for
-long hero runs once autoresearch selects a promising model.
+resume one-change 30-minute architecture research. The implementation,
+source/FP32 parity, guarded smoke, and batch sweep are complete; batch 512 is
+the selected PyTorch training batch. Production BF16 is now explicitly a
+runtime-specific numerical trajectory after the recorded tight-intermediate
+gate failed in both CPU and GPU comparisons. Representative FP32 gradients,
+checkpoint/JAX round trip, input prefetch, and the matched fixed-time control
+remain. JAX remains the target for long hero runs once autoresearch selects a
+promising model.
 
 The A10G is single-tenant throughout this sequence. Training, profiling,
 arena evaluation, and SAE work do not run concurrently.
@@ -960,6 +966,21 @@ peak JAX live memory, and batch 256 at `47.96` and `43.72` examples/s with
 Batch 128 is therefore the selected autoresearch knee; batch 256 remains a
 supported throughput mode rather than the default.
 
+PyTorch migration profile, 2026-07-23: this historical batch-128 decision
+applies to the JAX runtime only. The eager-PyTorch sweep measured batches 64,
+128, 256, 512, and 768 on the unchanged balanced-K1/no-norm objective. The
+final guarded batch-512 profile sustains `160.790` warm device and `150.663`
+sequential end-to-end examples/s, with a `3.1843`-second warm step,
+`12.571 GB` peak allocated HBM, `14.972 GB` peak reserved HBM, and `1.992 GB`
+peak process-group RSS. Batch 768 gains only a few percent, uses about
+`5.2 GB` more allocated HBM, and is scientifically invalid under the current
+1,024-row shard sampler because it drops the final 256 rows. Batch 1024 is
+projected outside safe headroom and was not attempted. Freeze batch 512 for
+the first PyTorch control/candidate comparisons; keep validation at batch 64
+over identical positions. The remaining roughly `0.210` seconds of data work
+per warm iteration motivates deterministic one-batch prefetch before the
+fixed-time control.
+
 Optimization sequence:
 
 1. no-norm target-plus-prediction-SIGReg compiled graph;
@@ -1843,15 +1864,21 @@ sweeps, held-out data, and repeated seeds.
   eventual hero-run framework. The migration contract is
   `research/pytorch_eager_migration.md`; the change creates no model-result
   row.
-- [ ] Implement the readable one-file `research/train_torch.py` production
+- [x] Implement the readable one-file `research/train_torch.py` production
   path without `torch.compile`, with strict source-leaf mapping and no runtime
   dependency on the upstream repository.
-- [ ] Pass CPU FP32 and production-BF16 intermediate/loss parity, explicit
-  stochastic-choice parity, representative full-gradient parity, one- and
-  two-update parity, and sparse checkpoint/JAX round-trip gates.
-- [ ] Run a guarded no-checkpoint A10G smoke/profile, then sweep physical batch
+- [x] Pass CPU FP32 intermediate/loss parity, explicit stochastic-choice
+  parity, and one-/two-update optimizer parity. Characterize—not hide—the
+  failed tight production-BF16 intermediate gate and record the layerwise
+  cause and rejected precision remedies in
+  `research/pytorch_eager_migration.md`.
+- [ ] Complete representative FP32 full-parameter-gradient parity and the
+  sparse checkpoint restore/JAX-round-trip gates. Use the matched PyTorch
+  control plus frozen JAX evaluation/inference cross-check as the amended
+  production-runtime gate.
+- [x] Run a guarded no-checkpoint A10G smoke/profile, then sweep physical batch
   size for throughput and safe HBM/RSS headroom. Freeze the selected batch for
-  matched comparisons; do not assume batch 128.
+  matched comparisons; batch 512 is selected for eager PyTorch.
 - [ ] Repeat the accepted fixed-time control and its frozen two-pool
   validation under PyTorch, cross-check the exported model with JAX
   validation and eight-pass inference, and set
