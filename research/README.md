@@ -522,3 +522,10 @@ model, optimizer, batch, and RNG values with signature-identical
 `ShapeDtypeStruct` leaves before lowering. A shared-cache parity/memory-release
 gate is mandatory before one batch-128 cold trial under a stricter enforced
 6.75 GiB RSS ceiling.
+
+Experiment 032 is rejected before its cold stage. Its shared-cache run
+preserves every abstract signature and compiler field and releases
+`1,894,688,512` live JAX GPU bytes, but peaks at `4,906,700,800` bytes group
+RSS, `71.4 MiB` above the preregistered 4.5 GiB cached ceiling. It writes no
+state and does not open the source checkpoint. Do not create its dedicated
+cache, run its restored stage, retry it, or relax the gate.

@@ -463,6 +463,15 @@ compiler/HLO parity and at least 1.5 GiB live-buffer release first. A single
 fresh-cache batch-128 trial is then allowed only under 50 ms polling and an
 enforced 6.75 GiB group-RSS ceiling; ordinary training remains unchanged.
 
+Experiment 032 is rejected at that cached gate. Abstractification preserves
+all signatures and compiler fields and releases `1,894,688,512` live JAX GPU
+bytes, but cached peak group RSS is `4,906,700,800` bytes—`71.4 MiB` above
+the frozen 4.5 GiB ceiling. No cold cache is created and no restored update is
+run. Before another compiler proposal, use read-only/CPU evidence to separate
+abstract-state lowering overhead from graph compilation, and consider a
+smaller physical compile batch with fixed effective-batch semantics; do not
+retry this mechanism or relax a resource gate.
+
 ## Editable surface
 
 During automated architecture research, edit only `research/train.py`.

@@ -1,8 +1,8 @@
 # Experiment 032: abstract-only compilation arguments
 
-Status: preregistered on 2026-07-23. This is a training-systems memory
-experiment; it cannot change the ordinary trainer, model, loss, data, update,
-checkpoint, or inference semantics.
+Status: rejected at the cached resource gate on 2026-07-23. This was a
+training-systems memory experiment; it did not change the ordinary trainer,
+model, loss, data, update, checkpoint, or inference semantics.
 
 ## Evidence and hypothesis
 
@@ -116,3 +116,46 @@ Any failure stops the experiment. Do not rescue it with another trial, batch,
 flag, timeout, allocator, graph, or resource relaxation. Remove disposable
 partial caches after preserving compact evidence. Keep exactly seven state
 files and leave the offline incumbent unchanged.
+
+## Outcome
+
+Commit `55be093` implemented the default-off abstract compile-only path after
+Ruff, byte-compilation, diff checks, and 117 guarded focused CPU tests passed.
+The CPU test group peaked at `3,165,978,624` bytes RSS and retained
+`9,113,182,208` bytes minimum host `MemAvailable`.
+
+The shared-cache gate completed normally in `35.5092` seconds, including
+startup, and loaded the retained executable in `14.2270` explicit seconds. It
+reproduced the exact compiler contract:
+
+```text
+FLOPs                  14,257,494,163,456
+bytes accessed            133,447,442,432
+transcendentals             3,425,560,832
+argument bytes              1,894,455,276
+output bytes                1,860,899,661
+temporary bytes            10,957,716,808
+generated-code bytes            3,590,872
+```
+
+All model, optimizer, batch, and RNG signatures were exactly preserved, and
+all 1,321 dynamic array leaves seen at lowering were
+`jax.ShapeDtypeStruct`. Abstractification replaced `1,898,144,741` bytes of
+concrete argument payload. Live JAX GPU use fell from `1,894,688,768` bytes
+to `256` bytes, a `1,894,688,512`-byte release that passes the 1.5 GiB gate.
+The source checkpoint was not opened, and the process executed no model,
+optimizer update, validation batch, or checkpoint write.
+
+The candidate nevertheless fails its preregistered cached resource gate.
+Peak process-group RSS was `4,906,700,800` bytes, which is `74,862,592` bytes
+(`71.4 MiB`) above the `4,831,838,208`-byte 4.5 GiB ceiling. Minimum host
+`MemAvailable` remained `8,666,673,152` bytes. The result directory contains
+only the three expected JSON files totaling `91,171` bytes, the shared cache
+remains exactly `157,684,302` bytes, and the storage audit still finds exactly
+seven allowlisted states.
+
+Per the frozen decision rule, reject Experiment 032 before creating
+`.local/cache/jax/experiment032-abstract-args-v1`; do not run the cold compile
+or ordinary restored-update stage, and do not retry or relax the gate. The
+default-off implementation remains diagnostic evidence only and is not an
+approved fresh-graph compilation path.
