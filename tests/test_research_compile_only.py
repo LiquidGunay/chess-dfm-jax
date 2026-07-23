@@ -2,9 +2,7 @@ from __future__ import annotations
 
 import argparse
 import copy
-import gc
 import types
-import weakref
 from pathlib import Path
 
 import numpy as np
@@ -77,21 +75,6 @@ def test_compile_only_cli_rejects_stateful_or_different_graph_modes(
     setattr(args, field, value)
     with pytest.raises(ValueError, match=message):
         train.validate_compile_only_args(args, save_updates=())
-
-
-def test_construction_parameter_payload_is_actually_released() -> None:
-    array = np.ones((32,), dtype=np.float32)
-    reference = weakref.ref(array)
-    payload = {"nested": {"weight": array}}
-    del array
-
-    train.release_construction_parameter_payload(payload)
-    gc.collect()
-
-    assert payload == {}
-    assert reference() is None
-    with pytest.raises(TypeError, match="plain dict"):
-        train.release_construction_parameter_payload(types.MappingProxyType({}))
 
 
 def test_dynamic_values_do_not_change_training_state_abi() -> None:

@@ -4667,20 +4667,6 @@ def create_joint_components(
     return model, optimizer
 
 
-def release_construction_parameter_payload(
-    mapped_params: dict[str, Any],
-) -> None:
-    """Release the construction-only NumPy BT4 tree before later heavy work."""
-
-    if type(mapped_params) is not dict:
-        raise TypeError(
-            "Mapped construction parameters must be a plain dict, got "
-            f"{type(mapped_params).__name__}"
-        )
-    mapped_params.clear()
-    gc.collect()
-
-
 def resolve_config(
     run_root: Path,
 ) -> tuple[JointLatentSASAConfig, dict[str, Any]]:
@@ -9266,8 +9252,8 @@ def main() -> int:
         else None
     )
     if args.compile_only:
-        release_construction_parameter_payload(model_params)
         del model_params
+        gc.collect()
         checkpoint_step = int(metadata["latest_step"])
         source_checkpoint_path = require_within_workspace(
             checkpoint_dir / f"step{checkpoint_step:07d}" / "state.npz"
