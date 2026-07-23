@@ -466,3 +466,10 @@ leaf-only `2888...0d3` signature; all 455 array objects remain identical and
 there are zero schema-record differences. The generic NNX round-trip is not
 the source of live post-restore `b53b...d13`. No compile is run. The next
 diagnostic must inspect the actual verified legacy restore before and after.
+
+Experiment 029 is that bounded diagnostic, preregistered in
+`experiment_legacy_restore_abi_diagnostic.md`. It opens the checksum-pinned
+legacy state once in production model-only mode, records complete before/after
+model schemas and fresh-optimizer invariants, and writes one compact report.
+It disables persistent cache writes and performs no data loading, model
+execution, training-graph lowering, update, or checkpoint write.

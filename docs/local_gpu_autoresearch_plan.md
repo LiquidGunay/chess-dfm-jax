@@ -1780,4 +1780,5 @@ sweeps, held-out data, and repeated seeds.
   may open the pinned `state.npz` once under the unchanged guard, but may not
   create data batches, lower/compile the training graph, execute an update, or
   write state. Use its exact path/shape/dtype/container diff to decide whether
-  compile-only canonicalization is possible.
+  compile-only canonicalization is possible. The immutable contract is in
+  `research/experiment_legacy_restore_abi_diagnostic.md`.

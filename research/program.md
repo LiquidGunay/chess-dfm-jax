@@ -410,6 +410,14 @@ live model immediately before and after the actual checksum-verified legacy
 model-only restore under the unchanged guard, without data, lowering,
 execution, or state writes.
 
+Experiment 029 is preregistered in
+`research/experiment_legacy_restore_abi_diagnostic.md`. It performs one
+production checksum-pinned model-only import, captures complete before/after
+model schemas and fresh-optimizer invariants, and writes one compact report.
+Persistent cache writes, data, lowering, model execution, updates, and state
+writes are forbidden. No later compile is authorized by this diagnostic
+alone.
+
 ## Editable surface
 
 During automated architecture research, edit only `research/train.py`.
