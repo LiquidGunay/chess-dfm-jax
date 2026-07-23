@@ -4667,6 +4667,20 @@ def create_joint_components(
     return model, optimizer
 
 
+def release_construction_parameter_payload(
+    mapped_params: dict[str, Any],
+) -> None:
+    """Release the construction-only NumPy BT4 tree before later heavy work."""
+
+    if type(mapped_params) is not dict:
+        raise TypeError(
+            "Mapped construction parameters must be a plain dict, got "
+            f"{type(mapped_params).__name__}"
+        )
+    mapped_params.clear()
+    gc.collect()
+
+
 def resolve_config(
     run_root: Path,
 ) -> tuple[JointLatentSASAConfig, dict[str, Any]]:
@@ -7405,6 +7419,16 @@ def parse_args(
         help="Lower/compile the training step explicitly and record compiler cost analysis.",
     )
     parser.add_argument(
+        "--compile-only",
+        action="store_true",
+        help=(
+            "Populate the persistent cache from constructor-equivalent model "
+            "and optimizer shapes, then exit before opening the legacy "
+            "checkpoint. Requires --compile-ahead, --init model-only, "
+            "--steps 0, --eval-batches 0, and no checkpoint request."
+        ),
+    )
+    parser.add_argument(
         "--gpu-monitor-interval-ms",
         type=int,
         default=0,
@@ -8009,6 +8033,8 @@ def run_checkpoint_evaluation(
     model, unused_optimizer = create_joint_components(
         model_params, config, seed=args.seed
     )
+    release_construction_parameter_payload(model_params)
+    del model_params
     del unused_optimizer
     gc.collect()
     ema_target = (
@@ -8164,6 +8190,62 @@ def validate_save_updates(values: tuple[int, ...] | list[int]) -> tuple[int, ...
     return updates
 
 
+def validate_compile_only_args(
+    args: argparse.Namespace,
+    *,
+    save_updates: tuple[int, ...],
+) -> None:
+    """Fail closed unless compile-only is a zero-state, zero-execution mode."""
+
+    if not args.compile_only:
+        return
+    if not args.compile_ahead:
+        raise ValueError("--compile-only requires --compile-ahead")
+    if args.init != "model-only":
+        raise ValueError("--compile-only requires --init model-only")
+    if args.objective != "normalized":
+        raise ValueError(
+            "--compile-only currently requires --objective normalized"
+        )
+    if args.steps != 0:
+        raise ValueError("--compile-only requires --steps 0")
+    if args.train_seconds != 0.0:
+        raise ValueError("--compile-only requires --train-seconds 0")
+    if args.eval_batches != 0:
+        raise ValueError("--compile-only requires --eval-batches 0")
+    if args.eval_only:
+        raise ValueError("--compile-only cannot be combined with --eval-only")
+    if args.gradient_audit:
+        raise ValueError(
+            "--compile-only cannot be combined with --gradient-audit"
+        )
+    if args.eval_checkpoints is not None:
+        raise ValueError(
+            "--compile-only cannot be combined with --eval-checkpoints"
+        )
+    if args.eval_root_legal_conditional_ce:
+        raise ValueError(
+            "--compile-only cannot be combined with "
+            "--eval-root-legal-conditional-ce"
+        )
+    if args.resume_from is not None:
+        raise ValueError(
+            "--compile-only cannot be combined with --resume-from"
+        )
+    if args.save_every != 0 or save_updates or args.save_final:
+        raise ValueError(
+            "--compile-only forbids every checkpoint write request"
+        )
+    if args.gpu_monitor_interval_ms != 0:
+        raise ValueError(
+            "--compile-only requires --gpu-monitor-interval-ms 0"
+        )
+    if args.collapse_diagnostics:
+        raise ValueError("--compile-only cannot run collapse diagnostics")
+    if not args.donate:
+        raise ValueError("--compile-only requires the ordinary donated graph")
+
+
 def should_save_checkpoint(
     *,
     invocation_update: int,
@@ -8211,6 +8293,56 @@ def normalize_memory_analysis(raw: Any) -> dict[str, int]:
         for key, value in values.items()
         if value is not None and key.endswith("_in_bytes")
     }
+
+
+class TrainingCompilation(NamedTuple):
+    executable: Any
+    seconds: float
+    cost_analysis_raw: dict[str, float]
+    memory_analysis: dict[str, int]
+
+
+def compile_training_executable(
+    train_fn: Any,
+    *,
+    objective: str,
+    model: JointLatentSASAModel,
+    optimizer: nnx.Optimizer,
+    batch: Mapping[str, Any],
+    rng: jax.Array,
+    sigreg_reference_count: float,
+    ema_target: EmaTargetModel | None,
+) -> TrainingCompilation:
+    """Lower and compile the canonical training call without executing it."""
+
+    compile_args = training_call_args(
+        objective=objective,
+        model=model,
+        optimizer=optimizer,
+        batch=batch,
+        rng=rng,
+        sigreg_reference_count=sigreg_reference_count,
+        ema_target=ema_target,
+    )
+    started = time.perf_counter()
+    executable = train_fn.lower(*compile_args).compile()
+    seconds = time.perf_counter() - started
+    cost_analysis_raw = (
+        normalize_cost_analysis(executable.cost_analysis())
+        if hasattr(executable, "cost_analysis")
+        else {}
+    )
+    memory_analysis = (
+        normalize_memory_analysis(executable.memory_analysis())
+        if hasattr(executable, "memory_analysis")
+        else {}
+    )
+    return TrainingCompilation(
+        executable=executable,
+        seconds=seconds,
+        cost_analysis_raw=cost_analysis_raw,
+        memory_analysis=memory_analysis,
+    )
 
 
 def start_gpu_monitor(
@@ -8835,6 +8967,139 @@ def run_gradient_audit(
     return result
 
 
+def run_compile_only(
+    args: argparse.Namespace,
+    *,
+    commit: str,
+    timestamp: str,
+    run_id: str,
+    output_dir: Path,
+    config: JointLatentSASAConfig,
+    train_batches: FixedTrajectoryBatches,
+    resume_contract: dict[str, Any],
+    model: JointLatentSASAModel,
+    optimizer: nnx.Optimizer,
+    ema_target: EmaTargetModel | None,
+    checkpoint_step: int,
+    source_checkpoint_path: Path,
+) -> int:
+    """Populate the training cache without decoding or executing source state."""
+
+    output_dir.mkdir(parents=True, exist_ok=False)
+    cache_dir = require_within_workspace(
+        os.environ["JAX_COMPILATION_CACHE_DIR"]
+    )
+    args_payload = {
+        key: str(value) if isinstance(value, Path) else value
+        for key, value in (
+            vars(args) | {"output_dir": str(output_dir)}
+        ).items()
+    }
+    state_footprint = training_state_footprint(model, optimizer)
+    run_config = {
+        "format": "chess-dfm-compile-only-v1",
+        "mode": "compile_only_shape_equivalent",
+        "autoresearch_ready": AUTORESEARCH_READY,
+        "architecture_source": ARCHITECTURE_SOURCE,
+        "git_commit": commit,
+        "run_id": run_id,
+        "timestamp_utc": timestamp,
+        "args": args_payload,
+        "model_config": serialized_model_config(config),
+        "learning_rate_schedule": learning_rate_schedule_contract(config),
+        "training_state_footprint": state_footprint,
+        "checkpoint_step": checkpoint_step,
+        "source_checkpoint_path": str(source_checkpoint_path),
+        "source_checkpoint_opened": False,
+        "source_checkpoint_values_restored": False,
+        "constructor_parameter_payload_released": True,
+        "parameter_values_are_dynamic_compilation_inputs": True,
+        "initial_optimizer_step": int(optimizer.step[...]),
+        "initial_data_cursor": 0,
+        "resume_contract": resume_contract,
+        "resume_contract_sha256": _json_sha256(resume_contract),
+        "train_data": train_batches.provenance(),
+        "jax_compilation_cache_dir": str(cache_dir),
+        "checkpoint_writes": 0,
+        "updates": 0,
+        "validation_batches": 0,
+    }
+    write_json(output_dir / "run_config.json", run_config)
+
+    train_fn = training_function(
+        objective=args.objective,
+        donate=args.donate,
+        target_semantics=config.jepa_target_semantics,
+    )
+    compile_batch = train_batches.batch_at(0)
+    compile_rng = jax.random.fold_in(jax.random.PRNGKey(args.seed), 0)
+    compilation = compile_training_executable(
+        train_fn,
+        objective=args.objective,
+        model=model,
+        optimizer=optimizer,
+        batch=compile_batch,
+        rng=compile_rng,
+        sigreg_reference_count=args.sigreg_reference_count,
+        ema_target=ema_target,
+    )
+    optimizer_step_after_compile = int(optimizer.step[...])
+    if optimizer_step_after_compile != run_config["initial_optimizer_step"]:
+        raise RuntimeError(
+            "Compile-only changed the optimizer step without execution: "
+            f"{optimizer_step_after_compile} != "
+            f"{run_config['initial_optimizer_step']}"
+        )
+    if compilation.cost_analysis_raw:
+        write_json(
+            output_dir / "compiler_cost_analysis.json",
+            compilation.cost_analysis_raw,
+        )
+    report = {
+        **run_config,
+        "explicit_compile_seconds": compilation.seconds,
+        "compiler_cost_analysis": compiler_cost_summary(
+            compilation.cost_analysis_raw
+        ),
+        "compiler_memory_analysis": compilation.memory_analysis,
+        "gpu_memory": gpu_memory_stats(),
+        "completed": True,
+        "optimizer_step_after_compile": optimizer_step_after_compile,
+        "model_or_optimizer_executed": False,
+        "checkpoint_path": None,
+        "metrics_path": None,
+    }
+    write_json(output_dir / "report.json", report)
+    print(
+        json.dumps(
+            {
+                "run_id": run_id,
+                "output_dir": str(output_dir),
+                "mode": report["mode"],
+                "completed": report["completed"],
+                "updates": report["updates"],
+                "checkpoint_writes": report["checkpoint_writes"],
+                "source_checkpoint_opened": report[
+                    "source_checkpoint_opened"
+                ],
+                "explicit_compile_seconds": report[
+                    "explicit_compile_seconds"
+                ],
+                "compiler_cost_analysis": report[
+                    "compiler_cost_analysis"
+                ],
+                "compiler_memory_analysis": report[
+                    "compiler_memory_analysis"
+                ],
+                "gpu_memory": report["gpu_memory"],
+            },
+            indent=2,
+            sort_keys=True,
+        )
+    )
+    return 0
+
+
 def main() -> int:
     args = parse_args()
     validate_environment()
@@ -8843,7 +9108,8 @@ def main() -> int:
     if args.steps < 0:
         raise ValueError("--steps must be non-negative")
     if (
-        not args.eval_only
+        not args.compile_only
+        and not args.eval_only
         and not args.gradient_audit
         and args.eval_checkpoints is None
         and args.steps == 0
@@ -8881,6 +9147,7 @@ def main() -> int:
     if args.save_every < 0:
         raise ValueError("--save-every must be non-negative")
     save_updates = validate_save_updates(args.save_updates)
+    validate_compile_only_args(args, save_updates=save_updates)
     if args.max_checkpoints < 0:
         raise ValueError("--max-checkpoints must be non-negative")
     if args.resume_from is not None and args.init != "exact":
@@ -8995,11 +9262,44 @@ def main() -> int:
 
     model_params = load_mapped_bt4_params(models_dir=models_dir)
     model, optimizer = create_joint_components(model_params, config, seed=args.seed)
+    release_construction_parameter_payload(model_params)
+    del model_params
     ema_target = (
         EmaTargetModel(model)
         if config.jepa_target_semantics == "ema"
         else None
     )
+    if args.compile_only:
+        checkpoint_step = int(metadata["latest_step"])
+        source_checkpoint_path = require_within_workspace(
+            checkpoint_dir / f"step{checkpoint_step:07d}" / "state.npz"
+        )
+        expected_source_path = require_within_workspace(
+            DEFAULT_CHECKPOINT_DIR / "step0265000" / "state.npz"
+        )
+        if (
+            checkpoint_step != 265_000
+            or source_checkpoint_path != expected_source_path
+        ):
+            raise ValueError(
+                "Compile-only supports only the checksum-pinned "
+                "step-265,000 model-only source contract."
+            )
+        return run_compile_only(
+            args,
+            commit=commit,
+            timestamp=timestamp,
+            run_id=run_id,
+            output_dir=output_dir,
+            config=config,
+            train_batches=train_batches,
+            resume_contract=resume_contract,
+            model=model,
+            optimizer=optimizer,
+            ema_target=ema_target,
+            checkpoint_step=checkpoint_step,
+            source_checkpoint_path=source_checkpoint_path,
+        )
     restore_started = time.perf_counter()
     research_update = 0
     next_data_cursor = 0
@@ -9311,7 +9611,8 @@ def main() -> int:
             jax.random.PRNGKey(args.seed),
             next_data_cursor,
         )
-        compile_args = training_call_args(
+        compilation = compile_training_executable(
+            train_fn,
             objective=args.objective,
             model=model,
             optimizer=optimizer,
@@ -9320,18 +9621,14 @@ def main() -> int:
             sigreg_reference_count=args.sigreg_reference_count,
             ema_target=ema_target,
         )
-        compile_started = time.perf_counter()
-        executable = train_fn.lower(*compile_args).compile()
-        explicit_compile_seconds = time.perf_counter() - compile_started
-        if hasattr(executable, "cost_analysis"):
-            compiler_cost_analysis_raw = normalize_cost_analysis(executable.cost_analysis())
+        executable = compilation.executable
+        explicit_compile_seconds = compilation.seconds
+        compiler_cost_analysis_raw = compilation.cost_analysis_raw
+        compiler_memory_analysis = compilation.memory_analysis
+        if compiler_cost_analysis_raw:
             write_json(
                 output_dir / "compiler_cost_analysis.json",
                 compiler_cost_analysis_raw,
-            )
-        if hasattr(executable, "memory_analysis"):
-            compiler_memory_analysis = normalize_memory_analysis(
-                executable.memory_analysis()
             )
 
     updates = 0
