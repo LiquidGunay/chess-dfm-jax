@@ -1,8 +1,8 @@
 # Experiment 023: frozen BT4 policy-head distillation at the DFM root
 
-Status: preregistered and implemented on 2026-07-23. Codec/data/model audits
-and the guarded CPU gate are complete; coefficient calibration and accelerator
-measurements have not started.
+Status: preregistered and implemented on 2026-07-23. Codec/data/model audits,
+the guarded CPU gate, and the no-update coefficient calibration are complete;
+the training smoke and later accelerator gates have not started.
 
 ## Question and hypothesis
 
@@ -135,6 +135,41 @@ contribution before the one-update training smoke. The target contribution
 term (about `0.35`) and weighted target-SIGReg term (about `0.25`) while
 remaining small relative to roughly `4.5` DFM CE. Do not round or retune the
 coefficient after seeing training, validation, or arena results.
+
+### Calibration result
+
+Commit `537ec36` evaluated both frozen source-initialized pools with
+coefficient `1.0`, deterministic time zero, 64 batches of 64 examples, zero
+optimizer updates, and zero checkpoint writes:
+
+| Seed | Root KL | Eligibility | Mapping coverage | Teacher/student top-1 | Teacher played accuracy |
+|---:|---:|---:|---:|---:|---:|
+| 10,000 | 0.8583731093 | 1.0 | 0.9999999935 | 0.5656738281 | 0.4885253906 |
+| 20,000 | 0.8729048609 | 1.0 | 0.9999999981 | 0.5588378906 | 0.4985351562 |
+| Pooled | **0.8656389851** | **1.0** | **0.9999999958** | **0.5622558594** | **0.4935302734** |
+
+The tiny mapping-coverage difference from one is validation-aggregation
+floating-point roundoff; every row passed the complete-mapping gate. Pooled
+teacher played NLL/entropy are `1.6699445089/1.8876852738`.
+
+The preregistered formula therefore fixes:
+
+```text
+lambda = 0.25 / 0.8656389850657433
+       = 0.2888039983331077
+```
+
+The coefficient is inside the unclipped interval and its pooled weighted
+source contribution is exactly `0.25` in host FP64. It is now immutable for
+the smoke, profile, fixed-time run, and repeat. Fourteen guarded targeted
+checks, including an exact checked-in coefficient/formula assertion and all
+active baseline controls, pass after freezing it; lint remains clean.
+
+Seed 10,000 used `6,145,294,336` bytes peak guarded process-group RSS and
+`3,809,939,968` bytes peak JAX HBM; seed 20,000 used
+`6,097,801,216`/`3,837,368,832` bytes. Minimum host `MemAvailable` was
+`5,897,994,240` and `6,033,047,552` bytes respectively. Both processes
+exited normally with no checkpoint.
 
 ## Fixed controls
 

@@ -291,6 +291,13 @@ calibration fixes the one allowed coefficient by
 `clip(0.25 / pooled_root_KL, 0.05, 1.0)` before the guarded training smoke;
 there is no weight or temperature sweep.
 
+The two no-update calibration pools pass with root KL
+`0.8583731093/0.8729048609`, full eligibility, and pooled source
+teacher/student top-1 agreement `0.5622558594`. Pooled
+`K0=0.8656389850657433` freezes the coefficient at
+`0.2888039983331077`, for weighted source KL exactly `0.25`. No optimizer
+update or checkpoint was written.
+
 ## Editable surface
 
 During automated architecture research, edit only `research/train.py`.

@@ -363,3 +363,6 @@ parameter, checkpoint state, or inference latency. Twelve sampled shards
 prove the plane-108 side and stored-legal contracts. A frozen no-update
 two-pool calibration sets the single coefficient to
 `clip(0.25 / pooled_root_KL, 0.05, 1.0)` before any optimizer update.
+The pools measure KL `0.8583731093/0.8729048609` with full eligibility, so
+the exact frozen coefficient is `0.2888039983331077`; both runs perform zero
+updates and write no checkpoint.
