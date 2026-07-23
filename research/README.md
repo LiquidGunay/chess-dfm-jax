@@ -536,3 +536,11 @@ barely differs from source despite full-backbone backpropagation, and its last
 block changes least. Evaluate the accepted and in-memory source-encoder hybrid
 on identical retained validation batches through the shared cache before
 choosing a frozen proxy or a more involved split-gradient/FP32-master path.
+
+Experiment 033 is rejected without an overlay result. The accepted stage
+exactly reproduces its retained control, then a BF16 raw-byte hashing bug fails
+before model mutation. The guard stays within limits, the executable cache is
+byte-identical, zero checkpoints are written, and all seven retained states
+remain unchanged. The hasher now has explicit BF16 coverage, but this
+experiment is not retried; the next systems proposal must conservatively
+investigate a forward-identical split-gradient or FP32-master route.

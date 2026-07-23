@@ -483,6 +483,17 @@ shared-cache, zero-checkpoint diagnostic. Its result chooses between a
 forward-identical frozen autoresearch proxy and a split-gradient/FP32-master
 systems path.
 
+Experiment 033 is rejected and functionally inconclusive. Its accepted
+control exactly reproduces the retained metrics, but the run fails before the
+overlay because the evidence hasher cannot cast NumPy BF16 buffer format `E`
+through `memoryview`. The guard remains healthy at `3.778 GB` peak RSS and
+`8.420 GB` minimum MemAvailable; zero checkpoints are written, all 67 cache
+executables remain byte-identical, and the seven retained states are
+unchanged. Harden the helper with a BF16 regression test, do not rerun this
+experiment, and conservatively route the next systems proposal to a
+forward-identical split-gradient or FP32-master path rather than a
+last-block-only tail.
+
 ## Editable surface
 
 During automated architecture research, edit only `research/train.py`.

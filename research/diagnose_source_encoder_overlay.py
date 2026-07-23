@@ -113,7 +113,7 @@ def state_value_digest(value: Any) -> dict[str, Any]:
         digest.update(len(metadata).to_bytes(8, "little"))
         digest.update(metadata)
         contiguous = np.ascontiguousarray(array)
-        raw = memoryview(contiguous).cast("B")
+        raw = memoryview(contiguous.reshape(-1).view(np.uint8))
         digest.update(len(raw).to_bytes(8, "little"))
         digest.update(raw)
         nbytes += len(raw)

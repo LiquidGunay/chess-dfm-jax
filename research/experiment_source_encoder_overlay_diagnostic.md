@@ -1,7 +1,8 @@
 # Experiment 033: accepted-head source-encoder overlay
 
-Status: preregistered on 2026-07-23. This is a read-only representation and
-systems diagnostic, not a training, compiler, loss, or model experiment.
+Status: rejected at the GPU implementation gate on 2026-07-23. This was a
+read-only representation and systems diagnostic, not a training, compiler,
+loss, or model experiment.
 
 ## Evidence and question
 
@@ -89,3 +90,29 @@ non-encoder mutation, unexpected artifact, or state write rejects the
 diagnostic. Do not retry with fewer batches, a different threshold, another
 checkpoint, or relaxed resource limit. Keep the seven retained states and the
 offline incumbent unchanged.
+
+## Outcome
+
+Run `source-encoder-overlay-tail1-u2072-eval-v1` used implementation commit
+`fefe5c8`. The accepted-control stage completed both preregistered validation
+pools and exactly reproduced all four retained pooled means. The run then
+failed before mutating the encoder: the evidence hasher attempted
+`memoryview(...).cast("B")` on NumPy's BF16 buffer format `E`, which raises
+`ValueError`. No overlay result exists, so this experiment is inconclusive
+about the functional importance of the stored encoder movement and does not
+authorize a frozen-backbone proxy.
+
+The resource guard stopped normally after `89.445` seconds with zero
+checkpoint writes, `3,778,281,472` bytes peak group RSS, and
+`8,419,737,600` bytes minimum MemAvailable. The output contains only a
+`27,093`-byte run configuration and `7,800` bytes of accepted metrics. All 67
+shared-cache executable names, sizes, and SHA-256 hashes remain identical;
+the cache remains `157,684,302` bytes. Storage audit still finds exactly the
+seven allowed state files and no extra or missing state.
+
+The raw-byte helper is hardened after the run by viewing a flattened
+contiguous array as `uint8`, with an explicit BF16 regression test. This
+postmortem fix is not grounds to rerun Experiment 033. Follow the conservative
+branch of the preregistration: investigate a forward-identical split-gradient
+or FP32-master training path, and do not infer that a last-block-only tail is
+useful.

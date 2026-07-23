@@ -51,6 +51,25 @@ def test_state_value_digest_is_order_stable_and_value_sensitive() -> None:
     )
 
 
+def test_state_value_digest_supports_bfloat16_raw_bytes() -> None:
+    left = {
+        "weight": np.asarray(
+            jnp.asarray([1.0, 2.0], dtype=jnp.bfloat16),
+        )
+    }
+    changed = {
+        "weight": np.asarray(
+            jnp.asarray([1.0, 3.0], dtype=jnp.bfloat16),
+        )
+    }
+
+    digest = diagnostic.state_value_digest(left)
+
+    assert digest["leaf_count"] == 1
+    assert digest["nbytes"] == 4
+    assert digest != diagnostic.state_value_digest(changed)
+
+
 def test_overlay_replaces_only_encoder_and_preserves_model_abi() -> None:
     model = TinyModel()
     head_before = model.head[...]
