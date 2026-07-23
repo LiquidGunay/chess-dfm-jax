@@ -540,6 +540,16 @@ graph-view variant. Preregister a method that materially reduces
 differentiated head state or activation/compiler complexity and state its
 scientific tradeoff explicitly.
 
+Experiment 036 is preregistered in
+`research/experiment_split_head_projection_vjp.md`. It materially splits the
+failed head graph at its existing `(z_all, z_dfm)` boundary: a
+`108,385,280`-byte / 17-leaf projector VJP and a `206,990,616`-byte /
+34-leaf coupled DFM+JEPA core VJP. Compose those cotangents exactly with the
+existing encoder VJP, then perform one unchanged merged optimizer update. All
+scientific knobs and checkpoint state remain fixed. Prove full gradient and
+two-update parity plus six production concrete lowerings on CPU before six
+sequential 6.75-GiB cold GPU compiler gates.
+
 ## Editable surface
 
 During automated architecture research, edit only `research/train.py`.
