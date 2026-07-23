@@ -2,11 +2,19 @@ import dataclasses
 
 import jax
 import jax.numpy as jnp
+import ml_dtypes
 import numpy as np
 import torch
 
 from chess_dfm_jax.nnx_bt4 import muon_adamw
-from research.train_torch import CONFIG, MuonAdamW, _prepare_training_step
+from research.train_torch import (
+    CONFIG,
+    MuonAdamW,
+    _prepare_training_step,
+    load_model_checkpoint,
+    load_model_checkpoint_numpy_tree,
+    save_model_checkpoint,
+)
 
 
 class TinyModel(torch.nn.Module):
@@ -97,9 +105,7 @@ def test_torch_optimizer_skips_entire_nonfinite_update():
     bias = np.zeros((128,), dtype=np.float32)
     model = TinyModel(matrix, bias)
     optimizer = MuonAdamW(model, CONFIG)
-    before = {
-        name: parameter.detach().clone() for name, parameter in model.named_parameters()
-    }
+    before = {name: parameter.detach().clone() for name, parameter in model.named_parameters()}
 
     model.matrix.grad = torch.ones_like(model.matrix)
     model.bias.grad = torch.full_like(model.bias, float("nan"))
@@ -115,6 +121,88 @@ def test_torch_optimizer_skips_entire_nonfinite_update():
         assert torch.count_nonzero(leaf.first_moment) == 0
         if leaf.second_moment is not None:
             assert torch.count_nonzero(leaf.second_moment) == 0
+
+
+def test_torch_model_checkpoint_is_strict_model_only_roundtrip(tmp_path):
+    matrix = np.arange(128 * 128, dtype=np.float32).reshape(128, 128)
+    bias = np.arange(128, dtype=np.float32)
+    model = TinyModel(matrix, bias)
+    expected = {name: parameter.detach().clone() for name, parameter in model.named_parameters()}
+
+    manifest = save_model_checkpoint(
+        output_dir=tmp_path,
+        model=model,
+        source_mapping_sha256="a" * 64,
+        optimizer_update=7,
+        data_cursor=11,
+    )
+    checkpoint_dir = tmp_path / "checkpoint"
+    assert sorted(path.name for path in checkpoint_dir.iterdir()) == [
+        "manifest.json",
+        "model.safetensors",
+    ]
+    assert manifest["model_only"] is True
+    assert manifest["optimizer_resume_supported"] is False
+    assert manifest["optimizer_update"] == 7
+    assert manifest["data_cursor"] == 11
+    assert manifest["state"]["leaf_count"] == 2
+
+    with torch.no_grad():
+        for parameter in model.parameters():
+            parameter.zero_()
+    restored = load_model_checkpoint(
+        checkpoint_dir=checkpoint_dir,
+        model=model,
+    )
+    tree, tree_manifest, tree_summary = load_model_checkpoint_numpy_tree(
+        checkpoint_dir=checkpoint_dir,
+        model=model,
+    )
+
+    assert restored == manifest
+    assert tree_manifest == manifest
+    assert tree_summary["leaf_count"] == 2
+    assert tree_summary["nbytes"] == matrix.nbytes + bias.nbytes
+    np.testing.assert_array_equal(tree["matrix"], matrix)
+    np.testing.assert_array_equal(tree["bias"], bias)
+    for name, parameter in model.named_parameters():
+        torch.testing.assert_close(
+            parameter,
+            expected[name],
+            rtol=0.0,
+            atol=0.0,
+        )
+
+
+def test_torch_checkpoint_numpy_tree_preserves_bfloat16_bits(tmp_path):
+    model = torch.nn.Module()
+    expected = torch.tensor(
+        [0.0, -1.5, 3.25, float("inf")],
+        dtype=torch.bfloat16,
+    )
+    model.register_parameter(
+        "bf16",
+        torch.nn.Parameter(expected.clone()),
+    )
+    save_model_checkpoint(
+        output_dir=tmp_path,
+        model=model,
+        source_mapping_sha256="b" * 64,
+        optimizer_update=0,
+        data_cursor=0,
+    )
+
+    tree, _, summary = load_model_checkpoint_numpy_tree(
+        checkpoint_dir=tmp_path / "checkpoint",
+        model=model,
+    )
+
+    assert tree["bf16"].dtype == ml_dtypes.bfloat16
+    assert summary["nbytes"] == expected.numel() * expected.element_size()
+    np.testing.assert_array_equal(
+        tree["bf16"].view(np.uint16),
+        expected.view(torch.uint16).numpy(),
+    )
 
 
 def test_prefetch_preparation_is_schedule_keyed_and_deterministic():

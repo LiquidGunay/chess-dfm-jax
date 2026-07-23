@@ -614,7 +614,11 @@ evidence amendment in `research/pytorch_eager_migration.md`, retain exact FP32
 formula/gradient/optimizer parity, treat BF16 optimization as
 runtime-specific, and require the matched PyTorch control plus exported JAX
 validation/eight-pass inference before opening readiness. Remaining work is
-the strict checkpoint/JAX round trip and that matched fixed-time control.
+the real-control checkpoint/JAX round trip and that matched fixed-time
+control. The model-only save/restore and NNX pure-tree path now pass exact
+FP32 and BF16-bit unit tests. A guarded full-horizon PyTorch source validation
+smoke also passes at batch 64, using 3.152 GB peak allocated HBM and 1.878 GB
+peak process-group RSS; the focused migration suite passes 21 tests.
 
 ## Editable surface
 

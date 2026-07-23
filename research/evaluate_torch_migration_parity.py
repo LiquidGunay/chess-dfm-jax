@@ -19,6 +19,7 @@ import json
 import math
 import os
 import sys
+import time
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -55,6 +56,7 @@ from research.train import (  # noqa: E402
     DEFAULT_RUN_ROOT,
     JointLatentSASAConfig,
     JointLatentSASAModel,
+    evaluate,
     resolve_config,
 )
 from research.train_torch import (  # noqa: E402
@@ -65,6 +67,8 @@ from research.train_torch import (  # noqa: E402
     _sigreg_v_stat,
     _torch_batch,
     bind_source_model,
+    load_model_checkpoint,
+    load_model_checkpoint_numpy_tree,
     load_source_model,
     load_verified_source_model,
     materialize_step_choices,
@@ -82,6 +86,9 @@ BF16_SCALAR_ABSOLUTE_MAX = 1e-2
 SOURCE_MAPPING_SHA256 = (
     "697c0944786a208eb22a290d01c9889c9c02564d43068d1b67cb30d8ae565261"
 )
+EXPECTED_MODEL_LEAVES = 455
+EXPECTED_MODEL_BYTES = 705_987_352
+ACTION_VOCAB_SIZE = 1858
 _CORE_TENSOR_NAMES = (
     "current_tokens",
     "future_tokens",
@@ -163,6 +170,119 @@ def _build_jax_model(
     nnx.replace_by_pure_dict(state, source)
     nnx.update(model, state)
     return model
+
+
+def _flatten_state_structure(
+    value: Any,
+    path: tuple[str | int, ...] = (),
+) -> dict[tuple[str | int, ...], Any]:
+    if isinstance(value, dict):
+        flattened: dict[tuple[str | int, ...], Any] = {}
+        for key, child in value.items():
+            flattened.update(_flatten_state_structure(child, (*path, key)))
+        return flattened
+    if isinstance(value, (list, tuple)):
+        flattened = {}
+        for index, child in enumerate(value):
+            flattened.update(_flatten_state_structure(child, (*path, index)))
+        return flattened
+    return {path: value}
+
+
+def _checkpoint_tree(
+    checkpoint_dir: Path,
+) -> tuple[
+    dict[str | int, Any],
+    dict[str, Any],
+    dict[str, Any],
+    tuple[str, ...],
+]:
+    with torch.device("meta"):
+        template = JointModel(CONFIG)
+    ordered_names = tuple(name for name, _ in template.named_parameters())
+    tree, manifest, summary = load_model_checkpoint_numpy_tree(
+        checkpoint_dir=checkpoint_dir,
+        model=template,
+    )
+    del template
+    if manifest["source_mapping_sha256"] != SOURCE_MAPPING_SHA256:
+        raise ValueError(
+            "Checkpoint source mapping drift: "
+            f"{manifest['source_mapping_sha256']} != {SOURCE_MAPPING_SHA256}"
+        )
+    if summary["leaf_count"] != EXPECTED_MODEL_LEAVES:
+        raise ValueError(
+            f"Checkpoint leaf count drift: {summary['leaf_count']} != "
+            f"{EXPECTED_MODEL_LEAVES}"
+        )
+    if summary["nbytes"] != EXPECTED_MODEL_BYTES:
+        raise ValueError(
+            f"Checkpoint model bytes drift: {summary['nbytes']} != "
+            f"{EXPECTED_MODEL_BYTES}"
+        )
+    return tree, manifest, summary, ordered_names
+
+
+def _apply_and_verify_jax_checkpoint(
+    model: JointLatentSASAModel,
+    tree: Mapping[str | int, Any],
+    *,
+    ordered_names: tuple[str, ...],
+    expected_summary: Mapping[str, Any],
+) -> dict[str, Any]:
+    state = nnx.state(model, TrainableParam)
+    nnx.replace_by_pure_dict(state, tree)
+    nnx.update(model, state)
+
+    observed_state = dict(nnx.to_pure_dict(nnx.state(model, TrainableParam)))
+    expected_flat = _flatten_state_structure(tree)
+    observed_flat = _flatten_state_structure(observed_state)
+    if set(observed_flat) != set(expected_flat):
+        raise ValueError(
+            "JAX checkpoint state leaf mismatch after update: "
+            f"missing={list(set(expected_flat) - set(observed_flat))[:10]}, "
+            f"extra={list(set(observed_flat) - set(expected_flat))[:10]}"
+        )
+    combined = hashlib.sha256()
+    total_bytes = 0
+    for name in ordered_names:
+        parts: tuple[str | int, ...] = tuple(
+            int(part) if part.isdigit() else part for part in name.split(".")
+        )
+        expected = np.asarray(expected_flat[parts])
+        observed = np.asarray(jax.device_get(observed_flat[parts]))
+        if observed.shape != expected.shape or observed.dtype != expected.dtype:
+            raise ValueError(
+                f"JAX checkpoint ABI mismatch at {name}: "
+                f"{observed.shape}/{observed.dtype} != "
+                f"{expected.shape}/{expected.dtype}"
+            )
+        expected_bytes = expected.tobytes(order="C")
+        observed_bytes = observed.tobytes(order="C")
+        if observed_bytes != expected_bytes:
+            raise ValueError(f"JAX checkpoint value mismatch at {name}")
+        leaf_digest = hashlib.sha256(observed_bytes).hexdigest()
+        combined.update(name.encode("utf-8"))
+        combined.update(b"\0")
+        combined.update(leaf_digest.encode("ascii"))
+        total_bytes += int(observed.nbytes)
+    observed_summary = {
+        "schema_version": "torch-to-jax-model-roundtrip-v1",
+        "leaf_count": len(ordered_names),
+        "nbytes": total_bytes,
+        "combined_state_sha256": combined.hexdigest(),
+        "exact_shape_dtype_and_value_match": True,
+    }
+    if (
+        observed_summary["combined_state_sha256"]
+        != expected_summary["combined_state_sha256"]
+    ):
+        raise ValueError(
+            "JAX checkpoint combined state checksum mismatch: "
+            f"{observed_summary['combined_state_sha256']} != "
+            f"{expected_summary['combined_state_sha256']}"
+        )
+    return observed_summary
 
 
 def _numpy_choices(choices: StepChoices) -> dict[str, np.ndarray]:
@@ -882,6 +1002,17 @@ def _run_torch_export(args: argparse.Namespace) -> int:
         device=device,
         source_path=args.source_state,
     )
+    checkpoint_manifest = None
+    if args.checkpoint_dir is not None:
+        checkpoint_manifest = load_model_checkpoint(
+            checkpoint_dir=args.checkpoint_dir,
+            model=model,
+        )
+        if (
+            checkpoint_manifest["source_mapping_sha256"]
+            != source_mapping["combined_sha256"]
+        ):
+            raise ValueError("Checkpoint/source mapping mismatch")
     model.eval()
     with torch.no_grad():
         torch_values = _torch_intermediates(
@@ -909,6 +1040,16 @@ def _run_torch_export(args: argparse.Namespace) -> int:
         "encoder_trace": args.encoder_trace,
         "torch_final_bt4_fp32": args.torch_final_bt4_fp32,
         "source_mapping_sha256": source_mapping["combined_sha256"],
+        "checkpoint_state_sha256": (
+            None
+            if checkpoint_manifest is None
+            else checkpoint_manifest["state"]["sha256"]
+        ),
+        "checkpoint_optimizer_update": (
+            None
+            if checkpoint_manifest is None
+            else checkpoint_manifest["optimizer_update"]
+        ),
         "torch_version": torch.__version__,
         "cuda_version": torch.version.cuda,
         "device": torch.cuda.get_device_name(device),
@@ -980,6 +1121,12 @@ def _load_exchange(
                 f"Exchange metadata mismatch for {key}: "
                 f"{metadata.get(key)!r} != {value!r}"
             )
+    checkpoint_exported = metadata.get("checkpoint_state_sha256") is not None
+    if checkpoint_exported != (args.checkpoint_dir is not None):
+        raise ValueError(
+            "Exchange checkpoint presence differs from --checkpoint-dir: "
+            f"{checkpoint_exported} != {args.checkpoint_dir is not None}"
+        )
     return metadata, torch_values, torch_losses
 
 
@@ -990,13 +1137,43 @@ def _run_jax_compare(args: argparse.Namespace) -> int:
         raise RuntimeError(f"JAX BF16 comparison found {jax.default_backend()}")
     metadata, torch_values, torch_losses = _load_exchange(args)
     numpy_batch, _, numpy_choices = _inputs(args)
-    source = load_verified_source_model(args.source_state)
-    jax_model = _build_jax_model(
-        source,
-        models_dir=args.models_dir,
-        compute_dtype=args.compute_dtype,
-    )
-    del source
+    checkpoint_manifest = None
+    checkpoint_tree_summary = None
+    roundtrip_summary = None
+    if args.checkpoint_dir is None:
+        source = load_verified_source_model(args.source_state)
+        jax_model = _build_jax_model(
+            source,
+            models_dir=args.models_dir,
+            compute_dtype=args.compute_dtype,
+        )
+        del source
+    else:
+        tree, checkpoint_manifest, checkpoint_tree_summary, ordered_names = (
+            _checkpoint_tree(args.checkpoint_dir)
+        )
+        if (
+            metadata["checkpoint_state_sha256"]
+            != checkpoint_manifest["state"]["sha256"]
+        ):
+            raise ValueError("Torch exchange/checkpoint state checksum mismatch")
+        if (
+            metadata["checkpoint_optimizer_update"]
+            != checkpoint_manifest["optimizer_update"]
+        ):
+            raise ValueError("Torch exchange/checkpoint update mismatch")
+        jax_model = _build_jax_model(
+            tree,
+            models_dir=args.models_dir,
+            compute_dtype=args.compute_dtype,
+        )
+        roundtrip_summary = _apply_and_verify_jax_checkpoint(
+            jax_model,
+            tree,
+            ordered_names=ordered_names,
+            expected_summary=checkpoint_tree_summary,
+        )
+        del tree
     gc.collect()
     jax_values = _jax_intermediates(
         jax_model,
@@ -1019,6 +1196,253 @@ def _run_jax_compare(args: argparse.Namespace) -> int:
     result["jax_backend"] = jax.default_backend()
     result["exchange"] = str(require_within_workspace(args.exchange))
     result["exchange_sha256"] = _sha256(require_within_workspace(args.exchange))
+    result["checkpoint_manifest"] = checkpoint_manifest
+    result["checkpoint_tree"] = checkpoint_tree_summary
+    result["jax_roundtrip"] = roundtrip_summary
+    return _write_result(args, result)
+
+
+def _root_legal_mask(batch: Mapping[str, Any]) -> np.ndarray:
+    legal_idx = np.asarray(batch["legal_idx"])[:, 0]
+    legal_count = np.asarray(batch["legal_count"])[:, 0].astype(np.int64)
+    batch_size = legal_idx.shape[0]
+    if "legal_masks_valid" in batch and not np.all(
+        np.asarray(batch["legal_masks_valid"])[:, 0]
+    ):
+        raise ValueError("Frozen inference batch contains invalid root legal metadata")
+    if np.any(legal_count <= 0) or np.any(legal_count > legal_idx.shape[1]):
+        raise ValueError("Frozen inference batch has invalid root legal counts")
+    mask = np.zeros((batch_size, ACTION_VOCAB_SIZE), dtype=np.bool_)
+    slots = np.arange(legal_idx.shape[1])[None, :] < legal_count[:, None]
+    rows = np.broadcast_to(np.arange(batch_size)[:, None], legal_idx.shape)
+    selected = legal_idx.astype(np.int64)
+    if np.any((selected[slots] < 0) | (selected[slots] >= ACTION_VOCAB_SIZE)):
+        raise ValueError("Frozen inference batch contains out-of-range legal actions")
+    mask[rows[slots], selected[slots]] = True
+    return mask
+
+
+def _jax_inference_gate(
+    model: JointLatentSASAModel,
+    batch: Mapping[str, Any],
+) -> dict[str, Any]:
+    from chess_dfm_jax.policy import ACTION_CODEC_LEGACY_ABSOLUTE_1858
+    from research.inference import infer_dfm_from_current
+
+    legal_mask = _root_legal_mask(batch)
+    started = time.perf_counter()
+    result = infer_dfm_from_current(
+        model,
+        np.asarray(batch["current_planes"]),
+        legal_mask,
+        refinement_passes=8,
+        trace_top_k=8,
+        action_codec_id=ACTION_CODEC_LEGACY_ABSOLUTE_1858,
+    )
+    actions, trace = jax.device_get(jax.block_until_ready(result))
+    seconds = time.perf_counter() - started
+    actions = np.asarray(actions, dtype=np.int32)
+    root_actions = actions[:, 0]
+    root_in_range = (root_actions >= 0) & (root_actions < ACTION_VOCAB_SIZE)
+    safe_root_actions = np.clip(root_actions, 0, ACTION_VOCAB_SIZE - 1)
+    root_legal = root_in_range & legal_mask[
+        np.arange(actions.shape[0]),
+        safe_root_actions,
+    ]
+    all_filled = bool(
+        np.all((actions >= 0) & (actions < ACTION_VOCAB_SIZE))
+    )
+    gate_pass = bool(np.all(root_legal) and all_filled)
+    return {
+        "gate_pass": gate_pass,
+        "batch_size": int(actions.shape[0]),
+        "refinement_passes": 8,
+        "action_codec_id": ACTION_CODEC_LEGACY_ABSOLUTE_1858,
+        "compile_and_first_call_seconds": seconds,
+        "all_final_root_actions_legal": bool(np.all(root_legal)),
+        "all_final_action_slots_filled": all_filled,
+        "final_actions_sha256": hashlib.sha256(
+            actions.tobytes(order="C")
+        ).hexdigest(),
+        "first_root_actions": root_actions[:16].tolist(),
+        "trace": {
+            "times": np.asarray(trace.times).tolist(),
+            "mean_root_raw_entropy_by_pass": np.asarray(
+                trace.root_raw_entropy
+            ).mean(axis=1).tolist(),
+            "mean_root_raw_legal_mass_by_pass": np.asarray(
+                trace.root_raw_legal_mass
+            ).mean(axis=1).tolist(),
+            "mean_root_legal_entropy_by_pass": np.asarray(
+                trace.root_legal_entropy
+            ).mean(axis=1).tolist(),
+        },
+    }
+
+
+def _jax_validation_records(
+    model: JointLatentSASAModel,
+    validation_batches: Mapping[int, FixedTrajectoryBatches],
+    *,
+    label: str,
+    eval_batches: int,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    records: list[dict[str, Any]] = []
+    for seed, batches in validation_batches.items():
+        metrics, seconds = evaluate(
+            model,
+            batches,
+            count=eval_batches,
+            seed=seed,
+            deterministic_t=0.0,
+            objective="normalized",
+            sigreg_reference_count=1.0,
+            collapse_diagnostics=True,
+        )
+        if not all(math.isfinite(value) for value in metrics.values()):
+            raise FloatingPointError(
+                f"Non-finite frozen JAX validation metric for {label}/seed {seed}"
+            )
+        records.append(
+            {
+                "state": label,
+                "validation_seed": seed,
+                "eval_batch_size": batches.batch_size,
+                "eval_batches": eval_batches,
+                "validation_examples": batches.batch_size * eval_batches,
+                "validation_seconds": seconds,
+                "validation": metrics,
+            }
+        )
+    inference = _jax_inference_gate(
+        model,
+        validation_batches[next(iter(validation_batches))].batch_at(0),
+    )
+    return records, inference
+
+
+def _run_jax_checkpoint_eval(args: argparse.Namespace) -> int:
+    if jax.default_backend() != "gpu":
+        raise RuntimeError(
+            f"JAX checkpoint evaluation found backend {jax.default_backend()}"
+        )
+    if args.checkpoint_dir is None:
+        raise ValueError("--mode jax-checkpoint-eval requires --checkpoint-dir")
+    if args.eval_batch_size != CONFIG.sigreg_example_count:
+        raise ValueError(
+            "Frozen JAX checkpoint evaluation requires --eval-batch-size "
+            f"{CONFIG.sigreg_example_count}"
+        )
+    if args.eval_batches < 1:
+        raise ValueError("--eval-batches must be positive")
+    if len(set(args.eval_seeds)) != len(args.eval_seeds):
+        raise ValueError("--eval-seeds must not contain duplicates")
+
+    validation_batches = {
+        seed: FixedTrajectoryBatches(
+            require_within_workspace(args.data_root / "val"),
+            batch_size=args.eval_batch_size,
+            horizon=CONFIG.horizon,
+            seed=seed,
+            shuffle_files=True,
+            batch_schedule="global_permutation",
+        )
+        for seed in args.eval_seeds
+    }
+    records: list[dict[str, Any]] = []
+    inference: dict[str, Any] = {}
+    if args.include_source:
+        source = load_verified_source_model(args.source_state)
+        model = _build_jax_model(
+            source,
+            models_dir=args.models_dir,
+            compute_dtype="bfloat16",
+        )
+        del source
+        gc.collect()
+        source_records, source_inference = _jax_validation_records(
+            model,
+            validation_batches,
+            label="source",
+            eval_batches=args.eval_batches,
+        )
+        records.extend(source_records)
+        inference["source"] = source_inference
+    else:
+        model = None
+
+    tree, manifest, tree_summary, ordered_names = _checkpoint_tree(
+        args.checkpoint_dir
+    )
+    if model is None:
+        model = _build_jax_model(
+            tree,
+            models_dir=args.models_dir,
+            compute_dtype="bfloat16",
+        )
+    roundtrip = _apply_and_verify_jax_checkpoint(
+        model,
+        tree,
+        ordered_names=ordered_names,
+        expected_summary=tree_summary,
+    )
+    del tree
+    gc.collect()
+    label = f"checkpoint_u{manifest['optimizer_update']}"
+    checkpoint_records, checkpoint_inference = _jax_validation_records(
+        model,
+        validation_batches,
+        label=label,
+        eval_batches=args.eval_batches,
+    )
+    records.extend(checkpoint_records)
+    inference[label] = checkpoint_inference
+
+    aggregate: dict[str, dict[str, float]] = {}
+    for state_label in sorted({record["state"] for record in records}):
+        matching = [
+            record["validation"]
+            for record in records
+            if record["state"] == state_label
+        ]
+        aggregate[state_label] = {
+            key: float(np.mean([row[key] for row in matching]))
+            for key in matching[0]
+        }
+    delta_from_source = None
+    if args.include_source:
+        delta_from_source = {
+            key: aggregate[label][key] - aggregate["source"][key]
+            for key in aggregate[label]
+        }
+    result = {
+        "schema_version": "torch-checkpoint-frozen-jax-evaluation-v1",
+        "gate_pass": bool(
+            roundtrip["exact_shape_dtype_and_value_match"]
+            and all(row["gate_pass"] for row in inference.values())
+        ),
+        "jax_backend": jax.default_backend(),
+        "jax_device": jax.devices()[0].device_kind,
+        "checkpoint_dir": str(require_within_workspace(args.checkpoint_dir)),
+        "checkpoint_manifest": manifest,
+        "checkpoint_tree": tree_summary,
+        "jax_roundtrip": roundtrip,
+        "include_source": bool(args.include_source),
+        "eval_batch_size": args.eval_batch_size,
+        "eval_batches": args.eval_batches,
+        "eval_seeds": list(args.eval_seeds),
+        "validation_schedule": (
+            "one global permutation per seed; batch indexes "
+            "[0, eval_batches) reused for every evaluated state"
+        ),
+        "records": records,
+        "two_pool_mean_by_state": aggregate,
+        "checkpoint_minus_source": delta_from_source,
+        "eight_pass_inference": inference,
+        "scientific_promotion_decision": (
+            "not evaluated by the migration bridge"
+        ),
+    }
     return _write_result(args, result)
 
 
@@ -1031,6 +1455,8 @@ def run(args: argparse.Namespace) -> int:
         return _run_torch_export(args)
     if args.mode == "jax-compare":
         return _run_jax_compare(args)
+    if args.mode == "jax-checkpoint-eval":
+        return _run_jax_checkpoint_eval(args)
     raise ValueError(f"Unsupported mode: {args.mode}")
 
 
@@ -1038,7 +1464,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--mode",
-        choices=("cpu-compare", "torch-export", "jax-compare"),
+        choices=(
+            "cpu-compare",
+            "torch-export",
+            "jax-compare",
+            "jax-checkpoint-eval",
+        ),
         default="cpu-compare",
     )
     parser.add_argument(
@@ -1050,6 +1481,8 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument("--models-dir", type=Path, default=DEFAULT_MODELS_DIR)
+    parser.add_argument("--checkpoint-dir", type=Path)
+    parser.add_argument("--include-source", action="store_true")
     parser.add_argument(
         "--data-root", type=Path, default=_REPO_ROOT / "data/trajectory_v3"
     )
@@ -1068,6 +1501,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--update", type=int, default=0)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--threads", type=int, default=2)
+    parser.add_argument(
+        "--eval-seeds",
+        type=int,
+        nargs="+",
+        default=(10000, 20000),
+    )
+    parser.add_argument("--eval-batch-size", type=int, default=64)
+    parser.add_argument("--eval-batches", type=int, default=64)
     parser.add_argument(
         "--compute-dtype",
         choices=("float32", "bfloat16"),

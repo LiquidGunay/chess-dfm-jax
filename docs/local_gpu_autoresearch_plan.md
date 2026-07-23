@@ -1881,10 +1881,16 @@ sweeps, held-out data, and repeated seeds.
   SIGReg loss.
 - [ ] Complete the sparse checkpoint restore/JAX-round-trip gates. Use the
   matched PyTorch control plus frozen JAX evaluation/inference cross-check as
-  the amended production-runtime gate.
+  the amended production-runtime gate. The strict model-only round-trip,
+  NNX-compatible pure-tree loader, and exact BF16-bit unit gate are complete;
+  the real fixed-time control state remains to be exercised.
 - [x] Run a guarded no-checkpoint A10G smoke/profile, then sweep physical batch
   size for throughput and safe HBM/RSS headroom. Freeze the selected batch for
   matched comparisons; batch 512 is selected for eager PyTorch.
+- [x] Add and smoke the full-horizon PyTorch validation/collapse path at frozen
+  batch 64. The guarded source batch completes in 2.367 seconds at 3.152 GB
+  peak allocated HBM and 1.878 GB peak host RSS, with all metrics finite and
+  every trivial/action-shuffled JEPA comparison ordered correctly.
 - [ ] Repeat the accepted fixed-time control and its frozen two-pool
   validation under PyTorch, cross-check the exported model with JAX
   validation and eight-pass inference, and set

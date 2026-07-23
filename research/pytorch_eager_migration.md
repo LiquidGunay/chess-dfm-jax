@@ -144,6 +144,17 @@ Matching JAX's primitive activation structure worsens the endpoint to
 `0.12594`; computing only the final block in FP32 also worsens it to
 `0.11068`. Both changes are rejected.
 
+The model-only checkpoint ABI now has an exact write/restore/pure-tree test,
+including bit-preserving BF16 conversion for NNX. The focused migration suite
+passes 21 tests. The frozen PyTorch validator encodes all eight future
+horizons even though training samples balanced K=1, and reports the historical
+per-horizon policy, legality, feature-variance/effective-rank, trivial-baseline,
+and action-shuffle diagnostics. A guarded source smoke at batch 64 completes
+in 2.367 seconds with 3.152 GB peak allocated HBM and 1.878 GB peak
+process-group RSS. Every scalar is finite; the prediction beats zero,
+identity, target-shuffled, and action-shuffled controls at every horizon.
+This smoke writes no checkpoint.
+
 This evidence amends, rather than silently relaxes, correctness gate 3:
 
 1. FP32 remains the exact formula, source-map, representative-gradient, and
@@ -160,5 +171,5 @@ This evidence amends, rather than silently relaxes, correctness gate 3:
    claimed.
 
 `PYTORCH_AUTORESEARCH_READY` remains false. The remaining gates are
-strict checkpoint restore/JAX round trip and the matched fixed-time control
-plus JAX validation/inference cross-check.
+the real-control checkpoint's strict JAX round trip and the matched fixed-time
+control plus full two-pool JAX validation/inference cross-check.
