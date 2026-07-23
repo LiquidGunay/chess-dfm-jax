@@ -8286,6 +8286,195 @@ class TrainingCompilation(NamedTuple):
     memory_analysis: dict[str, int]
 
 
+def current_process_rss_bytes(
+    status_path: Path = Path("/proc/self/status"),
+) -> int:
+    """Read current Linux process RSS without adding a monitoring dependency."""
+
+    for line in status_path.read_text(encoding="utf-8").splitlines():
+        if line.startswith("VmRSS:"):
+            fields = line.split()
+            if len(fields) == 3 and fields[2] == "kB":
+                return int(fields[1]) * 1024
+            break
+    raise RuntimeError(f"No valid VmRSS in {status_path}")
+
+
+def current_mem_available_bytes(
+    meminfo_path: Path = Path("/proc/meminfo"),
+) -> int:
+    """Read current Linux MemAvailable for compile-phase telemetry."""
+
+    for line in meminfo_path.read_text(encoding="utf-8").splitlines():
+        if line.startswith("MemAvailable:"):
+            fields = line.split()
+            if len(fields) == 3 and fields[2] == "kB":
+                return int(fields[1]) * 1024
+            break
+    raise RuntimeError(f"No valid MemAvailable in {meminfo_path}")
+
+
+def compilation_resource_snapshot() -> dict[str, Any]:
+    return {
+        "process_rss_bytes": current_process_rss_bytes(),
+        "system_mem_available_bytes": current_mem_available_bytes(),
+        "gpu_memory": gpu_memory_stats(),
+    }
+
+
+def raw_jax_abstract_signature(value: Any) -> dict[str, Any]:
+    """Describe paths and abstract values used to key JAX compilation."""
+
+    path_leaves, treedef = jax.tree_util.tree_flatten_with_path(value)
+    records = []
+    concrete_types: dict[str, int] = {}
+    total_nbytes = 0
+    for path, leaf in path_leaves:
+        abstract = jax.typeof(leaf)
+        dtype = np.dtype(abstract.dtype)
+        nbytes = int(np.prod(abstract.shape, dtype=np.int64)) * dtype.itemsize
+        total_nbytes += nbytes
+        concrete_type = f"{type(leaf).__module__}.{type(leaf).__qualname__}"
+        concrete_types[concrete_type] = (
+            concrete_types.get(concrete_type, 0) + 1
+        )
+        records.append(
+            {
+                "path": jax.tree_util.keystr(path),
+                "shape": list(abstract.shape),
+                "dtype": str(jax.dtypes.canonicalize_dtype(abstract.dtype)),
+                "weak_type": bool(abstract.weak_type),
+                "sharding": str(abstract.sharding),
+                "memory_space": str(abstract.memory_space),
+                "abstract_value": str(abstract),
+                "nbytes": nbytes,
+            }
+        )
+    treedef_text = str(treedef)
+    return {
+        "sha256": _json_sha256(records),
+        "leaf_count": len(records),
+        "nbytes": total_nbytes,
+        "records": records,
+        "treedef_sha256": _json_sha256(treedef_text),
+        "concrete_type_counts": dict(sorted(concrete_types.items())),
+    }
+
+
+def abstractify_dynamic_value(
+    value: Any,
+    *,
+    label: str,
+) -> tuple[Any, dict[str, Any]]:
+    """Replace dynamic array leaves with signature-equivalent abstract values."""
+
+    before = raw_jax_abstract_signature(value)
+
+    def to_abstract(leaf: Any) -> jax.ShapeDtypeStruct:
+        abstract = jax.typeof(leaf)
+        return jax.ShapeDtypeStruct(
+            abstract.shape,
+            abstract.dtype,
+            sharding=abstract.sharding,
+            weak_type=abstract.weak_type,
+        )
+
+    abstract_value = jax.tree.map(to_abstract, value)
+    after = raw_jax_abstract_signature(abstract_value)
+    before_signature = {
+        key: before[key]
+        for key in ("sha256", "leaf_count", "nbytes", "treedef_sha256")
+    }
+    after_signature = {
+        key: after[key]
+        for key in ("sha256", "leaf_count", "nbytes", "treedef_sha256")
+    }
+    if before["records"] != after["records"] or (
+        before_signature != after_signature
+    ):
+        raise RuntimeError(
+            f"{label} abstractification changed the JAX signature"
+        )
+    expected_types = {"jax.ShapeDtypeStruct": after["leaf_count"]}
+    if after["concrete_type_counts"] != expected_types:
+        raise RuntimeError(
+            f"{label} retains non-abstract dynamic leaves: "
+            f"{after['concrete_type_counts']!r}"
+        )
+    return abstract_value, {
+        "label": label,
+        "before": before_signature
+        | {"concrete_type_counts": before["concrete_type_counts"]},
+        "after": after_signature
+        | {"concrete_type_counts": after["concrete_type_counts"]},
+        "records_equal": True,
+    }
+
+
+def abstractify_nnx_dynamic_state(
+    node: Any,
+    *,
+    label: str,
+) -> dict[str, Any]:
+    """Replace every variable value in one disposable NNX node."""
+
+    state = nnx.state(node)
+    abstract_state, report = abstractify_dynamic_value(
+        state,
+        label=label,
+    )
+    nnx.update(node, abstract_state)
+    del state
+    del abstract_state
+    return report
+
+
+def abstractify_compile_only_arguments(
+    *,
+    model: JointLatentSASAModel,
+    optimizer: nnx.Optimizer,
+    batch: Mapping[str, Any],
+    rng: Any,
+    ema_target: EmaTargetModel | None,
+) -> tuple[Mapping[str, Any], Any, dict[str, Any]]:
+    """Release concrete dynamic inputs before disposable backend compilation."""
+
+    resource_before = compilation_resource_snapshot()
+    reports = {
+        "model": abstractify_nnx_dynamic_state(model, label="model"),
+        "optimizer": abstractify_nnx_dynamic_state(
+            optimizer,
+            label="optimizer",
+        ),
+    }
+    if ema_target is not None:
+        reports["ema_target"] = abstractify_nnx_dynamic_state(
+            ema_target,
+            label="ema_target",
+        )
+    abstract_batch, reports["batch"] = abstractify_dynamic_value(
+        batch,
+        label="batch",
+    )
+    abstract_rng, reports["rng"] = abstractify_dynamic_value(
+        rng,
+        label="rng",
+    )
+    gc.collect()
+    resource_after = compilation_resource_snapshot()
+    concrete_nbytes_replaced = sum(
+        int(report["before"]["nbytes"]) for report in reports.values()
+    )
+    return abstract_batch, abstract_rng, {
+        "all_dynamic_leaves_abstract": True,
+        "all_abstract_signature_records_equal": True,
+        "concrete_nbytes_replaced": concrete_nbytes_replaced,
+        "arguments": reports,
+        "resource_before": resource_before,
+        "resource_after": resource_after,
+    }
+
+
 def compile_training_executable(
     train_fn: Any,
     *,
@@ -8293,7 +8482,7 @@ def compile_training_executable(
     model: JointLatentSASAModel,
     optimizer: nnx.Optimizer,
     batch: Mapping[str, Any],
-    rng: jax.Array,
+    rng: Any,
     sigreg_reference_count: float,
     ema_target: EmaTargetModel | None,
 ) -> TrainingCompilation:
@@ -8980,6 +9169,7 @@ def run_compile_only(
         ).items()
     }
     state_footprint = training_state_footprint(model, optimizer)
+    initial_optimizer_step = int(optimizer.step[...])
     run_config = {
         "format": "chess-dfm-compile-only-v1",
         "mode": "compile_only_shape_equivalent",
@@ -8998,7 +9188,7 @@ def run_compile_only(
         "source_checkpoint_values_restored": False,
         "constructor_parameter_payload_released": True,
         "parameter_values_are_dynamic_compilation_inputs": True,
-        "initial_optimizer_step": int(optimizer.step[...]),
+        "initial_optimizer_step": initial_optimizer_step,
         "initial_data_cursor": 0,
         "resume_contract": resume_contract,
         "resume_contract_sha256": _json_sha256(resume_contract),
@@ -9008,8 +9198,6 @@ def run_compile_only(
         "updates": 0,
         "validation_batches": 0,
     }
-    write_json(output_dir / "run_config.json", run_config)
-
     train_fn = training_function(
         objective=args.objective,
         donate=args.donate,
@@ -9017,6 +9205,17 @@ def run_compile_only(
     )
     compile_batch = train_batches.batch_at(0)
     compile_rng = jax.random.fold_in(jax.random.PRNGKey(args.seed), 0)
+    compile_batch, compile_rng, abstract_arguments = (
+        abstractify_compile_only_arguments(
+            model=model,
+            optimizer=optimizer,
+            batch=compile_batch,
+            rng=compile_rng,
+            ema_target=ema_target,
+        )
+    )
+    run_config["abstract_compilation_arguments"] = abstract_arguments
+    write_json(output_dir / "run_config.json", run_config)
     compilation = compile_training_executable(
         train_fn,
         objective=args.objective,
@@ -9027,13 +9226,7 @@ def run_compile_only(
         sigreg_reference_count=args.sigreg_reference_count,
         ema_target=ema_target,
     )
-    optimizer_step_after_compile = int(optimizer.step[...])
-    if optimizer_step_after_compile != run_config["initial_optimizer_step"]:
-        raise RuntimeError(
-            "Compile-only changed the optimizer step without execution: "
-            f"{optimizer_step_after_compile} != "
-            f"{run_config['initial_optimizer_step']}"
-        )
+    optimizer_step_after_compile = initial_optimizer_step
     if compilation.cost_analysis_raw:
         write_json(
             output_dir / "compiler_cost_analysis.json",
@@ -9049,6 +9242,9 @@ def run_compile_only(
         "gpu_memory": gpu_memory_stats(),
         "completed": True,
         "optimizer_step_after_compile": optimizer_step_after_compile,
+        "optimizer_step_after_compile_source": (
+            "captured_before_abstract_lowering_no_execution"
+        ),
         "model_or_optimizer_executed": False,
         "checkpoint_path": None,
         "metrics_path": None,

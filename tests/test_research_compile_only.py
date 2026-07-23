@@ -5,8 +5,12 @@ import copy
 import types
 from pathlib import Path
 
+import jax
+import jax.numpy as jnp
 import numpy as np
+import optax
 import pytest
+from flax import nnx
 
 from research import train
 
@@ -101,6 +105,83 @@ def test_dynamic_values_do_not_change_training_state_abi() -> None:
     )
 
 
+def test_abstractification_preserves_raw_jax_signature_without_values() -> None:
+    concrete = {
+        "jax": jnp.ones((2, 3), dtype=jnp.bfloat16),
+        "numpy": np.ones((4,), dtype=np.float32),
+    }
+
+    abstract, report = train.abstractify_dynamic_value(
+        concrete,
+        label="test",
+    )
+
+    assert report["records_equal"] is True
+    assert report["before"]["sha256"] == report["after"]["sha256"]
+    assert report["before"]["treedef_sha256"] == (
+        report["after"]["treedef_sha256"]
+    )
+    assert report["before"]["nbytes"] == report["after"]["nbytes"]
+    assert report["after"]["concrete_type_counts"] == {
+        "jax.ShapeDtypeStruct": 2,
+    }
+    assert all(
+        isinstance(leaf, jax.ShapeDtypeStruct)
+        for leaf in jax.tree.leaves(abstract)
+    )
+
+
+def test_donated_nnx_update_lowers_with_abstract_dynamic_arguments() -> None:
+    class TinyModel(nnx.Module):
+        def __init__(self) -> None:
+            self.weight = nnx.Param(jnp.ones((2, 3), dtype=jnp.float32))
+
+        def __call__(self, batch):
+            return batch @ self.weight[...]
+
+    model = TinyModel()
+    optimizer = nnx.Optimizer(
+        model,
+        optax.sgd(1e-3),
+        wrt=nnx.Param,
+    )
+    batch = jnp.ones((4, 2), dtype=jnp.float32)
+    rng = jax.random.PRNGKey(0)
+
+    @nnx.jit(donate_argnums=(0, 1))
+    def step(model, optimizer, batch, rng):
+        del rng
+
+        def loss(candidate):
+            return jnp.sum(candidate(batch))
+
+        grads = nnx.grad(loss)(model)
+        optimizer.update(model, grads)
+        return loss(model)
+
+    abstract_batch, abstract_rng, report = (
+        train.abstractify_compile_only_arguments(
+            model=model,
+            optimizer=optimizer,
+            batch={"inputs": batch},
+            rng=rng,
+            ema_target=None,
+        )
+    )
+
+    lowered = step.lower(
+        model,
+        optimizer,
+        abstract_batch["inputs"],
+        abstract_rng,
+    )
+
+    assert lowered is not None
+    assert report["all_dynamic_leaves_abstract"] is True
+    assert report["all_abstract_signature_records_equal"] is True
+    assert report["concrete_nbytes_replaced"] > 0
+
+
 def test_compile_training_executable_lowers_without_execution(monkeypatch) -> None:
     calls: list[tuple[object, ...]] = []
 
@@ -171,7 +252,7 @@ def test_compile_only_report_has_no_restore_update_metrics_or_checkpoint(
 
         def batch_at(self, index: int):
             assert index == 0
-            return {"batch": "shape-only"}
+            return {"batch": np.ones((1,), dtype=np.float32)}
 
     optimizer = types.SimpleNamespace(step=np.asarray(0, dtype=np.int64))
     compilation = train.TrainingCompilation(
@@ -199,6 +280,18 @@ def test_compile_only_report_has_no_restore_update_metrics_or_checkpoint(
         train,
         "gpu_memory_stats",
         lambda: {"bytes_in_use": 0, "peak_bytes_in_use": 0},
+    )
+    monkeypatch.setattr(
+        train,
+        "abstractify_compile_only_arguments",
+        lambda **kwargs: (
+            kwargs["batch"],
+            kwargs["rng"],
+            {
+                "all_dynamic_leaves_abstract": True,
+                "all_abstract_signature_records_equal": True,
+            },
+        ),
     )
     monkeypatch.setattr(
         train,
@@ -244,6 +337,12 @@ def test_compile_only_report_has_no_restore_update_metrics_or_checkpoint(
     assert report["updates"] == 0
     assert report["checkpoint_writes"] == 0
     assert report["optimizer_step_after_compile"] == 0
+    assert report["optimizer_step_after_compile_source"] == (
+        "captured_before_abstract_lowering_no_execution"
+    )
+    assert report["abstract_compilation_arguments"][
+        "all_dynamic_leaves_abstract"
+    ] is True
     assert report["checkpoint_path"] is None
     assert report["metrics_path"] is None
     assert not list(output_dir.rglob("state.npz"))
