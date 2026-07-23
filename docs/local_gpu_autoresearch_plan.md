@@ -1765,3 +1765,10 @@ sweeps, held-out data, and repeated seeds.
   `f9f9...b467`; reject before creating the dedicated cache. First locate the
   exact constructor/restored path/shape/dtype difference with a guarded,
   read-only schema diagnostic.
+- [ ] Run the no-training schema diagnostic preregistered in
+  `research/experiment_compile_abi_schema_diagnostic.md`. Compare the full
+  constructor model ABI with the same state after the value-preserving
+  pure-dictionary round-trip used by legacy restore. Require identical leaf
+  path/shape/dtype/byte records and array objects before treating
+  `f9f9...b467` versus `b53b...d13` as container metadata rather than a JIT
+  signature difference. Do not lower or cold-compile a graph in this step.

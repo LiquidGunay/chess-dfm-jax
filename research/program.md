@@ -394,6 +394,14 @@ dedicated cache or cold compile is created. Before any further compiler-memory
 variant, run a read-only schema diff to identify the exact path, shape, dtype,
 or container distinction.
 
+Experiment 028, preregistered in
+`research/experiment_compile_abi_schema_diagnostic.md`, is that read-only
+diagnostic. The legacy payload and accepted research-checkpoint manifest both
+carry `f9f9...b467`; only live post-restore state carries `b53b...d13`.
+Apply the restore round-trip to constructor-owned arrays, compare complete and
+leaf-only schemas plus array identity, and do not lower or compile a training
+graph. Any leaf-level or value-identity change blocks another compile attempt.
+
 ## Editable surface
 
 During automated architecture research, edit only `research/train.py`.

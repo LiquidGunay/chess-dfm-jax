@@ -451,3 +451,11 @@ the local mapping reference leaves the same constructor model ABI
 `f9f9...b467` instead of restored `b53b...d13`. No dedicated cache or cold
 compile is created. The next step is a guarded, read-only full-schema diff
 before considering another compiler-memory experiment.
+
+Experiment 028 is the read-only diagnostic in
+`experiment_compile_abi_schema_diagnostic.md`. The legacy payload and accepted
+update-2,072 checkpoint manifest both use the constructor digest
+`f9f9...b467`, while only the live post-restore state uses `b53b...d13`.
+The diagnostic applies the restore round-trip to the constructor's own arrays
+and separates leaf signature changes from container metadata. It performs no
+training-graph lowering, state read, update, or checkpoint write.
