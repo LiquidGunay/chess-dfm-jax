@@ -389,3 +389,7 @@ The two no-update source pools measure conditional CE
 `C0=2.0873505054041743` fixes the sole coefficient at
 `0.11976905620438309`, making the initial weighted component exactly `0.25`.
 No optimizer update or checkpoint was written.
+
+The read-only update-2,072 control measures pooled legal-conditional CE
+`2.0518385936` and legal-only top-1 `0.4296875`, again with full coverage.
+Both a primary and repeat must beat that conditional-CE value.

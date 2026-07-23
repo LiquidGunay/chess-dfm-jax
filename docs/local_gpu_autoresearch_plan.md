@@ -1717,4 +1717,6 @@ sweeps, held-out data, and repeated seeds.
   `research/experiment_root_legal_conditional_ce_tail1.md`. Write at most one
   intermediate plus one terminal state; do not sweep the coefficient or
   relax the resource guard. The two source pools pass with full eligibility,
-  pooled `C0=2.0873505054`, and frozen coefficient `0.1197690562`.
+  pooled `C0=2.0873505054`, and frozen coefficient `0.1197690562`. The
+  read-only accepted-update-2,072 control is conditional CE `2.0518385936`
+  and legal-only top-1 `0.4296875`, with full coverage.

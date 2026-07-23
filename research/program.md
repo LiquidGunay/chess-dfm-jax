@@ -323,6 +323,9 @@ The two 4,096-position calibration pools pass with conditional CE
 `C0=2.0873505054041743` freezes the coefficient at
 `0.11976905620438309`, for weighted source loss exactly `0.25`. Pooled
 legal-only top-1 is `0.4224853516`; no update or checkpoint was written.
+The read-only accepted-update-2,072 control has conditional CE
+`2.0518385936`, legal-only top-1 `0.4296875`, and full coverage. That exact CE
+is the frozen candidate/repeat conditional-ranking gate.
 
 ## Editable surface
 

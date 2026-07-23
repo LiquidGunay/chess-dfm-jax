@@ -195,3 +195,14 @@ coefficient is therefore:
 
 Its source-init weighted contribution is exactly `0.25`. The two compact
 calibration directories are 48 KiB each and contain no model state.
+
+The explicit read-only overlay then evaluates accepted update 2,072 on the
+same pools. Seed-10,000/20,000 conditional CE is
+`2.1038359907/1.9998411965`, legal-only top-1 is
+`0.4248046875/0.4345703125`, and every coverage metric remains exactly
+`1.0`. The pooled incumbent controls are therefore conditional CE
+`2.051838593557477` and legal-only top-1 `0.4296875`. The candidate and repeat
+must each beat the former exact value. The overlay changes no state or
+forward logits, writes 60 KiB of evidence and no checkpoint, peaks at
+`3,791,794,176` bytes group RSS, and keeps host `MemAvailable` at or above
+`8,274,141,184` bytes.
