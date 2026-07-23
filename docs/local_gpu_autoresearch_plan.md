@@ -37,10 +37,10 @@ resume one-change 30-minute architecture research. The implementation,
 source/FP32 parity, guarded smoke, and batch sweep are complete; batch 512 is
 the selected PyTorch training batch. Production BF16 is now explicitly a
 runtime-specific numerical trajectory after the recorded tight-intermediate
-gate failed in both CPU and GPU comparisons. Representative FP32 gradients,
-checkpoint/JAX round trip, and the matched fixed-time control remain.
-Deterministic depth-1 prefetch is complete and frozen. JAX remains the target
-for long hero runs once autoresearch selects a promising model.
+gate failed in both CPU and GPU comparisons. Representative FP32 gradients
+and deterministic depth-1 prefetch are complete. Checkpoint/JAX round trip
+and the matched fixed-time control remain. JAX remains the target for long
+hero runs once autoresearch selects a promising model.
 
 The A10G is single-tenant throughout this sequence. Training, profiling,
 arena evaluation, and SAE work do not run concurrently.
@@ -1876,10 +1876,12 @@ sweeps, held-out data, and repeated seeds.
   failed tight production-BF16 intermediate gate and record the layerwise
   cause and rejected precision remedies in
   `research/pytorch_eager_migration.md`.
-- [ ] Complete representative FP32 full-parameter-gradient parity and the
-  sparse checkpoint restore/JAX-round-trip gates. Use the matched PyTorch
-  control plus frozen JAX evaluation/inference cross-check as the amended
-  production-runtime gate.
+- [x] Complete representative FP32 full-parameter-gradient parity for the
+  production projector/transformer, recurrent JEPA transition, and custom
+  SIGReg loss.
+- [ ] Complete the sparse checkpoint restore/JAX-round-trip gates. Use the
+  matched PyTorch control plus frozen JAX evaluation/inference cross-check as
+  the amended production-runtime gate.
 - [x] Run a guarded no-checkpoint A10G smoke/profile, then sweep physical batch
   size for throughput and safe HBM/RSS headroom. Freeze the selected batch for
   matched comparisons; batch 512 is selected for eager PyTorch.

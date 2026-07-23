@@ -600,6 +600,12 @@ microseconds of warm data preparation, and raises warm end-to-end throughput
 from `150.663` to `160.490` examples/s (`+6.52%`) without increasing HBM or
 host risk.
 
+Representative FP32 gradient parity is complete. Across the production
+projector/transformer and recurrent JEPA-transition classes, all 21 tested
+parameter leaves and every input/condition cotangent pass
+`rtol=5e-4, atol=3e-5`; the custom SIGReg value/latent gradient passes
+`rtol=2e-4, atol=2e-6`.
+
 The tight BF16 cross-framework gate fails and must not be relabeled. CPU and
 GPU traces identify gradual rounding drift amplified by the recovered final
 BT4 block, whose FFN layer-norm scale peaks at `6.125`; primitive-composition
@@ -608,8 +614,7 @@ evidence amendment in `research/pytorch_eager_migration.md`, retain exact FP32
 formula/gradient/optimizer parity, treat BF16 optimization as
 runtime-specific, and require the matched PyTorch control plus exported JAX
 validation/eight-pass inference before opening readiness. Remaining work is
-representative FP32 gradient parity, strict checkpoint/JAX round trip,
-and that matched fixed-time control.
+the strict checkpoint/JAX round trip and that matched fixed-time control.
 
 ## Editable surface
 

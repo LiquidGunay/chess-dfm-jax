@@ -98,6 +98,13 @@ absolute and `2.00e-5` relative. Two consecutive optimizer updates match
 Optax, including the accepted partition and schedule. A NaN in any gradient
 skips the entire update.
 
+Representative FP32 reverse-mode parity also passes. The production JAX and
+PyTorch classes use identical weights for a two-layer, QK-normalized/XSA
+projector and a two-layer clipped recurrent JEPA transition. All 21 parameter
+leaves and every input/condition cotangent pass `rtol=5e-4, atol=3e-5`; the
+custom SIGReg value and latent gradient pass `rtol=2e-4, atol=2e-6`. The
+combined focused suite passes 19 tests in 16.74 seconds.
+
 The guarded A10G sweep measured physical batches 64, 128, 256, 512, and 768.
 Batch 512 is selected:
 
@@ -153,6 +160,5 @@ This evidence amends, rather than silently relaxes, correctness gate 3:
    claimed.
 
 `PYTORCH_AUTORESEARCH_READY` remains false. The remaining gates are
-representative FP32 parameter-gradient parity, strict checkpoint restore/JAX
-round trip, and the matched fixed-time control plus JAX
-validation/inference cross-check.
+strict checkpoint restore/JAX round trip and the matched fixed-time control
+plus JAX validation/inference cross-check.
