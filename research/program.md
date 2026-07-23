@@ -280,6 +280,17 @@ benchmark, fixed-time rescue, repeat, evaluation, or arena. Remove the empty
 run directory, restore `jepa_feedback_mode="none"`, and retain the capability
 default-off.
 
+Experiment 023 is preregistered in
+`research/experiment_bt4_policy_distillation_tail1.md`. It reuses the already
+encoded current-board tokens and immutable source BT4 policy head to teach the
+DFM's legal-masked root ranking, with exact canonical-to-legacy remapping from
+classical side plane 108. It adds no encoder call, trainable/checkpoint state,
+or inference work. The teacher is exact raw BT4 at initialization and a
+frozen source head on online encoder tokens thereafter. A no-update two-pool
+calibration fixes the one allowed coefficient by
+`clip(0.25 / pooled_root_KL, 0.05, 1.0)` before the guarded training smoke;
+there is no weight or temperature sweep.
+
 ## Editable surface
 
 During automated architecture research, edit only `research/train.py`.

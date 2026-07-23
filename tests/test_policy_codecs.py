@@ -16,6 +16,7 @@ from chess_dfm_jax.policy import (
     legal_action_mask,
     legal_mask_lc0_canonical_1858,
     legal_move_mask,
+    legacy_to_lc0_canonical_1858_index_map,
     move_to_policy_index,
     policy_index_to_move,
 )
@@ -80,6 +81,40 @@ def test_lc0_canonical_codec_mirrors_black_to_white_action_indices():
     assert canonical_mask[159]
     assert not canonical_mask[1498]
     assert int(canonical_mask.sum()) == black_board.legal_moves.count() == 20
+
+
+def test_legacy_to_canonical_logit_map_is_exact_and_marks_promotions_partial():
+    white_map = legacy_to_lc0_canonical_1858_index_map(
+        black_to_move=False
+    )
+    black_map = legacy_to_lc0_canonical_1858_index_map(
+        black_to_move=True
+    )
+
+    np.testing.assert_array_equal(
+        white_map,
+        np.arange(ACTION_VOCAB_SIZE, dtype=np.int32),
+    )
+    assert black_map.shape == (ACTION_VOCAB_SIZE,)
+    assert black_map.dtype == np.int32
+    assert int(np.sum(black_map < 0)) == 66
+    assert len(set(map(int, black_map[black_map >= 0]))) == 1792
+
+    black_board = chess.Board(BLACK_TO_MOVE_START)
+    for move in black_board.legal_moves:
+        legacy_index = move_to_policy_index(move, "lc0_1858")
+        canonical_index = encode_lc0_canonical_1858(
+            black_board,
+            move,
+        )
+        assert black_map[legacy_index] == canonical_index
+
+    white_queen_promotion = move_to_policy_index("a7a8q", "lc0_1858")
+    assert black_map[white_queen_promotion] == -1
+    white_map[0] = -1
+    assert legacy_to_lc0_canonical_1858_index_map(
+        black_to_move=False
+    )[0] == 0
 
 
 @pytest.mark.parametrize(

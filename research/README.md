@@ -353,3 +353,13 @@ The guard exits while host `MemAvailable` is still `6.096 GB`; no report,
 checkpoint, state, or process survives. Run no profile, inference benchmark,
 fixed-time rescue, repeat, or arena. The capability remains default-off and
 the active graph restores `jepa_feedback_mode="none"`.
+
+Experiment 023 is preregistered in
+`experiment_bt4_policy_distillation_tail1.md`. The training-only candidate
+feeds existing current-board tokens through the immutable source BT4 policy
+head, exactly remaps canonical logits into represented legacy root support,
+and minimizes stopped-teacher/legal-student KL. It adds no encoder call,
+parameter, checkpoint state, or inference latency. Twelve sampled shards
+prove the plane-108 side and stored-legal contracts. A frozen no-update
+two-pool calibration sets the single coefficient to
+`clip(0.25 / pooled_root_KL, 0.05, 1.0)` before any optimizer update.

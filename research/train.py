@@ -49,6 +49,9 @@ from chess_dfm_jax.nnx_bt4 import (  # noqa: E402
     make_bt4_model,
     rounded_swiglu_dim,
 )
+from chess_dfm_jax.policy import (  # noqa: E402
+    legacy_to_lc0_canonical_1858_index_map,
+)
 from research.import_legacy import import_legacy_checkpoint  # noqa: E402
 from research.prepare import (  # noqa: E402
     REPO_ROOT,
@@ -74,6 +77,10 @@ EXPERIMENT_OVERRIDES: dict[str, Any] = {
     "jepa_target_sample_count": 1,
     "jepa_target_sampling_unit": "example_balanced",
     "bt4_encode_chunk_size": 0,
+    # Calibration-only value for Experiment 023. The two frozen source
+    # validation pools deterministically replace this with
+    # clip(0.25 / pooled_root_KL, 0.05, 1.0) before any optimizer update.
+    "bt4_policy_distill_coeff": 1.0,
     # "dfm_active_layers": 3,
     # "jepa_projector_active_layers": 1,
     # "jepa_sampled_target_anchors": True,
@@ -111,10 +118,19 @@ GRADIENT_COMPONENT_NAMES = (
 )
 TARGET_VARIANCE_HINGE_COMPONENT = "target_variance_hinge"
 WDL_COMPONENT = "wdl"
+BT4_POLICY_DISTILL_COMPONENT = "bt4_policy_distill"
 GRADIENT_GROUP_NAMES = ("backbone", "dfm", "jepa", "other", "all")
 TARGET_VARIANCE_HINGE_EPSILON = 1e-4
 JEPA_STATE_RMS_EPSILON = 1e-6
 JEPA_FEEDBACK_MAX_STATE_RMS_RATIO = 0.5
+CLASSICAL_SIDE_TO_MOVE_PLANE = 108
+BT4_POLICY_DISTILL_TEMPERATURE = 1.0
+_LEGACY_TO_CANONICAL_WHITE = (
+    legacy_to_lc0_canonical_1858_index_map(black_to_move=False)
+)
+_LEGACY_TO_CANONICAL_BLACK = (
+    legacy_to_lc0_canonical_1858_index_map(black_to_move=True)
+)
 
 UNEVALUATED_LEGACY_AUX_METRICS = frozenset(
     {
@@ -168,6 +184,7 @@ class JointLatentSASAConfig:
     horizon: int = 2
     loss_horizon: int = 0
     dfm_ce_coeff: float = 1.0
+    bt4_policy_distill_coeff: float = 0.0
     dfm_first_action_loss_share: float = 0.0
     dfm_force_first_action_mask: bool = False
     dfm_training_time_power: float = 1.0
@@ -686,6 +703,20 @@ class RootProposal(NamedTuple):
     feedback_gate: jax.Array
 
 
+class Bt4PolicyDistillationResult(NamedTuple):
+    loss: jax.Array
+    eligible_count: jax.Array
+    eligible_fraction: jax.Array
+    side_plane_valid_fraction: jax.Array
+    mapping_complete_fraction: jax.Array
+    legal_mapping_coverage: jax.Array
+    teacher_finite_fraction: jax.Array
+    teacher_entropy: jax.Array
+    teacher_played_nll: jax.Array
+    teacher_played_accuracy: jax.Array
+    teacher_student_top1_agreement: jax.Array
+
+
 class JepaFeedbackResult(NamedTuple):
     latents: jax.Array
     delta_rms: jax.Array
@@ -729,6 +760,258 @@ def root_legal_mask_from_indices(
         dtype=jnp.int32,
     ).at[batch_indices, safe_indices].add(valid_slots.astype(jnp.int32))
     return legal_counts > 0
+
+
+def bt4_policy_distillation_from_logits(
+    teacher_canonical_logits: jax.Array,
+    student_legacy_logits: jax.Array,
+    current_planes: jax.Array,
+    played_actions: jax.Array,
+    legal_idx: jax.Array,
+    legal_count: jax.Array,
+    sample_valid: jax.Array,
+    root_masked: jax.Array,
+    legal_metadata_valid: jax.Array | None = None,
+) -> Bt4PolicyDistillationResult:
+    """Match legal root rankings across canonical and legacy policy codecs."""
+
+    teacher = jnp.asarray(teacher_canonical_logits, dtype=jnp.float32)
+    student = jnp.asarray(student_legacy_logits, dtype=jnp.float32)
+    if (
+        teacher.ndim != 2
+        or teacher.shape[-1] != _LEGACY_TO_CANONICAL_WHITE.shape[0]
+    ):
+        raise ValueError(
+            "teacher_canonical_logits must have shape "
+            f"[batch, {_LEGACY_TO_CANONICAL_WHITE.shape[0]}], found "
+            f"{teacher.shape}"
+        )
+    if student.shape != teacher.shape:
+        raise ValueError(
+            "student_legacy_logits must match teacher logits, found "
+            f"{student.shape} != {teacher.shape}"
+        )
+    batch_size, action_vocab_size = teacher.shape
+    planes = jnp.asarray(current_planes)
+    if (
+        planes.ndim != 4
+        or planes.shape[0] != batch_size
+        or planes.shape[1] <= CLASSICAL_SIDE_TO_MOVE_PLANE
+    ):
+        raise ValueError(
+            "current_planes must have shape [batch, channels, height, width] "
+            f"with channels>{CLASSICAL_SIDE_TO_MOVE_PLANE}, found "
+            f"{planes.shape}"
+        )
+    actions = jnp.asarray(played_actions, dtype=jnp.int32)
+    counts = jnp.asarray(legal_count, dtype=jnp.int32)
+    valid = jnp.asarray(sample_valid, dtype=jnp.bool_)
+    masked = jnp.asarray(root_masked, dtype=jnp.bool_)
+    for name, value in (
+        ("played_actions", actions),
+        ("legal_count", counts),
+        ("sample_valid", valid),
+        ("root_masked", masked),
+    ):
+        if value.shape != (batch_size,):
+            raise ValueError(
+                f"{name} must have shape {(batch_size,)}, found "
+                f"{value.shape}"
+            )
+    if legal_metadata_valid is None:
+        metadata_valid = jnp.ones((batch_size,), dtype=jnp.bool_)
+    else:
+        metadata_valid = jnp.asarray(
+            legal_metadata_valid,
+            dtype=jnp.bool_,
+        )
+        if metadata_valid.shape != (batch_size,):
+            raise ValueError(
+                "legal_metadata_valid must have shape "
+                f"{(batch_size,)}, found {metadata_valid.shape}"
+            )
+
+    root_legal_mask = root_legal_mask_from_indices(
+        legal_idx,
+        counts,
+        action_vocab_size=action_vocab_size,
+    )
+    side_plane = planes[:, CLASSICAL_SIDE_TO_MOVE_PLANE, :, :]
+    side_is_white = jnp.all(side_plane == 0, axis=(1, 2))
+    side_is_black = jnp.all(side_plane == 1, axis=(1, 2))
+    side_valid = side_is_white | side_is_black
+    black_to_move = jax.lax.stop_gradient(side_is_black)
+
+    white_map = jnp.asarray(
+        _LEGACY_TO_CANONICAL_WHITE,
+        dtype=jnp.int32,
+    )
+    black_map = jnp.asarray(
+        _LEGACY_TO_CANONICAL_BLACK,
+        dtype=jnp.int32,
+    )
+    canonical_index = jnp.where(
+        black_to_move[:, None],
+        black_map[None, :],
+        white_map[None, :],
+    )
+    mapping_valid = canonical_index >= 0
+    safe_canonical_index = jnp.clip(
+        canonical_index,
+        0,
+        action_vocab_size - 1,
+    )
+
+    teacher = jax.lax.stop_gradient(teacher)
+    teacher_finite = jnp.all(jnp.isfinite(teacher), axis=-1)
+    finite_teacher = jnp.nan_to_num(
+        teacher,
+        nan=0.0,
+        posinf=0.0,
+        neginf=0.0,
+    )
+    teacher_legacy = jnp.take_along_axis(
+        finite_teacher,
+        safe_canonical_index,
+        axis=-1,
+    )
+    teacher_support = root_legal_mask & mapping_valid
+    legal_nonempty = jnp.any(root_legal_mask, axis=-1)
+    teacher_support_nonempty = jnp.any(teacher_support, axis=-1)
+    mapping_complete = jnp.all(
+        (~root_legal_mask) | mapping_valid,
+        axis=-1,
+    )
+
+    safe_teacher_support = teacher_support | (
+        ~teacher_support_nonempty[:, None]
+    )
+    safe_student_support = root_legal_mask | (~legal_nonempty[:, None])
+    teacher_log_probs = jax.nn.log_softmax(
+        jnp.where(
+            safe_teacher_support,
+            teacher_legacy / BT4_POLICY_DISTILL_TEMPERATURE,
+            -jnp.inf,
+        ),
+        axis=-1,
+    )
+    teacher_probs = jax.lax.stop_gradient(jnp.exp(teacher_log_probs))
+    teacher_log_probs = jax.lax.stop_gradient(teacher_log_probs)
+    student_log_probs = jax.nn.log_softmax(
+        jnp.where(
+            safe_student_support,
+            student / BT4_POLICY_DISTILL_TEMPERATURE,
+            -jnp.inf,
+        ),
+        axis=-1,
+    )
+    kl_by_sample = jnp.sum(
+        jnp.where(
+            teacher_support,
+            teacher_probs * (teacher_log_probs - student_log_probs),
+            0.0,
+        ),
+        axis=-1,
+    )
+    eligible = (
+        valid
+        & masked
+        & metadata_valid
+        & side_valid
+        & legal_nonempty
+        & teacher_support_nonempty
+        & mapping_complete
+        & teacher_finite
+    )
+    eligible_weight = eligible.astype(jnp.float32)
+    eligible_count = jnp.sum(eligible_weight)
+    loss = jnp.sum(kl_by_sample * eligible_weight) / jnp.maximum(
+        eligible_count,
+        1.0,
+    )
+
+    teacher_entropy_by_sample = -jnp.sum(
+        jnp.where(
+            teacher_support,
+            teacher_probs * teacher_log_probs,
+            0.0,
+        ),
+        axis=-1,
+    )
+    teacher_top1 = jnp.argmax(teacher_log_probs, axis=-1)
+    student_top1 = jnp.argmax(student_log_probs, axis=-1)
+    safe_actions = jnp.clip(actions, 0, action_vocab_size - 1)
+    played_in_support = jnp.take_along_axis(
+        teacher_support,
+        safe_actions[:, None],
+        axis=-1,
+    )[:, 0] & (actions >= 0) & (actions < action_vocab_size)
+    label_eligible_weight = (
+        eligible & played_in_support
+    ).astype(jnp.float32)
+    label_eligible_count = jnp.sum(label_eligible_weight)
+    teacher_played_log_prob = jnp.take_along_axis(
+        teacher_log_probs,
+        safe_actions[:, None],
+        axis=-1,
+    )[:, 0]
+
+    valid_weight = valid.astype(jnp.float32)
+    valid_count = jnp.sum(valid_weight)
+    legal_slot_count = jnp.sum(
+        root_legal_mask.astype(jnp.float32) * valid_weight[:, None]
+    )
+    mapped_legal_slot_count = jnp.sum(
+        teacher_support.astype(jnp.float32) * valid_weight[:, None]
+    )
+
+    def eligible_mean(values: jax.Array) -> jax.Array:
+        return jnp.sum(
+            jnp.asarray(values, dtype=jnp.float32) * eligible_weight
+        ) / jnp.maximum(eligible_count, 1.0)
+
+    return Bt4PolicyDistillationResult(
+        loss=loss,
+        eligible_count=eligible_count,
+        eligible_fraction=eligible_count / jnp.maximum(valid_count, 1.0),
+        side_plane_valid_fraction=(
+            jnp.sum(side_valid.astype(jnp.float32) * valid_weight)
+            / jnp.maximum(valid_count, 1.0)
+        ),
+        mapping_complete_fraction=(
+            jnp.sum(mapping_complete.astype(jnp.float32) * valid_weight)
+            / jnp.maximum(valid_count, 1.0)
+        ),
+        legal_mapping_coverage=(
+            mapped_legal_slot_count
+            / jnp.maximum(legal_slot_count, 1.0)
+        ),
+        teacher_finite_fraction=(
+            jnp.sum(teacher_finite.astype(jnp.float32) * valid_weight)
+            / jnp.maximum(valid_count, 1.0)
+        ),
+        teacher_entropy=eligible_mean(teacher_entropy_by_sample),
+        teacher_played_nll=(
+            jnp.sum(
+                jnp.where(
+                    label_eligible_weight > 0.0,
+                    -teacher_played_log_prob,
+                    0.0,
+                )
+            )
+            / jnp.maximum(label_eligible_count, 1.0)
+        ),
+        teacher_played_accuracy=(
+            jnp.sum(
+                (teacher_top1 == actions).astype(jnp.float32)
+                * label_eligible_weight
+            )
+            / jnp.maximum(label_eligible_count, 1.0)
+        ),
+        teacher_student_top1_agreement=eligible_mean(
+            teacher_top1 == student_top1
+        ),
+    )
 
 
 def proposal_from_root_logits(
@@ -1197,6 +1480,17 @@ class JointLatentSASAModel(nnx.Module):
         self.z_dim = int(config.z_dim)
         validate_bt4_freeze_config(config)
         validate_bt4_future_target_stop_gradient_config(config)
+        if config.bt4_policy_distill_coeff != 0.0:
+            if config.action_vocab_size != _LEGACY_TO_CANONICAL_WHITE.shape[0]:
+                raise ValueError(
+                    "BT4 policy distillation requires action_vocab_size="
+                    f"{_LEGACY_TO_CANONICAL_WHITE.shape[0]}, found "
+                    f"{config.action_vocab_size}."
+                )
+            if not hasattr(encoder, "policy_head"):
+                raise ValueError(
+                    "BT4 policy distillation requires encoder.policy_head."
+                )
         trainable_future_tail = int(
             config.bt4_future_target_trainable_tail_layers
         )
@@ -2582,6 +2876,34 @@ def joint_stage1_loss_fn(
         logits = preliminary_logits
     with jax.named_scope("joint_dfm_ce_loss"):
         log_probs = jax.nn.log_softmax(logits, axis=-1)
+    bt4_policy_distillation: Bt4PolicyDistillationResult | None = None
+    if model.config.bt4_policy_distill_coeff != 0.0:
+        with jax.named_scope("joint_bt4_frozen_policy_head_teacher"):
+            teacher_canonical_logits = model.encoder.policy_head(
+                jax.lax.stop_gradient(current_bt4_tokens)
+            )
+        legal_metadata_valid = (
+            jnp.asarray(batch["legal_count"][:, 0], dtype=jnp.int32) > 0
+        )
+        if "legal_masks_valid" in batch:
+            legal_metadata_valid = legal_metadata_valid & jnp.asarray(
+                batch["legal_masks_valid"][:, 0],
+                dtype=jnp.bool_,
+            )
+        with jax.named_scope("joint_bt4_root_policy_distillation"):
+            bt4_policy_distillation = (
+                bt4_policy_distillation_from_logits(
+                    teacher_canonical_logits,
+                    logits[:, 0, :],
+                    batch["current_planes"],
+                    actions[:, 0],
+                    batch["legal_idx"][:, 0, :],
+                    batch["legal_count"][:, 0],
+                    valid > 0.0,
+                    is_masked[:, 0],
+                    legal_metadata_valid,
+                )
+            )
     ce_by_horizon = -jnp.take_along_axis(log_probs, actions[..., None], axis=-1)[..., 0]
     loss_mask = jnp.asarray(is_masked, dtype=jnp.float32) * loss_horizon_mask[None, :]
     weighted_loss_mask = loss_mask * valid[:, None]
@@ -3259,6 +3581,12 @@ def joint_stage1_loss_fn(
         + model.config.wdl_coeff * wdl_loss
         + model.config.jepa_action_contrast_coeff * action_contrast_loss
     )
+    if bt4_policy_distillation is not None:
+        unclipped_loss = (
+            unclipped_loss
+            + model.config.bt4_policy_distill_coeff
+            * bt4_policy_distillation.loss
+        )
     if target_variance_hinge is not None:
         unclipped_loss = (
             unclipped_loss
@@ -3418,6 +3746,51 @@ def joint_stage1_loss_fn(
                 ),
                 "jepa_feedback_cap_fraction": (
                     feedback_result.cap_fraction
+                ),
+            }
+        )
+    if bt4_policy_distillation is not None:
+        aux.update(
+            {
+                "bt4_policy_distill_loss": (
+                    bt4_policy_distillation.loss
+                ),
+                "bt4_policy_distill_weighted_loss": (
+                    jnp.asarray(
+                        model.config.bt4_policy_distill_coeff,
+                        dtype=jnp.float32,
+                    )
+                    * bt4_policy_distillation.loss
+                ),
+                "bt4_policy_distill_eligible_count": (
+                    bt4_policy_distillation.eligible_count
+                ),
+                "bt4_policy_distill_eligible_fraction": (
+                    bt4_policy_distillation.eligible_fraction
+                ),
+                "bt4_policy_distill_side_plane_valid_fraction": (
+                    bt4_policy_distillation.side_plane_valid_fraction
+                ),
+                "bt4_policy_distill_mapping_complete_fraction": (
+                    bt4_policy_distillation.mapping_complete_fraction
+                ),
+                "bt4_policy_distill_legal_mapping_coverage": (
+                    bt4_policy_distillation.legal_mapping_coverage
+                ),
+                "bt4_policy_distill_teacher_finite_fraction": (
+                    bt4_policy_distillation.teacher_finite_fraction
+                ),
+                "bt4_policy_distill_teacher_entropy": (
+                    bt4_policy_distillation.teacher_entropy
+                ),
+                "bt4_policy_distill_teacher_played_nll": (
+                    bt4_policy_distillation.teacher_played_nll
+                ),
+                "bt4_policy_distill_teacher_played_accuracy": (
+                    bt4_policy_distillation.teacher_played_accuracy
+                ),
+                "bt4_policy_distill_teacher_student_top1_agreement": (
+                    bt4_policy_distillation.teacher_student_top1_agreement
                 ),
             }
         )
@@ -4107,6 +4480,32 @@ def validate_objective_config(
         raise ValueError(
             "first_legality_coeff must be finite and non-negative, found "
             f"{config.first_legality_coeff!r}"
+        )
+    if (
+        isinstance(config.bt4_policy_distill_coeff, bool)
+        or not math.isfinite(config.bt4_policy_distill_coeff)
+        or config.bt4_policy_distill_coeff < 0.0
+    ):
+        raise ValueError(
+            "bt4_policy_distill_coeff must be finite and non-negative, "
+            f"found {config.bt4_policy_distill_coeff!r}"
+        )
+    if (
+        config.bt4_policy_distill_coeff != 0.0
+        and objective != "normalized"
+    ):
+        raise ValueError(
+            "bt4_policy_distill_coeff requires --objective normalized."
+        )
+    if (
+        config.bt4_policy_distill_coeff != 0.0
+        and config.action_vocab_size
+        != _LEGACY_TO_CANONICAL_WHITE.shape[0]
+    ):
+        raise ValueError(
+            "BT4 policy distillation requires action_vocab_size="
+            f"{_LEGACY_TO_CANONICAL_WHITE.shape[0]}, found "
+            f"{config.action_vocab_size}."
         )
     if (
         isinstance(config.wdl_coeff, bool)
@@ -5288,6 +5687,8 @@ def serialized_model_config(
         payload.pop("jepa_projector_active_layers")
     if config.dfm_active_layers == 0:
         payload.pop("dfm_active_layers")
+    if config.bt4_policy_distill_coeff == 0.0:
+        payload.pop("bt4_policy_distill_coeff")
     if config.dfm_first_action_loss_share == 0.0:
         payload.pop("dfm_first_action_loss_share")
     if not config.dfm_force_first_action_mask:
@@ -5328,6 +5729,10 @@ def build_research_resume_contract(
     if config.jepa_feedback_mode == "final_pass_adjoint":
         source_files = source_files + (
             REPO_ROOT / "research" / "inference.py",
+        )
+    if config.bt4_policy_distill_coeff != 0.0:
+        source_files = source_files + (
+            REPO_ROOT / "chess_dfm_jax" / "policy.py",
         )
     objective_contract = {
         "name": objective,
@@ -5394,6 +5799,40 @@ def build_research_resume_contract(
             "inference_additional_jepa_transition_steps": 1,
             "model_state_abi": "unchanged",
             "optimizer_state_abi": "unchanged_source_compatible",
+        }
+    if config.bt4_policy_distill_coeff != 0.0:
+        objective_contract["bt4_root_policy_distillation"] = {
+            "coefficient": float(
+                config.bt4_policy_distill_coeff
+            ),
+            "temperature": BT4_POLICY_DISTILL_TEMPERATURE,
+            "teacher_head": "frozen_source_bt4_policy_head",
+            "teacher_token_source": "online_current_bt4_tokens",
+            "teacher_exact_raw_bt4_at_initialization_only": True,
+            "teacher_token_gradient": "exact_zero",
+            "teacher_logit_gradient": "exact_zero",
+            "teacher_action_codec": "lc0_canonical_1858",
+            "student_action_codec": "legacy_absolute_1858",
+            "side_to_move_source": (
+                "classical_112_auxiliary_plane_108"
+            ),
+            "canonical_to_legacy_mapping": (
+                "white_identity_black_vertical_square_mirror"
+            ),
+            "invalid_mapping_sentinel": -1,
+            "support": "stored_representable_root_legal_indices",
+            "student_distribution": "legal_masked_root_softmax",
+            "loss": "teacher_to_student_kl",
+            "eligibility": (
+                "valid*root_masked*legal_metadata_valid*"
+                "uniform_binary_side_plane*complete_mapping*finite_teacher"
+            ),
+            "additional_bt4_encoder_calls": 0,
+            "additional_training_policy_head_calls": 1,
+            "inference_policy_head_calls": 0,
+            "model_state_abi": "unchanged",
+            "optimizer_state_abi": "unchanged_source_compatible",
+            "checkpoint_state_abi": "unchanged",
         }
     if config.dfm_first_action_loss_share != 0.0:
         tail_horizon_count = (
@@ -6184,6 +6623,13 @@ def gradient_component_vector(
         components.append(
             jnp.asarray(aux["wdl_loss"], dtype=jnp.float32)
         )
+    if model.config.bt4_policy_distill_coeff != 0.0:
+        components.append(
+            jnp.asarray(
+                aux["bt4_policy_distill_loss"],
+                dtype=jnp.float32,
+            )
+        )
     return jnp.stack(components)
 
 
@@ -6199,6 +6645,8 @@ def gradient_component_names(
         )
     if config.wdl_coeff != 0.0:
         enabled_components += (WDL_COMPONENT,)
+    if config.bt4_policy_distill_coeff != 0.0:
+        enabled_components += (BT4_POLICY_DISTILL_COMPONENT,)
     return GRADIENT_COMPONENT_NAMES + enabled_components
 
 
@@ -7852,6 +8300,10 @@ def run_gradient_audit(
         primary_coefficients[component_names.index(WDL_COMPONENT)] = (
             model.config.wdl_coeff
         )
+    if BT4_POLICY_DISTILL_COMPONENT in component_names:
+        primary_coefficients[
+            component_names.index(BT4_POLICY_DISTILL_COMPONENT)
+        ] = model.config.bt4_policy_distill_coeff
     fractions = (0.01, 0.03, 0.10, 0.30)
     suggested_coefficients: dict[str, dict[str, dict[str, float]]] = {}
     for component_index, component_name in (

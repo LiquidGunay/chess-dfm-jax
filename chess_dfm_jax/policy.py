@@ -53,6 +53,49 @@ if len(_MOVE_LIST) != ACTION_VOCAB_SIZE:  # pragma: no cover - packaged asset in
     )
 
 
+def _vertical_mirror_policy_token(token: str) -> str:
+    """Mirror only the square ranks in one shipped policy-list token."""
+
+    if len(token) not in (4, 5):
+        raise RuntimeError(f"Invalid shipped policy token: {token!r}")
+    try:
+        from_rank = str(9 - int(token[1]))
+        to_rank = str(9 - int(token[3]))
+    except ValueError as exc:  # pragma: no cover - packaged asset invariant
+        raise RuntimeError(f"Invalid shipped policy token: {token!r}") from exc
+    return token[0] + from_rank + token[2] + to_rank + token[4:]
+
+
+_LEGACY_TO_CANONICAL_WHITE = np.arange(ACTION_VOCAB_SIZE, dtype=np.int32)
+_LEGACY_TO_CANONICAL_BLACK = np.asarray(
+    [
+        _MOVE_TO_INDEX.get(_vertical_mirror_policy_token(token), -1)
+        for token in _MOVE_LIST
+    ],
+    dtype=np.int32,
+)
+
+
+def legacy_to_lc0_canonical_1858_index_map(
+    *,
+    black_to_move: bool,
+) -> np.ndarray:
+    """Map each legacy logit slot to its canonical teacher-logit slot.
+
+    The white map is identity. Black-to-move coordinates are mirrored
+    vertically. A value of ``-1`` marks a legacy slot without a canonical
+    inverse; these are the canonically oriented promotion suffix slots and
+    cannot be legal legacy actions for black.
+    """
+
+    mapping = (
+        _LEGACY_TO_CANONICAL_BLACK
+        if black_to_move
+        else _LEGACY_TO_CANONICAL_WHITE
+    )
+    return mapping.copy()
+
+
 def _require_chess() -> None:
     if chess is None:
         raise ImportError("python-chess is required for move mapping.")
@@ -336,6 +379,7 @@ __all__ = [
     "legal_action_mask",
     "legal_mask_lc0_canonical_1858",
     "legal_move_mask",
+    "legacy_to_lc0_canonical_1858_index_map",
     "move_to_policy_index",
     "policy_index_to_move",
 ]
