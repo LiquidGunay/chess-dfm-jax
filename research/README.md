@@ -544,3 +544,11 @@ byte-identical, zero checkpoints are written, and all seven retained states
 remain unchanged. The hasher now has explicit BF16 coverage, but this
 experiment is not retried; the next systems proposal must conservatively
 investigate a forward-identical split-gradient or FP32-master route.
+
+Experiment 034 is the forward-identical split-gradient systems gate in
+`experiment_split_encoder_gradient_execution.md`. It decomposes the accepted
+logical update into encoder forward, head VJP, encoder VJP, and the unchanged
+full optimizer update while preserving the model/checkpoint ABI and global
+gradient semantics. Compile each component separately under a 6.75 GiB RSS
+ceiling before a ten-update parity smoke and 30-update cached profile. Do not
+add FP32 BT4 masters unless this safer compiler substrate passes.

@@ -494,6 +494,17 @@ experiment, and conservatively route the next systems proposal to a
 forward-identical split-gradient or FP32-master path rather than a
 last-block-only tail.
 
+Experiment 034 is preregistered in
+`research/experiment_split_encoder_gradient_execution.md`. FP32 BT4 masters
+alone would add `390,611,456` live model bytes without reducing the
+monolithic compiler graph, so first split reverse-mode execution into exact
+encoder-forward, head-VJP, encoder-VJP, and existing-optimizer-update
+components. The loss, forward pass, global clip, Muon state, optimizer step,
+model/checkpoint ABI, batch 128, and `0.0/5.76/1.0` objective stay fixed.
+Each cold component compile is isolated under a 6.75 GiB RSS ceiling and the
+ordinary guard; only a ten-update parity smoke and a cached 30-update profile
+can authorize FP32 masters as a later experiment.
+
 ## Editable surface
 
 During automated architecture research, edit only `research/train.py`.
