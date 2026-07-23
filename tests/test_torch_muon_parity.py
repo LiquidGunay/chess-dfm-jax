@@ -6,7 +6,7 @@ import numpy as np
 import torch
 
 from chess_dfm_jax.nnx_bt4 import muon_adamw
-from research.train_torch import CONFIG, MuonAdamW
+from research.train_torch import CONFIG, MuonAdamW, _prepare_training_step
 
 
 class TinyModel(torch.nn.Module):
@@ -115,3 +115,49 @@ def test_torch_optimizer_skips_entire_nonfinite_update():
         assert torch.count_nonzero(leaf.first_moment) == 0
         if leaf.second_moment is not None:
             assert torch.count_nonzero(leaf.second_moment) == 0
+
+
+def test_prefetch_preparation_is_schedule_keyed_and_deterministic():
+    class FakeBatches:
+        def __init__(self):
+            self.calls: list[int] = []
+
+        def batch_at(self, cursor: int):
+            self.calls.append(cursor)
+            future = np.arange(64 * 8, dtype=np.int64).reshape(64, 8, 1)
+            return {
+                "current_planes": np.full((64, 1), cursor, dtype=np.float32),
+                "future_planes": future,
+            }
+
+    batches = FakeBatches()
+    first = _prepare_training_step(
+        batches,
+        seed=17,
+        update=3,
+        data_cursor=7,
+        batch_size=64,
+    )
+    second = _prepare_training_step(
+        batches,
+        seed=17,
+        update=3,
+        data_cursor=7,
+        batch_size=64,
+    )
+
+    assert first.update == second.update == 3
+    assert first.data_cursor == second.data_cursor == 7
+    assert batches.calls == [7, 7]
+    for left, right in zip(first.choices, second.choices, strict=True):
+        torch.testing.assert_close(left, right, rtol=0.0, atol=0.0)
+    rows = np.arange(64)
+    expected = np.arange(64 * 8, dtype=np.int64).reshape(64, 8, 1)[
+        rows,
+        first.choices.target_horizon.numpy(),
+    ]
+    np.testing.assert_array_equal(
+        first.compact_batch["selected_future_planes"],
+        expected,
+    )
+    assert first.prepare_seconds >= 0.0

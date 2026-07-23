@@ -25,6 +25,7 @@ import sys
 import time
 import zipfile
 from collections.abc import Mapping
+from concurrent.futures import Future, ThreadPoolExecutor
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import IO, Any, NamedTuple
@@ -650,6 +651,15 @@ class StepChoices(NamedTuple):
     mask_uniform: Tensor
     sigreg_indices: Tensor
     sigreg_directions: Tensor
+
+
+@dataclasses.dataclass(frozen=True)
+class _PreparedTrainingStep:
+    update: int
+    data_cursor: int
+    compact_batch: dict[str, Any]
+    choices: StepChoices
+    prepare_seconds: float
 
 
 def materialize_step_choices(
@@ -1381,6 +1391,36 @@ def _compact_training_batch(
     return compact
 
 
+def _prepare_training_step(
+    batches: Any,
+    *,
+    seed: int,
+    update: int,
+    data_cursor: int,
+    batch_size: int,
+) -> _PreparedTrainingStep:
+    started = time.perf_counter()
+    choices = materialize_step_choices(
+        seed=seed,
+        update=update,
+        batch_size=batch_size,
+        config=CONFIG,
+        device=torch.device("cpu"),
+    )
+    raw_batch = batches.batch_at(data_cursor)
+    compact_batch = _compact_training_batch(
+        raw_batch,
+        choices.target_horizon.numpy(),
+    )
+    return _PreparedTrainingStep(
+        update=update,
+        data_cursor=data_cursor,
+        compact_batch=compact_batch,
+        choices=choices,
+        prepare_seconds=time.perf_counter() - started,
+    )
+
+
 def save_model_checkpoint(
     *,
     output_dir: Path,
@@ -1565,6 +1605,8 @@ def train(args: argparse.Namespace) -> int:
         raise ValueError("--log-every must be positive")
     if args.threads not in (1, 2):
         raise ValueError("--threads must be 1 or 2 under the resource guard")
+    if args.prefetch_depth not in (0, 1):
+        raise ValueError("--prefetch-depth must be 0 or 1")
     if args.gpu_monitor_interval_ms != 0 and args.gpu_monitor_interval_ms < 50:
         raise ValueError("--gpu-monitor-interval-ms must be 0 or at least 50")
     if args.save_every != 0 or args.save_updates:
@@ -1635,6 +1677,11 @@ def train(args: argparse.Namespace) -> int:
             key: value for key, value in partition.items() if key != "leaves"
         },
         "data": batches.provenance(),
+        "prefetch": {
+            "depth": args.prefetch_depth,
+            "workers": 1 if args.prefetch_depth == 1 else 0,
+            "deterministic_update_and_cursor_keys": True,
+        },
         "restore_seconds": restore_seconds,
     }
     _write_json(output_dir / "run_config.json", run_config)
@@ -1654,24 +1701,67 @@ def train(args: argparse.Namespace) -> int:
         if args.gpu_monitor_interval_ms > 0
         else None
     )
+    prefetch_executor = (
+        ThreadPoolExecutor(
+            max_workers=1,
+            thread_name_prefix="trajectory-prefetch",
+        )
+        if args.prefetch_depth == 1
+        else None
+    )
+    prepared_future: Future[_PreparedTrainingStep] | None = None
+    if prefetch_executor is not None:
+        prepared_future = prefetch_executor.submit(
+            _prepare_training_step,
+            batches,
+            seed=args.seed,
+            update=update,
+            data_cursor=data_cursor,
+            batch_size=args.batch_size,
+        )
     try:
         while (args.steps == 0 or update < args.steps) and (
             deadline is None or time.perf_counter() < deadline
         ):
-            data_started = time.perf_counter()
-            choices_cpu = materialize_step_choices(
-                seed=args.seed,
-                update=update,
-                batch_size=args.batch_size,
-                config=CONFIG,
-                device=torch.device("cpu"),
-            )
-            raw_batch = batches.batch_at(data_cursor)
-            compact_batch = _compact_training_batch(
-                raw_batch,
-                choices_cpu.target_horizon.numpy(),
-            )
-            data_seconds = time.perf_counter() - data_started
+            data_wait_started = time.perf_counter()
+            if prepared_future is None:
+                prepared = _prepare_training_step(
+                    batches,
+                    seed=args.seed,
+                    update=update,
+                    data_cursor=data_cursor,
+                    batch_size=args.batch_size,
+                )
+            else:
+                prepared = prepared_future.result()
+            data_wait_seconds = time.perf_counter() - data_wait_started
+            if prepared.update != update or prepared.data_cursor != data_cursor:
+                raise RuntimeError(
+                    "Prefetch schedule drift: "
+                    f"{prepared.update}/{prepared.data_cursor} != "
+                    f"{update}/{data_cursor}"
+                )
+            choices_cpu = prepared.choices
+            compact_batch = prepared.compact_batch
+            data_prepare_seconds = prepared.prepare_seconds
+
+            more_steps = args.steps == 0 or update + 1 < args.steps
+            before_deadline = deadline is None or time.perf_counter() < deadline
+            if (
+                prefetch_executor is not None
+                and more_steps
+                and before_deadline
+            ):
+                prepared_future = prefetch_executor.submit(
+                    _prepare_training_step,
+                    batches,
+                    seed=args.seed,
+                    update=update + 1,
+                    data_cursor=data_cursor + 1,
+                    batch_size=args.batch_size,
+                )
+            else:
+                prepared_future = None
 
             transfer_started = time.perf_counter()
             batch = _torch_batch(compact_batch, device)
@@ -1713,7 +1803,13 @@ def train(args: argparse.Namespace) -> int:
                 "data_cursor": data_cursor,
                 "examples": update * args.batch_size,
                 "elapsed_seconds": elapsed,
-                "data_seconds": data_seconds,
+                "data_seconds": data_wait_seconds,
+                "data_wait_seconds": data_wait_seconds,
+                "data_prepare_seconds": data_prepare_seconds,
+                "data_prefetch_hidden_seconds": max(
+                    data_prepare_seconds - data_wait_seconds,
+                    0.0,
+                ),
                 "transfer_seconds": transfer_seconds,
                 "step_seconds": step_seconds,
                 "forward_cuda_seconds": forward_cuda_seconds,
@@ -1741,7 +1837,7 @@ def train(args: argparse.Namespace) -> int:
                     handle.write(json.dumps(record, sort_keys=True) + "\n")
                 print(json.dumps(record, sort_keys=True), flush=True)
             del (
-                raw_batch,
+                prepared,
                 compact_batch,
                 batch,
                 choices_cpu,
@@ -1752,6 +1848,10 @@ def train(args: argparse.Namespace) -> int:
             if bool(optimizer_metrics["optimizer_skipped_nonfinite"]):
                 raise FloatingPointError(f"Non-finite update at {update}")
     finally:
+        if prepared_future is not None:
+            prepared_future.cancel()
+        if prefetch_executor is not None:
+            prefetch_executor.shutdown(wait=True, cancel_futures=True)
         _stop_gpu_monitor(monitor)
 
     torch.cuda.synchronize()
@@ -1776,6 +1876,15 @@ def train(args: argparse.Namespace) -> int:
             update * args.batch_size / max(train_seconds, 1e-12)
         ),
         "mean_data_seconds": float(np.mean([row["data_seconds"] for row in records])),
+        "mean_data_wait_seconds": float(
+            np.mean([row["data_wait_seconds"] for row in records])
+        ),
+        "mean_data_prepare_seconds": float(
+            np.mean([row["data_prepare_seconds"] for row in records])
+        ),
+        "mean_data_prefetch_hidden_seconds": float(
+            np.mean([row["data_prefetch_hidden_seconds"] for row in records])
+        ),
         "mean_transfer_seconds": float(
             np.mean([row["transfer_seconds"] for row in records])
         ),
@@ -1894,6 +2003,7 @@ def build_parser() -> argparse.ArgumentParser:
     train_parser.add_argument("--seed", type=int, default=0)
     train_parser.add_argument("--threads", type=int, default=2)
     train_parser.add_argument("--log-every", type=int, default=1)
+    train_parser.add_argument("--prefetch-depth", type=int, default=1)
     train_parser.add_argument("--gpu-monitor-interval-ms", type=int, default=0)
     train_parser.add_argument("--save-every", type=int, default=0)
     train_parser.add_argument("--save-updates", type=int, nargs="*", default=())
