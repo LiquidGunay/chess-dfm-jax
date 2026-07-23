@@ -10,6 +10,7 @@ numerical/checkpoint/evaluation oracle until every migration gate passes.
 from __future__ import annotations
 
 import argparse
+import csv
 import dataclasses
 import gc
 import hashlib
@@ -26,7 +27,7 @@ import zipfile
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, NamedTuple
+from typing import IO, Any, NamedTuple
 
 import ml_dtypes
 import numpy as np
@@ -205,9 +206,7 @@ class BT4InputEmbedding(nn.Module):
         x = x * self.mul_gate.to(compute_dtype) + self.add_gate.to(compute_dtype)
         flat = x.reshape(batch * 64, 1024)
         ffn = self.ffn2(F.mish(self.ffn1(flat, compute_dtype)), compute_dtype)
-        return self.ffn_ln(ffn * alpha + flat, compute_dtype).reshape(
-            batch, 64, 1024
-        )
+        return self.ffn_ln(ffn * alpha + flat, compute_dtype).reshape(batch, 64, 1024)
 
 
 class BT4Smolgen(nn.Module):
@@ -353,9 +352,7 @@ class TransformerStack(nn.Module):
         self.b_qkv = _raw_parameter((layers, 3 * width), dtype)
         self.w_o = _raw_parameter((layers, width, width), dtype)
         self.b_o = _raw_parameter((layers, width), dtype)
-        self.w_gate_up = _raw_parameter(
-            (layers, width, 2 * self.swiglu_dim), dtype
-        )
+        self.w_gate_up = _raw_parameter((layers, width, 2 * self.swiglu_dim), dtype)
         self.b_gate_up = _raw_parameter((layers, 2 * self.swiglu_dim), dtype)
         self.w_down = _raw_parameter((layers, self.swiglu_dim, width), dtype)
         self.b_down = _raw_parameter((layers, width), dtype)
@@ -377,14 +374,10 @@ class TransformerStack(nn.Module):
 
     def _layer(self, x: Tensor, layer: int, compute_dtype: torch.dtype) -> Tensor:
         batch, sequence, _ = x.shape
-        hidden = self._rms_norm(
-            x, self.attn_norm_scale[layer], compute_dtype
-        )
-        qkv = (
-            hidden.reshape(batch * sequence, self.width)
-            @ self.w_qkv[layer].to(compute_dtype)
-            + self.b_qkv[layer].to(compute_dtype)
-        )
+        hidden = self._rms_norm(x, self.attn_norm_scale[layer], compute_dtype)
+        qkv = hidden.reshape(batch * sequence, self.width) @ self.w_qkv[layer].to(
+            compute_dtype
+        ) + self.b_qkv[layer].to(compute_dtype)
         q, k, v = qkv.chunk(3, dim=-1)
         q = q.reshape(batch, sequence, self.heads, self.head_dim).transpose(1, 2)
         k = k.reshape(batch, sequence, self.heads, self.head_dim).transpose(1, 2)
@@ -403,28 +396,21 @@ class TransformerStack(nn.Module):
                 value.square().sum(dim=-1, keepdim=True) + 1e-6
             )
             attention_f32 = attention_heads.float()
-            projection = (attention_f32 * value_direction).sum(
-                dim=-1, keepdim=True
+            projection = (attention_f32 * value_direction).sum(dim=-1, keepdim=True)
+            attention_heads = (attention_f32 - projection * value_direction).to(
+                compute_dtype
             )
-            attention_heads = (
-                attention_f32 - projection * value_direction
-            ).to(compute_dtype)
         attention_out = attention_heads.transpose(1, 2).reshape(
             batch * sequence, self.width
         )
-        attention_out = (
-            attention_out @ self.w_o[layer].to(compute_dtype)
-            + self.b_o[layer].to(compute_dtype)
-        )
-        x = (x + attention_out.reshape(batch, sequence, self.width)).to(
-            compute_dtype
-        )
+        attention_out = attention_out @ self.w_o[layer].to(compute_dtype) + self.b_o[
+            layer
+        ].to(compute_dtype)
+        x = (x + attention_out.reshape(batch, sequence, self.width)).to(compute_dtype)
         hidden = self._rms_norm(x, self.mlp_norm_scale[layer], compute_dtype)
-        gate_up = (
-            hidden.reshape(batch * sequence, self.width)
-            @ self.w_gate_up[layer].to(compute_dtype)
-            + self.b_gate_up[layer].to(compute_dtype)
-        )
+        gate_up = hidden.reshape(batch * sequence, self.width) @ self.w_gate_up[
+            layer
+        ].to(compute_dtype) + self.b_gate_up[layer].to(compute_dtype)
         gate, up = gate_up.chunk(2, dim=-1)
         mlp = (F.silu(gate) * up) @ self.w_down[layer].to(compute_dtype)
         mlp = mlp + self.b_down[layer].to(compute_dtype)
@@ -489,13 +475,9 @@ class ConditionedTransition(nn.Module):
             (self.layers, config.z_dim, 2 * config.z_dim), dtype
         )
         self.cond_b = _raw_parameter((self.layers, 2 * config.z_dim), dtype)
-        self.w_gate_up = _raw_parameter(
-            (self.layers, config.z_dim, 2 * swiglu), dtype
-        )
+        self.w_gate_up = _raw_parameter((self.layers, config.z_dim, 2 * swiglu), dtype)
         self.b_gate_up = _raw_parameter((self.layers, 2 * swiglu), dtype)
-        self.w_down = _raw_parameter(
-            (self.layers, swiglu, config.z_dim), dtype
-        )
+        self.w_down = _raw_parameter((self.layers, swiglu, config.z_dim), dtype)
         self.b_down = _raw_parameter((self.layers, config.z_dim), dtype)
 
     def _layer(
@@ -505,31 +487,24 @@ class ConditionedTransition(nn.Module):
         layer: int,
         compute_dtype: torch.dtype,
     ) -> Tensor:
-        shift_scale = (
-            condition.to(compute_dtype) @ self.cond_w[layer].to(compute_dtype)
-            + self.cond_b[layer].to(compute_dtype)
-        )
+        shift_scale = condition.to(compute_dtype) @ self.cond_w[layer].to(
+            compute_dtype
+        ) + self.cond_b[layer].to(compute_dtype)
         shift, scale = shift_scale.chunk(2, dim=-1)
         stats = z.float()
-        hidden = stats * torch.rsqrt(
-            stats.square().mean(dim=-1, keepdim=True) + 1e-6
-        )
+        hidden = stats * torch.rsqrt(stats.square().mean(dim=-1, keepdim=True) + 1e-6)
         hidden = (hidden * self.norm_scale[layer].float()).to(compute_dtype)
         hidden = hidden * (1.0 + scale) + shift
-        gate_up = (
-            hidden @ self.w_gate_up[layer].to(compute_dtype)
-            + self.b_gate_up[layer].to(compute_dtype)
-        )
+        gate_up = hidden @ self.w_gate_up[layer].to(compute_dtype) + self.b_gate_up[
+            layer
+        ].to(compute_dtype)
         gate, up = gate_up.chunk(2, dim=-1)
-        delta = (
-            (F.silu(gate) * up) @ self.w_down[layer].to(compute_dtype)
-            + self.b_down[layer].to(compute_dtype)
-        )
+        delta = (F.silu(gate) * up) @ self.w_down[layer].to(
+            compute_dtype
+        ) + self.b_down[layer].to(compute_dtype)
         if self.delta_rms_clip > 0.0:
             delta_f32 = delta.float()
-            delta_rms = torch.sqrt(
-                delta_f32.square().mean(dim=-1, keepdim=True) + 1e-6
-            )
+            delta_rms = torch.sqrt(delta_f32.square().mean(dim=-1, keepdim=True) + 1e-6)
             delta = delta_f32 * torch.minimum(
                 torch.ones_like(delta_rms),
                 self.delta_rms_clip / delta_rms,
@@ -577,13 +552,9 @@ class JointModel(nn.Module):
         self.jepa_transition = ConditionedTransition(config)
         self.jepa_state_norm = RawRMSNorm(config.z_dim, dtype=dtype)
         self.value_wdl_head = ValueWDLHead(config)
-        self.action_embed = RawEmbedding(
-            _VOCAB_SIZE + 1, config.token_dim, dtype=dtype
-        )
+        self.action_embed = RawEmbedding(_VOCAB_SIZE + 1, config.token_dim, dtype=dtype)
         self.time_embed1 = _raw_parameter((1, config.token_dim), dtype)
-        self.time_embed2 = _raw_parameter(
-            (config.token_dim, config.token_dim), dtype
-        )
+        self.time_embed2 = _raw_parameter((config.token_dim, config.token_dim), dtype)
         self.time_bias = _raw_parameter((config.token_dim,), dtype)
         self.pos_embed = _raw_parameter((config.horizon, config.token_dim), dtype)
         self.dfm_blocks = TransformerStack(
@@ -596,9 +567,7 @@ class JointModel(nn.Module):
             remat=config.remat_blocks,
         )
         self.dfm_out_norm = RawRMSNorm(config.token_dim, dtype=dtype)
-        self.out_proj = _raw_parameter(
-            (config.token_dim, _VOCAB_SIZE), dtype
-        )
+        self.out_proj = _raw_parameter((config.token_dim, _VOCAB_SIZE), dtype)
         self.out_bias = _raw_parameter((_VOCAB_SIZE,), dtype)
 
     def encode_selected(
@@ -627,8 +596,7 @@ class JointModel(nn.Module):
 
     def _time_embedding(self, t: Tensor, compute_dtype: torch.dtype) -> Tensor:
         hidden = F.relu(
-            t.to(compute_dtype).unsqueeze(-1)
-            @ self.time_embed1.to(compute_dtype)
+            t.to(compute_dtype).unsqueeze(-1) @ self.time_embed1.to(compute_dtype)
         )
         return hidden @ self.time_embed2.to(compute_dtype) + self.time_bias.to(
             compute_dtype
@@ -651,9 +619,8 @@ class JointModel(nn.Module):
         sequence = self.dfm_blocks(sequence, compute_dtype)
         action_hidden = sequence[:, 64:, :]
         normalized = self.dfm_out_norm(action_hidden, compute_dtype)
-        logits = (
-            normalized @ self.out_proj.to(compute_dtype)
-            + self.out_bias.to(compute_dtype)
+        logits = normalized @ self.out_proj.to(compute_dtype) + self.out_bias.to(
+            compute_dtype
         )
         if return_hidden:
             return logits, action_hidden
@@ -671,9 +638,7 @@ class JointModel(nn.Module):
         for horizon in range(actions.shape[1]):
             condition = self.jepa_action_embed(
                 actions[:, horizon], compute_dtype
-            ) + self.jepa_hidden_adapter(
-                action_hidden[:, horizon], compute_dtype
-            )
+            ) + self.jepa_hidden_adapter(action_hidden[:, horizon], compute_dtype)
             z = self.jepa_transition(z, condition, compute_dtype)
             predictions.append(z)
         return torch.stack(predictions, dim=1)
@@ -709,9 +674,7 @@ def materialize_step_choices(
     directions = rng.standard_normal(
         (config.z_dim, config.sigreg_proj_dim), dtype=np.float32
     )
-    directions /= np.maximum(
-        np.linalg.norm(directions, axis=0, keepdims=True), 1e-12
-    )
+    directions /= np.maximum(np.linalg.norm(directions, axis=0, keepdims=True), 1e-12)
     return StepChoices(
         target_horizon=torch.from_numpy(target_horizon).to(device),
         training_time=torch.from_numpy(training_time).to(device),
@@ -803,9 +766,7 @@ def loss_and_aux(
     logits = model.planner(z_dfm, noisy_actions, t, compute_dtype)
     assert isinstance(logits, Tensor)
     log_probabilities = F.log_softmax(logits, dim=-1)
-    ce = -torch.gather(
-        log_probabilities, -1, actions.unsqueeze(-1)
-    ).squeeze(-1)
+    ce = -torch.gather(log_probabilities, -1, actions.unsqueeze(-1)).squeeze(-1)
     ce_weight = is_masked.float() * valid.unsqueeze(1)
     ce_den_horizon = ce_weight.sum(dim=0)
     ce_by_horizon = (ce * ce_weight).sum(dim=0) / ce_den_horizon.clamp_min(1.0)
@@ -832,13 +793,9 @@ def loss_and_aux(
     )
     assert isinstance(clean_result, tuple)
     _, clean_hidden = clean_result
-    pred_z = model.jepa_rollout(
-        z_jepa, actions, clean_hidden, compute_dtype
-    )
+    pred_z = model.jepa_rollout(z_jepa, actions, clean_hidden, compute_dtype)
     pred_for_loss = pred_z[rows, selected].unsqueeze(1)
-    sample_raw_mse = (
-        pred_for_loss.float() - target_z.float()
-    ).square().mean(dim=-1)
+    sample_raw_mse = (pred_for_loss.float() - target_z.float()).square().mean(dim=-1)
     positive_weight = valid.unsqueeze(1) * selected_valid
     jepa_positive = _weighted_mean(sample_raw_mse, positive_weight)
 
@@ -860,9 +817,7 @@ def loss_and_aux(
         reference_count=config.sigreg_reference_count,
     )
     pred_sigreg_z = pred_z[sigreg_rows].float().reshape(-1, config.z_dim)
-    pred_weight = (
-        future_valid[sigreg_rows] * sigreg_valid.unsqueeze(1)
-    ).reshape(-1)
+    pred_weight = (future_valid[sigreg_rows] * sigreg_valid.unsqueeze(1)).reshape(-1)
     pred_sigreg, pred_sigreg_count = _sigreg_v_stat(
         pred_sigreg_z,
         pred_weight,
@@ -886,9 +841,7 @@ def loss_and_aux(
         / stopped,
     )
     loss = unclipped * clip_scale
-    accuracy = _weighted_mean(
-        (logits.argmax(dim=-1) == actions).float(), ce_weight
-    )
+    accuracy = _weighted_mean((logits.argmax(dim=-1) == actions).float(), ce_weight)
     aux = {
         "loss": loss.detach(),
         "unclipped_loss": unclipped.detach(),
@@ -949,9 +902,7 @@ class MuonAdamW:
                     ),
                     use_muon=use_muon,
                     first_moment=torch.zeros_like(parameter),
-                    second_moment=(
-                        None if use_muon else torch.zeros_like(parameter)
-                    ),
+                    second_moment=(None if use_muon else torch.zeros_like(parameter)),
                 )
             )
 
@@ -984,9 +935,9 @@ class MuonAdamW:
             self.config.lr_decay_steps,
         )
         progress = relative / self.config.lr_decay_steps
-        return self.config.lr_min_ratio + (
-            1.0 - self.config.lr_min_ratio
-        ) * 0.5 * (1.0 + math.cos(math.pi * progress))
+        return self.config.lr_min_ratio + (1.0 - self.config.lr_min_ratio) * 0.5 * (
+            1.0 + math.cos(math.pi * progress)
+        )
 
     def _learning_rate(self, kind: str) -> float:
         peak = (
@@ -1004,10 +955,7 @@ class MuonAdamW:
         if transposed:
             matrix = matrix.transpose(-2, -1)
         matrix = matrix / (
-            torch.linalg.vector_norm(
-                matrix, ord=2, dim=(-2, -1), keepdim=True
-            )
-            + 1e-8
+            torch.linalg.vector_norm(matrix, ord=2, dim=(-2, -1), keepdim=True) + 1e-8
         )
         for _ in range(5):
             gram = matrix @ matrix.transpose(-2, -1)
@@ -1031,12 +979,6 @@ class MuonAdamW:
     def step(self) -> dict[str, float | int | bool]:
         gradient_norm = self._global_gradient_norm()
         finite = bool(torch.isfinite(gradient_norm))
-        if finite:
-            for leaf in self.leaves:
-                gradient = leaf.parameter.grad
-                if gradient is not None and not bool(torch.isfinite(gradient).all()):
-                    finite = False
-                    break
         if not finite:
             self.zero_grad()
             return {
@@ -1071,12 +1013,8 @@ class MuonAdamW:
                 gradient = gradient * clip_scale.to(gradient.dtype)
 
             if leaf.use_muon:
-                leaf.first_moment.mul_(beta_muon).add_(
-                    gradient, alpha=1.0 - beta_muon
-                )
-                corrected_moment = leaf.first_moment / (
-                    1.0 - beta_muon ** (count + 1)
-                )
+                leaf.first_moment.mul_(beta_muon).add_(gradient, alpha=1.0 - beta_muon)
+                corrected_moment = leaf.first_moment / (1.0 - beta_muon ** (count + 1))
                 corrected_gradient = gradient / (1.0 - beta_muon**count)
                 update = (
                     beta_muon * corrected_moment
@@ -1087,27 +1025,18 @@ class MuonAdamW:
                 update = update * math.sqrt(max(1.0, columns / rows))
             else:
                 assert leaf.second_moment is not None
-                leaf.first_moment.mul_(beta1).add_(
-                    gradient, alpha=1.0 - beta1
-                )
+                leaf.first_moment.mul_(beta1).add_(gradient, alpha=1.0 - beta1)
                 leaf.second_moment.mul_(beta2).addcmul_(
                     gradient, gradient, value=1.0 - beta2
                 )
-                corrected_moment = leaf.first_moment / (
-                    1.0 - beta1 ** (count + 1)
-                )
+                corrected_moment = leaf.first_moment / (1.0 - beta1 ** (count + 1))
                 corrected_gradient = gradient / (1.0 - beta1**count)
-                nesterov = (
-                    beta1 * corrected_moment
-                    + (1.0 - beta1) * corrected_gradient
-                )
+                nesterov = beta1 * corrected_moment + (1.0 - beta1) * corrected_gradient
                 corrected_variance = leaf.second_moment / (1.0 - beta2**count)
                 update = nesterov / (torch.sqrt(corrected_variance) + 1e-8)
 
             update = update + self.config.weight_decay * parameter
-            parameter.add_(
-                update, alpha=-self._learning_rate(leaf.learning_rate_kind)
-            )
+            parameter.add_(update, alpha=-self._learning_rate(leaf.learning_rate_kind))
 
         main_lr = self._learning_rate("main")
         bt4_lr = self._learning_rate("bt4")
@@ -1145,12 +1074,8 @@ class MuonAdamW:
             "adamw_leaf_count": sum(
                 row["optimizer"] == "nesterov_adamw" for row in rows
             ),
-            "bt4_leaf_count": sum(
-                row["learning_rate_kind"] == "bt4" for row in rows
-            ),
-            "main_leaf_count": sum(
-                row["learning_rate_kind"] == "main" for row in rows
-            ),
+            "bt4_leaf_count": sum(row["learning_rate_kind"] == "bt4" for row in rows),
+            "main_leaf_count": sum(row["learning_rate_kind"] == "main" for row in rows),
             "leaves": rows,
         }
 
@@ -1158,8 +1083,14 @@ class MuonAdamW:
 _ALLOWED_PICKLE_GLOBALS = {
     ("numpy", "ndarray"): np.ndarray,
     ("numpy", "dtype"): np.dtype,
-    ("numpy._core.multiarray", "_reconstruct"): np._core.multiarray._reconstruct,
-    ("numpy.core.multiarray", "_reconstruct"): np._core.multiarray._reconstruct,
+    (
+        "numpy._core.multiarray",
+        "_reconstruct",
+    ): np._core.multiarray._reconstruct,
+    (
+        "numpy.core.multiarray",
+        "_reconstruct",
+    ): np._core.multiarray._reconstruct,
     ("numpy._core.multiarray", "scalar"): np._core.multiarray.scalar,
     ("numpy.core.multiarray", "scalar"): np._core.multiarray.scalar,
     ("ml_dtypes", "bfloat16"): ml_dtypes.bfloat16,
@@ -1228,7 +1159,11 @@ def load_verified_source_model(path: Path = _SOURCE_STATE) -> dict[str, Any]:
             raise ValueError(f"Source SHA-256 drift: {digest} != {_SOURCE_SHA256}")
         handle.seek(0)
         with np.load(handle, allow_pickle=False) as payload:
-            if set(payload.files) != {"step", "model_trainable", "optimizer_state"}:
+            if set(payload.files) != {
+                "step",
+                "model_trainable",
+                "optimizer_state",
+            }:
                 raise ValueError(f"Source envelope drift: {payload.files}")
             step = np.asarray(payload["step"])
             if step.shape != () or int(step) != _SOURCE_STEP:
@@ -1236,7 +1171,11 @@ def load_verified_source_model(path: Path = _SOURCE_STATE) -> dict[str, Any]:
         handle.seek(0)
         with zipfile.ZipFile(handle, "r") as archive:
             members = [item.filename for item in archive.infolist()]
-            expected = {"step.npy", "model_trainable.npy", "optimizer_state.npy"}
+            expected = {
+                "step.npy",
+                "model_trainable.npy",
+                "optimizer_state.npy",
+            }
             if set(members) != expected or len(members) != len(expected):
                 raise ValueError(f"Source NPZ members drift: {members}")
             return _read_model_member(archive)
@@ -1296,8 +1235,7 @@ def bind_source_model(
             )
         if tuple(parameter.shape) != tuple(array.shape):
             raise ValueError(
-                f"Parameter shape mismatch at {name}: {tuple(parameter.shape)} "
-                f"!= {array.shape}"
+                f"Parameter shape mismatch at {name}: {tuple(parameter.shape)} != {array.shape}"
             )
         leaf_bytes = array.tobytes(order="C")
         leaf_digest = hashlib.sha256(leaf_bytes).hexdigest()
@@ -1320,9 +1258,7 @@ def bind_source_model(
                 "sha256": leaf_digest,
             }
         )
-    unused = sorted(
-        (".".join(map(str, path)) for path in set(flat) - consumed)
-    )
+    unused = sorted((".".join(map(str, path)) for path in set(flat) - consumed))
     if unused:
         raise ValueError(f"Unused source model leaves ({len(unused)}): {unused[:10]}")
     total_bytes = sum(record["nbytes"] for record in records)
@@ -1426,9 +1362,7 @@ def _git_commit() -> str:
     ).stdout.strip()
 
 
-def _choices_to_device(
-    choices: StepChoices, device: torch.device
-) -> StepChoices:
+def _choices_to_device(choices: StepChoices, device: torch.device) -> StepChoices:
     return StepChoices(*(value.to(device) for value in choices))
 
 
@@ -1510,7 +1444,9 @@ def load_model_checkpoint(
     root = _require_workspace(checkpoint_dir, exists=True)
     manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
     if manifest.get("format") != "chess-dfm-torch-model-v1":
-        raise ValueError(f"Unsupported torch checkpoint format: {manifest.get('format')}")
+        raise ValueError(
+            f"Unsupported torch checkpoint format: {manifest.get('format')}"
+        )
     state_path = _require_workspace(root / manifest["state"]["path"], exists=True)
     if state_path.stat().st_size != int(manifest["state"]["size_bytes"]):
         raise ValueError(f"Torch checkpoint size mismatch: {state_path}")
@@ -1537,6 +1473,82 @@ def load_model_checkpoint(
     return manifest
 
 
+def _start_gpu_monitor(
+    output_dir: Path,
+    *,
+    interval_ms: int,
+) -> tuple[subprocess.Popen[str], IO[str], IO[str]]:
+    samples = (output_dir / "gpu_samples.csv").open("w", encoding="utf-8")
+    stderr = (output_dir / "gpu_monitor.stderr.log").open("w", encoding="utf-8")
+    fields = (
+        "timestamp,utilization.gpu,utilization.memory,memory.used,memory.total,"
+        "power.draw,clocks.sm,clocks.mem"
+    )
+    process = subprocess.Popen(
+        [
+            "nvidia-smi",
+            f"--query-gpu={fields}",
+            "--format=csv,noheader,nounits",
+            f"--loop-ms={interval_ms}",
+        ],
+        stdout=samples,
+        stderr=stderr,
+        text=True,
+    )
+    return process, samples, stderr
+
+
+def _stop_gpu_monitor(
+    monitor: tuple[subprocess.Popen[str], IO[str], IO[str]] | None,
+) -> None:
+    if monitor is None:
+        return
+    process, samples, stderr = monitor
+    process.terminate()
+    try:
+        process.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait(timeout=5)
+    samples.close()
+    stderr.close()
+
+
+def _summarize_gpu_samples(path: Path) -> dict[str, float | int]:
+    columns = {
+        "gpu_utilization_percent": 1,
+        "memory_utilization_percent": 2,
+        "memory_used_mib": 3,
+        "memory_total_mib": 4,
+        "power_watts": 5,
+        "sm_clock_mhz": 6,
+        "memory_clock_mhz": 7,
+    }
+    values: dict[str, list[float]] = {name: [] for name in columns}
+    if not path.is_file():
+        return {"sample_count": 0}
+    with path.open(encoding="utf-8", newline="") as handle:
+        for row in csv.reader(handle):
+            if len(row) != 8:
+                continue
+            try:
+                for name, index in columns.items():
+                    values[name].append(float(row[index].strip()))
+            except ValueError:
+                continue
+    count = len(values["gpu_utilization_percent"])
+    summary: dict[str, float | int] = {"sample_count": count}
+    if count == 0:
+        return summary
+    for name, series in values.items():
+        array = np.asarray(series, dtype=np.float64)
+        summary[f"{name}_mean"] = float(np.mean(array))
+        summary[f"{name}_p50"] = float(np.quantile(array, 0.50))
+        summary[f"{name}_p95"] = float(np.quantile(array, 0.95))
+        summary[f"{name}_max"] = float(np.max(array))
+    return summary
+
+
 def train(args: argparse.Namespace) -> int:
     if not torch.cuda.is_available():
         raise RuntimeError("research/train_torch.py train requires CUDA")
@@ -1549,10 +1561,15 @@ def train(args: argparse.Namespace) -> int:
             "The accepted fixed-64 SIGReg contract requires --batch-size >= "
             f"{CONFIG.sigreg_example_count}"
         )
+    if args.log_every < 1:
+        raise ValueError("--log-every must be positive")
+    if args.threads not in (1, 2):
+        raise ValueError("--threads must be 1 or 2 under the resource guard")
+    if args.gpu_monitor_interval_ms != 0 and args.gpu_monitor_interval_ms < 50:
+        raise ValueError("--gpu-monitor-interval-ms must be 0 or at least 50")
     if args.save_every != 0 or args.save_updates:
         raise ValueError(
-            "Periodic/sparse checkpoints are disabled during migration; "
-            "use at most --save-final"
+            "Periodic/sparse checkpoints are disabled during migration; use at most --save-final"
         )
     if args.max_checkpoints not in (0, 1):
         raise ValueError("--max-checkpoints must be 0 or 1 for PyTorch migration")
@@ -1625,81 +1642,117 @@ def train(args: argparse.Namespace) -> int:
     torch.cuda.synchronize()
     torch.cuda.reset_peak_memory_stats()
     run_started = time.perf_counter()
-    deadline = (
-        run_started + args.train_seconds if args.train_seconds > 0 else None
-    )
+    deadline = run_started + args.train_seconds if args.train_seconds > 0 else None
     records: list[dict[str, Any]] = []
     update = 0
     data_cursor = args.data_start
-    while (args.steps == 0 or update < args.steps) and (
-        deadline is None or time.perf_counter() < deadline
-    ):
-        data_started = time.perf_counter()
-        choices_cpu = materialize_step_choices(
-            seed=args.seed,
-            update=update,
-            batch_size=args.batch_size,
-            config=CONFIG,
-            device=torch.device("cpu"),
+    monitor = (
+        _start_gpu_monitor(
+            output_dir,
+            interval_ms=args.gpu_monitor_interval_ms,
         )
-        raw_batch = batches.batch_at(data_cursor)
-        compact_batch = _compact_training_batch(
-            raw_batch,
-            choices_cpu.target_horizon.numpy(),
-        )
-        data_seconds = time.perf_counter() - data_started
+        if args.gpu_monitor_interval_ms > 0
+        else None
+    )
+    try:
+        while (args.steps == 0 or update < args.steps) and (
+            deadline is None or time.perf_counter() < deadline
+        ):
+            data_started = time.perf_counter()
+            choices_cpu = materialize_step_choices(
+                seed=args.seed,
+                update=update,
+                batch_size=args.batch_size,
+                config=CONFIG,
+                device=torch.device("cpu"),
+            )
+            raw_batch = batches.batch_at(data_cursor)
+            compact_batch = _compact_training_batch(
+                raw_batch,
+                choices_cpu.target_horizon.numpy(),
+            )
+            data_seconds = time.perf_counter() - data_started
 
-        transfer_started = time.perf_counter()
-        batch = _torch_batch(compact_batch, device)
-        choices = _choices_to_device(choices_cpu, device)
-        torch.cuda.synchronize()
-        transfer_seconds = time.perf_counter() - transfer_started
+            transfer_started = time.perf_counter()
+            batch = _torch_batch(compact_batch, device)
+            choices = _choices_to_device(choices_cpu, device)
+            torch.cuda.synchronize()
+            transfer_seconds = time.perf_counter() - transfer_started
 
-        step_started = time.perf_counter()
-        loss, aux = loss_and_aux(
-            model,
-            batch,
-            choices,
-            compute_dtype=torch.bfloat16,
-        )
-        loss.backward()
-        optimizer_metrics = optimizer.step()
-        torch.cuda.synchronize()
-        step_seconds = time.perf_counter() - step_started
-        update += 1
-        data_cursor += 1
-        elapsed = time.perf_counter() - run_started
-        record = {
-            "schema_version": "torch-eager-train-metrics-v1",
-            "update": update,
-            "optimizer_update": int(optimizer_metrics["optimizer_update"]),
-            "data_cursor": data_cursor,
-            "examples": update * args.batch_size,
-            "elapsed_seconds": elapsed,
-            "data_seconds": data_seconds,
-            "transfer_seconds": transfer_seconds,
-            "step_seconds": step_seconds,
-            "examples_per_second_step": args.batch_size / step_seconds,
-            "examples_per_second_end_to_end": (
-                update * args.batch_size / elapsed
-            ),
-            "gpu_memory_allocated_bytes": torch.cuda.memory_allocated(),
-            "gpu_memory_reserved_bytes": torch.cuda.memory_reserved(),
-            "gpu_peak_memory_allocated_bytes": (
-                torch.cuda.max_memory_allocated()
-            ),
-            "gpu_peak_memory_reserved_bytes": torch.cuda.max_memory_reserved(),
-            **_json_scalars(aux),
-            **optimizer_metrics,
-        }
-        records.append(record)
-        if update == 1 or update % args.log_every == 0:
-            with metrics_path.open("a", encoding="utf-8") as handle:
-                handle.write(json.dumps(record, sort_keys=True) + "\n")
-            print(json.dumps(record, sort_keys=True), flush=True)
-        del raw_batch, compact_batch, batch, choices_cpu, choices, loss, aux
-        if bool(optimizer_metrics["optimizer_skipped_nonfinite"]):
-            raise FloatingPointError(f"Non-finite update at {update}")
+            step_started = time.perf_counter()
+            event_start = torch.cuda.Event(enable_timing=True)
+            event_forward = torch.cuda.Event(enable_timing=True)
+            event_backward = torch.cuda.Event(enable_timing=True)
+            event_optimizer = torch.cuda.Event(enable_timing=True)
+            event_start.record()
+            loss, aux = loss_and_aux(
+                model,
+                batch,
+                choices,
+                compute_dtype=torch.bfloat16,
+            )
+            event_forward.record()
+            loss.backward()
+            event_backward.record()
+            optimizer_metrics = optimizer.step()
+            event_optimizer.record()
+            torch.cuda.synchronize()
+            step_seconds = time.perf_counter() - step_started
+            forward_cuda_seconds = event_start.elapsed_time(event_forward) / 1000.0
+            backward_cuda_seconds = event_forward.elapsed_time(event_backward) / 1000.0
+            optimizer_cuda_seconds = (
+                event_backward.elapsed_time(event_optimizer) / 1000.0
+            )
+            update += 1
+            data_cursor += 1
+            elapsed = time.perf_counter() - run_started
+            record = {
+                "schema_version": "torch-eager-train-metrics-v1",
+                "update": update,
+                "optimizer_update": int(optimizer_metrics["optimizer_update"]),
+                "data_cursor": data_cursor,
+                "examples": update * args.batch_size,
+                "elapsed_seconds": elapsed,
+                "data_seconds": data_seconds,
+                "transfer_seconds": transfer_seconds,
+                "step_seconds": step_seconds,
+                "forward_cuda_seconds": forward_cuda_seconds,
+                "backward_cuda_seconds": backward_cuda_seconds,
+                "optimizer_cuda_seconds": optimizer_cuda_seconds,
+                "host_overhead_in_step_seconds": max(
+                    step_seconds
+                    - forward_cuda_seconds
+                    - backward_cuda_seconds
+                    - optimizer_cuda_seconds,
+                    0.0,
+                ),
+                "examples_per_second_step": args.batch_size / step_seconds,
+                "examples_per_second_end_to_end": (update * args.batch_size / elapsed),
+                "gpu_memory_allocated_bytes": torch.cuda.memory_allocated(),
+                "gpu_memory_reserved_bytes": torch.cuda.memory_reserved(),
+                "gpu_peak_memory_allocated_bytes": (torch.cuda.max_memory_allocated()),
+                "gpu_peak_memory_reserved_bytes": (torch.cuda.max_memory_reserved()),
+                **_json_scalars(aux),
+                **optimizer_metrics,
+            }
+            records.append(record)
+            if update == 1 or update % args.log_every == 0:
+                with metrics_path.open("a", encoding="utf-8") as handle:
+                    handle.write(json.dumps(record, sort_keys=True) + "\n")
+                print(json.dumps(record, sort_keys=True), flush=True)
+            del (
+                raw_batch,
+                compact_batch,
+                batch,
+                choices_cpu,
+                choices,
+                loss,
+                aux,
+            )
+            if bool(optimizer_metrics["optimizer_skipped_nonfinite"]):
+                raise FloatingPointError(f"Non-finite update at {update}")
+    finally:
+        _stop_gpu_monitor(monitor)
 
     torch.cuda.synchronize()
     train_seconds = time.perf_counter() - run_started
@@ -1722,15 +1775,24 @@ def train(args: argparse.Namespace) -> int:
         "examples_per_second_end_to_end": (
             update * args.batch_size / max(train_seconds, 1e-12)
         ),
-        "mean_data_seconds": float(
-            np.mean([row["data_seconds"] for row in records])
-        ),
+        "mean_data_seconds": float(np.mean([row["data_seconds"] for row in records])),
         "mean_transfer_seconds": float(
             np.mean([row["transfer_seconds"] for row in records])
         ),
-        "mean_step_seconds": float(
-            np.mean([row["step_seconds"] for row in records])
+        "mean_step_seconds": float(np.mean([row["step_seconds"] for row in records])),
+        "mean_forward_cuda_seconds": float(
+            np.mean([row["forward_cuda_seconds"] for row in records])
         ),
+        "mean_backward_cuda_seconds": float(
+            np.mean([row["backward_cuda_seconds"] for row in records])
+        ),
+        "mean_optimizer_cuda_seconds": float(
+            np.mean([row["optimizer_cuda_seconds"] for row in records])
+        ),
+        "mean_host_overhead_in_step_seconds": float(
+            np.mean([row["host_overhead_in_step_seconds"] for row in records])
+        ),
+        "gpu_monitor": _summarize_gpu_samples(output_dir / "gpu_samples.csv"),
         "gpu_peak_memory_allocated_bytes": torch.cuda.max_memory_allocated(),
         "gpu_peak_memory_reserved_bytes": torch.cuda.max_memory_reserved(),
         "last_metrics": records[-1],
@@ -1752,7 +1814,9 @@ def inspect_source(args: argparse.Namespace) -> int:
         json.dumps(
             {
                 "output": str(output),
-                "parameters": sum(parameter.numel() for parameter in model.parameters()),
+                "parameters": sum(
+                    parameter.numel() for parameter in model.parameters()
+                ),
                 "mapping_sha256": mapping["combined_sha256"],
                 "leaf_count": mapping["leaf_count"],
                 "nbytes": mapping["nbytes"],
@@ -1787,9 +1851,7 @@ def cpu_smoke(args: argparse.Namespace) -> int:
         device=device,
     )
     started = time.perf_counter()
-    loss, aux = loss_and_aux(
-        model, batch, choices, compute_dtype=torch.float32
-    )
+    loss, aux = loss_and_aux(model, batch, choices, compute_dtype=torch.float32)
     if args.backward:
         loss.backward()
     elapsed = time.perf_counter() - started
@@ -1832,6 +1894,7 @@ def build_parser() -> argparse.ArgumentParser:
     train_parser.add_argument("--seed", type=int, default=0)
     train_parser.add_argument("--threads", type=int, default=2)
     train_parser.add_argument("--log-every", type=int, default=1)
+    train_parser.add_argument("--gpu-monitor-interval-ms", type=int, default=0)
     train_parser.add_argument("--save-every", type=int, default=0)
     train_parser.add_argument("--save-updates", type=int, nargs="*", default=())
     train_parser.add_argument("--save-final", action="store_true")

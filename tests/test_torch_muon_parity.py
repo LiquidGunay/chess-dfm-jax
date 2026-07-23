@@ -49,9 +49,7 @@ def test_torch_muon_adamw_matches_optax_for_two_updates():
         torch_optimizer.step()
 
         jax_gradients = jax.tree.map(jnp.asarray, gradients)
-        updates, jax_state = transform.update(
-            jax_gradients, jax_state, jax_params
-        )
+        updates, jax_state = transform.update(jax_gradients, jax_state, jax_params)
         jax_params = jax.tree.map(
             lambda parameter, update: parameter + update,
             jax_params,
@@ -92,3 +90,28 @@ def test_torch_optimizer_partition_and_schedule_contract():
     assert optimizer.learning_rate_ratio() == 0.55
     optimizer.update = 1200
     assert optimizer.learning_rate_ratio() == 0.1
+
+
+def test_torch_optimizer_skips_entire_nonfinite_update():
+    matrix = np.zeros((128, 128), dtype=np.float32)
+    bias = np.zeros((128,), dtype=np.float32)
+    model = TinyModel(matrix, bias)
+    optimizer = MuonAdamW(model, CONFIG)
+    before = {
+        name: parameter.detach().clone() for name, parameter in model.named_parameters()
+    }
+
+    model.matrix.grad = torch.ones_like(model.matrix)
+    model.bias.grad = torch.full_like(model.bias, float("nan"))
+    metrics = optimizer.step()
+
+    assert metrics["optimizer_skipped_nonfinite"] is True
+    assert optimizer.update == 0
+    assert model.matrix.grad is None
+    assert model.bias.grad is None
+    for name, parameter in model.named_parameters():
+        torch.testing.assert_close(parameter, before[name], rtol=0.0, atol=0.0)
+    for leaf in optimizer.leaves:
+        assert torch.count_nonzero(leaf.first_moment) == 0
+        if leaf.second_moment is not None:
+            assert torch.count_nonzero(leaf.second_moment) == 0
