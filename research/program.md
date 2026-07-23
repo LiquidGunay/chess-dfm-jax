@@ -505,6 +505,24 @@ Each cold component compile is isolated under a 6.75 GiB RSS ceiling and the
 ordinary guard; only a ten-update parity smoke and a cached 30-update profile
 can authorize FP32 masters as a later experiment.
 
+Experiment 034 is rejected at its second compiler gate. Encode compiles in
+50.789 seconds at `4.920 GB` peak group RSS with only `151 MB` compiler
+temporaries, but head VJP crosses the frozen 6.75 GiB group limit and is
+terminated at `8.006 GB` after 34.724 seconds. It writes neither an executable
+nor a checkpoint; encoder VJP and update are not attempted. The seven retained
+states remain unchanged. Static inspection shows that NNX still presents the
+entire model state to each component before dead-code elimination.
+
+Experiment 035 is preregistered in
+`research/experiment_partitioned_split_model_views.md`. Build transient,
+shared-variable encoder-only and head-only model views so encode/encoder VJP
+omit `315,375,896` irrelevant bytes and head VJP omits `390,611,456`
+irrelevant bytes, while the canonical full model and optimizer still receive
+one merged, globally clipped update. Prove path, object-identity, gradient,
+two-update, restore, and concrete-argument parity on CPU before repeating the
+four sequential 6.75-GiB cold compiler gates. This changes no scientific knob
+or checkpoint state.
+
 ## Editable surface
 
 During automated architecture research, edit only `research/train.py`.
