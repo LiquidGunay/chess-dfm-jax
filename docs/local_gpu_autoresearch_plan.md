@@ -1754,9 +1754,14 @@ sweeps, held-out data, and repeated seeds.
   digest and moves ordinary one-update final CE by `0.0009441`. Reject before
   the cold-cache stage. Restore the authoritative path in `029f501`; it
   returns exact retained metrics at `6.156 GB` peak RSS.
-- [ ] Test the one allowed non-mutating correction in
+- [x] Test the one allowed non-mutating correction in
   `research/experiment_nonmutating_compile_process.md`: only the disposable
   compile process drops its local Python mapping reference; no dictionary is
   cleared and the ordinary trainer is untouched. Require the exact restored
   model/optimizer ABI digests and cached systems gate before one fresh-cache
-  cold compile. Do not run the cold stage on any ABI mismatch.
+  cold compile. Do not run the cold stage on any ABI mismatch. The cached
+  process fits at `4.541 GB` peak group RSS with exact compiler and optimizer
+  fields, but retains the same incorrect constructor model ABI
+  `f9f9...b467`; reject before creating the dedicated cache. First locate the
+  exact constructor/restored path/shape/dtype difference with a guarded,
+  read-only schema diagnostic.

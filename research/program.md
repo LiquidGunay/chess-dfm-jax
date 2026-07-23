@@ -386,6 +386,14 @@ and optimizer ABI digests plus the cached systems gate. Only then may it spend
 one fresh-cache guarded cold compile, followed on success by an ordinary
 one-update cache-hit parity check.
 
+Experiment 027 is rejected at that first gate. The cached process safely peaks
+at `4,541,132,800` bytes group RSS and preserves exact compiler and optimizer
+fields, but its model ABI remains `f9f9...b467` rather than the required
+restored `b53b...d13`. Reference deletion is therefore not the cause. No
+dedicated cache or cold compile is created. Before any further compiler-memory
+variant, run a read-only schema diff to identify the exact path, shape, dtype,
+or container distinction.
+
 ## Editable surface
 
 During automated architecture research, edit only `research/train.py`.

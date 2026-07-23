@@ -1,7 +1,8 @@
 # Experiment 027: non-mutating isolated compile process
 
-Status: preregistered on 2026-07-23. This narrows Experiment 026; it is a
-systems experiment and cannot change the authoritative training process.
+Status: completed and rejected at the cached ABI gate on 2026-07-23. No
+fresh-cache cold compile was run. This narrowed Experiment 026; it was a
+systems experiment and could not change the authoritative training process.
 
 ## Correction and hypothesis
 
@@ -87,3 +88,39 @@ partial run directories after preserving compact evidence. On success, keep
 the default-off compile-only capability as the required preflight for future
 new graphs, remove the dedicated validation cache, and leave the offline
 incumbent unchanged.
+
+## Outcome
+
+Commit `ee52958` implemented exactly the preregistered non-mutating change
+after 103 guarded focused CPU tests passed at `3,163,942,912` bytes peak group
+RSS and `9,250,578,432` bytes minimum `MemAvailable`; Ruff, byte-compilation,
+and diff checks also passed.
+
+The shared-cache compile-only gate completed normally in `35.8979` seconds,
+including startup, with:
+
+- `4,541,132,800` bytes peak process-group RSS;
+- `7,806,922,752` bytes minimum host `MemAvailable`;
+- `1,893,640,704` bytes peak JAX GPU memory;
+- `14.8570` seconds explicit compile/cache-load time;
+- exact retained compiler FLOPs, bytes, transcendentals, and argument/output/
+  temp/generated-code sizes; and
+- zero updates, validation batches, checkpoint writes, or source-checkpoint
+  opens.
+
+The systems and optimizer gates pass, but the decisive model ABI gate does
+not. The constructor still reports
+`f9f9bde96785c9b9bb24a3b12ac10bde16ec5761f501f3783fc45733c0f1b467`,
+identical to Experiment 026, rather than the required restored digest
+`b53b21a8113b74655bb897e8171315503d31f4434d33eb2b579d83bb38614d13`.
+Its `455` leaves and `705,987,352` bytes match, and the optimizer ABI remains
+the exact required
+`6d45c99b53bf22d638ecdfe9f9a3cfae5f1a50d8ecfa4c54a41bb8c8b84b707e`.
+
+Therefore ordinary reference deletion does not explain or correct the
+constructor/restored model-schema mismatch. Per the immutable contract, stop
+before creating the dedicated cache or running a cold compile. The closing
+storage audit finds exactly seven allowlisted state files; the shared cache
+remains `157,684,302` bytes, and the compact failed-gate record is `83,245`
+bytes. The next safe action is a read-only path/shape/dtype schema diff, not
+another compiler-memory attempt.

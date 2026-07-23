@@ -444,3 +444,10 @@ compiler to drop its local mapping reference without clearing the mapping.
 The ordinary trainer stays unchanged. Exact restored model/optimizer ABI and
 cached compiler gates are mandatory before the one allowed fresh-cache cold
 compile.
+
+Experiment 027 is rejected at the cached ABI gate. It safely peaks at
+`4.541 GB` group RSS with exact compiler and optimizer fields, but dropping
+the local mapping reference leaves the same constructor model ABI
+`f9f9...b467` instead of restored `b53b...d13`. No dedicated cache or cold
+compile is created. The next step is a guarded, read-only full-schema diff
+before considering another compiler-memory experiment.
