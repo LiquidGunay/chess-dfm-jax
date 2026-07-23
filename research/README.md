@@ -481,3 +481,10 @@ exact. Under the preregistered rule this blocks compilation. Because
 `research_state_abi` converts live NNX wrappers while JAX flattening exposes
 their raw values, the next diagnostic must compare actual JAX abstract leaf
 signatures before interpreting `void16` as a cache-key difference.
+
+Experiment 030 is the final no-compile signature check preregistered in
+`experiment_jax_restore_signature_diagnostic.md`. It compares raw JAX leaf
+paths and `jax.typeof` abstract values, PyTree definitions, and NNX graph
+definitions around the same verified restore. Exact equality is required
+before replacing the overly broad reporting-ABI gate; the diagnostic itself
+does not authorize a cold compile.

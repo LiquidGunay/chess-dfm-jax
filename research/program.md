@@ -426,6 +426,13 @@ flattening exposes raw `.value` leaves; compare those canonical abstract
 signatures next before deciding whether the mismatch affects an `nnx.jit`
 cache key.
 
+Experiment 030, preregistered in
+`research/experiment_jax_restore_signature_diagnostic.md`, is the final
+no-compile check. Compare raw JAX leaf paths and `jax.typeof` shape, canonical
+dtype, weak type, sharding, and memory-space records plus PyTree and NNX graph
+definitions around the verified restore. Only exact equality can replace the
+broad reporting-ABI gate in a later separately preregistered compile test.
+
 ## Editable surface
 
 During automated architecture research, edit only `research/train.py`.
