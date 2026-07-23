@@ -5,8 +5,10 @@ from __future__ import annotations
 
 import argparse
 import gc
+import hashlib
 import json
 import sys
+from collections import Counter
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -36,6 +38,63 @@ SOURCE_CHECKPOINT = (
     / "step0265000"
     / "state.npz"
 )
+
+
+def _sha256_json(value: Any) -> str:
+    payload = json.dumps(
+        value,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
+def jax_state_signature(state: Any) -> dict[str, Any]:
+    """Describe the raw leaves and abstract values JAX sees for one state."""
+
+    path_leaves, treedef = jax.tree_util.tree_flatten_with_path(state)
+    records = []
+    concrete_types: Counter[str] = Counter()
+    for path, leaf in path_leaves:
+        abstract = jax.typeof(leaf)
+        concrete_type = f"{type(leaf).__module__}.{type(leaf).__qualname__}"
+        concrete_types[concrete_type] += 1
+        records.append(
+            {
+                "path": jax.tree_util.keystr(path),
+                "shape": list(abstract.shape),
+                "dtype": str(
+                    jax.dtypes.canonicalize_dtype(abstract.dtype)
+                ),
+                "weak_type": bool(abstract.weak_type),
+                "sharding": str(abstract.sharding),
+                "memory_space": str(abstract.memory_space),
+                "abstract_value": str(abstract),
+            }
+        )
+    treedef_text = str(treedef)
+    return {
+        "sha256": _sha256_json(records),
+        "leaf_count": len(records),
+        "records": records,
+        "treedef": treedef_text,
+        "treedef_sha256": _sha256_json(treedef_text),
+        "concrete_type_counts": dict(sorted(concrete_types.items())),
+    }
+
+
+def graph_definition_signature(model: Any) -> tuple[Any, dict[str, Any]]:
+    """Return the NNX graph definition plus a stable representation digest."""
+
+    split = nnx.split(model, TrainableParam, ...)
+    graphdef = split[0]
+    del split
+    text = str(graphdef)
+    return graphdef, {
+        "sha256": _sha256_json(text),
+        "text_length": len(text),
+    }
 
 
 def validate_import_invariants(
@@ -148,15 +207,19 @@ def main() -> int:
     del model_params
     gc.collect()
 
-    before_model_abi = train.research_state_abi(
-        nnx.state(model, TrainableParam)
-    )
+    before_state = nnx.state(model, TrainableParam)
+    before_model_abi = train.research_state_abi(before_state)
     if before_model_abi != reference_model_abi:
         raise ValueError(
             "Constructor model schema differs from the accepted checkpoint "
             f"manifest: {before_model_abi['sha256']} != "
             f"{reference_model_abi['sha256']}"
         )
+    before_jax_signature = jax_state_signature(before_state)
+    del before_state
+    before_graphdef, before_graph_signature = graph_definition_signature(
+        model
+    )
     optimizer_before_full = train.research_state_abi(
         nnx.state(optimizer.opt_state)
     )
@@ -176,9 +239,11 @@ def main() -> int:
     )
     gc.collect()
 
-    after_model_abi = train.research_state_abi(
-        nnx.state(model, TrainableParam)
-    )
+    after_state = nnx.state(model, TrainableParam)
+    after_model_abi = train.research_state_abi(after_state)
+    after_jax_signature = jax_state_signature(after_state)
+    del after_state
+    after_graphdef, after_graph_signature = graph_definition_signature(model)
     optimizer_after_full = train.research_state_abi(
         nnx.state(optimizer.opt_state)
     )
@@ -211,9 +276,38 @@ def main() -> int:
         decision = "container_metadata_only"
     else:
         decision = "leaf_signature_changed"
+    jax_signatures_equal = (
+        before_jax_signature["sha256"]
+        == after_jax_signature["sha256"]
+        and before_jax_signature["records"]
+        == after_jax_signature["records"]
+        and before_jax_signature["treedef"]
+        == after_jax_signature["treedef"]
+        and before_jax_signature["treedef_sha256"]
+        == after_jax_signature["treedef_sha256"]
+    )
+    graph_definitions_equal = (
+        before_graphdef == after_graphdef
+        and before_graph_signature == after_graph_signature
+    )
+    expected_concrete_types = (
+        before_jax_signature["concrete_type_counts"]
+        == {"jaxlib._jax.ArrayImpl": schema_tools.EXPECTED_MODEL_LEAVES}
+        and after_jax_signature["concrete_type_counts"]
+        == {"numpy.ndarray": schema_tools.EXPECTED_MODEL_LEAVES}
+    )
+    jit_signature_pass = all(
+        (
+            after_summary == expected_after,
+            decision == "leaf_signature_changed",
+            jax_signatures_equal,
+            graph_definitions_equal,
+            expected_concrete_types,
+        )
+    )
 
     report = {
-        "format": "chess-dfm-legacy-restore-abi-diagnostic-v1",
+        "format": "chess-dfm-jax-restore-signature-diagnostic-v1",
         "git_commit": train.git_commit(),
         "timestamp_utc": datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ"),
         "run_id": args.run_id,
@@ -240,7 +334,19 @@ def main() -> int:
         "optimizer_step_before": optimizer_step_before,
         "optimizer_step_after": optimizer_step_after,
         "full_schema_differences": differences,
-        "decision": decision,
+        "reporting_abi_decision": decision,
+        "jax_state_signature_before": before_jax_signature,
+        "jax_state_signature_after": after_jax_signature,
+        "jax_state_signatures_equal": jax_signatures_equal,
+        "nnx_graph_definition_before": before_graph_signature,
+        "nnx_graph_definition_after": after_graph_signature,
+        "nnx_graph_definitions_equal": graph_definitions_equal,
+        "expected_concrete_storage_types": expected_concrete_types,
+        "decision": (
+            "jit_abstract_signature_identical"
+            if jit_signature_pass
+            else "blocked_by_jit_signature_or_reference_difference"
+        ),
         "gpu_memory": train.gpu_memory_stats(),
     }
     output_dir.mkdir(parents=True, exist_ok=False)
@@ -269,14 +375,37 @@ def main() -> int:
                         "leaf_difference_count",
                     )
                 },
-                "decision": decision,
+                "reporting_abi_decision": decision,
+                "jax_state_signature_before": {
+                    key: before_jax_signature[key]
+                    for key in (
+                        "sha256",
+                        "leaf_count",
+                        "treedef_sha256",
+                        "concrete_type_counts",
+                    )
+                },
+                "jax_state_signature_after": {
+                    key: after_jax_signature[key]
+                    for key in (
+                        "sha256",
+                        "leaf_count",
+                        "treedef_sha256",
+                        "concrete_type_counts",
+                    )
+                },
+                "jax_state_signatures_equal": jax_signatures_equal,
+                "nnx_graph_definition_before": before_graph_signature,
+                "nnx_graph_definition_after": after_graph_signature,
+                "nnx_graph_definitions_equal": graph_definitions_equal,
+                "decision": report["decision"],
                 "gpu_memory": report["gpu_memory"],
             },
             indent=2,
             sort_keys=True,
         )
     )
-    return 0 if after_summary == expected_after else 2
+    return 0 if jit_signature_pass else 2
 
 
 if __name__ == "__main__":
