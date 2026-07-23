@@ -38,9 +38,9 @@ source/FP32 parity, guarded smoke, and batch sweep are complete; batch 512 is
 the selected PyTorch training batch. Production BF16 is now explicitly a
 runtime-specific numerical trajectory after the recorded tight-intermediate
 gate failed in both CPU and GPU comparisons. Representative FP32 gradients,
-checkpoint/JAX round trip, input prefetch, and the matched fixed-time control
-remain. JAX remains the target for long hero runs once autoresearch selects a
-promising model.
+checkpoint/JAX round trip, and the matched fixed-time control remain.
+Deterministic depth-1 prefetch is complete and frozen. JAX remains the target
+for long hero runs once autoresearch selects a promising model.
 
 The A10G is single-tenant throughout this sequence. Training, profiling,
 arena evaluation, and SAE work do not run concurrently.
@@ -978,8 +978,12 @@ peak process-group RSS. Batch 768 gains only a few percent, uses about
 projected outside safe headroom and was not attempted. Freeze batch 512 for
 the first PyTorch control/candidate comparisons; keep validation at batch 64
 over identical positions. The remaining roughly `0.210` seconds of data work
-per warm iteration motivates deterministic one-batch prefetch before the
-fixed-time control.
+per warm iteration motivated deterministic one-batch prefetch before the
+fixed-time control. That prefetch is now complete: all 10 scientific rows
+match the sequential profile exactly, warm data wait falls to `13.1`
+microseconds, and end-to-end throughput rises from `150.663` to `160.490`
+examples/s (`+6.52%`) while peak host RSS remains `1.959 GB`. Freeze prefetch
+depth 1.
 
 Optimization sequence:
 

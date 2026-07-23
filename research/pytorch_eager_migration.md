@@ -115,6 +115,15 @@ Batch 512 is selected:
   1,024-row shards—would silently omit 25% of every shard. Batch 1024 is
   projected beyond safe memory and was deliberately not attempted.
 
+Deterministic depth-1 prefetch preserves all 10 profiled updates bit-for-bit
+across total/component losses, policy metrics, gradient norm/clip scale, and
+latent norms. It hides `0.24157` of `0.24158` warm preparation seconds, reduces
+warm data wait to `13.1` microseconds, and raises warm end-to-end throughput
+from `150.663` to `160.490` examples/s (`+6.52%`) while device throughput
+remains `160.681` examples/s. Mean utilization including startup rises from
+86.96% to 91.39%; peak process-group RSS remains `1,959,333,888` bytes. Freeze
+prefetch depth 1 for the matched control.
+
 The preregistered production-BF16 intermediate gate does **not** pass. In two
 sequential guarded GPU processes, source-weight PyTorch versus JAX batch-2
 comparison reaches `0.1142/0.0965` relative-L2 error for current/future BT4
@@ -145,5 +154,5 @@ This evidence amends, rather than silently relaxes, correctness gate 3:
 
 `PYTORCH_AUTORESEARCH_READY` remains false. The remaining gates are
 representative FP32 parameter-gradient parity, strict checkpoint restore/JAX
-round trip, deterministic input prefetch profiling, and the matched
-fixed-time control plus JAX validation/inference cross-check.
+round trip, and the matched fixed-time control plus JAX
+validation/inference cross-check.

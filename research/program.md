@@ -594,6 +594,12 @@ are complete. Freeze PyTorch training batch 512: the final profile reaches
 Reject batch 768 because its small throughput gain costs about 5.2 GB more
 allocated HBM and drops 25% of each 1,024-row shard.
 
+Deterministic depth-1 prefetch is accepted and frozen. Its ten-update replay
+matches every recorded scientific scalar exactly, hides all but `13.1`
+microseconds of warm data preparation, and raises warm end-to-end throughput
+from `150.663` to `160.490` examples/s (`+6.52%`) without increasing HBM or
+host risk.
+
 The tight BF16 cross-framework gate fails and must not be relabeled. CPU and
 GPU traces identify gradual rounding drift amplified by the recovered final
 BT4 block, whose FFN layer-norm scale peaks at `6.125`; primitive-composition
@@ -603,7 +609,7 @@ formula/gradient/optimizer parity, treat BF16 optimization as
 runtime-specific, and require the matched PyTorch control plus exported JAX
 validation/eight-pass inference before opening readiness. Remaining work is
 representative FP32 gradient parity, strict checkpoint/JAX round trip,
-deterministic prefetch, and that matched fixed-time control.
+and that matched fixed-time control.
 
 ## Editable surface
 
