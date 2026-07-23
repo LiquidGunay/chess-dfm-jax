@@ -449,7 +449,7 @@ def test_direct_serialization_and_resume_contract_are_explicit(
     assert train.serialized_model_config(direct)["jepa_rollout_mode"] == "direct_sequence"
     assert (
         train.apply_experiment_overrides(train.JointLatentSASAConfig()).jepa_rollout_mode
-        == "direct_sequence"
+        == "recurrent"
     )
 
     monkeypatch.setattr(train, "require_within_workspace", lambda path: path)

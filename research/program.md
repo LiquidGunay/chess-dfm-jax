@@ -258,17 +258,15 @@ H1/uniform CE `2.844706/4.496097`, and legal mass `0.647005`. Repeat update
 arena, retain no candidate state, restore `wdl_coeff=0.0`, and do not sweep
 the coefficient.
 
-Experiment 021 is preregistered in
-`research/experiment_direct_multihorizon_jepa_tail1.md`. It is the next
-original-plan architecture axis: replace the recurrent eight-step JEPA scan
-with eight direct predictions from the same `z_0`, evaluated as one parallel
-tensor and conditioned by the existing horizon-specific full-sequence DFM
-hidden states. The parameter/optimizer state ABI, one-block future tail,
-balanced K=1 target estimator, `0.0/5.76/1.0` loss, and current-only
-eight-pass DFM inference remain fixed. The resource guard permits only update
-1,200 plus terminal state. No fixed-time run is allowed until default parity,
-direct mathematics, gradient, serialization, guarded smoke, and guarded
-profile gates pass.
+Experiment 021's direct parallel multi-horizon JEPA is rejected at guarded
+compilation. Commit `a7f0f58` preserves the parameter/state ABI and passes 108
+focused CPU tests, but the batch-128 one-update smoke reaches
+`10,965,164,032` bytes process-group RSS after `39.236` seconds, above the
+frozen `7,516,192,768`-byte ceiling. The guard exits 75 while host
+MemAvailable remains at least `6,194,348,032` bytes; no process survives and
+no checkpoint/report is written. Per preregistration, run no profile,
+fixed-time training, repeat, evaluation, or arena. Remove the empty run
+directory, restore recurrent mode, and retain direct execution default-off.
 
 ## Editable surface
 

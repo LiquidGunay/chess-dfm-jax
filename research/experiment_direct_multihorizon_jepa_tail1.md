@@ -1,7 +1,7 @@
 # Experiment 021: direct parallel multi-horizon JEPA
 
-Status: preregistered on 2026-07-23; implementation and measurements have not
-started.
+Status: completed and rejected at the guarded compilation/smoke gate on
+2026-07-23. No profile, fixed-time run, checkpoint, repeat, or arena was run.
 
 ## Question and hypothesis
 
@@ -162,4 +162,30 @@ cache, compiler artifact, checkpoint, and temporary file under
 
 ## Outcome
 
-Pending.
+Commit `a7f0f58` preregisters and implements the parameter-ABI-preserving
+direct graph. One hundred eight focused CPU tests pass. They prove exact
+default recurrent dispatch, direct per-horizon mathematics, no prediction
+carry between horizons, finite gradients through the transition/action/DFM/
+current-encoder paths, unchanged DFM/RNG/target assignments, mode-aware
+collapse and action-shuffle diagnostics, exact model-state ABI, unchanged DFM
+inference values, explicit resume semantics, and fail-closed incompatible
+configurations.
+
+The guarded batch-128 one-update smoke did not reach XLA compilation
+completion. The launcher began with `11,815,149,568` bytes MemAvailable and
+the frozen `7,516,192,768`-byte process-group RSS ceiling. After `39.236`
+seconds, the parallel direct graph reached `10,965,164,032` bytes
+process-group RSS, so the guard terminated it with exit 75. Minimum host
+MemAvailable remained `6,194,348,032` bytes, safely above the runtime
+`3,221,225,472`-byte floor. The global GPU lock remained exclusive, the
+process group was killed, no compute process survived, and the server did not
+enter the prior global-OOM regime.
+
+This is the preregistered guard-abort condition. Run no 30-update profile,
+30-minute training, repeat, checkpoint evaluation, or arena. The command wrote
+no checkpoint or report; its empty run directory was removed. Restore the
+active edit surface to `jepa_rollout_mode="recurrent"` while retaining the
+direct capability default-off for a separately designed future experiment.
+A future revisit would need a lower-host-memory lowering such as explicitly
+chunked horizons, but that is a different systems/model intervention and is
+not authorized as a rescue in this experiment.

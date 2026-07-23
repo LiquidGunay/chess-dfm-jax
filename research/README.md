@@ -333,3 +333,12 @@ mass `0.645706` miss their frozen thresholds by `0.0014257/0.0010171`.
 Therefore run no arena, retain no candidate state, restore WDL coefficient
 zero, and do not open a coefficient sweep. Target and `z_pred` SIGReg remain
 fixed at `5.76/1.0`, with RMS norm matching off.
+
+Experiment 021 is complete and rejected at its guarded compilation gate. The
+checkpoint-ABI-preserving direct multi-horizon JEPA implementation passes 108
+focused CPU tests, but its batch-128 one-update smoke reaches `10.965 GB`
+process-group RSS after `39.236` seconds, above the frozen `7.516 GB` host
+ceiling. The guard terminates it before host MemAvailable falls below
+`6.194 GB`; no process, report, or checkpoint survives. Per the immutable
+contract, run no profile or fixed-time rescue. Direct execution remains
+available default-off and recurrent JEPA is restored as the active graph.

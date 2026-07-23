@@ -71,7 +71,6 @@ EXPERIMENT_OVERRIDES: dict[str, Any] = {
     "lr_decay_start_steps": 400,
     "lr_decay_steps": 800,
     "lr_min_ratio": 0.1,
-    "jepa_rollout_mode": "direct_sequence",
     "jepa_target_sample_count": 1,
     "jepa_target_sampling_unit": "example_balanced",
     "bt4_encode_chunk_size": 0,
