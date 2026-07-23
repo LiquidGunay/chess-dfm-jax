@@ -411,3 +411,11 @@ uses the same 7 GiB guard, batch 128, a 900-second timeout, and no checkpoints.
 The setting is adopted only if the compile has 256 MiB guard headroom, the
 one-update metrics match the retained smoke within `1e-6`, and a cached
 30-update profile retains at least 95% throughput.
+
+The candidate is rejected at the first gate. Autotune level 0 still reaches
+`11.098 GB` process-group RSS after `92.824` seconds; the unchanged guard exits
+safely while host `MemAvailable` remains `6.315 GB`. No update, report,
+checkpoint, or state is written. The empty run directory and 108 KiB
+dedicated partial cache are removed, leaving the ordinary cache and exact
+seven-state retention set unchanged. Do not adopt or sweep this flag; inspect
+host initialization/import/compiler lifetimes next.

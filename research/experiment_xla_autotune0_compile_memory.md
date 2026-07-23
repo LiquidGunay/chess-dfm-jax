@@ -1,7 +1,8 @@
 # Experiment 025: bounded XLA autotune-off compilation
 
-Status: preregistered on 2026-07-23. This is a systems experiment, not a
-model, objective, data, batch-size, or inference experiment.
+Status: completed and rejected at the cold-compilation gate on 2026-07-23.
+This was a systems experiment, not a model, objective, data, batch-size, or
+inference experiment.
 
 ## Question and evidence
 
@@ -104,3 +105,31 @@ dedicated cache and any empty/partial run directory after preserving compact
 text/JSON evidence. Write no result row because this is not a 30-minute model
 experiment. Resume model autoresearch only after a separate compilation path
 is preregistered and shown safe.
+
+## Outcome
+
+Commit `dee9337` froze the experiment before the one allowed cold compile.
+The guarded flag-acceptance probe completed with only `442,990,592` bytes peak
+group RSS. The real batch-128 candidate then started with zero permitted
+checkpoint writes, CPUs `[0,1]`, `63,826,997,248` bytes free disk, and
+`12,113,039,360` bytes host `MemAvailable`.
+
+Autotune level 0 did not reduce the binding footprint. The training graph did
+not finish compilation; after `92.8240` seconds, process-group RSS reached
+`11,098,423,296` bytes and the unchanged guard exited `75`. Minimum host
+`MemAvailable` remained `6,314,930,176` bytes. This is within `0.14%` of the
+largest prior failure and slightly above the `10,943,864,832`-byte
+Experiment-024 peak, so GEMM/convolution autotuning is not the source of the
+roughly 11 GB host working set.
+
+No optimizer update, report, checkpoint, or `state.npz` was written. The run
+directory was empty; the dedicated cache contained only 108 KiB of partial
+per-fusion text protos. Both were removed. The GPU lock is free, no training
+or guard process survives, and the closing storage audit again finds exactly
+the seven allowlisted states and `157,684,302` bytes in the ordinary JAX
+cache.
+
+Reject autotune level 0. Run no numerical/profile stage and do not adopt or
+sweep the flag. The next compiler investigation must measure and reduce
+host-resident initialization/import/compiler lifetimes while leaving the
+guard fixed, rather than trying another kernel-selection setting.

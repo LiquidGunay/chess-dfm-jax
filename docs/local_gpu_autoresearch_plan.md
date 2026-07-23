@@ -1724,7 +1724,7 @@ sweeps, held-out data, and repeated seeds.
   `7.516 GB` ceiling and exits safely before any update or state write.
   Reject at the systems gate, run no smaller-batch rescue or later stage, and
   restore coefficient zero.
-- [ ] Test one compiler-only recovery before another model graph. The four
+- [x] Test one compiler-only recovery before another model graph. The four
   consecutive cold failures at `10.944--11.095 GB` make compilation the
   immediate blocker, while cached incumbent executables remain safe. The
   installed XLA build already defaults LLVM-module compilation to
@@ -1734,4 +1734,10 @@ sweeps, held-out data, and repeated seeds.
   writes. Adopt it only if it retains 256 MiB RSS headroom, matches the
   incumbent smoke numerically, and preserves at least 95% of cached profile
   throughput. The frozen contract is in
-  `research/experiment_xla_autotune0_compile_memory.md`.
+  `research/experiment_xla_autotune0_compile_memory.md`. Autotune level 0
+  still reaches `11.098 GB` group RSS after `92.824` seconds and is rejected
+  without an update or state write. Remove its 108 KiB partial cache and empty
+  run directory; the ordinary cache and seven-state retention set are
+  unchanged. Kernel autotuning is not the source of the cold-compile working
+  set. Measure and reduce host initialization/import/compiler lifetimes before
+  another cold graph.

@@ -348,6 +348,16 @@ contracts, the 7 GiB guard, and zero checkpoint writes. A successful compile
 still cannot be adopted unless it matches the retained smoke numerically and
 keeps at least 95% of cached profile throughput.
 
+The one allowed Experiment-025 cold compile is rejected. Autotune level 0
+reaches `11,098,423,296` bytes group RSS after `92.8240` seconds versus the
+unchanged `7,516,192,768`-byte guard, while host `MemAvailable` remains
+`6,314,930,176` bytes. This is effectively the same footprint as the four
+default-level failures, so kernel autotuning is not the cause. No update,
+report, checkpoint, state, process, or cache artifact survives; run no
+numerical or profile stage and do not adopt or sweep the flag. The next
+systems work must inspect host-resident initialization/import/compiler
+lifetimes before another cold model graph.
+
 ## Editable surface
 
 During automated architecture research, edit only `research/train.py`.
