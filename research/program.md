@@ -358,6 +358,18 @@ numerical or profile stage and do not adopt or sweep the flag. The next
 systems work must inspect host-resident initialization/import/compiler
 lifetimes before another cold model graph.
 
+Experiment 026 is preregistered in
+`research/experiment_separate_compile_process.md`. The exact incumbent cache
+hit peaks at `6,158,090,240` bytes group RSS and reproduces the retained
+initial/final validation CE exactly. Glibc arena/trim controls save only
+`16,277,504` bytes, so they are rejected without a cold trial. The new
+systems hypothesis is to compile the shape-equivalent graph in a separate
+guarded process before opening the 1.8 GiB legacy checkpoint, exit after
+populating the cache, and then launch the ordinary guarded source-init trainer
+as a cache hit. Batch, graph, loss, data, guard, and zero-checkpoint contracts
+remain fixed; one fresh-cache compile is allowed only after CPU and cached
+parity gates pass.
+
 ## Editable surface
 
 During automated architecture research, edit only `research/train.py`.

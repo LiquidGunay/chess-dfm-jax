@@ -1741,3 +1741,12 @@ sweeps, held-out data, and repeated seeds.
   unchanged. Kernel autotuning is not the source of the cold-compile working
   set. Measure and reduce host initialization/import/compiler lifetimes before
   another cold graph.
+- [ ] Separate cold compilation from source-state decoding. Add a
+  fail-closed `--compile-only` mode that constructs the exact graph and
+  optimizer shapes, releases the raw mapped NumPy tree, compiles without
+  opening the 1.8 GiB legacy checkpoint, populates the persistent cache, and
+  exits. Only then may the ordinary guarded trainer verify/restore the source
+  and execute the cached graph. First prove cached-path/ABI/metric parity,
+  then spend one fresh-cache cold compile with the same 7 GiB guard and zero
+  checkpoints. The immutable contract is in
+  `research/experiment_separate_compile_process.md`.

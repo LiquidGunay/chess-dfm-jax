@@ -419,3 +419,14 @@ checkpoint, or state is written. The empty run directory and 108 KiB
 dedicated partial cache are removed, leaving the ordinary cache and exact
 seven-state retention set unchanged. Do not adopt or sweep this flag; inspect
 host initialization/import/compiler lifetimes next.
+
+Experiment 026 is the separately guarded compile-process test in
+`experiment_separate_compile_process.md`. A normal incumbent cache hit peaks
+at `6.158 GB` group RSS and exactly reproduces retained metrics; aggressive
+glibc arena/trim settings reduce that by only 16 MB and are not adopted. The
+candidate adds a fail-closed `--compile-only` path that constructs identical
+model/optimizer shapes, releases construction-only NumPy weights, populates
+the JAX cache without opening the 1.8 GiB legacy state, and exits. The normal
+trainer then verifies/restores the source and executes the cache hit. The two
+GPU processes are sequential, use the unchanged guard, and write no
+checkpoint during validation.
