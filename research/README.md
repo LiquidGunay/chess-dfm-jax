@@ -28,6 +28,7 @@ arena_history_trust.py sealed O(1) internal history attestations
 local_policy.py   strict current-only localized DFM arena adapter
 play_arena.py     bounded batched gameplay with exact history replay
 evaluate_arena.py strict in-process relative-Elo CLI and resumable blocks
+arena_results.tsv compact append-only paired-strength and timing ledger
 program.md        rules for automated research
 results.tsv       compact append-only experiment ledger
 ```

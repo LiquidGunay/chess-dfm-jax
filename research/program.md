@@ -724,6 +724,26 @@ those immutable run reports rather than hand-editing historical summaries.
 Compiler-only experiments execute zero model updates and therefore record
 compiler/resource metrics with no synthetic loss value.
 
+Once the PyTorch migration gate is open, model-side autoresearch uses chess
+play as its primary ranking signal. Each completed 30-minute candidate first
+passes the finite-loss, legality, checkpoint, validation, and latent-health
+gates, then plays the same 128 color-reversed development pairs under the
+frozen eight-pass, deterministic-greedy, cap-256 arena contract. Optimize the
+pentanomial pair score against the fixed reference and report its monotonic
+logistic-Elo transform; do not optimize the numerically less stable Elo
+transform directly. Record held-out DFM CE as a secondary explanatory metric,
+not the final ranker.
+
+Only model-side code may change inside this loop. Opening pools, histories,
+action codecs, game adjudication, inference passes, batching, ply cap, and the
+reference checkpoint stay frozen. A candidate that changes inference cost
+must report latency and remains subject to the frozen inference budget. The
+reused 128-pair development pool is a selection set and cannot authorize
+promotion. Confirm winners on disjoint, predeclared pairs before the full
+promotion GSPRT, and periodically rerun the raw-BT4 anchor. Any incomplete
+action-codec coverage remains a charged fault and must be separated from model
+strength before treating small Elo differences as scientific signal.
+
 The strength gate consumes complete color-reversed pairs from the repinned
 promotion pool. Only the normalized-Elo GSPRT may promote a checkpoint:
 `H0=0`, `H1=+20`, `alpha=beta=0.05`, checked after complete pairs and capped
@@ -751,11 +771,17 @@ Reject a run if:
 6. Outside the unattended loop, complete a matched 30-minute baseline
    qualification and open readiness only if its repeats pass every gate.
 7. Once readiness is open, run the fixed 30-minute experiment.
-8. Append exactly one row to `research/results.tsv` for that accepted
-   30-minute experiment; leave smoke and pre-baseline calibration runs out.
-9. Keep improvements that exceed baseline noise and pass every gate.
-10. Revert rejected changes without rewriting the result history.
-11. Promote only confirmed candidates to relative Elo.
+8. If its offline health gates pass, run the frozen 128-pair development arena
+   and rank it by paired score against the fixed reference.
+9. Append exactly one row to `research/results.tsv` and one row to
+   `research/arena_results.tsv` for that completed 30-minute experiment; the
+   run ID and arena-report path bind the rows to their immutable detailed
+   reports. Leave smoke and pre-baseline calibration runs out.
+10. Keep improvements that exceed paired-development noise and pass every
+    gate.
+11. Revert rejected changes without rewriting the result history.
+12. Promote only candidates confirmed on disjoint pairs to the normalized-Elo
+    GSPRT.
 
 Prefer simple changes whose effects can be explained. Record surprises and
 negative results; they are part of the research output.

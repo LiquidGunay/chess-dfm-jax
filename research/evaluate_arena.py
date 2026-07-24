@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import dataclasses
+import gc
 import hashlib
 import json
 import math
@@ -252,6 +253,8 @@ def _git_commit() -> str:
 def _code_provenance() -> dict[str, Any]:
     paths = (
         "research/train.py",
+        "research/train_torch.py",
+        "research/evaluate_torch_migration_parity.py",
         "research/inference.py",
         "research/local_policy.py",
         "research/raw_bt4_policy.py",
@@ -284,6 +287,14 @@ class ResearchCheckpointDescriptor:
     checkpoint_dir: Path
     manifest: dict[str, Any]
     config: Any
+    descriptor: dict[str, Any]
+
+
+@dataclasses.dataclass(frozen=True)
+class TorchResearchCheckpointDescriptor:
+    checkpoint_dir: Path
+    manifest: dict[str, Any]
+    run_config: dict[str, Any]
     descriptor: dict[str, Any]
 
 
@@ -359,6 +370,111 @@ def research_checkpoint_descriptor(
         checkpoint_dir=checkpoint_dir,
         manifest=manifest,
         config=config,
+        descriptor=descriptor,
+    )
+
+
+def torch_research_checkpoint_descriptor(
+    path: Path,
+    *,
+    models_dir: Path,
+) -> TorchResearchCheckpointDescriptor:
+    """Describe a strict model-only checkpoint from the eager-Torch trainer."""
+
+    from research.train_torch import CONFIG
+
+    candidate = require_within_workspace(path)
+    if (candidate / "checkpoint" / "manifest.json").is_file():
+        checkpoint_dir = require_within_workspace(candidate / "checkpoint")
+        run_root = candidate
+    elif (candidate / "manifest.json").is_file():
+        checkpoint_dir = candidate
+        run_root = require_within_workspace(candidate.parent)
+    else:
+        raise FileNotFoundError(
+            f"No eager-Torch checkpoint manifest under {candidate}"
+        )
+
+    manifest_path = require_within_workspace(checkpoint_dir / "manifest.json")
+    manifest = _load_json_object(
+        manifest_path,
+        label="eager-Torch checkpoint manifest",
+    )
+    if manifest.get("format") != "chess-dfm-torch-model-v1":
+        raise ValueError("Unsupported eager-Torch checkpoint format.")
+    if manifest.get("model_only") is not True:
+        raise ValueError("Eager-Torch arena checkpoint must be model-only.")
+    state = manifest.get("state")
+    if not isinstance(state, dict) or state.get("path") != "model.safetensors":
+        raise ValueError("Eager-Torch checkpoint has an invalid state record.")
+    state_path = require_within_workspace(checkpoint_dir / "model.safetensors")
+    if (
+        not state_path.is_file()
+        or state_path.stat().st_size != int(state.get("size_bytes", -1))
+    ):
+        raise ValueError("Eager-Torch checkpoint state size mismatch.")
+
+    run_config_path = require_within_workspace(run_root / "run_config.json")
+    run_config = _load_json_object(
+        run_config_path,
+        label="eager-Torch run config",
+    )
+    if (
+        run_config.get("framework") != "torch"
+        or run_config.get("execution") != "eager"
+        or run_config.get("torch_compile") is not False
+    ):
+        raise ValueError("Eager-Torch run execution contract mismatch.")
+    expected_config = dataclasses.asdict(CONFIG)
+    if run_config.get("config") != expected_config:
+        raise ValueError(
+            "Eager-Torch checkpoint config differs from the checked-out "
+            "one-file trainer; evaluate it at its recorded git commit."
+        )
+
+    model_path = require_within_workspace(models_dir / "BT4_exported.pb.gz")
+    if not model_path.is_file():
+        raise ValueError(f"Raw BT4 asset does not exist: {model_path}")
+    descriptor = {
+        "kind": "torch_research",
+        "action_codec_id": ACTION_CODEC_LEGACY_ABSOLUTE_1858,
+        "plane_history_mode": PLANE_HISTORY_MODE_CURRENT_ONLY_AS_PREPROCESSED,
+        "checkpoint_dir": str(checkpoint_dir),
+        "manifest_path": str(manifest_path),
+        "manifest_sha256": sha256_file(manifest_path),
+        "research_update": int(manifest["optimizer_update"]),
+        "optimizer_resume_supported": bool(
+            manifest.get("optimizer_resume_supported", False)
+        ),
+        "source_mapping_sha256": manifest.get("source_mapping_sha256"),
+        "state": {
+            "path": str(state_path),
+            "size_bytes": int(state["size_bytes"]),
+            "sha256": str(state["sha256"]),
+            "leaf_count": int(state["leaf_count"]),
+        },
+        "lineage": run_config.get("source"),
+        "torch_run_config": {
+            "path": str(run_config_path),
+            "sha256": sha256_file(run_config_path),
+            "git_commit": run_config.get("git_commit"),
+            "framework": run_config.get("framework"),
+            "execution": run_config.get("execution"),
+            "torch_compile": run_config.get("torch_compile"),
+        },
+        "model_config": expected_config,
+        "jax_materialization": (
+            "exact_shape_dtype_value_checked_from_model_safetensors"
+        ),
+        "bt4_constructor": {
+            "path": str(model_path),
+            "sha256": sha256_file(model_path),
+        },
+    }
+    return TorchResearchCheckpointDescriptor(
+        checkpoint_dir=checkpoint_dir,
+        manifest=manifest,
+        run_config=run_config,
         descriptor=descriptor,
     )
 
@@ -503,6 +619,71 @@ def load_research_policy(
         {
             "load_seconds": elapsed,
             "checkpoint_dir": restored["checkpoint_dir"],
+        },
+    )
+
+
+def load_torch_research_policy(
+    checkpoint: TorchResearchCheckpointDescriptor,
+    *,
+    bt4_params: dict[str, Any],
+    model_id: str,
+    seed: int,
+    refinement_passes: int,
+    collect_diagnostics: bool,
+    inference_batch_size: int,
+) -> tuple[LocalDFMPolicy, dict[str, Any]]:
+    """Materialize a strict Torch model-only state into the frozen JAX arena."""
+
+    from research.evaluate_torch_migration_parity import (
+        _apply_and_verify_jax_checkpoint,
+        _checkpoint_tree,
+        _jax_config,
+    )
+    from research.train import JointLatentSASAModel
+
+    started = time.perf_counter()
+    tree, manifest, tree_summary, ordered_names = _checkpoint_tree(
+        checkpoint.checkpoint_dir
+    )
+    if manifest != checkpoint.manifest:
+        raise ValueError("Eager-Torch checkpoint manifest changed during load.")
+    config = _jax_config("bfloat16")
+    encoder = make_bt4_model(
+        bt4_params,
+        dtype=jnp.bfloat16,
+        attention_impl="manual",
+        train_encoder=True,
+    )
+    model = JointLatentSASAModel(
+        encoder,
+        config,
+        rngs=nnx.Rngs(seed),
+    )
+    roundtrip = _apply_and_verify_jax_checkpoint(
+        model,
+        tree,
+        ordered_names=ordered_names,
+        expected_summary=tree_summary,
+    )
+    del tree
+    gc.collect()
+    elapsed = time.perf_counter() - started
+    return (
+        LocalDFMPolicy(
+            model=model,
+            model_id=model_id,
+            refinement_passes=refinement_passes,
+            trace_top_k=1,
+            collect_diagnostics=collect_diagnostics,
+            inference_batch_size=inference_batch_size,
+            history_validation_mode=HISTORY_VALIDATION_TRUSTED_ARENA_ENDPOINT,
+        ),
+        {
+            "load_seconds": elapsed,
+            "checkpoint_dir": str(checkpoint.checkpoint_dir),
+            "checkpoint_state_sha256": manifest["state"]["sha256"],
+            "jax_roundtrip": roundtrip,
         },
     )
 
@@ -1324,7 +1505,17 @@ def run_blocks(
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--candidate", type=Path, required=True)
+    candidate = parser.add_mutually_exclusive_group(required=True)
+    candidate.add_argument(
+        "--candidate",
+        type=Path,
+        help="Standard JAX research checkpoint.",
+    )
+    candidate.add_argument(
+        "--candidate-torch",
+        type=Path,
+        help="Strict model-only checkpoint from research/train_torch.py.",
+    )
     opponent = parser.add_mutually_exclusive_group()
     opponent.add_argument(
         "--opponent-checkpoint",
@@ -1432,11 +1623,24 @@ def main(argv: Sequence[str] | None = None) -> int:
         expected_manifest_sha256=tier.history_manifest_sha256,
     )
 
-    candidate_descriptor = research_checkpoint_descriptor(
-        args.candidate,
-        models_dir=models_dir,
-    )
-    candidate_id = "candidate-" + candidate_descriptor.descriptor["state"]["sha256"][:12]
+    if args.candidate_torch is None:
+        candidate_descriptor = research_checkpoint_descriptor(
+            args.candidate,
+            models_dir=models_dir,
+        )
+        candidate_id = (
+            "candidate-"
+            + candidate_descriptor.descriptor["state"]["sha256"][:12]
+        )
+    else:
+        candidate_descriptor = torch_research_checkpoint_descriptor(
+            args.candidate_torch,
+            models_dir=models_dir,
+        )
+        candidate_id = (
+            "candidate-torch-"
+            + candidate_descriptor.descriptor["state"]["sha256"][:12]
+        )
     if args.opponent_raw_bt4:
         opponent_descriptor = raw_bt4_descriptor(models_dir=models_dir)
         opponent_config = None
@@ -1546,15 +1750,26 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 0
 
     bt4_params = load_mapped_bt4_params(models_dir=models_dir)
-    candidate_policy, candidate_load = load_research_policy(
-        candidate_descriptor,
-        bt4_params=bt4_params,
-        model_id=candidate_id,
-        seed=args.seed,
-        refinement_passes=args.refinement_passes,
-        collect_diagnostics=args.collect_diagnostics,
-        inference_batch_size=inference_batch_size,
-    )
+    if args.candidate_torch is None:
+        candidate_policy, candidate_load = load_research_policy(
+            candidate_descriptor,
+            bt4_params=bt4_params,
+            model_id=candidate_id,
+            seed=args.seed,
+            refinement_passes=args.refinement_passes,
+            collect_diagnostics=args.collect_diagnostics,
+            inference_batch_size=inference_batch_size,
+        )
+    else:
+        candidate_policy, candidate_load = load_torch_research_policy(
+            candidate_descriptor,
+            bt4_params=bt4_params,
+            model_id=candidate_id,
+            seed=args.seed,
+            refinement_passes=args.refinement_passes,
+            collect_diagnostics=args.collect_diagnostics,
+            inference_batch_size=inference_batch_size,
+        )
     if args.opponent_raw_bt4:
         opponent_policy, opponent_load = load_raw_bt4_policy(
             bt4_params=bt4_params,

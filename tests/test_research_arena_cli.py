@@ -31,6 +31,7 @@ from research.evaluate_arena import (
     _static_inference_batch_size,
     load_run_state,
     run_blocks,
+    torch_research_checkpoint_descriptor,
 )
 from research.local_policy import (
     STATIC_INFERENCE_BATCHING_SCHEMA,
@@ -122,6 +123,67 @@ def _fixture_assets(root: Path):
         expected_manifest_sha256=sidecar["manifest_sha256"],
     )
     return pool, sidecar_path, sidecar, loaded
+
+
+def test_torch_checkpoint_descriptor_is_strict_and_plot_reproducible(
+    workspace_tmp: Path,
+):
+    import dataclasses
+
+    from research.train_torch import CONFIG
+
+    models_dir = workspace_tmp / "models"
+    models_dir.mkdir()
+    model_path = models_dir / "BT4_exported.pb.gz"
+    model_path.write_bytes(b"fixture-bt4")
+    run_root = workspace_tmp / "torch-run"
+    checkpoint_dir = run_root / "checkpoint"
+    checkpoint_dir.mkdir(parents=True)
+    state_path = checkpoint_dir / "model.safetensors"
+    state_path.write_bytes(b"fixture-state")
+    state_sha256 = hashlib.sha256(state_path.read_bytes()).hexdigest()
+    manifest = {
+        "format": "chess-dfm-torch-model-v1",
+        "model_only": True,
+        "optimizer_resume_supported": False,
+        "optimizer_update": 7,
+        "source_mapping_sha256": "a" * 64,
+        "state": {
+            "path": "model.safetensors",
+            "size_bytes": state_path.stat().st_size,
+            "sha256": state_sha256,
+            "leaf_count": 455,
+        },
+    }
+    (checkpoint_dir / "manifest.json").write_text(
+        json.dumps(manifest),
+        encoding="utf-8",
+    )
+    run_config = {
+        "framework": "torch",
+        "execution": "eager",
+        "torch_compile": False,
+        "git_commit": "b" * 40,
+        "config": dataclasses.asdict(CONFIG),
+        "source": {"step": 265000},
+    }
+    (run_root / "run_config.json").write_text(
+        json.dumps(run_config),
+        encoding="utf-8",
+    )
+
+    descriptor = torch_research_checkpoint_descriptor(
+        run_root,
+        models_dir=models_dir,
+    )
+
+    assert descriptor.checkpoint_dir == checkpoint_dir
+    assert descriptor.manifest == manifest
+    assert descriptor.run_config == run_config
+    assert descriptor.descriptor["kind"] == "torch_research"
+    assert descriptor.descriptor["research_update"] == 7
+    assert descriptor.descriptor["state"]["sha256"] == state_sha256
+    assert descriptor.descriptor["torch_run_config"]["git_commit"] == "b" * 40
 
 
 class _Selection:

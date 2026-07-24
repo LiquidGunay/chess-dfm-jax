@@ -34,7 +34,10 @@ def _requested_mode() -> str:
         return "cpu-compare"
 
 
-if _requested_mode() in {"cpu-compare", "torch-export"}:
+if __name__ == "__main__" and _requested_mode() in {
+    "cpu-compare",
+    "torch-export",
+}:
     os.environ.setdefault("JAX_PLATFORMS", "cpu")
 
 import jax  # noqa: E402

@@ -208,3 +208,45 @@ This evidence amends, rather than silently relaxes, correctness gate 3:
 `PYTORCH_AUTORESEARCH_READY` remains false. The remaining gates are
 the control checkpoint's matched full-pool PyTorch validation, exact JAX round
 trip, and full two-pool JAX validation/eight-pass inference cross-check.
+
+## First Torch-checkpoint Elo timing, 2026-07-24
+
+The frozen arena now accepts the strict model-only eager-Torch checkpoint
+directly. It constructs the matching JAX inference model and requires an exact
+455-leaf, 705,987,352-byte shape/dtype/value round trip before warm-up; it
+does not write a duplicate checkpoint. The current batch-512/update-564
+control passed with combined state checksum
+`a3a99de695eb73b28a35eda75323a075713d0032debdaf2e3c8919a429486b3d`.
+
+The 128-pair, 256-game development arena against original raw BT4 completed
+through `research/run_gpu.sh` in 176.583 seconds cold end to end. Exact
+checkpoint load/audit took 23.778 seconds, candidate/raw warm-up took
+2.855/1.242 seconds, and gameplay took 131.606 seconds. The candidate/raw
+mean batched policy-call times were 41.463/34.226 ms at physical batch 16.
+The guard measured 6,588,268,544 bytes peak process-group RSS and
+7,485,341,696 bytes minimum host `MemAvailable`.
+
+The control scored `35.7422%`: 2 wins, 179 draws, and 75 losses, for
+descriptive logistic Elo `-101.90` with the deliberately conservative
+pair-aware interval `[-202.74,-15.67]`. Four losses were charged
+`no_representable_move` faults from incomplete legacy action-codec coverage;
+raw BT4 had complete canonical coverage. This result is a valid frozen arena
+outcome but is not a clean estimate of small model-strength differences until
+the codec asymmetry is removed or the fixed-reference comparison makes it
+symmetrical.
+
+At this throughput, a cold 128-pair screen adds under three minutes to a
+30-minute training experiment. That is suitable for rejecting large chess
+regressions and ranking large gains, but not for resolving roughly 10--20 Elo:
+the development interval is far wider. Use paired score—not the transformed
+point Elo—as the numerical autoresearch objective, retain offline
+legality/collapse checks as hard gates, and confirm apparent winners on
+disjoint pairs.
+
+All local controls and architecture experiments restore every one of the 455
+model leaves from the joint step-265,000 checkpoint and create a fresh
+optimizer. The restored leaves include the fine-tuned BT4 encoder, state
+projector, DFM planner, JEPA embeddings/adapters/transition/norm, and disabled
+value/WDL head. Constructor initializations are overwritten. Runs do not chain
+from the preceding local winner, but they are continuations from the pretrained
+joint model rather than raw BT4 plus fresh JEPA/DFM modules.

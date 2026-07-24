@@ -1905,6 +1905,14 @@ sweeps, held-out data, and repeated seeds.
   elevated evaluation launch at its usage-limit gate and reported access
   resuming 2026-07-28 17:03 UTC. Retain the sole final state and queue these
   read-only GPU gates without bypassing the launcher.
+- [x] Add a no-duplicate-checkpoint Torch-to-JAX arena loader and time the
+  first current-control strength screen against raw BT4. The exact 455-leaf
+  round trip passes; 128 color-reversed pairs take 176.583 seconds cold and
+  131.606 seconds in gameplay. The control scores `35.7422%` or `-101.90`
+  descriptive logistic Elo, but four charged legacy-codec coverage faults
+  mean small strength differences remain contaminated. Use the paired arena
+  score as the post-health-gate model-selection signal once coverage is made
+  symmetric; keep eight passes and all evaluator code frozen.
 - [ ] Resume 30-minute one-change autoresearch runs in
   `research/train_torch.py`, recording every loss component and systems
   metric. Every run now emits an exact terminal plus fixed first/last-64-update
