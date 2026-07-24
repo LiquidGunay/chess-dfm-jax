@@ -1907,6 +1907,8 @@ sweeps, held-out data, and repeated seeds.
   read-only GPU gates without bypassing the launcher.
 - [ ] Resume 30-minute one-change autoresearch runs in
   `research/train_torch.py`, recording every loss component and systems
-  metric. Consider regional `torch.compile` only if measured end-to-end
-  payback occurs within a typical run; return selected architectures to JAX
-  for hero runs.
+  metric. Every run now emits an exact terminal plus fixed first/last-64-update
+  `loss_summary.json`; use the frozen two-pool validation DFM CE, rather than
+  terminal train loss, for cross-experiment quality plots. Consider regional
+  `torch.compile` only if measured end-to-end payback occurs within a typical
+  run; return selected architectures to JAX for hero runs.

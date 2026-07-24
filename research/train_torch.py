@@ -60,6 +60,26 @@ _MASK_TOKEN = 1858
 _VOCAB_SIZE = 1858
 _LEGAL_PAD = np.iinfo(np.uint16).max
 _HASH_CHUNK_BYTES = 8 * 1024 * 1024
+_LOSS_SUMMARY_WINDOW_UPDATES = 64
+_LOSS_SUMMARY_METRICS = (
+    "loss",
+    "unclipped_loss",
+    "dfm_ce_loss",
+    "accuracy",
+    "first_legality_loss",
+    "weighted_legality_loss",
+    "first_legal_mass",
+    "jepa_positive_loss",
+    "jepa_sigreg_loss",
+    "jepa_pred_sigreg_loss",
+    "z_state_norm",
+    "z_pred_norm",
+    "z_target_norm",
+    "learning_rate",
+    "bt4_learning_rate",
+    "gradient_global_norm",
+    "gradient_clip_scale",
+)
 
 
 # AUTORESEARCH EDIT SURFACE. Keep systems/parity controls below unchanged.
@@ -1527,6 +1547,65 @@ def _json_scalars(values: Mapping[str, Tensor]) -> dict[str, float]:
     }
 
 
+def _summarize_training_records(
+    records: list[dict[str, Any]],
+    *,
+    window_updates: int = _LOSS_SUMMARY_WINDOW_UPDATES,
+) -> dict[str, Any]:
+    """Return compact, plot-ready terminal and fixed-window train metrics."""
+
+    if not records:
+        raise ValueError("Cannot summarize an empty training run")
+    if window_updates < 1:
+        raise ValueError("window_updates must be positive")
+    missing = [
+        (int(row.get("update", -1)), key)
+        for row in records
+        for key in _LOSS_SUMMARY_METRICS
+        if key not in row
+    ]
+    if missing:
+        raise KeyError(f"Training metrics missing from loss-summary ABI: {missing[:10]}")
+
+    window_count = min(window_updates, len(records))
+
+    def summarize_window(rows: list[dict[str, Any]]) -> dict[str, Any]:
+        return {
+            "updates": [int(rows[0]["update"]), int(rows[-1]["update"])],
+            **{
+                key: float(np.mean([float(row[key]) for row in rows], dtype=np.float64))
+                for key in _LOSS_SUMMARY_METRICS
+            },
+        }
+
+    first_window = summarize_window(records[:window_count])
+    last_window = summarize_window(records[-window_count:])
+    terminal = {
+        "update": int(records[-1]["update"]),
+        "examples": int(records[-1]["examples"]),
+        **{key: float(records[-1][key]) for key in _LOSS_SUMMARY_METRICS},
+    }
+    return {
+        "schema_version": "torch-eager-loss-summary-v2",
+        "window_updates": window_count,
+        "terminal": terminal,
+        "first_window": first_window,
+        "last_window": last_window,
+        "last_minus_first": {
+            key: float(last_window[key] - first_window[key])
+            for key in _LOSS_SUMMARY_METRICS
+        },
+        "plot_contract": {
+            "training_curve_source": "metrics.jsonl",
+            "training_endpoint": "last_window",
+            "primary_cross_experiment_metric": (
+                "matched mean validation dfm_ce_loss over frozen seeds 10000 and 20000"
+            ),
+            "promotion_metric": "normalized-Elo GSPRT",
+        },
+    }
+
+
 def _flatten_torch_metrics(values: Mapping[str, Tensor]) -> dict[str, float]:
     """Flatten scalar and horizon-vector tensors with the JAX report ABI."""
 
@@ -2103,9 +2182,9 @@ def train(args: argparse.Namespace) -> int:
                 **optimizer_metrics,
             }
             records.append(record)
+            with metrics_path.open("a", encoding="utf-8") as handle:
+                handle.write(json.dumps(record, sort_keys=True) + "\n")
             if update == 1 or update % args.log_every == 0:
-                with metrics_path.open("a", encoding="utf-8") as handle:
-                    handle.write(json.dumps(record, sort_keys=True) + "\n")
                 print(json.dumps(record, sort_keys=True), flush=True)
             del (
                 prepared,
@@ -2136,6 +2215,8 @@ def train(args: argparse.Namespace) -> int:
             optimizer_update=optimizer.update,
             data_cursor=data_cursor,
         )
+    loss_summary = _summarize_training_records(records)
+    _write_json(output_dir / "loss_summary.json", loss_summary)
     report = {
         "schema_version": "torch-eager-train-report-v1",
         "completed_utc": datetime.now(UTC).isoformat(),
@@ -2170,6 +2251,7 @@ def train(args: argparse.Namespace) -> int:
         "gpu_peak_memory_allocated_bytes": torch.cuda.max_memory_allocated(),
         "gpu_peak_memory_reserved_bytes": torch.cuda.max_memory_reserved(),
         "last_metrics": records[-1],
+        "loss_summary": loss_summary,
         "checkpoint": checkpoint_manifest,
     }
     _write_json(output_dir / "report.json", report)

@@ -709,12 +709,20 @@ The weighted training loss is not by itself a promotion metric.
 Every actual training experiment must nevertheless retain its full loss
 record: per-update total and unclipped loss plus DFM CE, JEPA positive,
 target-SIGReg, prediction-SIGReg, legality, and any enabled auxiliary
-component in `metrics.jsonl`; final training and initial/final validation
-aggregates in `report.json`; and the primary validation DFM CE in
-`research/results.tsv` for accepted 30-minute experiments. Build consolidated
-loss comparisons from those immutable run reports rather than hand-editing
-historical summaries. Compiler-only experiments execute zero model updates
-and therefore record compiler/resource metrics with no synthetic loss value.
+component in `metrics.jsonl`, independent of console-log frequency. Each
+PyTorch run must also write `loss_summary.json` with the exact terminal update,
+the mean of the first and last 64 updates (or the whole run when shorter), and
+their delta for every objective component and policy/latent diagnostic.
+Retain final training and initial/final validation aggregates in `report.json`,
+and the primary validation DFM CE in `research/results.tsv` for accepted
+30-minute experiments. Training-curve plots may use `metrics.jsonl`, and
+endpoint diagnostic plots may use the fixed last-window summary; the
+cross-experiment quality plot must use the matched mean validation DFM CE over
+the frozen seed-10,000 and seed-20,000 pools, not a noisy terminal training
+batch or the weighted multitask loss. Build consolidated comparisons from
+those immutable run reports rather than hand-editing historical summaries.
+Compiler-only experiments execute zero model updates and therefore record
+compiler/resource metrics with no synthetic loss value.
 
 The strength gate consumes complete color-reversed pairs from the repinned
 promotion pool. Only the normalized-Elo GSPRT may promote a checkpoint:
@@ -735,7 +743,9 @@ Reject a run if:
 
 1. Inspect the current code, previous result, and baseline noise.
 2. State one testable hypothesis.
-3. Make one coherent change to `research/train.py`.
+3. Make one coherent change to the active one-file trainer
+   (`research/train_torch.py` for local short runs; port only selected
+   candidates back to `research/train.py` for JAX hero runs).
 4. Run correctness and short GPU smoke tests.
 5. Repeat the baseline/candidate when bitwise repeatability is absent.
 6. Outside the unattended loop, complete a matched 30-minute baseline

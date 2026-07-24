@@ -168,6 +168,13 @@ training DFM CE changes `3.47652 -> 3.42899`, JEPA positive loss
 there is no training-stream collapse claim because the frozen full-pool rank
 gate is still authoritative.
 
+Every subsequent PyTorch run writes every update to `metrics.jsonl` regardless
+of console-log frequency and automatically emits `loss_summary.json`. The
+summary stores the exact terminal metrics plus fixed first/last-64-update
+means and deltas. These are plot-ready training diagnostics; matched two-pool
+validation DFM CE remains the cross-experiment quality endpoint, and Elo
+remains the strength endpoint.
+
 Exactly one terminal checkpoint was written: 455 leaves, 705,987,352 tensor
 bytes in a 706,033,120-byte safetensors file, SHA-256
 `cd45d2ecb17d35439ec1ee54b3ad3ce02bcb5d2cdc4571e37bddcda15e34c49c`.

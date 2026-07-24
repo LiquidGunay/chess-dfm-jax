@@ -11,6 +11,7 @@ from research.train_torch import (
     CONFIG,
     MuonAdamW,
     _prepare_training_step,
+    _summarize_training_records,
     load_model_checkpoint,
     load_model_checkpoint_numpy_tree,
     save_model_checkpoint,
@@ -249,3 +250,53 @@ def test_prefetch_preparation_is_schedule_keyed_and_deterministic():
         expected,
     )
     assert first.prepare_seconds >= 0.0
+
+
+def test_training_loss_summary_preserves_terminal_and_fixed_window_metrics():
+    metric_names = (
+        "loss",
+        "unclipped_loss",
+        "dfm_ce_loss",
+        "accuracy",
+        "first_legality_loss",
+        "weighted_legality_loss",
+        "first_legal_mass",
+        "jepa_positive_loss",
+        "jepa_sigreg_loss",
+        "jepa_pred_sigreg_loss",
+        "z_state_norm",
+        "z_pred_norm",
+        "z_target_norm",
+        "learning_rate",
+        "bt4_learning_rate",
+        "gradient_global_norm",
+        "gradient_clip_scale",
+    )
+    records = [
+        {
+            "update": update,
+            "examples": update * 512,
+            **{
+                name: float(update + metric_index)
+                for metric_index, name in enumerate(metric_names)
+            },
+        }
+        for update in range(1, 6)
+    ]
+
+    summary = _summarize_training_records(records, window_updates=2)
+
+    assert summary["schema_version"] == "torch-eager-loss-summary-v2"
+    assert summary["window_updates"] == 2
+    assert summary["terminal"]["update"] == 5
+    assert summary["terminal"]["examples"] == 2560
+    assert summary["terminal"]["loss"] == 5.0
+    assert summary["first_window"]["updates"] == [1, 2]
+    assert summary["first_window"]["loss"] == 1.5
+    assert summary["last_window"]["updates"] == [4, 5]
+    assert summary["last_window"]["loss"] == 4.5
+    assert summary["last_minus_first"]["loss"] == 3.0
+    assert (
+        summary["plot_contract"]["primary_cross_experiment_metric"]
+        == "matched mean validation dfm_ce_loss over frozen seeds 10000 and 20000"
+    )
