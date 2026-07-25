@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""One-file eager-PyTorch BT4/DFM/JEPA autoresearch trainer.
+"""One-file PyTorch BT4/DFM/JEPA autoresearch trainer.
 
-This file intentionally keeps the production model, objective, optimizer, and
-training loop together.  The initial migration uses ordinary eager PyTorch:
-there is no ``torch.compile`` call in this file.  JAX remains the frozen
+This file intentionally keeps the production model, objective, optimizer,
+training loop, and bounded systems controls together.  Eager execution remains
+the numerical baseline; optional regional ``torch.compile`` and profiler
+windows are explicit command-line choices.  JAX remains the frozen
 numerical/checkpoint/evaluation oracle until every migration gate passes.
 """
 
@@ -13,12 +14,14 @@ import argparse
 import csv
 import dataclasses
 import gc
+import gzip
 import hashlib
 import hmac
 import json
 import math
 import os
 import pickle
+import shutil
 import stat
 import subprocess
 import sys
@@ -123,6 +126,11 @@ class Config:
     use_qk_norm: bool = True
     use_xsa: bool = True
     remat_blocks: bool = True
+    remat_bt4_blocks: bool | None = None
+    remat_projector_blocks: bool | None = None
+    remat_dfm_blocks: bool | None = None
+    use_bt4_sdpa: bool = False
+    use_head_sdpa: bool = False
     action_codec: str = "legacy_absolute_1858"
     use_bt4_policy_residual: bool = False
     root_legal_ce_coeff: float = 0.0
@@ -136,11 +144,14 @@ class Config:
 
 CONFIG = Config()
 _HERO_TRAIN_EXAMPLES = 28_343_296
+# Deterministic update-zero batch-1024 root CE was 2.870999574661255.
+# This makes the weighted root legal-conditional contribution exactly 0.25.
+_HERO_ROOT_LEGAL_CE_COEFFICIENT = 0.08707768618513193
 HERO_CONFIG = dataclasses.replace(
     CONFIG,
     action_codec="lc0_canonical_1858",
     use_bt4_policy_residual=True,
-    root_legal_ce_coeff=0.0,
+    root_legal_ce_coeff=_HERO_ROOT_LEGAL_CE_COEFFICIENT,
     wdl_coeff=0.25,
     target_sigreg_coeff=2.0,
     pred_sigreg_coeff=2.0,
@@ -154,6 +165,10 @@ HERO_CONFIG = dataclasses.replace(
     lr_total_examples=_HERO_TRAIN_EXAMPLES,
     lr_min_ratio=1e-3,
 )
+
+
+def _resolved_remat(specific: bool | None, fallback: bool) -> bool:
+    return fallback if specific is None else specific
 
 
 def _require_workspace(path: str | os.PathLike[str], *, exists: bool = False) -> Path:
@@ -284,8 +299,9 @@ class BT4Smolgen(nn.Module):
 
 
 class BT4EncoderLayer(nn.Module):
-    def __init__(self):
+    def __init__(self, *, use_sdpa: bool = False):
         super().__init__()
+        self.use_sdpa = bool(use_sdpa)
         dtype = torch.bfloat16
         self.wq = _raw_parameter((1024, 1024), dtype)
         self.wq_b = _raw_parameter((1024,), dtype)
@@ -308,10 +324,19 @@ class BT4EncoderLayer(nn.Module):
         q = q.reshape(batch, sequence, 32, 32).transpose(1, 2)
         k = k.reshape(batch, sequence, 32, 32).transpose(1, 2)
         v = v.reshape(batch, sequence, 32, 32).transpose(1, 2)
-        logits = (q @ k.transpose(-2, -1)) / math.sqrt(32.0)
-        logits = logits + self.smolgen(x, compute_dtype)
-        attention = F.softmax(logits, dim=-1)
-        out = attention @ v
+        smolgen_bias = self.smolgen(x, compute_dtype)
+        if self.use_sdpa:
+            out = F.scaled_dot_product_attention(
+                q,
+                k,
+                v,
+                attn_mask=smolgen_bias,
+                dropout_p=0.0,
+            )
+        else:
+            logits = (q @ k.transpose(-2, -1)) / math.sqrt(32.0)
+            attention = F.softmax(logits + smolgen_bias, dim=-1)
+            out = attention @ v
         out = out.transpose(1, 2).reshape(batch * sequence, 1024)
         out = self.wo(out, compute_dtype).reshape(batch, sequence, 1024)
         x = self.ln_attn(out * alpha + x, compute_dtype)
@@ -363,10 +388,17 @@ class BT4PolicyHead(nn.Module):
 
 
 class BT4Encoder(nn.Module):
-    def __init__(self, *, include_policy_head: bool = False):
+    def __init__(
+        self,
+        *,
+        include_policy_head: bool = False,
+        use_sdpa: bool = False,
+    ):
         super().__init__()
         self.embedding = BT4InputEmbedding()
-        self.layers = nn.ModuleList(BT4EncoderLayer() for _ in range(15))
+        self.layers = nn.ModuleList(
+            BT4EncoderLayer(use_sdpa=use_sdpa) for _ in range(15)
+        )
         self.policy_head = BT4PolicyHead() if include_policy_head else None
         self.alpha = float((2.0 * len(self.layers)) ** -0.25)
 
@@ -428,6 +460,7 @@ class TransformerStack(nn.Module):
         mlp_dim: int,
         use_qk_norm: bool,
         use_xsa: bool,
+        use_sdpa: bool,
         remat: bool,
     ):
         super().__init__()
@@ -438,6 +471,7 @@ class TransformerStack(nn.Module):
         self.swiglu_dim = _rounded_swiglu_dim(mlp_dim)
         self.use_qk_norm = bool(use_qk_norm)
         self.use_xsa = bool(use_xsa)
+        self.use_sdpa = bool(use_sdpa)
         self.remat = bool(remat)
         dtype = torch.float32
         self.attn_norm_scale = _raw_parameter((layers, width), dtype)
@@ -477,11 +511,19 @@ class TransformerStack(nn.Module):
         if self.use_qk_norm:
             q = self._qk_norm(q, compute_dtype)
             k = self._qk_norm(k, compute_dtype)
-        attention = F.softmax(
-            (q @ k.transpose(-2, -1)) / math.sqrt(self.head_dim),
-            dim=-1,
-        )
-        attention_heads = attention @ v
+        if self.use_sdpa:
+            attention_heads = F.scaled_dot_product_attention(
+                q,
+                k,
+                v,
+                dropout_p=0.0,
+            )
+        else:
+            attention = F.softmax(
+                (q @ k.transpose(-2, -1)) / math.sqrt(self.head_dim),
+                dim=-1,
+            )
+            attention_heads = attention @ v
         if self.use_xsa:
             value = v.float()
             value_direction = value * torch.rsqrt(value.square().sum(dim=-1, keepdim=True) + 1e-6)
@@ -532,7 +574,11 @@ class StateProjector(nn.Module):
             mlp_dim=config.projector_mlp_dim,
             use_qk_norm=config.use_qk_norm,
             use_xsa=config.use_xsa,
-            remat=config.remat_blocks,
+            use_sdpa=config.use_head_sdpa,
+            remat=_resolved_remat(
+                config.remat_projector_blocks,
+                config.remat_blocks,
+            ),
         )
 
     def forward(self, tokens: Tensor, compute_dtype: torch.dtype) -> Tensor:
@@ -638,6 +684,7 @@ class JointModel(nn.Module):
         dtype = torch.float32
         self.encoder = BT4Encoder(
             include_policy_head=config.use_bt4_policy_residual,
+            use_sdpa=config.use_bt4_sdpa,
         )
         self.state_projector = StateProjector(config)
         self.dfm_state_projector = RawLinear(1024, config.token_dim, dtype=dtype)
@@ -658,7 +705,11 @@ class JointModel(nn.Module):
             mlp_dim=config.dfm_mlp_dim,
             use_qk_norm=config.use_qk_norm,
             use_xsa=config.use_xsa,
-            remat=config.remat_blocks,
+            use_sdpa=config.use_head_sdpa,
+            remat=_resolved_remat(
+                config.remat_dfm_blocks,
+                config.remat_blocks,
+            ),
         )
         self.dfm_out_norm = RawRMSNorm(config.token_dim, dtype=dtype)
         self.out_proj = _raw_parameter((config.token_dim, _VOCAB_SIZE), dtype)
@@ -673,7 +724,10 @@ class JointModel(nn.Module):
         current = self.encoder.encode_current(
             current_planes,
             compute_dtype=compute_dtype,
-            remat=self.config.remat_blocks,
+            remat=_resolved_remat(
+                self.config.remat_bt4_blocks,
+                self.config.remat_blocks,
+            ),
         )
         future = self.encoder.encode_future_tail(
             selected_future_planes,
@@ -885,6 +939,7 @@ def loss_and_aux(
     choices: StepChoices,
     *,
     compute_dtype: torch.dtype,
+    capture: dict[str, Any] | None = None,
 ) -> tuple[Tensor, dict[str, Tensor]]:
     """Accepted no-norm, target/pred-SIGReg objective."""
 
@@ -920,6 +975,8 @@ def loss_and_aux(
         base_root_logits=base_policy_logits,
     )
     assert isinstance(logits, Tensor)
+    if capture is not None:
+        capture["root_logits"] = logits[:, 0].detach()
     log_probabilities = F.log_softmax(logits, dim=-1)
     ce = -torch.gather(log_probabilities, -1, actions.unsqueeze(-1)).squeeze(-1)
     ce_weight = is_masked.float() * valid.unsqueeze(1)
@@ -1026,6 +1083,17 @@ def loss_and_aux(
             (expected_value - target_value).square(),
             wdl_weight,
         )
+
+    if capture is not None:
+        capture["loss_components"] = {
+            "dfm_ce": dfm_ce,
+            "root_legal_conditional_ce": root_legal_ce,
+            "root_illegal_mass": legality,
+            "jepa_raw_mse": jepa_positive,
+            "target_sigreg": target_sigreg,
+            "prediction_sigreg": pred_sigreg,
+            "wdl_ce": wdl_loss,
+        }
 
     unclipped = (
         config.dfm_ce_coeff * dfm_ce
@@ -1463,7 +1531,6 @@ class MuonAdamW:
                     second_moment=(None if use_muon else torch.zeros_like(parameter)),
                 )
             )
-
     @staticmethod
     def _use_muon(name: str, parameter: Tensor) -> bool:
         if parameter.ndim < 2:
@@ -2150,10 +2217,18 @@ def canonicalize_trajectory_batch(
     from chess_dfm_jax.policy import (
         LC0_CANONICAL_1858_INPUT_FORMAT,
         encode_lc0_canonical_1858,
+        legal_move_mask,
         legal_mask_lc0_canonical_1858,
     )
 
-    required = {"fen_t", "input_format", "actions_uci", "future_valid", "legal_idx"}
+    required = {
+        "fen_t",
+        "input_format",
+        "actions_uci",
+        "future_valid",
+        "legal_idx",
+        "legal_count",
+    }
     missing = sorted(required - set(batch))
     if missing:
         raise KeyError(f"Canonical trajectory conversion requires metadata: {missing}")
@@ -2169,6 +2244,7 @@ def canonicalize_trajectory_batch(
         )
     batch_size, horizon = future_valid.shape
     source_legal = np.asarray(batch["legal_idx"])
+    source_legal_count = np.asarray(batch["legal_count"])
     legal_capacity = int(source_legal.shape[-1])
     canonical_actions = np.zeros((batch_size, horizon), dtype=np.int32)
     canonical_legal = np.full(
@@ -2189,38 +2265,74 @@ def canonicalize_trajectory_batch(
             raise ValueError(
                 f"Unsupported canonical input format at row {row}: {input_format!r}"
             )
-        board = chess.Board(_metadata_text(fens if fens.ndim == 0 else fens[row]))
+        fen = _metadata_text(fens if fens.ndim == 0 else fens[row])
+        candidate_records: list[tuple[int, np.ndarray]] | None = None
+        for chess960 in (False, True):
+            board = chess.Board(fen, chess960=chess960)
+            if not board.is_valid():
+                continue
+            records: list[tuple[int, np.ndarray]] = []
+            for offset in range(horizon):
+                if future_valid[row, offset] <= 0.0:
+                    continue
+                observed_source_legal = np.flatnonzero(
+                    legal_move_mask(board, "lc0_1858")
+                ).astype(np.int32, copy=False)
+                stored_count = int(source_legal_count[row, offset])
+                stored_source_legal = np.sort(
+                    source_legal[row, offset, :stored_count].astype(
+                        np.int32,
+                        copy=False,
+                    )
+                )
+                if not np.array_equal(
+                    observed_source_legal,
+                    stored_source_legal,
+                ):
+                    records = []
+                    break
+                move_text = _metadata_text(actions_uci[row, offset])
+                move = chess.Move.from_uci(move_text)
+                action = encode_lc0_canonical_1858(
+                    board,
+                    move,
+                    input_format=input_format,
+                )
+                legal = np.flatnonzero(
+                    legal_mask_lc0_canonical_1858(
+                        board,
+                        input_format=input_format,
+                    )
+                ).astype(np.int32, copy=False)
+                if not np.any(legal == action):
+                    records = []
+                    break
+                records.append((action, legal))
+                board.push(move)
+            expected_records = int(np.count_nonzero(future_valid[row] > 0.0))
+            if len(records) == expected_records:
+                candidate_records = records
+                break
+        if candidate_records is None:
+            raise RuntimeError(
+                f"Neither standard nor Chess960 semantics reproduce the stored "
+                f"legal/action trajectory at row {row}"
+            )
+        record_index = 0
         for offset in range(horizon):
             if future_valid[row, offset] <= 0.0:
                 continue
-            move_text = _metadata_text(actions_uci[row, offset])
-            move = chess.Move.from_uci(move_text)
-            action = encode_lc0_canonical_1858(
-                board,
-                move,
-                input_format=input_format,
-            )
-            legal = np.flatnonzero(
-                legal_mask_lc0_canonical_1858(
-                    board,
-                    input_format=input_format,
-                )
-            ).astype(np.int32, copy=False)
+            action, legal = candidate_records[record_index]
+            record_index += 1
             if legal.size > legal_capacity:
                 raise ValueError(
                     f"Canonical legal set at row {row}, horizon {offset + 1} "
                     f"needs {legal.size} slots; shard capacity is {legal_capacity}"
                 )
-            if not np.any(legal == action):
-                raise RuntimeError(
-                    f"Canonical target {action} is absent from its legal set at "
-                    f"row {row}, horizon {offset + 1}"
-                )
             canonical_actions[row, offset] = action
             canonical_legal[row, offset, : legal.size] = legal
             canonical_count[row, offset] = legal.size
             canonical_valid[row, offset] = 1.0
-            board.push(move)
 
     result["action_indices"] = canonical_actions
     result["action_idx"] = canonical_actions[:, 0]
@@ -2648,6 +2760,20 @@ def _start_gpu_monitor(
         "timestamp,utilization.gpu,utilization.memory,memory.used,memory.total,"
         "power.draw,clocks.sm,clocks.mem"
     )
+    monitor_env = os.environ.copy()
+    local_nvml = monitor_env.get("CHESS_DFM_NVML_LIBRARY_DIR")
+    if local_nvml:
+        nvml_dir = _require_workspace(Path(local_nvml), exists=True)
+        if not (nvml_dir / "libnvidia-ml.so.1").is_file():
+            raise FileNotFoundError(
+                f"Workspace-local NVML library is missing from {nvml_dir}"
+            )
+        existing_library_path = monitor_env.get("LD_LIBRARY_PATH")
+        monitor_env["LD_LIBRARY_PATH"] = (
+            str(nvml_dir)
+            if not existing_library_path
+            else f"{nvml_dir}{os.pathsep}{existing_library_path}"
+        )
     process = subprocess.Popen(
         [
             "nvidia-smi",
@@ -2658,6 +2784,7 @@ def _start_gpu_monitor(
         stdout=samples,
         stderr=stderr,
         text=True,
+        env=monitor_env,
     )
     return process, samples, stderr
 
@@ -2713,8 +2840,239 @@ def _summarize_gpu_samples(path: Path) -> dict[str, float | int]:
     return summary
 
 
+def _apply_compile_regions(model: JointModel, regions: str) -> list[str]:
+    """Compile bounded repeated regions without changing parameter/checkpoint paths."""
+
+    if regions == "none":
+        return []
+    if regions not in {
+        "dfm-jepa",
+        "fresh",
+        "fresh-bt4-smolgen",
+        "fresh-bt4-smolgen-eager-numerics",
+        "fresh-bt4",
+        "fresh-bt4-eager-numerics",
+        "fresh-bt4-strict-numerics",
+    }:
+        raise ValueError(f"Unsupported compile region set: {regions!r}")
+    os.environ.setdefault("TORCHINDUCTOR_COMPILE_THREADS", "1")
+    import torch._inductor.config
+
+    torch._inductor.config.compile_threads = 1
+    modules: list[tuple[str, nn.Module]] = [
+        ("dfm_blocks", model.dfm_blocks),
+        ("jepa_transition", model.jepa_transition),
+    ]
+    compiled: list[str] = []
+    if regions == "fresh":
+        modules.insert(0, ("state_projector_blocks", model.state_projector.blocks))
+    elif regions in {
+        "fresh-bt4-smolgen",
+        "fresh-bt4-smolgen-eager-numerics",
+    }:
+        modules.insert(0, ("state_projector_blocks", model.state_projector.blocks))
+        for layer in model.encoder.layers:
+            smolgen_compile_kwargs: dict[str, Any] = {
+                "backend": "inductor",
+                "fullgraph": True,
+                "dynamic": False,
+            }
+            if regions == "fresh-bt4-smolgen-eager-numerics":
+                smolgen_compile_kwargs["options"] = {
+                    "emulate_precision_casts": True,
+                }
+            else:
+                smolgen_compile_kwargs["mode"] = "default"
+            layer.smolgen.forward = torch.compile(  # type: ignore[method-assign]
+                layer.smolgen.forward,
+                **smolgen_compile_kwargs,
+            )
+        compiled.append(
+            {
+                "fresh-bt4-smolgen": "bt4_smolgen_modules",
+                "fresh-bt4-smolgen-eager-numerics": (
+                    "bt4_smolgen_modules_eager_numerics"
+                ),
+            }[regions]
+        )
+    elif regions in {
+        "fresh-bt4",
+        "fresh-bt4-eager-numerics",
+        "fresh-bt4-strict-numerics",
+    }:
+        modules.insert(0, ("state_projector_blocks", model.state_projector.blocks))
+        # TorchDynamo's cache is keyed by the forward code object, so all 15
+        # structurally identical layer instances reuse regional compilations.
+        # Keep separate wrappers so parameters and state-dict paths stay native.
+        for layer in model.encoder.layers:
+            bt4_compile_kwargs: dict[str, Any] = {
+                "backend": "inductor",
+                "fullgraph": True,
+                "dynamic": False,
+            }
+            if regions in {
+                "fresh-bt4-eager-numerics",
+                "fresh-bt4-strict-numerics",
+            }:
+                bt4_compile_kwargs["options"] = {
+                    "emulate_precision_casts": True,
+                    **(
+                        {"epilogue_fusion": False}
+                        if regions == "fresh-bt4-strict-numerics"
+                        else {}
+                    ),
+                }
+            else:
+                bt4_compile_kwargs["mode"] = "default"
+            layer.forward = torch.compile(  # type: ignore[method-assign]
+                layer.forward,
+                **bt4_compile_kwargs,
+            )
+        compiled.append(
+            {
+                "fresh-bt4": "bt4_encoder_layers",
+                "fresh-bt4-eager-numerics": "bt4_encoder_layers_eager_numerics",
+                "fresh-bt4-strict-numerics": "bt4_encoder_layers_strict_numerics",
+            }[regions]
+        )
+    for name, module in modules:
+        module.forward = torch.compile(  # type: ignore[method-assign]
+            module.forward,
+            backend="inductor",
+            fullgraph=True,
+            dynamic=False,
+            mode="default",
+        )
+        compiled.append(name)
+    return compiled
+
+
+def _profiler_metric(event: Any, *names: str) -> float:
+    for name in names:
+        value = getattr(event, name, None)
+        if value is not None:
+            return float(value)
+    return 0.0
+
+
+def _write_profiler_artifacts(
+    profiler: Any,
+    output_dir: Path,
+    *,
+    profiled_update: int,
+) -> dict[str, Any]:
+    """Persist one bounded profiler window as a compact summary and gzip trace."""
+
+    key_averages = list(profiler.key_averages(group_by_input_shape=False))
+    rows = [
+        {
+            "name": str(event.key),
+            "count": int(event.count),
+            "self_cuda_time_us": _profiler_metric(
+                event,
+                "self_device_time_total",
+                "self_cuda_time_total",
+            ),
+            "cuda_time_us": _profiler_metric(
+                event,
+                "device_time_total",
+                "cuda_time_total",
+            ),
+            "self_cpu_time_us": float(event.self_cpu_time_total),
+            "cpu_time_us": float(event.cpu_time_total),
+            "flops": int(getattr(event, "flops", 0) or 0),
+        }
+        for event in key_averages
+    ]
+    top_cuda = sorted(
+        rows,
+        key=lambda row: (row["self_cuda_time_us"], row["cuda_time_us"]),
+        reverse=True,
+    )[:100]
+    top_cpu = sorted(
+        rows,
+        key=lambda row: (row["self_cpu_time_us"], row["cpu_time_us"]),
+        reverse=True,
+    )[:50]
+    table = profiler.key_averages().table(
+        sort_by="self_cuda_time_total",
+        row_limit=100,
+    )
+    table_path = _require_workspace(output_dir / "profile_table.txt")
+    table_path.write_text(table + "\n", encoding="utf-8")
+
+    raw_trace = _require_workspace(output_dir / ".profile_trace.json.partial")
+    compressed_trace = _require_workspace(output_dir / "profile_trace.json.gz")
+    profiler.export_chrome_trace(str(raw_trace))
+    with raw_trace.open("rb") as source, gzip.open(
+        compressed_trace,
+        "wb",
+        compresslevel=6,
+    ) as target:
+        shutil.copyfileobj(source, target, length=_HASH_CHUNK_BYTES)
+    raw_trace.unlink()
+
+    summary = {
+        "schema_version": "torch-profiler-single-update-v1",
+        "profiled_update": int(profiled_update),
+        "activities": ["cpu", "cuda"],
+        "record_shapes": True,
+        "profile_memory": True,
+        "with_flops": True,
+        "event_key_count": len(rows),
+        "aggregate_flops": int(sum(row["flops"] for row in rows)),
+        "top_ops_by_self_cuda_time": top_cuda,
+        "top_ops_by_self_cpu_time": top_cpu,
+        "table": {
+            "path": table_path.name,
+            "size_bytes": table_path.stat().st_size,
+            "sha256": _sha256_file(table_path),
+        },
+        "trace": {
+            "path": compressed_trace.name,
+            "size_bytes": compressed_trace.stat().st_size,
+            "sha256": _sha256_file(compressed_trace),
+            "compression": "gzip",
+        },
+    }
+    _write_json(output_dir / "profile_summary.json", summary)
+    return summary
+
+
+def _compile_counter_snapshot() -> dict[str, dict[str, int]]:
+    try:
+        from torch._dynamo.utils import counters
+    except (ImportError, AttributeError):
+        return {}
+    return {
+        str(category): {
+            str(key): int(value)
+            for key, value in values.items()
+        }
+        for category, values in counters.items()
+        if values
+    }
+
+
 def train(args: argparse.Namespace) -> int:
     config = HERO_CONFIG if args.recipe == "hero" else CONFIG
+    remat_modes = {
+        "all": (True, True, True),
+        "none": (False, False, False),
+        "bt4-only": (True, False, False),
+        "bt4-projector": (True, True, False),
+        "bt4-dfm": (True, False, True),
+        "heads-only": (False, True, True),
+    }
+    remat_bt4, remat_projector, remat_dfm = remat_modes[args.remat_mode]
+    config = dataclasses.replace(
+        config,
+        remat_bt4_blocks=remat_bt4,
+        remat_projector_blocks=remat_projector,
+        remat_dfm_blocks=remat_dfm,
+        use_bt4_sdpa=args.attention_impl == "sdpa-all",
+        use_head_sdpa=args.attention_impl in {"sdpa-heads", "sdpa-all"},
+    )
     if not torch.cuda.is_available():
         raise RuntimeError("research/train_torch.py train requires CUDA")
     if args.steps < 0 or args.train_seconds < 0:
@@ -2734,6 +3092,10 @@ def train(args: argparse.Namespace) -> int:
         raise ValueError("--prefetch-depth must be 0 or 1")
     if args.gpu_monitor_interval_ms != 0 and args.gpu_monitor_interval_ms < 50:
         raise ValueError("--gpu-monitor-interval-ms must be 0 or at least 50")
+    if args.profile_update < 0:
+        raise ValueError("--profile-update must be non-negative")
+    if args.profile_update > 0 and args.steps > 0 and args.profile_update > args.steps:
+        raise ValueError("--profile-update cannot exceed --steps")
     if args.save_every != 0 or args.save_updates:
         raise ValueError(
             "Periodic/sparse checkpoints are disabled during migration; use at most --save-final"
@@ -2776,6 +3138,7 @@ def train(args: argparse.Namespace) -> int:
             "optimizer": "fresh",
         }
     model.train()
+    compiled_regions = _apply_compile_regions(model, args.compile_regions)
     optimizer = MuonAdamW(
         model,
         config,
@@ -2805,8 +3168,21 @@ def train(args: argparse.Namespace) -> int:
         "created_utc": datetime.now(UTC).isoformat(),
         "git_commit": _git_commit(),
         "framework": "torch",
-        "execution": "eager",
-        "torch_compile": False,
+        "execution": (
+            "eager" if args.compile_regions == "none" else "regional-compile"
+        ),
+        "torch_compile": args.compile_regions != "none",
+        "compile_regions": compiled_regions,
+        "compile_settings": {
+            "backend": "inductor",
+            "fullgraph": True,
+            "dynamic": False,
+            "mode": "default",
+            "compile_threads": 1,
+            "max_autotune": False,
+        },
+        "remat_mode": args.remat_mode,
+        "attention_impl": args.attention_impl,
         "torch_version": torch.__version__,
         "cuda_version": torch.version.cuda,
         "device": torch.cuda.get_device_name(device),
@@ -2834,6 +3210,7 @@ def train(args: argparse.Namespace) -> int:
     run_started = time.perf_counter()
     deadline = run_started + args.train_seconds if args.train_seconds > 0 else None
     records: list[dict[str, Any]] = []
+    profiler_summary: dict[str, Any] | None = None
     update = 0
     data_cursor = args.data_start
     monitor = (
@@ -2912,6 +3289,20 @@ def train(args: argparse.Namespace) -> int:
             transfer_seconds = time.perf_counter() - transfer_started
 
             step_started = time.perf_counter()
+            profile_this_update = args.profile_update == update + 1
+            active_profiler = None
+            if profile_this_update:
+                active_profiler = torch.profiler.profile(
+                    activities=[
+                        torch.profiler.ProfilerActivity.CPU,
+                        torch.profiler.ProfilerActivity.CUDA,
+                    ],
+                    record_shapes=True,
+                    profile_memory=True,
+                    with_stack=False,
+                    with_flops=True,
+                )
+                active_profiler.start()
             event_start = torch.cuda.Event(enable_timing=True)
             event_forward = torch.cuda.Event(enable_timing=True)
             event_backward = torch.cuda.Event(enable_timing=True)
@@ -2930,6 +3321,13 @@ def train(args: argparse.Namespace) -> int:
             event_optimizer.record()
             torch.cuda.synchronize()
             step_seconds = time.perf_counter() - step_started
+            if active_profiler is not None:
+                active_profiler.stop()
+                profiler_summary = _write_profiler_artifacts(
+                    active_profiler,
+                    output_dir,
+                    profiled_update=update + 1,
+                )
             forward_cuda_seconds = event_start.elapsed_time(event_forward) / 1000.0
             backward_cuda_seconds = event_forward.elapsed_time(event_backward) / 1000.0
             optimizer_cuda_seconds = event_backward.elapsed_time(event_optimizer) / 1000.0
@@ -3038,6 +3436,8 @@ def train(args: argparse.Namespace) -> int:
             np.mean([row["host_overhead_in_step_seconds"] for row in records])
         ),
         "gpu_monitor": _summarize_gpu_samples(output_dir / "gpu_samples.csv"),
+        "profiler": profiler_summary,
+        "compile_counters": _compile_counter_snapshot(),
         "gpu_peak_memory_allocated_bytes": torch.cuda.max_memory_allocated(),
         "gpu_peak_memory_reserved_bytes": torch.cuda.max_memory_reserved(),
         "last_metrics": records[-1],
@@ -3046,6 +3446,902 @@ def train(args: argparse.Namespace) -> int:
     }
     _write_json(output_dir / "report.json", report)
     print(json.dumps(report, sort_keys=True), flush=True)
+    return 0
+
+
+def _gradient_audit_group(name: str) -> str:
+    if name.startswith("encoder."):
+        return "raw_bt4"
+    if name.startswith("state_projector."):
+        return "state_projector"
+    if name.startswith("dfm_state_projector."):
+        return "dfm_state_projector"
+    if name.startswith("jepa_"):
+        return "jepa"
+    if name.startswith("value_wdl_head."):
+        return "value_wdl"
+    return "dfm_policy"
+
+
+def _legal_root_actions(
+    root_logits: Tensor,
+    compact_batch: Mapping[str, Any],
+) -> tuple[Tensor, Tensor]:
+    legal_idx = torch.from_numpy(
+        np.ascontiguousarray(np.asarray(compact_batch["legal_idx"])[:, 0])
+    ).long()
+    legal_count = torch.from_numpy(
+        np.ascontiguousarray(np.asarray(compact_batch["legal_count"])[:, 0])
+    ).long()
+    safe = legal_idx.clamp(0, root_logits.shape[-1] - 1)
+    legal_logits = torch.gather(root_logits.float(), 1, safe)
+    slots = torch.arange(safe.shape[1]).unsqueeze(0)
+    legal_logits = torch.where(
+        slots < legal_count.unsqueeze(1),
+        legal_logits,
+        torch.full_like(legal_logits, -torch.inf),
+    )
+    selected_slot = legal_logits.argmax(dim=1, keepdim=True)
+    return torch.gather(safe, 1, selected_slot).squeeze(1), legal_count > 0
+
+
+def runtime_parity(args: argparse.Namespace) -> int:
+    """Compare a diagnostic compile boundary with the accepted compiled reference."""
+
+    if not torch.cuda.is_available():
+        raise RuntimeError("runtime-parity requires CUDA")
+    if args.batch_size < HERO_CONFIG.sigreg_example_count:
+        raise ValueError(
+            f"--batch-size must be at least {HERO_CONFIG.sigreg_example_count}"
+        )
+    if args.threads not in (1, 2):
+        raise ValueError("--threads must be 1 or 2 under the resource guard")
+    output = _require_workspace(args.output)
+    if output.exists():
+        raise FileExistsError(f"Runtime parity output already exists: {output}")
+    output.parent.mkdir(parents=True, exist_ok=True)
+
+    device = torch.device("cuda")
+    torch.set_num_threads(args.threads)
+    torch.set_float32_matmul_precision("high")
+    config = dataclasses.replace(
+        HERO_CONFIG,
+        remat_bt4_blocks=True,
+        remat_projector_blocks=True,
+        remat_dfm_blocks=False,
+        use_bt4_sdpa=True,
+        use_head_sdpa=True,
+    )
+    batches = CanonicalTrajectoryBatches(
+        _require_workspace(args.data_root) / "train",
+        batch_size=args.batch_size,
+        horizon=config.horizon,
+        seed=args.seed,
+        shuffle_files=True,
+        batch_schedule="global_permutation",
+    )
+    prepared = _prepare_training_step(
+        batches,
+        seed=args.seed,
+        update=0,
+        data_cursor=args.data_step,
+        batch_size=args.batch_size,
+        config=config,
+    )
+
+    def run_backward(
+        compile_regions: str,
+    ) -> tuple[
+        JointModel,
+        dict[str, Any],
+        dict[str, float],
+        Tensor,
+        float,
+        int,
+        int,
+    ]:
+        model, mapping = load_raw_bt4_hero_model(
+            device=device,
+            raw_bt4_path=args.raw_bt4_path,
+            config=config,
+        )
+        model.train()
+        compiled = _apply_compile_regions(model, compile_regions)
+        batch = _torch_batch(prepared.compact_batch, device)
+        choices = _choices_to_device(prepared.choices, device)
+        capture: dict[str, Any] = {}
+        torch.cuda.synchronize()
+        torch.cuda.reset_peak_memory_stats()
+        started = time.perf_counter()
+        loss, aux = loss_and_aux(
+            model,
+            batch,
+            choices,
+            compute_dtype=torch.bfloat16,
+            capture=capture,
+        )
+        loss.backward()
+        torch.cuda.synchronize()
+        seconds = time.perf_counter() - started
+        metrics = {"loss": float(loss.detach().float().cpu()), **_json_scalars(aux)}
+        root_logits = capture["root_logits"].float().cpu()
+        peak_allocated = torch.cuda.max_memory_allocated()
+        peak_reserved = torch.cuda.max_memory_reserved()
+        del batch, choices, loss, aux, capture
+        return (
+            model,
+            {"mapping": mapping, "compiled_regions": compiled},
+            metrics,
+            root_logits,
+            seconds,
+            peak_allocated,
+            peak_reserved,
+        )
+
+    (
+        reference_model,
+        reference_lineage,
+        reference_metrics,
+        reference_logits,
+        reference_seconds,
+        reference_peak_allocated,
+        reference_peak_reserved,
+    ) = run_backward("fresh")
+    reference_gradients: dict[str, Tensor] = {}
+    reference_missing: set[str] = set()
+    for name, parameter in reference_model.named_parameters():
+        if parameter.grad is None:
+            reference_missing.add(name)
+        else:
+            reference_gradients[name] = parameter.grad.detach().float().cpu().clone()
+    del reference_model
+    gc.collect()
+    torch.cuda.empty_cache()
+
+    (
+        candidate_model,
+        candidate_lineage,
+        candidate_metrics,
+        candidate_logits,
+        candidate_seconds,
+        candidate_peak_allocated,
+        candidate_peak_reserved,
+    ) = run_backward(args.candidate_compile_regions)
+
+    accumulators: dict[str, dict[str, float | int | bool]] = {
+        "all": {
+            "dot": 0.0,
+            "reference_squared_norm": 0.0,
+            "candidate_squared_norm": 0.0,
+            "difference_squared_norm": 0.0,
+            "element_count": 0,
+            "parameter_count": 0,
+            "max_absolute_difference": 0.0,
+            "finite": True,
+        }
+    }
+    parameter_records: list[dict[str, Any]] = []
+    candidate_missing: set[str] = set()
+    for name, parameter in candidate_model.named_parameters():
+        if parameter.grad is None:
+            candidate_missing.add(name)
+            continue
+        if name not in reference_gradients:
+            raise KeyError(f"Candidate-only gradient: {name}")
+        reference = reference_gradients.pop(name)
+        candidate = parameter.grad.detach().float().cpu()
+        difference = candidate - reference
+        reference_flat = reference.reshape(-1)
+        candidate_flat = candidate.reshape(-1)
+        difference_flat = difference.reshape(-1)
+        dot = float(torch.dot(reference_flat, candidate_flat))
+        reference_squared_norm = float(torch.dot(reference_flat, reference_flat))
+        candidate_squared_norm = float(torch.dot(candidate_flat, candidate_flat))
+        difference_squared_norm = float(torch.dot(difference_flat, difference_flat))
+        finite = bool(
+            torch.isfinite(reference).all()
+            and torch.isfinite(candidate).all()
+            and torch.isfinite(difference).all()
+        )
+        max_absolute_difference = float(difference.abs().max()) if difference.numel() else 0.0
+        group = _gradient_audit_group(name)
+        if group not in accumulators:
+            accumulators[group] = {
+                "dot": 0.0,
+                "reference_squared_norm": 0.0,
+                "candidate_squared_norm": 0.0,
+                "difference_squared_norm": 0.0,
+                "element_count": 0,
+                "parameter_count": 0,
+                "max_absolute_difference": 0.0,
+                "finite": True,
+            }
+        for key in ("all", group):
+            accumulator = accumulators[key]
+            accumulator["dot"] = float(accumulator["dot"]) + dot
+            accumulator["reference_squared_norm"] = (
+                float(accumulator["reference_squared_norm"]) + reference_squared_norm
+            )
+            accumulator["candidate_squared_norm"] = (
+                float(accumulator["candidate_squared_norm"]) + candidate_squared_norm
+            )
+            accumulator["difference_squared_norm"] = (
+                float(accumulator["difference_squared_norm"]) + difference_squared_norm
+            )
+            accumulator["element_count"] = int(accumulator["element_count"]) + reference.numel()
+            accumulator["parameter_count"] = int(accumulator["parameter_count"]) + 1
+            accumulator["max_absolute_difference"] = max(
+                float(accumulator["max_absolute_difference"]),
+                max_absolute_difference,
+            )
+            accumulator["finite"] = bool(accumulator["finite"]) and finite
+        reference_norm = math.sqrt(max(reference_squared_norm, 0.0))
+        candidate_norm = math.sqrt(max(candidate_squared_norm, 0.0))
+        parameter_records.append(
+            {
+                "name": name,
+                "group": group,
+                "element_count": reference.numel(),
+                "reference_norm": reference_norm,
+                "candidate_norm": candidate_norm,
+                "norm_ratio": candidate_norm / max(reference_norm, 1e-30),
+                "cosine": dot / max(reference_norm * candidate_norm, 1e-30),
+                "relative_l2": (
+                    math.sqrt(max(difference_squared_norm, 0.0))
+                    / max(reference_norm, 1e-30)
+                ),
+                "max_absolute_difference": max_absolute_difference,
+                "finite": finite,
+            }
+        )
+        del reference, candidate, difference
+    if reference_gradients:
+        raise KeyError(f"Reference-only gradients: {sorted(reference_gradients)[:10]}")
+
+    gradient_groups: dict[str, dict[str, Any]] = {}
+    for name, accumulator in accumulators.items():
+        reference_norm = math.sqrt(
+            max(float(accumulator["reference_squared_norm"]), 0.0)
+        )
+        candidate_norm = math.sqrt(
+            max(float(accumulator["candidate_squared_norm"]), 0.0)
+        )
+        difference_norm = math.sqrt(
+            max(float(accumulator["difference_squared_norm"]), 0.0)
+        )
+        gradient_groups[name] = {
+            "element_count": int(accumulator["element_count"]),
+            "parameter_count": int(accumulator["parameter_count"]),
+            "reference_norm": reference_norm,
+            "candidate_norm": candidate_norm,
+            "norm_ratio": candidate_norm / max(reference_norm, 1e-30),
+            "cosine": (
+                float(accumulator["dot"])
+                / max(reference_norm * candidate_norm, 1e-30)
+            ),
+            "relative_l2": difference_norm / max(reference_norm, 1e-30),
+            "max_absolute_difference": float(
+                accumulator["max_absolute_difference"]
+            ),
+            "finite": bool(accumulator["finite"]),
+        }
+
+    reference_actions, legal_valid = _legal_root_actions(
+        reference_logits,
+        prepared.compact_batch,
+    )
+    candidate_actions, candidate_legal_valid = _legal_root_actions(
+        candidate_logits,
+        prepared.compact_batch,
+    )
+    if not torch.equal(legal_valid, candidate_legal_valid):
+        raise RuntimeError("Legal-valid masks drifted across runtime variants")
+    reference_flat = reference_logits.reshape(-1)
+    candidate_flat = candidate_logits.reshape(-1)
+    logit_difference = candidate_flat - reference_flat
+    reference_logit_norm = float(torch.linalg.vector_norm(reference_flat))
+    candidate_logit_norm = float(torch.linalg.vector_norm(candidate_flat))
+    logit_cosine = float(
+        torch.dot(reference_flat, candidate_flat)
+        / max(reference_logit_norm * candidate_logit_norm, 1e-30)
+    )
+    valid_count = int(legal_valid.sum())
+    legal_action_agreement = float(
+        ((reference_actions == candidate_actions) & legal_valid).sum()
+        / max(valid_count, 1)
+    )
+    loss_relative_difference = abs(
+        candidate_metrics["loss"] - reference_metrics["loss"]
+    ) / max(abs(reference_metrics["loss"]), 1e-30)
+    nontrivial_groups = [
+        value
+        for key, value in gradient_groups.items()
+        if key != "all" and value["reference_norm"] > 1e-8
+    ]
+    gate_checks = {
+        "source_mapping_equal": (
+            reference_lineage["mapping"]["combined_sha256"]
+            == candidate_lineage["mapping"]["combined_sha256"]
+        ),
+        "missing_gradients_equal": reference_missing == candidate_missing,
+        "finite_gradients": all(value["finite"] for value in gradient_groups.values()),
+        "loss_relative_difference_le_0p005": loss_relative_difference <= 0.005,
+        "root_logits_cosine_ge_0p999": logit_cosine >= 0.999,
+        "legal_action_agreement_ge_0p99": legal_action_agreement >= 0.99,
+        "global_gradient_cosine_ge_0p99": gradient_groups["all"]["cosine"] >= 0.99,
+        "global_gradient_norm_ratio_in_0p8_1p25": (
+            0.8 <= gradient_groups["all"]["norm_ratio"] <= 1.25
+        ),
+        "every_nontrivial_group_gradient_cosine_ge_0p95": all(
+            value["cosine"] >= 0.95 for value in nontrivial_groups
+        ),
+    }
+    report = {
+        "schema_version": "torch-hero-runtime-parity-v1",
+        "created_utc": datetime.now(UTC).isoformat(),
+        "git_commit": _git_commit(),
+        "device": torch.cuda.get_device_name(device),
+        "batch_size": args.batch_size,
+        "data_step": args.data_step,
+        "seed": args.seed,
+        "config": dataclasses.asdict(config),
+        "reference": {
+            "compile_regions": reference_lineage["compiled_regions"],
+            "metrics": reference_metrics,
+            "forward_backward_seconds_including_compile": reference_seconds,
+            "peak_allocated_bytes": reference_peak_allocated,
+            "peak_reserved_bytes": reference_peak_reserved,
+        },
+        "candidate": {
+            "requested_compile_regions": args.candidate_compile_regions,
+            "compile_regions": candidate_lineage["compiled_regions"],
+            "metrics": candidate_metrics,
+            "forward_backward_seconds_including_compile": candidate_seconds,
+            "peak_allocated_bytes": candidate_peak_allocated,
+            "peak_reserved_bytes": candidate_peak_reserved,
+        },
+        "loss_relative_difference": loss_relative_difference,
+        "root_logits": {
+            "reference_norm": reference_logit_norm,
+            "candidate_norm": candidate_logit_norm,
+            "cosine": logit_cosine,
+            "relative_l2": (
+                float(torch.linalg.vector_norm(logit_difference))
+                / max(reference_logit_norm, 1e-30)
+            ),
+            "max_absolute_difference": float(logit_difference.abs().max()),
+            "legal_valid_count": valid_count,
+            "legal_top1_action_agreement": legal_action_agreement,
+        },
+        "gradient_groups": gradient_groups,
+        "worst_parameters_by_relative_l2": sorted(
+            parameter_records,
+            key=lambda row: row["relative_l2"],
+            reverse=True,
+        )[:25],
+        "reference_missing_gradients": sorted(reference_missing),
+        "candidate_missing_gradients": sorted(candidate_missing),
+        "compile_counters": _compile_counter_snapshot(),
+        "gate_checks": gate_checks,
+        "gate_pass": all(gate_checks.values()),
+    }
+    _write_json(output, report)
+    print(json.dumps(report, sort_keys=True), flush=True)
+    if not report["gate_pass"]:
+        raise RuntimeError("Diagnostic runtime parity gate failed")
+    return 0
+
+
+_LOSS_AUDIT_GROUPS = (
+    "raw_bt4",
+    "state_projector",
+    "dfm_state_projector",
+    "jepa",
+    "value_wdl",
+    "dfm_policy",
+)
+
+
+def _gradient_norms_by_group(model: nn.Module) -> dict[str, dict[str, Any]]:
+    device = next(model.parameters()).device
+    squared_norms = {
+        group: torch.zeros((), device=device, dtype=torch.float32)
+        for group in _LOSS_AUDIT_GROUPS
+    }
+    parameter_counts = {group: 0 for group in _LOSS_AUDIT_GROUPS}
+    element_counts = {group: 0 for group in _LOSS_AUDIT_GROUPS}
+    finite = {
+        group: torch.ones((), device=device, dtype=torch.bool)
+        for group in _LOSS_AUDIT_GROUPS
+    }
+    for name, parameter in model.named_parameters():
+        gradient = parameter.grad
+        if gradient is None:
+            continue
+        group = _gradient_audit_group(name)
+        detached = gradient.detach().float()
+        squared_norms[group] = squared_norms[group] + detached.square().sum()
+        parameter_counts[group] += 1
+        element_counts[group] += detached.numel()
+        finite[group] = finite[group] & torch.isfinite(detached).all()
+
+    total_squared = torch.stack(tuple(squared_norms.values())).sum()
+    result = {
+        group: {
+            "norm": math.sqrt(max(float(value.cpu()), 0.0)),
+            "squared_norm": max(float(value.cpu()), 0.0),
+            "parameter_count": parameter_counts[group],
+            "element_count": element_counts[group],
+            "finite": bool(finite[group].cpu()),
+        }
+        for group, value in squared_norms.items()
+    }
+    result["all"] = {
+        "norm": math.sqrt(max(float(total_squared.cpu()), 0.0)),
+        "squared_norm": max(float(total_squared.cpu()), 0.0),
+        "parameter_count": sum(parameter_counts.values()),
+        "element_count": sum(element_counts.values()),
+        "finite": all(bool(value.cpu()) for value in finite.values()),
+    }
+    return result
+
+
+def _polarized_gradient_cosines(
+    left: Mapping[str, Mapping[str, Any]],
+    right: Mapping[str, Mapping[str, Any]],
+    combined: Mapping[str, Mapping[str, Any]],
+) -> dict[str, dict[str, float | None]]:
+    result: dict[str, dict[str, float | None]] = {}
+    for group in (*_LOSS_AUDIT_GROUPS, "all"):
+        left_squared = float(left[group]["squared_norm"])
+        right_squared = float(right[group]["squared_norm"])
+        combined_squared = float(combined[group]["squared_norm"])
+        dot = 0.5 * (combined_squared - left_squared - right_squared)
+        denominator = math.sqrt(max(left_squared * right_squared, 0.0))
+        result[group] = {
+            "dot": dot,
+            "cosine": (
+                max(-1.0, min(1.0, dot / denominator))
+                if denominator > 1e-30
+                else None
+            ),
+        }
+    return result
+
+
+def _shared_sigreg_gradient_projection(
+    records: Mapping[str, Mapping[str, Any]],
+    interactions: Mapping[str, Mapping[str, Mapping[str, float | None]]],
+    *,
+    baseline_coefficient: float,
+    candidate_coefficients: Sequence[float],
+) -> dict[str, Any]:
+    """Project gradient balance when both SIGReg coefficients change together."""
+
+    if not math.isfinite(baseline_coefficient) or baseline_coefficient <= 0.0:
+        raise ValueError("baseline_coefficient must be finite and positive")
+    result: dict[str, Any] = {
+        "baseline_coefficient": baseline_coefficient,
+        "candidates": {},
+    }
+    for coefficient in candidate_coefficients:
+        if not math.isfinite(coefficient) or coefficient < 0.0:
+            raise ValueError("candidate coefficients must be finite and non-negative")
+        scale = coefficient / baseline_coefficient
+        groups: dict[str, Any] = {}
+        for group in (*_LOSS_AUDIT_GROUPS, "all"):
+            policy_squared = float(
+                records["policy_total"]["gradient_groups"][group]["squared_norm"]
+            )
+            non_sigreg_squared = float(
+                records["non_sigreg_representation"]["gradient_groups"][group][
+                    "squared_norm"
+                ]
+            )
+            sigreg_squared = float(
+                records["sigreg_total"]["gradient_groups"][group]["squared_norm"]
+            )
+            policy_dot_representation = float(
+                interactions["policy_vs_representation"][group]["dot"]
+            )
+            policy_dot_sigreg = float(
+                interactions["policy_vs_sigreg"][group]["dot"]
+            )
+            non_sigreg_dot_sigreg = float(
+                interactions["non_sigreg_vs_sigreg"][group]["dot"]
+            )
+            policy_dot_non_sigreg = (
+                policy_dot_representation - policy_dot_sigreg
+            )
+            representation_squared = (
+                non_sigreg_squared
+                + scale * scale * sigreg_squared
+                + 2.0 * scale * non_sigreg_dot_sigreg
+            )
+            policy_dot_scaled_representation = (
+                policy_dot_non_sigreg + scale * policy_dot_sigreg
+            )
+            total_squared = (
+                policy_squared
+                + representation_squared
+                + 2.0 * policy_dot_scaled_representation
+            )
+            cosine_denominator = math.sqrt(
+                max(policy_squared * representation_squared, 0.0)
+            )
+            groups[group] = {
+                "policy_norm": math.sqrt(max(policy_squared, 0.0)),
+                "non_sigreg_representation_norm": math.sqrt(
+                    max(non_sigreg_squared, 0.0)
+                ),
+                "scaled_sigreg_norm": abs(scale)
+                * math.sqrt(max(sigreg_squared, 0.0)),
+                "representation_norm": math.sqrt(
+                    max(representation_squared, 0.0)
+                ),
+                "total_norm": math.sqrt(max(total_squared, 0.0)),
+                "policy_vs_representation_cosine": (
+                    max(
+                        -1.0,
+                        min(
+                            1.0,
+                            policy_dot_scaled_representation
+                            / cosine_denominator,
+                        ),
+                    )
+                    if cosine_denominator > 1e-30
+                    else None
+                ),
+            }
+        result["candidates"][format(coefficient, ".12g")] = {
+            "coefficient": coefficient,
+            "relative_to_baseline": scale,
+            "gradient_groups": groups,
+        }
+    return result
+
+
+def loss_gradient_audit(args: argparse.Namespace) -> int:
+    """Calibrate root CE and measure no-update component gradients."""
+
+    if not torch.cuda.is_available():
+        raise RuntimeError("loss-audit requires CUDA")
+    if args.batch_size < HERO_CONFIG.sigreg_example_count:
+        raise ValueError(
+            f"--batch-size must be at least {HERO_CONFIG.sigreg_example_count}"
+        )
+    if args.threads not in (1, 2):
+        raise ValueError("--threads must be 1 or 2 under the resource guard")
+    if not math.isfinite(args.root_target_contribution) or (
+        args.root_target_contribution <= 0.0
+    ):
+        raise ValueError("--root-target-contribution must be finite and positive")
+    output = _require_workspace(args.output)
+    if output.exists():
+        raise FileExistsError(f"Loss-audit output already exists: {output}")
+    output.parent.mkdir(parents=True, exist_ok=True)
+
+    device = torch.device("cuda")
+    torch.set_num_threads(args.threads)
+    torch.set_float32_matmul_precision("high")
+    config = dataclasses.replace(
+        HERO_CONFIG,
+        remat_bt4_blocks=True,
+        remat_projector_blocks=True,
+        remat_dfm_blocks=False,
+        use_bt4_sdpa=True,
+        use_head_sdpa=True,
+        root_legal_ce_coeff=0.0,
+    )
+    batches = CanonicalTrajectoryBatches(
+        _require_workspace(args.data_root) / "train",
+        batch_size=args.batch_size,
+        horizon=config.horizon,
+        seed=args.seed,
+        shuffle_files=True,
+        batch_schedule="global_permutation",
+    )
+    prepared_started = time.perf_counter()
+    prepared = _prepare_training_step(
+        batches,
+        seed=args.seed,
+        update=0,
+        data_cursor=args.data_step,
+        batch_size=args.batch_size,
+        config=config,
+    )
+    data_prepare_seconds = time.perf_counter() - prepared_started
+    model, mapping = load_raw_bt4_hero_model(
+        device=device,
+        raw_bt4_path=args.raw_bt4_path,
+        config=config,
+    )
+    model.train()
+    batch = _torch_batch(prepared.compact_batch, device)
+    choices = _choices_to_device(prepared.choices, device)
+
+    calibration_source: dict[str, Any]
+    scalar_components: dict[str, float] | None = None
+    if args.root_calibration_metrics is not None:
+        calibration_batch_size = args.root_calibration_batch_size
+        metrics_path = _require_workspace(
+            args.root_calibration_metrics,
+            exists=True,
+        )
+        calibration_rows = [
+            json.loads(line)
+            for line in metrics_path.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+        matches = [
+            row
+            for row in calibration_rows
+            if int(row.get("update", -1)) == 1
+        ]
+        if len(matches) != 1:
+            raise ValueError(
+                f"Expected exactly one update-1 calibration row in {metrics_path}"
+            )
+        calibration_row = matches[0]
+        run_config_path = metrics_path.with_name("run_config.json")
+        run_config = json.loads(
+            _require_workspace(run_config_path, exists=True).read_text(
+                encoding="utf-8"
+            )
+        )
+        run_args = run_config["args"]
+        expected_lineage = {
+            "recipe": "hero",
+            "batch_size": args.root_calibration_batch_size,
+            "seed": args.seed,
+            "data_start": args.data_step,
+        }
+        observed_lineage = {
+            key: run_args[key] for key in expected_lineage
+        }
+        if observed_lineage != expected_lineage:
+            raise ValueError(
+                "Root-calibration run lineage does not match this audit: "
+                f"{observed_lineage} != {expected_lineage}"
+            )
+        root_value = float(calibration_row["root_legal_conditional_ce"])
+        calibration_source = {
+            "kind": "deterministic_update_zero_metrics",
+            "metrics_path": str(metrics_path.relative_to(_REPO_ROOT)),
+            "metrics_sha256": _sha256_file(metrics_path),
+            "run_config_path": str(run_config_path.relative_to(_REPO_ROOT)),
+            "run_config_sha256": _sha256_file(run_config_path),
+            "update": 1,
+            "lineage": observed_lineage,
+        }
+    else:
+        calibration_batch_size = args.batch_size
+        initial_capture: dict[str, Any] = {}
+        with torch.no_grad():
+            initial_loss, initial_aux = loss_and_aux(
+                model,
+                batch,
+                choices,
+                compute_dtype=torch.bfloat16,
+                capture=initial_capture,
+            )
+        initial_components = initial_capture["loss_components"]
+        scalar_components = {
+            name: float(value.detach().float().cpu())
+            for name, value in initial_components.items()
+        }
+        root_value = scalar_components["root_legal_conditional_ce"]
+        calibration_source = {"kind": "inline_no_grad_forward"}
+        del initial_loss, initial_aux, initial_capture, initial_components
+        gc.collect()
+        torch.cuda.empty_cache()
+    if not math.isfinite(root_value) or root_value <= 0.0:
+        raise RuntimeError(f"Cannot calibrate root CE from {root_value!r}")
+    root_coefficient = args.root_target_contribution / root_value
+    calibrated_config = dataclasses.replace(
+        config,
+        root_legal_ce_coeff=root_coefficient,
+    )
+    model.config = calibrated_config
+    compiled_regions = _apply_compile_regions(model, args.compile_regions)
+
+    weights = {
+        "dfm_ce": calibrated_config.dfm_ce_coeff,
+        "root_legal_conditional_ce": calibrated_config.root_legal_ce_coeff,
+        "root_illegal_mass": calibrated_config.legality_coeff,
+        "jepa_raw_mse": calibrated_config.jepa_positive_coeff,
+        "target_sigreg": calibrated_config.target_sigreg_coeff,
+        "prediction_sigreg": calibrated_config.pred_sigreg_coeff,
+        "wdl_ce": calibrated_config.wdl_coeff,
+    }
+    specifications: dict[str, tuple[str, ...]] = {
+        name: (name,) for name in weights
+    }
+    specifications.update(
+        {
+            "sigreg_total": ("target_sigreg", "prediction_sigreg"),
+            "non_sigreg_representation": ("jepa_raw_mse", "wdl_ce"),
+            "policy_total": (
+                "dfm_ce",
+                "root_legal_conditional_ce",
+                "root_illegal_mass",
+            ),
+            "policy_plus_sigreg": (
+                "dfm_ce",
+                "root_legal_conditional_ce",
+                "root_illegal_mass",
+                "target_sigreg",
+                "prediction_sigreg",
+            ),
+            "representation_total": (
+                "jepa_raw_mse",
+                "target_sigreg",
+                "prediction_sigreg",
+                "wdl_ce",
+            ),
+            "total": tuple(weights),
+        }
+    )
+
+    records: dict[str, dict[str, Any]] = {}
+    max_scalar_replay_difference = 0.0
+    torch.cuda.synchronize()
+    torch.cuda.reset_peak_memory_stats()
+    audit_started = time.perf_counter()
+    for audit_name, component_names in specifications.items():
+        model.zero_grad(set_to_none=True)
+        capture: dict[str, Any] = {}
+        torch.cuda.synchronize()
+        started = time.perf_counter()
+        _, aux = loss_and_aux(
+            model,
+            batch,
+            choices,
+            compute_dtype=torch.bfloat16,
+            capture=capture,
+        )
+        components = capture["loss_components"]
+        objective = sum(weights[name] * components[name] for name in component_names)
+        objective.backward()
+        torch.cuda.synchronize()
+        elapsed = time.perf_counter() - started
+        replay_components = {
+            name: float(value.detach().float().cpu())
+            for name, value in components.items()
+        }
+        if scalar_components is None:
+            scalar_components = replay_components
+        else:
+            max_scalar_replay_difference = max(
+                max_scalar_replay_difference,
+                max(
+                    abs(replay_components[name] - scalar_components[name])
+                    for name in scalar_components
+                ),
+            )
+        records[audit_name] = {
+            "components": list(component_names),
+            "weighted_scalar": float(objective.detach().float().cpu()),
+            "forward_backward_seconds": elapsed,
+            "gradient_groups": _gradient_norms_by_group(model),
+        }
+        del aux, capture, components, objective
+    torch.cuda.synchronize()
+    audit_seconds = time.perf_counter() - audit_started
+    assert scalar_components is not None
+    calibration_replay_difference = abs(
+        scalar_components["root_legal_conditional_ce"] - root_value
+    )
+    calibration_batch_matches_audit = (
+        calibration_batch_size == args.batch_size
+    )
+
+    interactions = {
+        "target_vs_prediction_sigreg": _polarized_gradient_cosines(
+            records["target_sigreg"]["gradient_groups"],
+            records["prediction_sigreg"]["gradient_groups"],
+            records["sigreg_total"]["gradient_groups"],
+        ),
+        "policy_vs_representation": _polarized_gradient_cosines(
+            records["policy_total"]["gradient_groups"],
+            records["representation_total"]["gradient_groups"],
+            records["total"]["gradient_groups"],
+        ),
+        "non_sigreg_vs_sigreg": _polarized_gradient_cosines(
+            records["non_sigreg_representation"]["gradient_groups"],
+            records["sigreg_total"]["gradient_groups"],
+            records["representation_total"]["gradient_groups"],
+        ),
+        "policy_vs_sigreg": _polarized_gradient_cosines(
+            records["policy_total"]["gradient_groups"],
+            records["sigreg_total"]["gradient_groups"],
+            records["policy_plus_sigreg"]["gradient_groups"],
+        ),
+    }
+    shared_sigreg_projection = _shared_sigreg_gradient_projection(
+        records,
+        interactions,
+        baseline_coefficient=calibrated_config.target_sigreg_coeff,
+        candidate_coefficients=(0.0, 0.5, 1.0, 2.0, 4.0),
+    )
+    weighted_scalar_components = {
+        name: weights[name] * value for name, value in scalar_components.items()
+    }
+    finite_gradients = all(
+        group["finite"]
+        for record in records.values()
+        for group in record["gradient_groups"].values()
+    )
+    nonzero_atomic_gradients = all(
+        records[name]["gradient_groups"]["all"]["norm"] > 1e-8
+        for name in weights
+    )
+    gate_checks = {
+        "finite_root_coefficient": (
+            math.isfinite(root_coefficient) and root_coefficient > 0.0
+        ),
+        "root_weighted_scalar_matches_target": (
+            abs(
+                root_coefficient * root_value
+                - args.root_target_contribution
+            )
+            <= 1e-6
+        ),
+        "equal_sigreg_coefficients": (
+            calibrated_config.target_sigreg_coeff
+            == calibrated_config.pred_sigreg_coeff
+        ),
+        "finite_component_gradients": finite_gradients,
+        "nonzero_atomic_global_gradients": nonzero_atomic_gradients,
+        "deterministic_scalar_replay": max_scalar_replay_difference <= 1e-6,
+        "matched_batch_calibration_scalar_reproduced": (
+            not calibration_batch_matches_audit
+            or calibration_replay_difference <= 1e-6
+        ),
+    }
+    report = {
+        "schema_version": "torch-hero-loss-gradient-audit-v2",
+        "created_utc": datetime.now(UTC).isoformat(),
+        "git_commit": _git_commit(),
+        "device": torch.cuda.get_device_name(device),
+        "batch_size": args.batch_size,
+        "sigreg_example_count": calibrated_config.sigreg_example_count,
+        "data_step": args.data_step,
+        "seed": args.seed,
+        "data_prepare_seconds": data_prepare_seconds,
+        "audit_seconds": audit_seconds,
+        "compile_regions": compiled_regions,
+        "config_before_calibration": dataclasses.asdict(config),
+        "config_after_calibration": dataclasses.asdict(calibrated_config),
+        "root_calibration": {
+            "unweighted_scalar": root_value,
+            "target_weighted_scalar": args.root_target_contribution,
+            "coefficient": root_coefficient,
+            "source": calibration_source,
+            "replay_absolute_difference": calibration_replay_difference,
+            "calibration_batch_size": calibration_batch_size,
+            "audit_batch_size": args.batch_size,
+            "calibration_batch_matches_audit": calibration_batch_matches_audit,
+        },
+        "scalar_components": scalar_components,
+        "weights": weights,
+        "weighted_scalar_components": weighted_scalar_components,
+        "gradient_records": records,
+        "interactions": interactions,
+        "shared_sigreg_gradient_projection": shared_sigreg_projection,
+        "max_scalar_replay_absolute_difference": max_scalar_replay_difference,
+        "gpu_peak_memory_allocated_bytes": torch.cuda.max_memory_allocated(),
+        "gpu_peak_memory_reserved_bytes": torch.cuda.max_memory_reserved(),
+        "source_mapping_sha256": mapping["combined_sha256"],
+        "data": batches.provenance(),
+        "compile_counters": _compile_counter_snapshot(),
+        "gate_checks": gate_checks,
+        "gate_pass": all(gate_checks.values()),
+    }
+    _write_json(output, report)
+    print(json.dumps(report, sort_keys=True), flush=True)
+    if not report["gate_pass"]:
+        raise RuntimeError("Hero loss-gradient audit gate failed")
     return 0
 
 
@@ -3503,6 +4799,32 @@ def build_parser() -> argparse.ArgumentParser:
         choices=("continuation", "hero"),
         default="continuation",
     )
+    train_parser.add_argument(
+        "--remat-mode",
+        choices=(
+            "all",
+            "none",
+            "bt4-only",
+            "bt4-projector",
+            "bt4-dfm",
+            "heads-only",
+        ),
+        default="all",
+    )
+    train_parser.add_argument(
+        "--attention-impl",
+        choices=("manual", "sdpa-heads", "sdpa-all"),
+        default="manual",
+    )
+    train_parser.add_argument(
+        "--compile-regions",
+        choices=(
+            "none",
+            "dfm-jepa",
+            "fresh",
+        ),
+        default="none",
+    )
     train_parser.add_argument("--source-state", type=Path, default=_SOURCE_STATE)
     train_parser.add_argument("--raw-bt4-path", type=Path, default=_RAW_BT4_PATH)
     train_parser.add_argument("--data-root", type=Path, default=_DATA_ROOT)
@@ -3516,6 +4838,12 @@ def build_parser() -> argparse.ArgumentParser:
     train_parser.add_argument("--log-every", type=int, default=1)
     train_parser.add_argument("--prefetch-depth", type=int, default=1)
     train_parser.add_argument("--gpu-monitor-interval-ms", type=int, default=0)
+    train_parser.add_argument(
+        "--profile-update",
+        type=int,
+        default=0,
+        help="Capture one bounded CPU/CUDA profiler window at this one-based update.",
+    )
     train_parser.add_argument("--save-every", type=int, default=0)
     train_parser.add_argument("--save-updates", type=int, nargs="*", default=())
     train_parser.add_argument("--save-final", action="store_true")
@@ -3572,6 +4900,86 @@ def build_parser() -> argparse.ArgumentParser:
         default=_REPO_ROOT / "artifacts" / "pytorch" / "hero_init_policy_parity.json",
     )
     hero_verify_parser.set_defaults(handler=verify_hero_init)
+
+    loss_audit_parser = subparsers.add_parser("loss-audit")
+    loss_audit_parser.add_argument(
+        "--raw-bt4-path",
+        type=Path,
+        default=_RAW_BT4_PATH,
+    )
+    loss_audit_parser.add_argument("--data-root", type=Path, default=_DATA_ROOT)
+    loss_audit_parser.add_argument("--batch-size", type=int, default=512)
+    loss_audit_parser.add_argument("--data-step", type=int, default=0)
+    loss_audit_parser.add_argument("--seed", type=int, default=0)
+    loss_audit_parser.add_argument("--threads", type=int, default=2)
+    loss_audit_parser.add_argument(
+        "--compile-regions",
+        choices=("none", "dfm-jepa", "fresh"),
+        default="fresh",
+    )
+    loss_audit_parser.add_argument(
+        "--root-target-contribution",
+        type=float,
+        default=0.25,
+    )
+    loss_audit_parser.add_argument(
+        "--root-calibration-metrics",
+        type=Path,
+        help=(
+            "Optional matched update-zero metrics.jsonl used to avoid an "
+            "extra calibration forward at memory-saturating batch sizes."
+        ),
+    )
+    loss_audit_parser.add_argument(
+        "--root-calibration-batch-size",
+        type=int,
+        default=1024,
+    )
+    loss_audit_parser.add_argument(
+        "--output",
+        type=Path,
+        default=(
+            _REPO_ROOT
+            / "artifacts"
+            / "profiles"
+            / "hero_loss_gradient_audit_b512.json"
+        ),
+    )
+    loss_audit_parser.set_defaults(handler=loss_gradient_audit)
+
+    runtime_parity_parser = subparsers.add_parser("runtime-parity")
+    runtime_parity_parser.add_argument(
+        "--raw-bt4-path",
+        type=Path,
+        default=_RAW_BT4_PATH,
+    )
+    runtime_parity_parser.add_argument("--data-root", type=Path, default=_DATA_ROOT)
+    runtime_parity_parser.add_argument("--batch-size", type=int, default=512)
+    runtime_parity_parser.add_argument("--data-step", type=int, default=0)
+    runtime_parity_parser.add_argument("--seed", type=int, default=0)
+    runtime_parity_parser.add_argument("--threads", type=int, default=2)
+    runtime_parity_parser.add_argument(
+        "--candidate-compile-regions",
+        choices=(
+            "fresh-bt4-smolgen",
+            "fresh-bt4-smolgen-eager-numerics",
+            "fresh-bt4",
+            "fresh-bt4-eager-numerics",
+            "fresh-bt4-strict-numerics",
+        ),
+        default="fresh-bt4-strict-numerics",
+    )
+    runtime_parity_parser.add_argument(
+        "--output",
+        type=Path,
+        default=(
+            _REPO_ROOT
+            / "artifacts"
+            / "profiles"
+            / "hero_compiled_bt4_strict_numerics_runtime_parity_b512.json"
+        ),
+    )
+    runtime_parity_parser.set_defaults(handler=runtime_parity)
     return parser
 
 

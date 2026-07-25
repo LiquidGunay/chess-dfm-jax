@@ -41,6 +41,8 @@ export NUMBA_CACHE_DIR="${CHESS_DFM_LOCAL_ROOT}/cache/numba"
 export TRITON_CACHE_DIR="${CHESS_DFM_LOCAL_ROOT}/cache/triton"
 export TORCH_HOME="${CHESS_DFM_LOCAL_ROOT}/cache/torch"
 export TORCH_EXTENSIONS_DIR="${CHESS_DFM_LOCAL_ROOT}/cache/torch-extensions"
+export CHESS_DFM_NVML_LIBRARY_DIR="${CHESS_DFM_LOCAL_ROOT}/nvidia-580.159.03/usr/lib/x86_64-linux-gnu"
+export CHESS_DFM_NVML_LIBRARY="${CHESS_DFM_NVML_LIBRARY_DIR}/libnvidia-ml.so.580.159.03"
 export MPLCONFIGDIR="${CHESS_DFM_LOCAL_ROOT}/cache/matplotlib"
 export PYTHONPYCACHEPREFIX="${CHESS_DFM_LOCAL_ROOT}/cache/pycache"
 

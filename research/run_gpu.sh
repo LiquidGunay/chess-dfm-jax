@@ -20,6 +20,14 @@ export TF_NUM_INTRAOP_THREADS="${CHESS_DFM_GUARD_CPU_COUNT}"
 export TF_NUM_INTEROP_THREADS="1"
 export JAX_NUM_THREADS="${CHESS_DFM_GUARD_CPU_COUNT}"
 
+# PyTorch's CUDA allocator uses NVML on low-memory paths. The host NVML
+# userspace package can be newer than the running kernel module, so preload
+# only the exact workspace-local NVML library when it has been provisioned.
+# This does not replace libcuda or any training kernel/runtime library.
+if [[ -f "${CHESS_DFM_NVML_LIBRARY}" ]]; then
+  export LD_PRELOAD="${CHESS_DFM_NVML_LIBRARY}${LD_PRELOAD:+:${LD_PRELOAD}}"
+fi
+
 # Hold one host-visible lock for the full prepare/compile/run lifetime. This is
 # deliberately independent of process namespaces: a disconnected tool session
 # cannot make a second JAX compilation appear safe.
