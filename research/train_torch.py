@@ -1011,31 +1011,6 @@ def loss_and_aux(
         ),
         legal_gate,
     )
-    root_legal_positions = (
-        torch.arange(
-            batch["legal_idx"].shape[-1],
-            device=actions.device,
-        ).unsqueeze(0)
-        < batch["legal_count"][:, 0].unsqueeze(1)
-    )
-    root_legal_mask_counts = torch.zeros(
-        (batch_size, _VOCAB_SIZE),
-        device=actions.device,
-        dtype=torch.int32,
-    )
-    root_legal_mask_counts.scatter_add_(
-        1,
-        batch["legal_idx"][:, 0].long().clamp(0, _VOCAB_SIZE - 1),
-        root_legal_positions.to(torch.int32),
-    )
-    root_legal_action = logits[:, 0].masked_fill(
-        root_legal_mask_counts == 0,
-        -torch.inf,
-    ).argmax(dim=-1)
-    root_legal_top1_accuracy = _weighted_mean(
-        (root_legal_action == actions[:, 0]).float(),
-        legal_gate,
-    )
 
     clean_t = torch.ones(batch_size, device=actions.device, dtype=torch.float32)
     clean_result = model.planner(
@@ -1081,10 +1056,6 @@ def loss_and_aux(
     wdl_loss = torch.zeros((), device=actions.device, dtype=torch.float32)
     wdl_accuracy = torch.zeros_like(wdl_loss)
     wdl_expected_value_mse = torch.zeros_like(wdl_loss)
-    wdl_expected_value_bias = torch.zeros_like(wdl_loss)
-    wdl_brier_score = torch.zeros_like(wdl_loss)
-    wdl_entropy = torch.zeros_like(wdl_loss)
-    wdl_ece_15 = torch.zeros_like(wdl_loss)
     wdl_valid_count = torch.zeros_like(wdl_loss)
     if config.wdl_coeff != 0.0:
         if "wdl_targets" not in batch:
@@ -1118,41 +1089,6 @@ def loss_and_aux(
             (expected_value - target_value).square(),
             wdl_weight,
         )
-        wdl_expected_value_bias = _uniform_horizon_mean(
-            expected_value - target_value,
-            wdl_weight,
-        )
-        wdl_brier_score = _uniform_horizon_mean(
-            (wdl_probabilities - wdl_targets).square().sum(dim=-1),
-            wdl_weight,
-        )
-        wdl_entropy = _uniform_horizon_mean(
-            -(wdl_probabilities * wdl_log_probabilities).sum(dim=-1),
-            wdl_weight,
-        )
-        confidence, predicted_class = wdl_probabilities.max(dim=-1)
-        correctness = (
-            predicted_class == wdl_targets.argmax(dim=-1)
-        ).float()
-        calibration_bin = torch.clamp(
-            (confidence * 15.0).long(),
-            min=0,
-            max=14,
-        )
-        calibration_error_sum = torch.zeros_like(wdl_loss)
-        for bin_index in range(15):
-            bin_weight = wdl_weight * (calibration_bin == bin_index).float()
-            bin_count = bin_weight.sum()
-            bin_accuracy = (correctness * bin_weight).sum() / bin_count.clamp_min(
-                1.0
-            )
-            bin_confidence = (confidence * bin_weight).sum() / bin_count.clamp_min(
-                1.0
-            )
-            calibration_error_sum = calibration_error_sum + bin_count * torch.abs(
-                bin_accuracy - bin_confidence
-            )
-        wdl_ece_15 = calibration_error_sum / wdl_valid_count.clamp_min(1.0)
 
     if capture is not None:
         capture["loss_components"] = {
@@ -1321,6 +1257,31 @@ def full_horizon_evaluation_aux(
         ),
         legal_gate,
     )
+    root_legal_positions = (
+        torch.arange(
+            batch["legal_idx"].shape[-1],
+            device=actions.device,
+        ).unsqueeze(0)
+        < batch["legal_count"][:, 0].unsqueeze(1)
+    )
+    root_legal_mask_counts = torch.zeros(
+        (batch_size, _VOCAB_SIZE),
+        device=actions.device,
+        dtype=torch.int32,
+    )
+    root_legal_mask_counts.scatter_add_(
+        1,
+        batch["legal_idx"][:, 0].long().clamp(0, _VOCAB_SIZE - 1),
+        root_legal_positions.to(torch.int32),
+    )
+    root_legal_action = logits[:, 0].masked_fill(
+        root_legal_mask_counts == 0,
+        -torch.inf,
+    ).argmax(dim=-1)
+    root_legal_top1_accuracy = _weighted_mean(
+        (root_legal_action == actions[:, 0]).float(),
+        legal_gate,
+    )
 
     clean_t = torch.ones(batch_size, device=actions.device, dtype=torch.float32)
     clean_result = model.planner(
@@ -1377,6 +1338,10 @@ def full_horizon_evaluation_aux(
     wdl_loss = torch.zeros((), device=actions.device, dtype=torch.float32)
     wdl_accuracy = torch.zeros_like(wdl_loss)
     wdl_expected_value_mse = torch.zeros_like(wdl_loss)
+    wdl_expected_value_bias = torch.zeros_like(wdl_loss)
+    wdl_brier_score = torch.zeros_like(wdl_loss)
+    wdl_entropy = torch.zeros_like(wdl_loss)
+    wdl_ece_15 = torch.zeros_like(wdl_loss)
     wdl_valid_count = torch.zeros_like(wdl_loss)
     if config.wdl_coeff != 0.0:
         if "wdl_targets" not in batch:
@@ -1410,6 +1375,41 @@ def full_horizon_evaluation_aux(
             (expected_value - target_value).square(),
             wdl_weight,
         )
+        wdl_expected_value_bias = _uniform_horizon_mean(
+            expected_value - target_value,
+            wdl_weight,
+        )
+        wdl_brier_score = _uniform_horizon_mean(
+            (wdl_probabilities - wdl_targets).square().sum(dim=-1),
+            wdl_weight,
+        )
+        wdl_entropy = _uniform_horizon_mean(
+            -(wdl_probabilities * wdl_log_probabilities).sum(dim=-1),
+            wdl_weight,
+        )
+        confidence, predicted_class = wdl_probabilities.max(dim=-1)
+        correctness = (
+            predicted_class == wdl_targets.argmax(dim=-1)
+        ).float()
+        calibration_bin = torch.clamp(
+            (confidence * 15.0).long(),
+            min=0,
+            max=14,
+        )
+        calibration_error_sum = torch.zeros_like(wdl_loss)
+        for bin_index in range(15):
+            bin_weight = wdl_weight * (calibration_bin == bin_index).float()
+            bin_count = bin_weight.sum()
+            bin_accuracy = (correctness * bin_weight).sum() / bin_count.clamp_min(
+                1.0
+            )
+            bin_confidence = (confidence * bin_weight).sum() / bin_count.clamp_min(
+                1.0
+            )
+            calibration_error_sum = calibration_error_sum + bin_count * torch.abs(
+                bin_accuracy - bin_confidence
+            )
+        wdl_ece_15 = calibration_error_sum / wdl_valid_count.clamp_min(1.0)
 
     unclipped = (
         config.dfm_ce_coeff * dfm_ce
