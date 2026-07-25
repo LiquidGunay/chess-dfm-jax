@@ -1,0 +1,30 @@
+{
+  "best_comparable_validation": {
+    "cumulative_epochs": 73.17309151342172,
+    "step": 255000,
+    "val_dfm_ce_loss": 4.503007724881172
+  },
+  "conditional_epoch_100_projection": {
+    "preferred_hypothesis": "Post-SIGReg-change saturation, fit through the last point before the observed deterioration",
+    "range_max": 4.450660931497914,
+    "range_min": 4.414170463168678,
+    "tail_inclusive_range_max": 4.499198514732871,
+    "tail_inclusive_range_min": 4.4664485866106585,
+    "warning": "Conditional only: the actual run deteriorated after step 255k and was unstable by the W&B endpoint, so uninterrupted continuation to 100 epochs is not supported by the observed run."
+  },
+  "dataset_examples": 28343296,
+  "inferred_hidden_replay_epochs": 4.364897575779472,
+  "inferred_hidden_replayed_updates": 15102,
+  "intermediate_side_branch_epochs": 0.09350048773438346,
+  "literal_wandb_geometry_epochs": 75.86773366089815,
+  "retained_checkpoint_step": 265000,
+  "retained_checkpoint_validation": {
+    "cumulative_epochs": 76.06336934137794,
+    "step": 265000,
+    "val_dfm_ce_loss": 4.541200563311577
+  },
+  "retained_lineage_epochs": 76.06336934137794,
+  "retained_lineage_examples": 2155886592,
+  "wandb_endpoint_lineage_epochs": 76.68709129665089,
+  "wandb_endpoint_step": 267158
+}

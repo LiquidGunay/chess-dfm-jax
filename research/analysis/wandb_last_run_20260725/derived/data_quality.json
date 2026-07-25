@@ -1,0 +1,225 @@
+{
+  "final_run_coefficient_changes": [
+    {
+      "inferred_jepa_sigreg_coefficient": 0.05,
+      "step": 1,
+      "timestamp_utc": "2026-05-06T14:02:09.984978+00:00"
+    },
+    {
+      "inferred_jepa_sigreg_coefficient": 0.01,
+      "step": 176187,
+      "timestamp_utc": "2026-05-10T18:58:12.405454+00:00"
+    }
+  ],
+  "final_run_geometry_segments": [
+    {
+      "end_step": 10722,
+      "end_utc": "2026-05-06T15:32:02.871844+00:00",
+      "global_batch": 512,
+      "global_devices": 64,
+      "local_devices": 4,
+      "per_device_batch": 8,
+      "process_batch": 32,
+      "process_count": 16,
+      "start_step": 1,
+      "start_utc": "2026-05-06T14:02:09.984978+00:00",
+      "updates_spanned": 10722
+    },
+    {
+      "end_step": 267158,
+      "end_utc": "2026-05-13T16:55:34.973654+00:00",
+      "global_batch": 8192,
+      "global_devices": 64,
+      "local_devices": 4,
+      "per_device_batch": 128,
+      "process_batch": 512,
+      "process_count": 16,
+      "start_step": 10723,
+      "start_utc": "2026-05-06T15:51:19.314469+00:00",
+      "updates_spanned": 256436
+    }
+  ],
+  "final_run_interruptions": [
+    {
+      "confidence": "medium",
+      "geometry_changed": true,
+      "inferred_replayed_updates": 722,
+      "next_logged_step": 10723,
+      "next_utc": "2026-05-06T15:51:19.314469+00:00",
+      "periodic_checkpoint_hypothesis": 10000,
+      "previous_step": 10722,
+      "retry_included_in_compute_estimate": true,
+      "step_delta": 1,
+      "wall_gap_seconds": 1156.4426248073578,
+      "wandb_runtime_delta_seconds": 113.99252967599932
+    },
+    {
+      "confidence": "low",
+      "geometry_changed": false,
+      "inferred_replayed_updates": 0,
+      "next_logged_step": 17176,
+      "next_utc": "2026-05-07T03:45:18.427007+00:00",
+      "periodic_checkpoint_hypothesis": 15000,
+      "previous_step": 17171,
+      "retry_included_in_compute_estimate": false,
+      "step_delta": 5,
+      "wall_gap_seconds": 32229.13537478447,
+      "wandb_runtime_delta_seconds": 145.5795324259998
+    },
+    {
+      "confidence": "high",
+      "geometry_changed": false,
+      "inferred_replayed_updates": 3406,
+      "next_logged_step": 73407,
+      "next_utc": "2026-05-08T10:56:23.434522+00:00",
+      "periodic_checkpoint_hypothesis": 70000,
+      "previous_step": 73406,
+      "retry_included_in_compute_estimate": true,
+      "step_delta": 1,
+      "wall_gap_seconds": 20897.9925634861,
+      "wandb_runtime_delta_seconds": 5914.970589281002
+    },
+    {
+      "confidence": "high",
+      "geometry_changed": false,
+      "inferred_replayed_updates": 4863,
+      "next_logged_step": 74864,
+      "next_utc": "2026-05-08T14:19:43.848380+00:00",
+      "periodic_checkpoint_hypothesis": 70000,
+      "previous_step": 74863,
+      "retry_included_in_compute_estimate": true,
+      "step_delta": 1,
+      "wall_gap_seconds": 9717.285557985306,
+      "wandb_runtime_delta_seconds": 8375.750291656994
+    },
+    {
+      "confidence": "high",
+      "geometry_changed": false,
+      "inferred_replayed_updates": 3315,
+      "next_logged_step": 88316,
+      "next_utc": "2026-05-08T22:14:39.942786+00:00",
+      "periodic_checkpoint_hypothesis": 85000,
+      "previous_step": 88315,
+      "retry_included_in_compute_estimate": true,
+      "step_delta": 1,
+      "wall_gap_seconds": 7143.121054410934,
+      "wandb_runtime_delta_seconds": 5739.130039367999
+    },
+    {
+      "confidence": "high",
+      "geometry_changed": false,
+      "inferred_replayed_updates": 1610,
+      "next_logged_step": 101611,
+      "next_utc": "2026-05-09T05:17:20.234702+00:00",
+      "periodic_checkpoint_hypothesis": 100000,
+      "previous_step": 101610,
+      "retry_included_in_compute_estimate": true,
+      "step_delta": 1,
+      "wall_gap_seconds": 4206.349929571152,
+      "wandb_runtime_delta_seconds": 2846.93466598299
+    },
+    {
+      "confidence": "confirmed",
+      "geometry_changed": false,
+      "inferred_replayed_updates": 1186,
+      "next_logged_step": 176187,
+      "next_utc": "2026-05-10T18:58:12.405454+00:00",
+      "periodic_checkpoint_hypothesis": 175000,
+      "previous_step": 176186,
+      "retry_included_in_compute_estimate": true,
+      "step_delta": 1,
+      "wall_gap_seconds": 16340.032214641571,
+      "wandb_runtime_delta_seconds": 2149.433938460017
+    },
+    {
+      "confidence": "low",
+      "geometry_changed": false,
+      "inferred_replayed_updates": 0,
+      "next_logged_step": 221433,
+      "next_utc": "2026-05-12T20:39:56.589207+00:00",
+      "periodic_checkpoint_hypothesis": 220000,
+      "previous_step": 221432,
+      "retry_included_in_compute_estimate": false,
+      "step_delta": 1,
+      "wall_gap_seconds": 106602.14385938644,
+      "wandb_runtime_delta_seconds": 123.76997533702524
+    }
+  ],
+  "issues": [
+    {
+      "confidence": "high",
+      "impact": "The final config describes only the latest resume, while early history used global batch 512 and JEPA SIGReg coefficient 0.05.",
+      "issue": "One W&B run ID was reused across batch and loss-recipe changes.",
+      "remediation": "Use one immutable run ID per recipe segment and an explicit parent_run_id/parent_checkpoint_step.",
+      "severity": "high"
+    },
+    {
+      "confidence": "high",
+      "impact": "A/B evaluated the full validation pool; C evaluated process 0's 96-shard subset. C also used only 1,024 examples at steps 5k/10k before switching to 16,384.",
+      "issue": "Validation population changed with process topology.",
+      "remediation": "Create a topology-invariant frozen validation index and aggregate example-weighted metrics across all processes.",
+      "severity": "high"
+    },
+    {
+      "confidence": "confirmed",
+      "impact": "At the step-175k restart, retrained steps were omitted from W&B until the logged step exceeded 176,186; several earlier gaps show the same signature.",
+      "issue": "Checkpoint rollback caused duplicate training that W&B rejected.",
+      "remediation": "Log monotonic optimizer_updates_total and examples_seen_total, plus checkpoint lineage and retry counters.",
+      "severity": "high"
+    },
+    {
+      "confidence": "high",
+      "impact": "Teacher forcing and JEPA SIGReg weights changed (0.1\u21920.05\u21920.01), including a coefficient change at step 176,187 inside run C.",
+      "issue": "The displayed composite loss is not longitudinally comparable.",
+      "remediation": "Version the objective and log raw components plus a fixed reference-objective score.",
+      "severity": "medium"
+    },
+    {
+      "confidence": "high",
+      "impact": "W&B reached step 267,158, while the locally evaluable checkpoint is step 265,000. The endpoint was already unstable.",
+      "issue": "The retained checkpoint is not the W&B endpoint.",
+      "remediation": "Log checkpoint artifact IDs and mark the canonical evaluation checkpoint explicitly.",
+      "severity": "medium"
+    }
+  ],
+  "profile": {
+    "duplicate_steps": 0,
+    "history_rows": 503762,
+    "local_checkpoint_crosscheck": {
+      "all_checked_values_exact": true,
+      "common_validation_steps": [
+        225000,
+        230000,
+        235000,
+        240000,
+        245000,
+        250000,
+        255000,
+        260000,
+        265000
+      ],
+      "local_history_rows": 43568,
+      "local_validation_points": 9,
+      "max_absolute_differences": {
+        "val_accuracy": 0.0,
+        "val_dfm_ce_loss": 0.0,
+        "val_jepa_positive_loss": 0.0,
+        "val_jepa_sigreg_loss": 0.0,
+        "val_loss": 0.0
+      },
+      "wandb_validation_points": 54
+    },
+    "missing_steps_by_run": {
+      "continuation_b512": [],
+      "final_reused_run": [
+        17172,
+        17173,
+        17174,
+        17175
+      ],
+      "initial_b256": []
+    },
+    "runs": 3,
+    "validation_points": 102
+  }
+}

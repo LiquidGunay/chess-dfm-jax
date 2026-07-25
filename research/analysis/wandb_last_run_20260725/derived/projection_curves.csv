@@ -1,0 +1,403 @@
+epoch,series,val_dfm_ce_loss,kind
+50.0,exponential to floor,4.75938630665269,conditional projection
+50.25,exponential to floor,4.754206095299929,conditional projection
+50.5,exponential to floor,4.7491037345259,conditional projection
+50.75,exponential to floor,4.744078054356604,conditional projection
+51.0,exponential to floor,4.739127902400939,conditional projection
+51.25,exponential to floor,4.734252143586466,conditional projection
+51.5,exponential to floor,4.72944965989913,conditional projection
+51.75,exponential to floor,4.724719350126903,conditional projection
+52.0,exponential to floor,4.720060129607272,conditional projection
+52.25,exponential to floor,4.715470929978528,conditional projection
+52.5,exponential to floor,4.710950698934787,conditional projection
+52.75,exponential to floor,4.706498399984701,conditional projection
+53.0,exponential to floor,4.702113012213784,conditional projection
+53.25,exponential to floor,4.697793530050321,conditional projection
+53.5,exponential to floor,4.693538963034784,conditional projection
+53.75,exponential to floor,4.689348335592724,conditional projection
+54.0,exponential to floor,4.685220686811072,conditional projection
+54.25,exponential to floor,4.6811550702177955,conditional projection
+54.5,exponential to floor,4.677150553564877,conditional projection
+54.75,exponential to floor,4.673206218614547,conditional projection
+55.0,exponential to floor,4.669321160928733,conditional projection
+55.25,exponential to floor,4.6654944896616675,conditional projection
+55.5,exponential to floor,4.661725327355624,conditional projection
+55.75,exponential to floor,4.658012809739706,conditional projection
+56.0,exponential to floor,4.654356085531678,conditional projection
+56.25,exponential to floor,4.65075431624276,conditional projection
+56.5,exponential to floor,4.647206675985364,conditional projection
+56.75,exponential to floor,4.643712351283719,conditional projection
+57.0,exponential to floor,4.640270540887338,conditional projection
+57.25,exponential to floor,4.636880455587289,conditional projection
+57.5,exponential to floor,4.633541318035237,conditional projection
+57.75,exponential to floor,4.630252362565188,conditional projection
+58.0,exponential to floor,4.627012835017927,conditional projection
+58.25,exponential to floor,4.6238219925680895,conditional projection
+58.5,exponential to floor,4.620679103553826,conditional projection
+58.75,exponential to floor,4.617583447309038,conditional projection
+59.0,exponential to floor,4.6145343139981225,conditional projection
+59.25,exponential to floor,4.611531004453214,conditional projection
+59.5,exponential to floor,4.608572830013857,conditional projection
+59.75,exponential to floor,4.605659112369102,conditional projection
+60.0,exponential to floor,4.6027891834019625,conditional projection
+60.25,exponential to floor,4.599962385036221,conditional projection
+60.5,exponential to floor,4.597178069085531,conditional projection
+60.75,exponential to floor,4.594435597104782,conditional projection
+61.0,exponential to floor,4.591734340243712,conditional projection
+61.25,exponential to floor,4.589073679102705,conditional projection
+61.5,exponential to floor,4.586453003590765,conditional projection
+61.75,exponential to floor,4.583871712785622,conditional projection
+62.0,exponential to floor,4.581329214795941,conditional projection
+62.25,exponential to floor,4.578824926625599,conditional projection
+62.5,exponential to floor,4.576358274040005,conditional projection
+62.75,exponential to floor,4.573928691434426,conditional projection
+63.0,exponential to floor,4.571535621704296,conditional projection
+63.25,exponential to floor,4.569178516117472,conditional projection
+63.5,exponential to floor,4.566856834188405,conditional projection
+63.75,exponential to floor,4.564570043554211,conditional projection
+64.0,exponential to floor,4.562317619852597,conditional projection
+64.25,exponential to floor,4.5600990466016285,conditional projection
+64.5,exponential to floor,4.557913815081293,conditional projection
+64.75,exponential to floor,4.5557614242168585,conditional projection
+65.0,exponential to floor,4.5536413804639695,conditional projection
+65.25,exponential to floor,4.551553197695481,conditional projection
+65.5,exponential to floor,4.549496397089989,conditional projection
+65.75,exponential to floor,4.547470507022035,conditional projection
+66.0,exponential to floor,4.545475062953964,conditional projection
+66.25,exponential to floor,4.543509607329406,conditional projection
+66.5,exponential to floor,4.541573689468353,conditional projection
+66.75,exponential to floor,4.539666865463825,conditional projection
+67.0,exponential to floor,4.5377886980800755,conditional projection
+67.25,exponential to floor,4.535938756652341,conditional projection
+67.5,exponential to floor,4.534116616988078,conditional projection
+67.75,exponential to floor,4.532321861269709,conditional projection
+68.0,exponential to floor,4.530554077958806,conditional projection
+68.25,exponential to floor,4.528812861701725,conditional projection
+68.5,exponential to floor,4.527097813236669,conditional projection
+68.75,exponential to floor,4.525408539302122,conditional projection
+69.0,exponential to floor,4.523744652546686,conditional projection
+69.25,exponential to floor,4.5221057714402555,conditional projection
+69.5,exponential to floor,4.520491520186531,conditional projection
+69.75,exponential to floor,4.518901528636856,conditional projection
+70.0,exponential to floor,4.517335432205331,conditional projection
+70.25,exponential to floor,4.515792871785225,conditional projection
+70.5,exponential to floor,4.514273493666623,conditional projection
+70.75,exponential to floor,4.5127769494553265,conditional projection
+71.0,exponential to floor,4.511302895992962,conditional projection
+71.25,exponential to floor,4.509850995278297,conditional projection
+71.5,exponential to floor,4.5084209143897365,conditional projection
+71.75,exponential to floor,4.507012325408982,conditional projection
+72.0,exponential to floor,4.505624905345842,conditional projection
+72.25,exponential to floor,4.504258336064167,conditional projection
+72.5,exponential to floor,4.5029123042089045,conditional projection
+72.75,exponential to floor,4.501586501134244,conditional projection
+73.0,exponential to floor,4.500280622832845,conditional projection
+73.25,exponential to floor,4.498994369866128,conditional projection
+73.5,exponential to floor,4.4977274472956115,conditional projection
+73.75,exponential to floor,4.496479564615287,conditional projection
+74.0,exponential to floor,4.495250435685001,conditional projection
+74.25,exponential to floor,4.4940397786648445,conditional projection
+74.5,exponential to floor,4.492847315950528,conditional projection
+74.75,exponential to floor,4.491672774109725,conditional projection
+75.0,exponential to floor,4.490515883819376,conditional projection
+75.25,exponential to floor,4.48937637980393,conditional projection
+75.5,exponential to floor,4.488254000774519,conditional projection
+75.75,exponential to floor,4.487148489369041,conditional projection
+76.0,exponential to floor,4.486059592093152,conditional projection
+76.25,exponential to floor,4.484987059262137,conditional projection
+76.5,exponential to floor,4.483930644943652,conditional projection
+76.75,exponential to floor,4.482890106901341,conditional projection
+77.0,exponential to floor,4.481865206539286,conditional projection
+77.25,exponential to floor,4.480855708847296,conditional projection
+77.5,exponential to floor,4.479861382347019,conditional projection
+77.75,exponential to floor,4.478881999038868,conditional projection
+78.0,exponential to floor,4.477917334349736,conditional projection
+78.25,exponential to floor,4.476967167081504,conditional projection
+78.5,exponential to floor,4.4760312793603205,conditional projection
+78.75,exponential to floor,4.475109456586638,conditional projection
+79.0,exponential to floor,4.474201487386011,conditional projection
+79.25,exponential to floor,4.4733071635606265,conditional projection
+79.5,exponential to floor,4.472426280041561,conditional projection
+79.75,exponential to floor,4.471558634841763,conditional projection
+80.0,exponential to floor,4.470704029009732,conditional projection
+80.25,exponential to floor,4.469862266583902,conditional projection
+80.5,exponential to floor,4.4690331545477076,conditional projection
+80.75,exponential to floor,4.468216502785324,conditional projection
+81.0,exponential to floor,4.4674121240380735,conditional projection
+81.25,exponential to floor,4.466619833861487,conditional projection
+81.5,exponential to floor,4.465839450583013,conditional projection
+81.75,exponential to floor,4.465070795260354,conditional projection
+82.0,exponential to floor,4.4643136916404424,conditional projection
+82.25,exponential to floor,4.4635679661190215,conditional projection
+82.5,exponential to floor,4.462833447700837,conditional projection
+82.75,exponential to floor,4.462109967960432,conditional projection
+83.0,exponential to floor,4.461397361003519,conditional projection
+83.25,exponential to floor,4.460695463428952,conditional projection
+83.5,exponential to floor,4.460004114291249,conditional projection
+83.75,exponential to floor,4.4593231550636885,conditional projection
+84.0,exponential to floor,4.458652429601963,conditional projection
+84.25,exponential to floor,4.457991784108372,conditional projection
+84.5,exponential to floor,4.457341067096557,conditional projection
+84.75,exponential to floor,4.456700129356767,conditional projection
+85.0,exponential to floor,4.456068823921641,conditional projection
+85.25,exponential to floor,4.455447006032512,conditional projection
+85.5,exponential to floor,4.454834533106211,conditional projection
+85.75,exponential to floor,4.454231264702376,conditional projection
+86.0,exponential to floor,4.453637062491244,conditional projection
+86.25,exponential to floor,4.453051790221937,conditional projection
+86.5,exponential to floor,4.452475313691217,conditional projection
+86.75,exponential to floor,4.4519075007127125,conditional projection
+87.0,exponential to floor,4.45134822108661,conditional projection
+87.25,exponential to floor,4.450797346569797,conditional projection
+87.5,exponential to floor,4.450254750846459,conditional projection
+87.75,exponential to floor,4.449720309499112,conditional projection
+88.0,exponential to floor,4.449193899980073,conditional projection
+88.25,exponential to floor,4.448675401583365,conditional projection
+88.5,exponential to floor,4.448164695417033,conditional projection
+88.75,exponential to floor,4.447661664375884,conditional projection
+89.0,exponential to floor,4.447166193114638,conditional projection
+89.25,exponential to floor,4.446678168021474,conditional projection
+89.5,exponential to floor,4.4461974771919825,conditional projection
+89.75,exponential to floor,4.445724010403504,conditional projection
+90.0,exponential to floor,4.445257659089855,conditional projection
+90.25,exponential to floor,4.444798316316435,conditional projection
+90.5,exponential to floor,4.444345876755706,conditional projection
+90.75,exponential to floor,4.443900236663038,conditional projection
+91.0,exponential to floor,4.443461293852923,conditional projection
+91.25,exponential to floor,4.443028947675548,conditional projection
+91.5,exponential to floor,4.442603098993705,conditional projection
+91.75,exponential to floor,4.442183650160067,conditional projection
+92.0,exponential to floor,4.441770504994799,conditional projection
+92.25,exponential to floor,4.441363568763497,conditional projection
+92.5,exponential to floor,4.440962748155468,conditional projection
+92.75,exponential to floor,4.440567951262338,conditional projection
+93.0,exponential to floor,4.440179087556972,conditional projection
+93.25,exponential to floor,4.439796067872718,conditional projection
+93.5,exponential to floor,4.439418804382962,conditional projection
+93.75,exponential to floor,4.439047210580988,conditional projection
+94.0,exponential to floor,4.438681201260141,conditional projection
+94.25,exponential to floor,4.438320692494293,conditional projection
+94.5,exponential to floor,4.437965601618594,conditional projection
+94.75,exponential to floor,4.4376158472105205,conditional projection
+95.0,exponential to floor,4.437271349071203,conditional projection
+95.25,exponential to floor,4.436932028207037,conditional projection
+95.5,exponential to floor,4.436597806811572,conditional projection
+95.75,exponential to floor,4.436268608247665,conditional projection
+96.0,exponential to floor,4.435944357029912,conditional projection
+96.25,exponential to floor,4.435624978807341,conditional projection
+96.5,exponential to floor,4.435310400346356,conditional projection
+96.75,exponential to floor,4.435000549513952,conditional projection
+97.0,exponential to floor,4.43469535526117,conditional projection
+97.25,exponential to floor,4.434394747606808,conditional projection
+97.5,exponential to floor,4.434098657621373,conditional projection
+97.75,exponential to floor,4.433807017411276,conditional projection
+98.0,exponential to floor,4.433519760103263,conditional projection
+98.25,exponential to floor,4.433236819829085,conditional projection
+98.5,exponential to floor,4.432958131710386,conditional projection
+98.75,exponential to floor,4.432683631843836,conditional projection
+99.0,exponential to floor,4.432413257286471,conditional projection
+99.25,exponential to floor,4.432146946041263,conditional projection
+99.5,exponential to floor,4.431884637042903,conditional projection
+99.75,exponential to floor,4.431626270143801,conditional projection
+100.0,exponential to floor,4.431371786100292,conditional projection
+50.0,power law to floor,4.761169462568549,conditional projection
+50.25,power law to floor,4.755735862061265,conditional projection
+50.5,power law to floor,4.750400324569256,conditional projection
+50.75,power law to floor,4.74516060789464,conditional projection
+51.0,power law to floor,4.740014531803004,conditional projection
+51.25,power law to floor,4.734959976018325,conditional projection
+51.5,power law to floor,4.729994878292153,conditional projection
+51.75,power law to floor,4.725117232543967,conditional projection
+52.0,power law to floor,4.72032508706974,conditional projection
+52.25,power law to floor,4.715616542815907,conditional projection
+52.5,power law to floor,4.710989751716052,conditional projection
+52.75,power law to floor,4.706442915087743,conditional projection
+53.0,power law to floor,4.701974282087072,conditional projection
+53.25,power law to floor,4.697582148218548,conditional projection
+53.5,power law to floor,4.6932648538981505,conditional projection
+53.75,power law to floor,4.689020783067356,conditional projection
+54.0,power law to floor,4.684848361856147,conditional projection
+54.25,power law to floor,4.680746057293041,conditional projection
+54.5,power law to floor,4.676712376060258,conditional projection
+54.75,power law to floor,4.672745863292288,conditional projection
+55.0,power law to floor,4.668845101416127,conditional projection
+55.25,power law to floor,4.665008709031557,conditional projection
+55.5,power law to floor,4.661235339829928,conditional projection
+55.75,power law to floor,4.657523681549944,conditional projection
+56.0,power law to floor,4.653872454969019,conditional projection
+56.25,power law to floor,4.6502804129288595,conditional projection
+56.5,power law to floor,4.646746339393944,conditional projection
+56.75,power law to floor,4.64326904854167,conditional projection
+57.0,power law to floor,4.639847383882946,conditional projection
+57.25,power law to floor,4.636480217412115,conditional projection
+57.5,power law to floor,4.633166448785062,conditional projection
+57.75,power law to floor,4.629905004524511,conditional projection
+58.0,power law to floor,4.626694837251444,conditional projection
+58.25,power law to floor,4.623534924941708,conditional projection
+58.5,power law to floor,4.620424270206877,conditional projection
+58.75,power law to floor,4.6173618995984675,conditional projection
+59.0,power law to floor,4.614346862934662,conditional projection
+59.25,power law to floor,4.6113782326487165,conditional projection
+59.5,power law to floor,4.608455103158273,conditional projection
+59.75,power law to floor,4.605576590254813,conditional projection
+60.0,power law to floor,4.602741830512531,conditional projection
+60.25,power law to floor,4.599949980715935,conditional projection
+60.5,power law to floor,4.597200217305502,conditional projection
+60.75,power law to floor,4.594491735840759,conditional projection
+61.0,power law to floor,4.591823750480143,conditional projection
+61.25,power law to floor,4.589195493477094,conditional projection
+61.5,power law to floor,4.58660621469177,conditional projection
+61.75,power law to floor,4.584055181117862,conditional projection
+62.0,power law to floor,4.581541676423974,conditional projection
+62.25,power law to floor,4.579065000509064,conditional projection
+62.5,power law to floor,4.57662446907147,conditional projection
+62.75,power law to floor,4.574219413191038,conditional projection
+63.0,power law to floor,4.571849178923909,conditional projection
+63.25,power law to floor,4.569513126909547,conditional projection
+63.5,power law to floor,4.567210631989568,conditional projection
+63.75,power law to floor,4.564941082837989,conditional projection
+64.0,power law to floor,4.562703881602505,conditional projection
+64.25,power law to floor,4.560498443556421,conditional projection
+64.5,power law to floor,4.558324196760889,conditional projection
+64.75,power law to floor,4.556180581737103,conditional projection
+65.0,power law to floor,4.55406705114812,conditional projection
+65.25,power law to floor,4.5519830694899905,conditional projection
+65.5,power law to floor,4.549928112791891,conditional projection
+65.75,power law to floor,4.547901668324966,conditional projection
+66.0,power law to floor,4.545903234319585,conditional projection
+66.25,power law to floor,4.543932319690762,conditional projection
+66.5,power law to floor,4.541988443771438,conditional projection
+66.75,power law to floor,4.540071136053409,conditional projection
+67.0,power law to floor,4.538179935935628,conditional projection
+67.25,power law to floor,4.536314392479656,conditional projection
+67.5,power law to floor,4.534474064172026,conditional projection
+67.75,power law to floor,4.532658518693312,conditional projection
+68.0,power law to floor,4.530867332693671,conditional projection
+68.25,power law to floor,4.529100091574674,conditional projection
+68.5,power law to floor,4.527356389277213,conditional projection
+68.75,power law to floor,4.525635828075302,conditional projection
+69.0,power law to floor,4.523938018375577,conditional projection
+69.25,power law to floor,4.522262578522335,conditional projection
+69.5,power law to floor,4.520609134607918,conditional projection
+69.75,power law to floor,4.518977320288296,conditional projection
+70.0,power law to floor,4.517366776603677,conditional projection
+70.25,power law to floor,4.515777151803997,conditional projection
+70.5,power law to floor,4.5142081011791255,conditional projection
+70.75,power law to floor,4.512659286893671,conditional projection
+71.0,power law to floor,4.5111303778262135,conditional projection
+71.25,power law to floor,4.509621049412856,conditional projection
+71.5,power law to floor,4.50813098349495,conditional projection
+71.75,power law to floor,4.506659868170872,conditional projection
+72.0,power law to floor,4.505207397651736,conditional projection
+72.25,power law to floor,4.5037732721209185,conditional projection
+72.5,power law to floor,4.502357197597279,conditional projection
+72.75,power law to floor,4.500958885801977,conditional projection
+73.0,power law to floor,4.499578054028771,conditional projection
+73.25,power law to floor,4.498214425017697,conditional projection
+73.5,power law to floor,4.496867726832031,conditional projection
+73.75,power law to floor,4.495537692738438,conditional projection
+74.0,power law to floor,4.494224061090212,conditional projection
+74.25,power law to floor,4.492926575213524,conditional projection
+74.5,power law to floor,4.491644983296578,conditional projection
+74.75,power law to floor,4.490379038281608,conditional projection
+75.0,power law to floor,4.489128497759617,conditional projection
+75.25,power law to floor,4.487893123867794,conditional projection
+75.5,power law to floor,4.486672683189524,conditional projection
+75.75,power law to floor,4.485466946656916,conditional projection
+76.0,power law to floor,4.484275689455785,conditional projection
+76.25,power law to floor,4.483098690933011,conditional projection
+76.5,power law to floor,4.481935734506214,conditional projection
+76.75,power law to floor,4.480786607575672,conditional projection
+77.0,power law to floor,4.479651101438428,conditional projection
+77.25,power law to floor,4.478529011204521,conditional projection
+77.5,power law to floor,4.477420135715278,conditional projection
+77.75,power law to floor,4.476324277463614,conditional projection
+78.0,power law to floor,4.475241242516289,conditional projection
+78.25,power law to floor,4.474170840438056,conditional projection
+78.5,power law to floor,4.473112884217655,conditional projection
+78.75,power law to floor,4.4720671901956095,conditional projection
+79.0,power law to floor,4.471033577993758,conditional projection
+79.25,power law to floor,4.470011870446496,conditional projection
+79.5,power law to floor,4.469001893533655,conditional projection
+79.75,power law to floor,4.4680034763150065,conditional projection
+80.0,power law to floor,4.467016450866318,conditional projection
+80.25,power law to floor,4.466040652216928,conditional projection
+80.5,power law to floor,4.46507591828882,conditional projection
+80.75,power law to floor,4.464122089837117,conditional projection
+81.0,power law to floor,4.463179010391993,conditional projection
+81.25,power law to floor,4.462246526201945,conditional projection
+81.5,power law to floor,4.461324486178392,conditional projection
+81.75,power law to floor,4.46041274184158,conditional projection
+82.0,power law to floor,4.459511147267731,conditional projection
+82.25,power law to floor,4.458619559037434,conditional projection
+82.5,power law to floor,4.457737836185217,conditional projection
+82.75,power law to floor,4.456865840150301,conditional projection
+83.0,power law to floor,4.456003434728471,conditional projection
+83.25,power law to floor,4.455150486025058,conditional projection
+83.5,power law to floor,4.454306862408999,conditional projection
+83.75,power law to floor,4.453472434467941,conditional projection
+84.0,power law to floor,4.452647074964369,conditional projection
+84.25,power law to floor,4.451830658792723,conditional projection
+84.5,power law to floor,4.451023062937496,conditional projection
+84.75,power law to floor,4.450224166432265,conditional projection
+85.0,power law to floor,4.449433850319647,conditional projection
+85.25,power law to floor,4.4486519976121555,conditional projection
+85.5,power law to floor,4.447878493253925,conditional projection
+85.75,power law to floor,4.4471132240832985,conditional projection
+86.0,power law to floor,4.446356078796232,conditional projection
+86.25,power law to floor,4.445606947910525,conditional projection
+86.5,power law to floor,4.444865723730826,conditional projection
+86.75,power law to floor,4.444132300314423,conditional projection
+87.0,power law to floor,4.443406573437774,conditional projection
+87.25,power law to floor,4.44268844056378,conditional projection
+87.5,power law to floor,4.441977800809759,conditional projection
+87.75,power law to floor,4.441274554916133,conditional projection
+88.0,power law to floor,4.44057860521579,conditional projection
+88.25,power law to floor,4.439889855604096,conditional projection
+88.5,power law to floor,4.439208211509577,conditional projection
+88.75,power law to floor,4.4385335798652115,conditional projection
+89.0,power law to floor,4.437865869080357,conditional projection
+89.25,power law to floor,4.437204989013264,conditional projection
+89.5,power law to floor,4.436550850944178,conditional projection
+89.75,power law to floor,4.435903367549028,conditional projection
+90.0,power law to floor,4.435262452873656,conditional projection
+90.25,power law to floor,4.4346280223085985,conditional projection
+90.5,power law to floor,4.4339999925644085,conditional projection
+90.75,power law to floor,4.433378281647484,conditional projection
+91.0,power law to floor,4.432762808836412,conditional projection
+91.25,power law to floor,4.432153494658808,conditional projection
+91.5,power law to floor,4.431550260868632,conditional projection
+91.75,power law to floor,4.43095303042399,conditional projection
+92.0,power law to floor,4.430361727465382,conditional projection
+92.25,power law to floor,4.429776277294408,conditional projection
+92.5,power law to floor,4.429196606352919,conditional projection
+92.75,power law to floor,4.428622642202583,conditional projection
+93.0,power law to floor,4.428054313504888,conditional projection
+93.25,power law to floor,4.427491550001539,conditional projection
+93.5,power law to floor,4.426934282495269,conditional projection
+93.75,power law to floor,4.426382442831029,conditional projection
+94.0,power law to floor,4.425835963877573,conditional projection
+94.25,power law to floor,4.425294779509405,conditional projection
+94.5,power law to floor,4.424758824589098,conditional projection
+94.75,power law to floor,4.4242280349499685,conditional projection
+95.0,power law to floor,4.423702347379095,conditional projection
+95.25,power law to floor,4.423181699600684,conditional projection
+95.5,power law to floor,4.422666030259764,conditional projection
+95.75,power law to floor,4.422155278906208,conditional projection
+96.0,power law to floor,4.42164938597907,conditional projection
+96.25,power law to floor,4.421148292791239,conditional projection
+96.5,power law to floor,4.420651941514387,conditional projection
+96.75,power law to floor,4.420160275164226,conditional projection
+97.0,power law to floor,4.419673237586047,conditional projection
+97.25,power law to floor,4.4191907734405484,conditional projection
+97.5,power law to floor,4.4187128281899355,conditional projection
+97.75,power law to floor,4.418239348084298,conditional projection
+98.0,power law to floor,4.417770280148252,conditional projection
+98.25,power law to floor,4.417305572167842,conditional projection
+98.5,power law to floor,4.41684517267769,conditional projection
+98.75,power law to floor,4.416389030948409,conditional projection
+99.0,power law to floor,4.41593709697424,conditional projection
+99.25,power law to floor,4.415489321460941,conditional projection
+99.5,power law to floor,4.415045655813908,conditional projection
+99.75,power law to floor,4.414606052126513,conditional projection
+100.0,power law to floor,4.414170463168678,conditional projection

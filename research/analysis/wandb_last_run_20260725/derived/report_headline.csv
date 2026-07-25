@@ -1,0 +1,2 @@
+retained_epochs,wandb_endpoint_epochs,best_val_dfm_ce,retained_val_dfm_ce,retained_minus_best,projection_midpoint,projection_low,projection_high
+76.06336934137794,76.68709129665089,4.503007724881172,4.541200563311577,0.03819283843040466,4.432415697333296,4.414170463168678,4.450660931497914
