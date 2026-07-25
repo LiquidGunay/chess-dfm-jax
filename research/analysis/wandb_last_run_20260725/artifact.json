@@ -7,7 +7,7 @@
         "type": "markdown"
       },
       {
-        "body": "## Technical summary\n\nThe retained step-265k checkpoint is best understood as a **76.06-epoch model**, not an eight-epoch run. It inherited 2.00 epochs from the initial run, 0.181 epochs from the first 10k steps of the intermediate continuation, and 73.88 epochs from the final reused run. Its best comparable validation DFM CE was **4.503 at step 255k (73.17 epochs)**; the retained checkpoint had worsened to **4.541**. Stable-phase saturation fits imply **4.41\u20134.45 at 100 epochs**, conditional on removing the late instability. The literal crashed run does not support that continuation assumption.",
+        "body": "## Technical summary\n\nThe retained step-265k checkpoint is best understood as a **76.06-epoch model**, not an eight-epoch run. It inherited 2.00 epochs from the initial run, 0.181 epochs from the first 10k steps of the intermediate continuation, and 73.88 epochs from the final reused run. The TPU processed **at least 76.51 and likely about 80.33 training-set equivalents** after abandoned branches and high-confidence retry replays are included. Its best comparable validation DFM CE was **4.503 at step 255k (73.17 epochs)**; the retained checkpoint had worsened to **4.541**. Stable-phase saturation fits imply **4.41\u20134.45 at 100 epochs**, conditional on removing the late instability. The literal crashed run does not support that continuation assumption.",
         "id": "technical_summary",
         "sourceId": "lineage_analysis",
         "type": "markdown"
@@ -22,7 +22,7 @@
         "type": "metric-strip"
       },
       {
-        "body": "## The checkpoint lineage contains three optimizer phases\n\nRun A started fresh. Run B loaded only model weights from run A, so its optimizer and step counter restarted. Run C likewise loaded only the step-10k model from run B before later full-state resumes. Run B's steps 10,001\u201315,176 are a side branch: they consumed compute but are not ancestors of the retained model. The large-batch run-C restart most likely resumed from step 10k, giving the 76.06-epoch estimate; treating W&B's displayed geometry literally gives 75.87 epochs.",
+        "body": "## The checkpoint lineage contains three optimizer phases\n\nRun A started fresh. Run B loaded only model weights from run A, so its optimizer and step counter restarted. Run C likewise loaded only the step-10k model from run B before later full-state resumes. Run B's steps 10,001\u201315,176 are a side branch: they consumed compute but are not ancestors of the retained model. The large-batch run-C restart most likely resumed from step 10k, giving the 76.06-epoch estimate; treating W&B's displayed geometry literally gives 75.87 epochs. Counting the confirmed retry and abandoned tail gives a 76.51-epoch compute lower bound; periodic-checkpoint replay signatures raise the medium-confidence compute estimate to 80.33 epochs.",
         "id": "lineage_finding",
         "sourceId": "lineage_analysis",
         "type": "markdown"
@@ -66,7 +66,7 @@
         "type": "chart"
       },
       {
-        "body": "## Scope, data, and methodology\n\nThe analysis uses 503,762 exported per-update W&B rows across the three identified runs, 102 validation snapshots, the 28,343,296-example training manifest, the retained checkpoint's local metrics, and the trainer's restore/evaluation code. Runs are joined by parent checkpoint rather than displayed W&B step. Cumulative examples use each inherited segment's global batch. The nine local validation snapshots at steps 225k\u2013265k match W&B exactly on all five checked metrics.",
+        "body": "## Scope, data, and methodology\n\nThe analysis uses 503,762 exported per-update W&B rows across the three identified runs, 102 validation snapshots, the 28,343,296-example training manifest, the retained checkpoint's local metrics, and the trainer's restore/evaluation code. Runs are joined by parent checkpoint rather than displayed W&B step. Cumulative examples use each inherited segment's global batch. Compute exposure additionally counts executed discarded branches and inferred retries. The nine local validation snapshots at steps 225k\u2013265k match W&B exactly on all five checked metrics.",
         "id": "scope_methodology",
         "sourceId": "lineage_analysis",
         "type": "markdown"
@@ -88,7 +88,7 @@
         "type": "table"
       },
       {
-        "body": "## Limitations and robustness\n\nThe 76.06-epoch count assumes the 8,192-batch restart rolled back to the periodic step-10k checkpoint; wall time, checkpoint cadence, and the first accepted large-batch log support this, but the overwritten run log prevents direct proof. The literal W&B-geometry alternative is 75.87 epochs, only 0.20 epochs lower. Cross-run validation values are not directly comparable because the evaluated population changed. Curve-model spread is sensitivity analysis, not statistical coverage, and DFM CE has not yet been calibrated to Elo.",
+        "body": "## Limitations and robustness\n\nThe 76.06-epoch count assumes the 8,192-batch restart rolled back to the periodic step-10k checkpoint; wall time, checkpoint cadence, and the first accepted large-batch log support this, but the overwritten run log prevents direct proof. The literal W&B-geometry alternative is 75.87 epochs, only 0.20 epochs lower. The 80.33-epoch compute estimate is medium-confidence because several earlier process logs were overwritten; 76.51 is the evidence-backed lower bound. Cross-run validation values are not directly comparable because the evaluated population changed. Curve-model spread is sensitivity analysis, not statistical coverage, and DFM CE has not yet been calibrated to Elo.",
         "id": "limitations",
         "sourceId": "lineage_analysis",
         "type": "markdown"
@@ -108,7 +108,7 @@
     "cards": [
       {
         "dataset": "headline",
-        "description": "Training-set-equivalent exposure inherited by the retained step-265k checkpoint.",
+        "description": "Inherited exposure of the retained step-265k checkpoint compared with the retry-adjusted estimate of all examples processed.",
         "id": "epochs_card",
         "metrics": [
           {
@@ -117,9 +117,9 @@
             "label": "Retained lineage epochs"
           },
           {
-            "field": "wandb_endpoint_epochs",
+            "field": "retry_adjusted_compute_epochs",
             "format": "number",
-            "label": "W&B endpoint epochs"
+            "label": "Likely epochs processed"
           }
         ],
         "sourceId": "headline_source"
@@ -240,7 +240,7 @@
       }
     ],
     "description": "Reconstructed checkpoint lineage, data-quality audit, and bounded 100-epoch loss scenarios for the May 2026 joint BT4/JEPA-DFM training.",
-    "generatedAt": "2026-07-25T07:42:11Z",
+    "generatedAt": "2026-07-25T07:45:50Z",
     "sources": [
       {
         "href": "https://wandb.ai/gunays-independent/chess_dfm_jax-joint/runs/jph8-b512-ln-sig005-lr3e4-init221432-8ep-v5e64-euw4-20260506a",
@@ -250,7 +250,7 @@
         "query": {
           "description": "Joins three continuation runs by checkpoint ancestry and cumulative examples, audits validation protocols, and fits post-change saturation scenarios.",
           "engine": "Python over bounded W&B API export",
-          "executed_at": "2026-07-25T07:42:11Z",
+          "executed_at": "2026-07-25T07:45:50Z",
           "filters": [
             "Only the three identified May 2026 joint-training runs",
             "Run-B steps above 10,000 excluded from the final-model lineage",
@@ -281,7 +281,7 @@
         "query": {
           "description": "Per-update and validation metrics for the reused final run ID.",
           "engine": "Weights & Biases",
-          "executed_at": "2026-07-25T07:42:11Z",
+          "executed_at": "2026-07-25T07:45:50Z",
           "filters": [
             "Steps 1 through 267,158",
             "Fixed allowlist of optimization, validation, and topology metrics"
@@ -304,7 +304,7 @@
         "query": {
           "description": "Reviews checkpoint restore semantics, process-local validation, batch construction, and checkpoint cadence.",
           "engine": "Repository source audit",
-          "executed_at": "2026-07-25T07:42:11Z",
+          "executed_at": "2026-07-25T07:45:50Z",
           "filters": [
             "Checkpoint initialization and resume paths",
             "Validation loader and evaluate_validation_batches",
@@ -329,7 +329,7 @@
         "query": {
           "description": "Loads the exact headline values shown in the metric strip.",
           "engine": "DuckDB",
-          "executed_at": "2026-07-25T07:42:11Z",
+          "executed_at": "2026-07-25T07:45:50Z",
           "filters": [
             "No additional row filters; the CSV is a reviewed bounded output"
           ],
@@ -351,7 +351,7 @@
         "query": {
           "description": "Loads observed validation points and the two reviewed projection curves.",
           "engine": "DuckDB",
-          "executed_at": "2026-07-25T07:42:11Z",
+          "executed_at": "2026-07-25T07:45:50Z",
           "filters": [
             "No additional row filters; the CSV is a reviewed bounded output"
           ],
@@ -373,7 +373,7 @@
         "query": {
           "description": "Loads the reconstructed inherited-exposure table in lineage order.",
           "engine": "DuckDB",
-          "executed_at": "2026-07-25T07:42:11Z",
+          "executed_at": "2026-07-25T07:45:50Z",
           "filters": [
             "No additional row filters; the CSV is a reviewed bounded output"
           ],
@@ -395,7 +395,7 @@
         "query": {
           "description": "Loads fit windows, errors, holdout diagnostics, and epoch-100 scenarios.",
           "engine": "DuckDB",
-          "executed_at": "2026-07-25T07:42:11Z",
+          "executed_at": "2026-07-25T07:45:50Z",
           "filters": [
             "No additional row filters; the CSV is a reviewed bounded output"
           ],
@@ -417,7 +417,7 @@
         "query": {
           "description": "Loads the sampled raw target-SIGReg series near the W&B endpoint.",
           "engine": "DuckDB",
-          "executed_at": "2026-07-25T07:42:11Z",
+          "executed_at": "2026-07-25T07:45:50Z",
           "filters": [
             "No additional row filters; the CSV is a reviewed bounded output"
           ],
@@ -439,7 +439,7 @@
         "query": {
           "description": "Loads the process-local validation population and sample size by segment.",
           "engine": "DuckDB",
-          "executed_at": "2026-07-25T07:42:11Z",
+          "executed_at": "2026-07-25T07:45:50Z",
           "filters": [
             "No additional row filters; the CSV is a reviewed bounded output"
           ],
@@ -461,7 +461,7 @@
         "query": {
           "description": "Loads the severity-ranked audit findings and remediations.",
           "engine": "DuckDB",
-          "executed_at": "2026-07-25T07:42:11Z",
+          "executed_at": "2026-07-25T07:45:50Z",
           "filters": [
             "No additional row filters; the CSV is a reviewed bounded output"
           ],
@@ -689,12 +689,14 @@
       "headline": [
         {
           "best_val_dfm_ce": 4.503007724881172,
+          "compute_epochs_lower_bound": 76.51269915820659,
           "projection_high": 4.450660931497914,
           "projection_low": 4.414170463168678,
           "projection_midpoint": 4.432415697333296,
           "retained_epochs": 76.06336934137794,
           "retained_minus_best": 0.03819283843040466,
           "retained_val_dfm_ce": 4.541200563311577,
+          "retry_adjusted_compute_epochs": 80.32613172441201,
           "wandb_endpoint_epochs": 76.68709129665089
         }
       ],
@@ -5605,7 +5607,7 @@
         }
       ]
     },
-    "generatedAt": "2026-07-25T07:42:11Z",
+    "generatedAt": "2026-07-25T07:45:50Z",
     "status": "ready",
     "version": 1
   },
@@ -5618,7 +5620,7 @@
       "query": {
         "description": "Joins three continuation runs by checkpoint ancestry and cumulative examples, audits validation protocols, and fits post-change saturation scenarios.",
         "engine": "Python over bounded W&B API export",
-        "executed_at": "2026-07-25T07:42:11Z",
+        "executed_at": "2026-07-25T07:45:50Z",
         "filters": [
           "Only the three identified May 2026 joint-training runs",
           "Run-B steps above 10,000 excluded from the final-model lineage",
@@ -5649,7 +5651,7 @@
       "query": {
         "description": "Per-update and validation metrics for the reused final run ID.",
         "engine": "Weights & Biases",
-        "executed_at": "2026-07-25T07:42:11Z",
+        "executed_at": "2026-07-25T07:45:50Z",
         "filters": [
           "Steps 1 through 267,158",
           "Fixed allowlist of optimization, validation, and topology metrics"
@@ -5672,7 +5674,7 @@
       "query": {
         "description": "Reviews checkpoint restore semantics, process-local validation, batch construction, and checkpoint cadence.",
         "engine": "Repository source audit",
-        "executed_at": "2026-07-25T07:42:11Z",
+        "executed_at": "2026-07-25T07:45:50Z",
         "filters": [
           "Checkpoint initialization and resume paths",
           "Validation loader and evaluate_validation_batches",
@@ -5697,7 +5699,7 @@
       "query": {
         "description": "Loads the exact headline values shown in the metric strip.",
         "engine": "DuckDB",
-        "executed_at": "2026-07-25T07:42:11Z",
+        "executed_at": "2026-07-25T07:45:50Z",
         "filters": [
           "No additional row filters; the CSV is a reviewed bounded output"
         ],
@@ -5719,7 +5721,7 @@
       "query": {
         "description": "Loads observed validation points and the two reviewed projection curves.",
         "engine": "DuckDB",
-        "executed_at": "2026-07-25T07:42:11Z",
+        "executed_at": "2026-07-25T07:45:50Z",
         "filters": [
           "No additional row filters; the CSV is a reviewed bounded output"
         ],
@@ -5741,7 +5743,7 @@
       "query": {
         "description": "Loads the reconstructed inherited-exposure table in lineage order.",
         "engine": "DuckDB",
-        "executed_at": "2026-07-25T07:42:11Z",
+        "executed_at": "2026-07-25T07:45:50Z",
         "filters": [
           "No additional row filters; the CSV is a reviewed bounded output"
         ],
@@ -5763,7 +5765,7 @@
       "query": {
         "description": "Loads fit windows, errors, holdout diagnostics, and epoch-100 scenarios.",
         "engine": "DuckDB",
-        "executed_at": "2026-07-25T07:42:11Z",
+        "executed_at": "2026-07-25T07:45:50Z",
         "filters": [
           "No additional row filters; the CSV is a reviewed bounded output"
         ],
@@ -5785,7 +5787,7 @@
       "query": {
         "description": "Loads the sampled raw target-SIGReg series near the W&B endpoint.",
         "engine": "DuckDB",
-        "executed_at": "2026-07-25T07:42:11Z",
+        "executed_at": "2026-07-25T07:45:50Z",
         "filters": [
           "No additional row filters; the CSV is a reviewed bounded output"
         ],
@@ -5807,7 +5809,7 @@
       "query": {
         "description": "Loads the process-local validation population and sample size by segment.",
         "engine": "DuckDB",
-        "executed_at": "2026-07-25T07:42:11Z",
+        "executed_at": "2026-07-25T07:45:50Z",
         "filters": [
           "No additional row filters; the CSV is a reviewed bounded output"
         ],
@@ -5829,7 +5831,7 @@
       "query": {
         "description": "Loads the severity-ranked audit findings and remediations.",
         "engine": "DuckDB",
-        "executed_at": "2026-07-25T07:42:11Z",
+        "executed_at": "2026-07-25T07:45:50Z",
         "filters": [
           "No additional row filters; the CSV is a reviewed bounded output"
         ],

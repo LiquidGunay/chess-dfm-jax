@@ -912,11 +912,43 @@ def analyze() -> dict[str, Any]:
             if row["segment"] == "Retained final model — total"
         )
     )
+    b_side_examples = (15_176 - ANCESTOR_B_STEP) * 512
+    discarded_small_batch_examples = (10_722 - ANCESTOR_B_STEP) * 512
+    confirmed_retry_examples = 1_186 * 8_192
+    compute_examples_lower_bound = (
+        retained_examples
+        + b_side_examples
+        + discarded_small_batch_examples
+        + confirmed_retry_examples
+    )
+    c_logged_examples_through_retained = (
+        10_722 * 512 + (RETAINED_C_STEP - 10_722 - 4) * 8_192
+    )
+    c_missing_log_examples = 4 * 8_192
+    estimated_compute_examples = (
+        221_432 * 256
+        + 15_176 * 512
+        + c_logged_examples_through_retained
+        + c_missing_log_examples
+        + inferred_replays * 8_192
+    )
     summary = {
         "dataset_examples": dataset_examples,
         "retained_checkpoint_step": RETAINED_C_STEP,
         "retained_lineage_examples": retained_examples,
         "retained_lineage_epochs": retained_examples / dataset_examples,
+        "actual_compute_examples_lower_bound": compute_examples_lower_bound,
+        "actual_compute_epochs_lower_bound": (
+            compute_examples_lower_bound / dataset_examples
+        ),
+        "retry_adjusted_compute_examples_estimate": estimated_compute_examples,
+        "retry_adjusted_compute_epochs_estimate": (
+            estimated_compute_examples / dataset_examples
+        ),
+        "retry_adjusted_compute_overhead_epochs_estimate": (
+            (estimated_compute_examples - retained_examples) / dataset_examples
+        ),
+        "retry_adjusted_compute_estimate_confidence": "medium",
         "literal_wandb_geometry_epochs": (
             221_432 * 256
             + ANCESTOR_B_STEP * 512

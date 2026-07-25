@@ -87,7 +87,11 @@ def build_notebook():
                 f"**Retained step-265k model:** {summary['retained_lineage_epochs']:.3f} "
                 f"epochs / {summary['retained_lineage_examples']:,} examples.  "
                 f"**W&B endpoint:** {summary['wandb_endpoint_lineage_epochs']:.3f} "
-                f"epochs, but it is not the retained checkpoint."
+                f"epochs, but it is not the retained checkpoint.  "
+                f"**Actual compute:** at least "
+                f"{summary['actual_compute_epochs_lower_bound']:.3f} epochs and likely "
+                f"about {summary['retry_adjusted_compute_epochs_estimate']:.3f} after "
+                f"high-confidence checkpoint replays (medium-confidence estimate)."
             ))
             lineage = pd.read_csv(derived / "lineage_segments.csv")
             display(lineage[[

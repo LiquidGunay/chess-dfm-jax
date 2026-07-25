@@ -291,6 +291,12 @@ def build() -> dict[str, Any]:
         {
             "retained_epochs": summary["retained_lineage_epochs"],
             "wandb_endpoint_epochs": summary["wandb_endpoint_lineage_epochs"],
+            "compute_epochs_lower_bound": summary[
+                "actual_compute_epochs_lower_bound"
+            ],
+            "retry_adjusted_compute_epochs": summary[
+                "retry_adjusted_compute_epochs_estimate"
+            ],
             "best_val_dfm_ce": summary["best_comparable_validation"]["val_dfm_ce_loss"],
             "retained_val_dfm_ce": summary["retained_checkpoint_validation"][
                 "val_dfm_ce_loss"
@@ -457,14 +463,18 @@ def build() -> dict[str, Any]:
         {
             "id": "epochs_card",
             "description": (
-                "Training-set-equivalent exposure inherited by the retained step-265k "
-                "checkpoint."
+                "Inherited exposure of the retained step-265k checkpoint compared with "
+                "the retry-adjusted estimate of all examples processed."
             ),
             "dataset": "headline",
             "sourceId": "headline_source",
             "metrics": [
                 {"label": "Retained lineage epochs", "field": "retained_epochs", "format": "number"},
-                {"label": "W&B endpoint epochs", "field": "wandb_endpoint_epochs", "format": "number"},
+                {
+                    "label": "Likely epochs processed",
+                    "field": "retry_adjusted_compute_epochs",
+                    "format": "number",
+                },
             ],
         },
         {
@@ -669,7 +679,10 @@ def build() -> dict[str, Any]:
                 "The retained step-265k checkpoint is best understood as a **76.06-epoch "
                 "model**, not an eight-epoch run. It inherited 2.00 epochs from the "
                 "initial run, 0.181 epochs from the first 10k steps of the intermediate "
-                "continuation, and 73.88 epochs from the final reused run. Its best "
+                "continuation, and 73.88 epochs from the final reused run. "
+                "The TPU processed **at least 76.51 and likely about 80.33 "
+                "training-set equivalents** after abandoned branches and "
+                "high-confidence retry replays are included. Its best "
                 "comparable validation DFM CE was **4.503 at step 255k (73.17 epochs)**; "
                 "the retained checkpoint had worsened to **4.541**. Stable-phase "
                 "saturation fits imply **4.41–4.45 at 100 epochs**, conditional on "
@@ -694,7 +707,10 @@ def build() -> dict[str, Any]:
                 "steps 10,001–15,176 are a side branch: they consumed compute but are "
                 "not ancestors of the retained model. The large-batch run-C restart "
                 "most likely resumed from step 10k, giving the 76.06-epoch estimate; "
-                "treating W&B's displayed geometry literally gives 75.87 epochs."
+                "treating W&B's displayed geometry literally gives 75.87 epochs. "
+                "Counting the confirmed retry and abandoned tail gives a 76.51-epoch "
+                "compute lower bound; periodic-checkpoint replay signatures raise the "
+                "medium-confidence compute estimate to 80.33 epochs."
             ),
         },
         {"id": "lineage_detail", "type": "table", "tableId": "lineage_table"},
@@ -758,7 +774,9 @@ def build() -> dict[str, Any]:
                 "training manifest, the retained checkpoint's local metrics, and the "
                 "trainer's restore/evaluation code. Runs are joined by parent checkpoint "
                 "rather than displayed W&B step. Cumulative examples use each inherited "
-                "segment's global batch. The nine local validation snapshots at steps "
+                "segment's global batch. Compute exposure additionally counts executed "
+                "discarded branches and inferred retries. The nine local validation "
+                "snapshots at steps "
                 "225k–265k match W&B exactly on all five checked metrics."
             ),
         },
@@ -788,7 +806,10 @@ def build() -> dict[str, Any]:
                 "the periodic step-10k checkpoint; wall time, checkpoint cadence, and "
                 "the first accepted large-batch log support this, but the overwritten "
                 "run log prevents direct proof. The literal W&B-geometry alternative is "
-                "75.87 epochs, only 0.20 epochs lower. Cross-run validation values are "
+                "75.87 epochs, only 0.20 epochs lower. "
+                "The 80.33-epoch compute estimate is medium-confidence because several "
+                "earlier process logs were overwritten; 76.51 is the evidence-backed "
+                "lower bound. Cross-run validation values are "
                 "not directly comparable because the evaluated population changed. "
                 "Curve-model spread is sensitivity analysis, not statistical coverage, "
                 "and DFM CE has not yet been calibrated to Elo."

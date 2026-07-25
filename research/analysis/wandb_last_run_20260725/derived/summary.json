@@ -1,4 +1,6 @@
 {
+  "actual_compute_epochs_lower_bound": 76.51269915820659,
+  "actual_compute_examples_lower_bound": 2168622080,
   "best_comparable_validation": {
     "cumulative_epochs": 73.17309151342172,
     "step": 255000,
@@ -25,6 +27,10 @@
   },
   "retained_lineage_epochs": 76.06336934137794,
   "retained_lineage_examples": 2155886592,
+  "retry_adjusted_compute_epochs_estimate": 80.32613172441201,
+  "retry_adjusted_compute_estimate_confidence": "medium",
+  "retry_adjusted_compute_examples_estimate": 2276707328,
+  "retry_adjusted_compute_overhead_epochs_estimate": 4.262762383034069,
   "wandb_endpoint_lineage_epochs": 76.68709129665089,
   "wandb_endpoint_step": 267158
 }
