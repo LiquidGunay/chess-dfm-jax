@@ -178,6 +178,12 @@ def test_hero_loss_contract_is_frozen_after_gradient_audit():
     assert HERO_CONFIG.loss_clip_value == 0.0
 
 
+def test_hero_optimizer_hyperparameters_are_frozen_after_lr_range():
+    assert HERO_CONFIG.learning_rate == 5e-4
+    assert HERO_CONFIG.bt4_learning_rate == pytest.approx(5e-4 / 30.0)
+    assert HERO_CONFIG.weight_decay == 1e-2
+
+
 def test_gradient_polarization_recovers_component_cosine():
     groups = (
         "raw_bt4",

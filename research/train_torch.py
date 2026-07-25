@@ -147,6 +147,8 @@ _HERO_TRAIN_EXAMPLES = 28_343_296
 # Deterministic update-zero batch-1024 root CE was 2.870999574661255.
 # This makes the weighted root legal-conditional contribution exactly 0.25.
 _HERO_ROOT_LEGAL_CE_COEFFICIENT = 0.08707768618513193
+_HERO_MAIN_LEARNING_RATE = 5e-4
+_HERO_BT4_LEARNING_RATE = _HERO_MAIN_LEARNING_RATE / 30.0
 HERO_CONFIG = dataclasses.replace(
     CONFIG,
     action_codec="lc0_canonical_1858",
@@ -156,8 +158,8 @@ HERO_CONFIG = dataclasses.replace(
     target_sigreg_coeff=2.0,
     pred_sigreg_coeff=2.0,
     loss_clip_value=0.0,
-    learning_rate=3e-4,
-    bt4_learning_rate=1e-5,
+    learning_rate=_HERO_MAIN_LEARNING_RATE,
+    bt4_learning_rate=_HERO_BT4_LEARNING_RATE,
     weight_decay=1e-2,
     selective_weight_decay=True,
     lr_schedule_unit="examples",

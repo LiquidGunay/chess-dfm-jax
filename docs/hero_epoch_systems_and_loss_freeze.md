@@ -1,8 +1,7 @@
 # Hero Epoch Systems and Loss Freeze
 
-Status: systems runtime and loss coefficients frozen on 2026-07-25. Learning
-rate and weight decay remain intentionally unfrozen pending the resettable
-LR-range calibration.
+Status: systems runtime, loss coefficients, learning rates, and weight decay
+frozen on 2026-07-25.
 
 This is the execution record for steps 7 and the loss-coefficient portion of
 step 8 in `docs/hero_epoch_plan.md`. All measurements used the A10G through
@@ -163,7 +162,51 @@ expectation nor its scalar convention. A future change to the 64-example
 sample is a scientific change and requires another gradient audit, not an
 automatic batch-ratio correction.
 
-## Evidence and remaining calibration
+## Frozen learning rates and weight decay
+
+Two disposable, no-checkpoint LR-range runs started from the identical raw
+BT4 plus fresh-head initialization, used batch 1024 and zero weight decay, and
+preserved the 30:1 fresh/BT4 rate ratio.
+
+The planned `1e-5` to `1e-3` sweep completed 128 finite updates without
+bracketing failure. Across consecutive 16-update bins:
+
+- mean DFM CE improved monotonically from `7.430` to `6.429`;
+- mean legal mass improved from `0.0234` to `0.1587`;
+- target and prediction norms remained close; and
+- the last `5.6e-4` to `1e-3` region still had the best policy loss.
+
+This establishes that the provisional `3e-4` peak is safe, but not that it is
+near the useful limit. A second `1e-5` to `1e-2` sweep located that limit:
+
+- smoothed total loss reached its minimum at main LR `1.411e-3`;
+- representation stress was visible by `1.754e-3`, where JEPA MSE rose to
+  `1.174` and prediction norm separated to `39.97` versus target `33.76`;
+- the automatic divergence criterion fired at `4.188e-3`, where total loss
+  reached `48.85` and latent norms jumped to about `500`; and
+- by `1e-2`, total loss was `1180.7` and latent norms exceeded `23,000`.
+
+Freeze:
+
+```text
+fresh peak LR = 5e-4
+raw-BT4 peak LR = 1.6666666666666667e-5
+fresh matrix weight decay = 1e-2
+```
+
+The fresh peak is approximately one third of the observed minimum-loss LR,
+more than threefold below the first representation-stress point, and over
+eightfold below detected divergence. The one-decade-below-minimum heuristic
+would select `1.41e-4`, but it is rejected here because the early steep loss
+drop is dominated by SIGReg equilibration and both sweeps directly show
+healthy policy improvement well above that rate.
+
+At batch 1024, the exact discrete warmup/cosine schedule with a `5e-4` peak
+has `sum(lr) = 6.92653`. Weight decay `0.01` therefore produces integrated
+shrink `exp(-0.01 * 6.92653) = 0.93308`, or `6.69%`, inside the planned
+5--10% interval. No further decay adjustment is needed.
+
+## Evidence and remaining launch work
 
 Primary retained evidence:
 
@@ -183,7 +226,14 @@ Primary retained evidence:
 - loss-gradient audit:
   `artifacts/profiles/hero_loss_gradient_audit_b512_rootcal_b1024_v2.json`,
   SHA-256
-  `1a46e941880a86d4cc986a17af2b0f2c1d14a49f2766b21b0d5c78c76b0647b8`.
+  `1a46e941880a86d4cc986a17af2b0f2c1d14a49f2766b21b0d5c78c76b0647b8`;
+- planned-range metrics:
+  `research/runs/torch_hero_lr_range_b1024_v1/metrics.jsonl`, SHA-256
+  `39106dca5988ab7cccf9557ef07984d21e8c798ce2dc351ea4abae64928824bd`;
+  and
+- extended-range metrics:
+  `research/runs/torch_hero_lr_range_b1024_to1e2_v1/metrics.jsonl`, SHA-256
+  `40082e253134b06ba87d307ddb0ef596abb6d9a11f2fe32902dda53d2f428079`.
 
 A guarded, no-checkpoint three-update smoke then passed at batch 1024. Update
 zero reproduced root CE `2.870999574661255` and weighted root CE `0.25`
@@ -191,9 +241,6 @@ exactly; all loss/gradient values were finite, prefetch hid data preparation
 after the first update, and the guard recorded `2.432 GB` peak group RSS with
 at least `8.930 GB` host memory available.
 
-Next run the resettable LR-range calibration at batch 1024. Weight decay must
-be recomputed after selecting the peak LR. At the provisional `3e-4` peak, the
-exact discrete one-epoch schedule has `sum(lr) = 4.1559`; decay `0.01`
-produces only `4.07%` integrated shrink. The coefficients for 5%, 7.5%, and
-10% shrink would be approximately `0.01234`, `0.01876`, and `0.02535`,
-respectively.
+The remaining launch work is to run initialization validation/Arena gates,
+verify halfway/terminal recovery and compact-retention behavior, freeze the
+terminal run command and hashes, and then start the one-epoch job.
