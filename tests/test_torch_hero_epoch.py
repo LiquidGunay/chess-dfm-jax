@@ -17,6 +17,7 @@ from research.train_torch import (
     MuonAdamW,
     StateProjector,
     _analyze_lr_range_records,
+    _normalize_frozen_indices,
     _polarized_gradient_cosines,
     _shared_sigreg_gradient_projection,
     _sigreg_v_stat,
@@ -356,3 +357,31 @@ def test_lr_range_analysis_is_plot_ready_and_finds_descent_candidates():
     assert 1e-5 <= analysis["candidates"]["one_decade_below_minimum_loss"][
         "learning_rate"
     ] <= 1e-2
+
+
+def test_frozen_evaluation_indices_are_sorted_and_fail_closed():
+    normalized = _normalize_frozen_indices(
+        np.asarray([7, 1, 4, 2]),
+        total_examples=8,
+        batch_size=2,
+    )
+    np.testing.assert_array_equal(normalized, np.asarray([1, 2, 4, 7]))
+
+    with pytest.raises(ValueError, match="duplicates"):
+        _normalize_frozen_indices(
+            np.asarray([1, 1]),
+            total_examples=8,
+            batch_size=2,
+        )
+    with pytest.raises(ValueError, match="not divisible"):
+        _normalize_frozen_indices(
+            np.asarray([1, 2, 3]),
+            total_examples=8,
+            batch_size=2,
+        )
+    with pytest.raises(ValueError, match="out-of-range"):
+        _normalize_frozen_indices(
+            np.asarray([1, 8]),
+            total_examples=8,
+            batch_size=2,
+        )

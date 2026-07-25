@@ -27,6 +27,7 @@ import subprocess
 import sys
 import time
 import zipfile
+from collections import OrderedDict
 from collections.abc import Mapping, Sequence
 from concurrent.futures import Future, ThreadPoolExecutor
 from datetime import UTC, datetime
@@ -56,6 +57,9 @@ _SOURCE_STATE = (
 _DATA_ROOT = _REPO_ROOT / "data" / "trajectory_v3"
 _RAW_BT4_PATH = (
     _REPO_ROOT / "models" / "source" / "extracted" / "BT4_exported.pb.gz"
+)
+_HERO_EVAL_MANIFEST = (
+    _REPO_ROOT / "research" / "eval" / "hero_epoch_v1" / "manifest.json"
 )
 _RAW_BT4_SIZE_BYTES = 335_916_563
 _RAW_BT4_SHA256 = "61e43e98d2c4cb747498c6bc13a5bbb3b07e985d3f5d87f0351a4db855fa0651"
@@ -1007,6 +1011,31 @@ def loss_and_aux(
         ),
         legal_gate,
     )
+    root_legal_positions = (
+        torch.arange(
+            batch["legal_idx"].shape[-1],
+            device=actions.device,
+        ).unsqueeze(0)
+        < batch["legal_count"][:, 0].unsqueeze(1)
+    )
+    root_legal_mask_counts = torch.zeros(
+        (batch_size, _VOCAB_SIZE),
+        device=actions.device,
+        dtype=torch.int32,
+    )
+    root_legal_mask_counts.scatter_add_(
+        1,
+        batch["legal_idx"][:, 0].long().clamp(0, _VOCAB_SIZE - 1),
+        root_legal_positions.to(torch.int32),
+    )
+    root_legal_action = logits[:, 0].masked_fill(
+        root_legal_mask_counts == 0,
+        -torch.inf,
+    ).argmax(dim=-1)
+    root_legal_top1_accuracy = _weighted_mean(
+        (root_legal_action == actions[:, 0]).float(),
+        legal_gate,
+    )
 
     clean_t = torch.ones(batch_size, device=actions.device, dtype=torch.float32)
     clean_result = model.planner(
@@ -1052,6 +1081,10 @@ def loss_and_aux(
     wdl_loss = torch.zeros((), device=actions.device, dtype=torch.float32)
     wdl_accuracy = torch.zeros_like(wdl_loss)
     wdl_expected_value_mse = torch.zeros_like(wdl_loss)
+    wdl_expected_value_bias = torch.zeros_like(wdl_loss)
+    wdl_brier_score = torch.zeros_like(wdl_loss)
+    wdl_entropy = torch.zeros_like(wdl_loss)
+    wdl_ece_15 = torch.zeros_like(wdl_loss)
     wdl_valid_count = torch.zeros_like(wdl_loss)
     if config.wdl_coeff != 0.0:
         if "wdl_targets" not in batch:
@@ -1085,6 +1118,41 @@ def loss_and_aux(
             (expected_value - target_value).square(),
             wdl_weight,
         )
+        wdl_expected_value_bias = _uniform_horizon_mean(
+            expected_value - target_value,
+            wdl_weight,
+        )
+        wdl_brier_score = _uniform_horizon_mean(
+            (wdl_probabilities - wdl_targets).square().sum(dim=-1),
+            wdl_weight,
+        )
+        wdl_entropy = _uniform_horizon_mean(
+            -(wdl_probabilities * wdl_log_probabilities).sum(dim=-1),
+            wdl_weight,
+        )
+        confidence, predicted_class = wdl_probabilities.max(dim=-1)
+        correctness = (
+            predicted_class == wdl_targets.argmax(dim=-1)
+        ).float()
+        calibration_bin = torch.clamp(
+            (confidence * 15.0).long(),
+            min=0,
+            max=14,
+        )
+        calibration_error_sum = torch.zeros_like(wdl_loss)
+        for bin_index in range(15):
+            bin_weight = wdl_weight * (calibration_bin == bin_index).float()
+            bin_count = bin_weight.sum()
+            bin_accuracy = (correctness * bin_weight).sum() / bin_count.clamp_min(
+                1.0
+            )
+            bin_confidence = (confidence * bin_weight).sum() / bin_count.clamp_min(
+                1.0
+            )
+            calibration_error_sum = calibration_error_sum + bin_count * torch.abs(
+                bin_accuracy - bin_confidence
+            )
+        wdl_ece_15 = calibration_error_sum / wdl_valid_count.clamp_min(1.0)
 
     if capture is not None:
         capture["loss_components"] = {
@@ -1425,6 +1493,7 @@ def full_horizon_evaluation_aux(
         "dfm_ce_loss": dfm_ce,
         "dfm_ce_loss_by_horizon": ce_by_horizon,
         "root_legal_conditional_ce": root_legal_ce,
+        "root_legal_top1_accuracy": root_legal_top1_accuracy,
         "weighted_root_legal_conditional_ce": (
             config.root_legal_ce_coeff * root_legal_ce
         ),
@@ -1442,6 +1511,10 @@ def full_horizon_evaluation_aux(
         "wdl_weighted_loss": config.wdl_coeff * wdl_loss,
         "wdl_accuracy": wdl_accuracy,
         "wdl_expected_value_mse": wdl_expected_value_mse,
+        "wdl_expected_value_bias": wdl_expected_value_bias,
+        "wdl_brier_score": wdl_brier_score,
+        "wdl_entropy": wdl_entropy,
+        "wdl_ece_15": wdl_ece_15,
         "wdl_valid_count": wdl_valid_count,
         "accuracy": accuracy,
         "mask_prob": torch.ones((), device=actions.device),
@@ -2399,6 +2472,174 @@ class CanonicalTrajectoryBatches(_FixedTrajectoryBatches):
             raise RuntimeError(
                 f"Failed canonical trajectory decode for required shard {path}"
             ) from exc
+
+
+def _normalize_frozen_indices(
+    indices: np.ndarray,
+    *,
+    total_examples: int,
+    batch_size: int,
+) -> np.ndarray:
+    result = np.asarray(indices, dtype=np.int64)
+    if result.ndim != 1 or result.size == 0:
+        raise ValueError("Frozen indices must be a non-empty rank-1 array")
+    if result.size % batch_size != 0:
+        raise ValueError(
+            f"Frozen index count {result.size} is not divisible by batch {batch_size}"
+        )
+    if np.any(result < 0) or np.any(result >= total_examples):
+        raise ValueError("Frozen indices contain an out-of-range global index")
+    result = np.sort(result)
+    if np.any(np.diff(result) == 0):
+        raise ValueError("Frozen indices contain duplicates")
+    return result
+
+
+class FrozenIndexTrajectoryBatches:
+    """Decode one immutable position set in sorted global-index order."""
+
+    def __init__(
+        self,
+        split_dir: Path,
+        *,
+        global_indices: np.ndarray,
+        batch_size: int,
+        horizon: int,
+        indices_sha256: str,
+        pool_name: str,
+    ):
+        self.split_dir = _require_workspace(split_dir, exists=True)
+        self.paths = sorted(self.split_dir.glob("*.npz"))
+        if not self.paths:
+            raise FileNotFoundError(f"No trajectory shards under {self.split_dir}")
+        self.batch_size = int(batch_size)
+        self.horizon = int(horizon)
+        self.samples_per_shard = _FixedTrajectoryBatches._read_sample_count(
+            self.paths[0]
+        )
+        self.global_indices = _normalize_frozen_indices(
+            global_indices,
+            total_examples=len(self.paths) * self.samples_per_shard,
+            batch_size=self.batch_size,
+        )
+        self.steps_per_epoch = self.global_indices.size // self.batch_size
+        self.indices_sha256 = str(indices_sha256)
+        self.pool_name = str(pool_name)
+        self._rows_by_shard: dict[int, np.ndarray] = {}
+        shard_indices = self.global_indices // self.samples_per_shard
+        for shard_index in np.unique(shard_indices):
+            mask = shard_indices == shard_index
+            self._rows_by_shard[int(shard_index)] = (
+                self.global_indices[mask] % self.samples_per_shard
+            ).astype(np.int64, copy=False)
+        self._cache: OrderedDict[int, dict[str, Any]] = OrderedDict()
+
+    def _decode_selected_shard(self, shard_index: int) -> dict[str, Any]:
+        cached = self._cache.get(shard_index)
+        if cached is not None:
+            self._cache.move_to_end(shard_index)
+            return cached
+
+        from chess_dfm_jax.data.trajectory_v3 import trajectory_v3_to_batch
+
+        path = self.paths[shard_index]
+        rows = self._rows_by_shard[shard_index]
+        try:
+            with np.load(_require_workspace(path, exists=True), allow_pickle=False) as payload:
+                observed_count = (
+                    int(np.asarray(payload["batch_size"]).item())
+                    if "batch_size" in payload
+                    else int(payload["actions_u16"].shape[0])
+                )
+                if observed_count != self.samples_per_shard:
+                    raise ValueError(
+                        f"Shard size changed: {observed_count} != "
+                        f"{self.samples_per_shard} in {path}"
+                    )
+                selected: dict[str, np.ndarray] = {}
+                for key in payload.files:
+                    array = np.asarray(payload[key])
+                    selected[key] = (
+                        array[rows]
+                        if array.ndim > 0 and array.shape[0] == observed_count
+                        else array
+                    )
+            decoded = canonicalize_trajectory_batch(
+                trajectory_v3_to_batch(
+                    selected,
+                    view="joint_latent_sasa",
+                    horizon=self.horizon,
+                    include_metadata=True,
+                )
+            )
+            compact = {
+                key: value
+                for key, value in decoded.items()
+                if key in _TRAIN_BATCH_KEYS
+            }
+        except Exception as exc:
+            raise RuntimeError(
+                f"Failed frozen-index decode for shard {path}"
+            ) from exc
+        self._cache[shard_index] = compact
+        self._cache.move_to_end(shard_index)
+        while len(self._cache) > 2:
+            self._cache.popitem(last=False)
+        return compact
+
+    def batch_at(self, step: int) -> dict[str, Any]:
+        if not 0 <= step < self.steps_per_epoch:
+            raise IndexError(
+                f"Frozen pool step {step} is outside [0, {self.steps_per_epoch})"
+            )
+        start = step * self.batch_size
+        requested = self.global_indices[start : start + self.batch_size]
+        requested_shards = requested // self.samples_per_shard
+        pieces: list[dict[str, Any]] = []
+        for shard_index in np.unique(requested_shards):
+            mask = requested_shards == shard_index
+            rows = requested[mask] % self.samples_per_shard
+            selected_rows = self._rows_by_shard[int(shard_index)]
+            positions = np.searchsorted(selected_rows, rows)
+            if not np.array_equal(selected_rows[positions], rows):
+                raise RuntimeError("Frozen-index shard lookup drift")
+            decoded = self._decode_selected_shard(int(shard_index))
+            pieces.append(
+                {
+                    key: np.asarray(value)[positions]
+                    for key, value in decoded.items()
+                }
+            )
+        keys = set(pieces[0])
+        if any(set(piece) != keys for piece in pieces):
+            raise RuntimeError("Frozen-index batch leaf drift across shards")
+        result = {
+            key: np.concatenate([piece[key] for piece in pieces], axis=0)
+            for key in sorted(keys)
+        }
+        if any(np.asarray(value).shape[0] != self.batch_size for value in result.values()):
+            raise RuntimeError("Frozen-index batch did not materialize exactly one batch")
+        return result
+
+    def provenance(self) -> dict[str, Any]:
+        entries = [
+            f"{path.name}\t{path.stat().st_size}"
+            for path in self.paths
+        ]
+        return {
+            "pool_name": self.pool_name,
+            "split_dir": str(self.split_dir),
+            "shard_count": len(self.paths),
+            "samples_per_shard": self.samples_per_shard,
+            "batch_size": self.batch_size,
+            "position_count": int(self.global_indices.size),
+            "batch_count": self.steps_per_epoch,
+            "global_index_order": "ascending",
+            "indices_sha256": self.indices_sha256,
+            "file_manifest_sha256": hashlib.sha256(
+                "\n".join(entries).encode("utf-8")
+            ).hexdigest(),
+        }
 
 
 _TRAIN_BATCH_KEYS = frozenset(
@@ -4648,7 +4889,7 @@ def _evaluate_validation_pool(
                 seed=seed,
                 update=index,
                 batch_size=batches.batch_size,
-                config=CONFIG,
+                config=model.config,
                 device=device,
             )
             permutation_rng = np.random.Generator(
@@ -4694,6 +4935,234 @@ def _evaluate_validation_pool(
         {key: value / count for key, value in totals.items()},
         time.perf_counter() - started,
     )
+
+
+def _load_hero_frozen_pool(
+    *,
+    manifest_path: Path,
+    pool_name: str,
+    batch_size: int,
+) -> tuple[FrozenIndexTrajectoryBatches, dict[str, Any]]:
+    manifest_path = _require_workspace(manifest_path, exists=True)
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if manifest.get("schema_version") != "chess-dfm-hero-eval-manifest-v1":
+        raise ValueError("Unsupported hero evaluation manifest")
+    if manifest.get("immutable_after_creation") is not True:
+        raise ValueError("Hero evaluation manifest is not immutable")
+    if manifest.get("action_codec") != HERO_CONFIG.action_codec:
+        raise ValueError("Hero evaluation action codec drift")
+    if int(manifest.get("horizon", -1)) != HERO_CONFIG.horizon:
+        raise ValueError("Hero evaluation horizon drift")
+    definitions = {
+        "fast": "fast_validation",
+        "primary": "primary_validation",
+        "blind": "blind_test",
+    }
+    try:
+        definition = manifest["position_indices"][definitions[pool_name]]
+    except KeyError as exc:
+        raise ValueError(f"Unsupported frozen hero pool: {pool_name!r}") from exc
+    indices_record = manifest["position_indices"]
+    indices_path = _require_workspace(indices_record["path"], exists=True)
+    if indices_path.stat().st_size != int(indices_record["size_bytes"]):
+        raise ValueError("Frozen hero index size drift")
+    if _sha256_file(indices_path) != indices_record["sha256"]:
+        raise ValueError("Frozen hero index checksum drift")
+    with np.load(indices_path, allow_pickle=False) as payload:
+        expected_arrays = {
+            "fast_val_global_index",
+            "primary_val_global_index",
+            "blind_test_global_index",
+        }
+        if set(payload.files) != expected_arrays:
+            raise ValueError(
+                f"Frozen hero index arrays drift: {sorted(payload.files)}"
+            )
+        indices = np.asarray(payload[definition["array"]]).copy()
+    if indices.size != int(definition["count"]):
+        raise ValueError("Frozen hero pool count drift")
+    split = str(definition["split"])
+    split_record = manifest["dataset"][split]
+    batches = FrozenIndexTrajectoryBatches(
+        _require_workspace(split_record["path"], exists=True),
+        global_indices=indices,
+        batch_size=batch_size,
+        horizon=HERO_CONFIG.horizon,
+        indices_sha256=indices_record["sha256"],
+        pool_name=pool_name,
+    )
+    provenance = batches.provenance()
+    if (
+        provenance["file_manifest_sha256"]
+        != split_record["filename_size_manifest_sha256"]
+    ):
+        raise ValueError("Frozen hero split inventory drift")
+    return batches, {
+        "manifest_path": str(manifest_path),
+        "manifest_sha256": _sha256_file(manifest_path),
+        "indices_path": str(indices_path),
+        "indices_sha256": indices_record["sha256"],
+        "pool_name": pool_name,
+        "pool_definition": definition,
+        "data": provenance,
+    }
+
+
+def evaluate_hero_pool(args: argparse.Namespace) -> int:
+    """Evaluate clean hero initialization/checkpoint on one frozen index set."""
+
+    if not torch.cuda.is_available():
+        raise RuntimeError("hero-evaluate requires CUDA")
+    if args.eval_batch_size != HERO_CONFIG.sigreg_example_count:
+        raise ValueError(
+            "Frozen hero evaluation requires batch "
+            f"{HERO_CONFIG.sigreg_example_count}"
+        )
+    if args.threads not in (1, 2):
+        raise ValueError("--threads must be 1 or 2 under the resource guard")
+    if args.pool == "blind" and (
+        args.checkpoint_dir is None or not args.allow_blind_terminal
+    ):
+        raise ValueError(
+            "Blind evaluation requires a terminal checkpoint and "
+            "--allow-blind-terminal"
+        )
+    output_dir = _require_workspace(args.output_dir)
+    if output_dir.exists():
+        raise FileExistsError(f"Hero evaluation output exists: {output_dir}")
+
+    batches, frozen_pool = _load_hero_frozen_pool(
+        manifest_path=args.eval_manifest,
+        pool_name=args.pool,
+        batch_size=args.eval_batch_size,
+    )
+    device = torch.device("cuda")
+    torch.set_num_threads(args.threads)
+    torch.set_float32_matmul_precision("high")
+    model, initialization = load_raw_bt4_hero_model(
+        device=device,
+        raw_bt4_path=args.raw_bt4_path,
+        config=HERO_CONFIG,
+    )
+    checkpoint_manifest = None
+    if args.checkpoint_dir is not None:
+        checkpoint_manifest = load_model_checkpoint(
+            checkpoint_dir=args.checkpoint_dir,
+            model=model,
+        )
+        if (
+            checkpoint_manifest["source_mapping_sha256"]
+            != initialization["combined_sha256"]
+        ):
+            raise ValueError("Hero checkpoint raw-BT4 mapping drift")
+        state_label = (
+            f"hero_checkpoint_u{checkpoint_manifest['optimizer_update']}"
+        )
+    else:
+        state_label = "hero_initialization"
+    output_dir.mkdir(parents=True)
+    run_config = {
+        "schema_version": "torch-hero-frozen-evaluation-run-v1",
+        "created_utc": datetime.now(UTC).isoformat(),
+        "git_commit": _git_commit(),
+        "state": state_label,
+        "pool": frozen_pool,
+        "eval_batch_size": args.eval_batch_size,
+        "eval_batches": batches.steps_per_epoch,
+        "evaluation_examples": int(batches.global_indices.size),
+        "global_index_order": "ascending",
+        "stochastic_choices": (
+            "PCG64 keyed by the frozen pool seed and ascending batch index"
+        ),
+        "compute_dtype": "bfloat16",
+        "execution": "eager",
+        "config": dataclasses.asdict(HERO_CONFIG),
+        "raw_initialization": initialization,
+        "checkpoint": checkpoint_manifest,
+        "wdl_calibration": (
+            "wdl_ece_15 is fixed-batch mean 15-bin confidence ECE; "
+            "expected-value bias is also reported"
+        ),
+        "args": {
+            key: str(value) if isinstance(value, Path) else value
+            for key, value in vars(args).items()
+            if key != "handler"
+        },
+    }
+    _write_json(output_dir / "run_config.json", run_config)
+    monitor = (
+        _start_gpu_monitor(
+            output_dir,
+            interval_ms=args.gpu_monitor_interval_ms,
+        )
+        if args.gpu_monitor_interval_ms > 0
+        else None
+    )
+    torch.cuda.synchronize()
+    torch.cuda.reset_peak_memory_stats()
+    wall_started = time.perf_counter()
+    pool_seed = int(frozen_pool["pool_definition"]["seed"])
+    try:
+        metrics, evaluation_seconds = _evaluate_validation_pool(
+            model,
+            batches,
+            count=batches.steps_per_epoch,
+            seed=pool_seed,
+            device=device,
+        )
+    finally:
+        _stop_gpu_monitor(monitor)
+    residual_zero = bool(
+        torch.count_nonzero(model.out_proj).item() == 0
+        and torch.count_nonzero(model.out_bias).item() == 0
+    )
+    gate_checks = {
+        "frozen_pool_count_reproduced": (
+            batches.global_indices.size
+            == int(frozen_pool["pool_definition"]["count"])
+        ),
+        "all_metrics_finite": all(math.isfinite(value) for value in metrics.values()),
+        "initial_residual_is_zero": (
+            checkpoint_manifest is not None or residual_zero
+        ),
+        "blind_terminal_authorized": (
+            args.pool != "blind"
+            or (
+                checkpoint_manifest is not None
+                and args.allow_blind_terminal
+            )
+        ),
+    }
+    report = {
+        **run_config,
+        "completed_utc": datetime.now(UTC).isoformat(),
+        "wall_seconds": time.perf_counter() - wall_started,
+        "evaluation_seconds": evaluation_seconds,
+        "metrics": metrics,
+        "gpu_monitor": _summarize_gpu_samples(output_dir / "gpu_samples.csv"),
+        "gpu_peak_memory_allocated_bytes": torch.cuda.max_memory_allocated(),
+        "gpu_peak_memory_reserved_bytes": torch.cuda.max_memory_reserved(),
+        "gate_checks": gate_checks,
+        "gate_pass": all(gate_checks.values()),
+    }
+    _write_json(output_dir / "report.json", report)
+    print(
+        json.dumps(
+            {
+                "state": state_label,
+                "pool": args.pool,
+                "examples": int(batches.global_indices.size),
+                "evaluation_seconds": evaluation_seconds,
+                "metrics": metrics,
+                "gate_pass": report["gate_pass"],
+            },
+            sort_keys=True,
+        ),
+        flush=True,
+    )
+    if not report["gate_pass"]:
+        raise RuntimeError("Frozen hero evaluation gate failed")
+    return 0
 
 
 def evaluate_checkpoint(args: argparse.Namespace) -> int:
@@ -5176,6 +5645,37 @@ def build_parser() -> argparse.ArgumentParser:
         save_final=False,
         max_checkpoints=0,
     )
+
+    hero_evaluate_parser = subparsers.add_parser("hero-evaluate")
+    hero_evaluate_parser.add_argument(
+        "--raw-bt4-path",
+        type=Path,
+        default=_RAW_BT4_PATH,
+    )
+    hero_evaluate_parser.add_argument(
+        "--eval-manifest",
+        type=Path,
+        default=_HERO_EVAL_MANIFEST,
+    )
+    hero_evaluate_parser.add_argument(
+        "--pool",
+        choices=("fast", "primary", "blind"),
+        required=True,
+    )
+    hero_evaluate_parser.add_argument("--checkpoint-dir", type=Path)
+    hero_evaluate_parser.add_argument("--output-dir", type=Path, required=True)
+    hero_evaluate_parser.add_argument("--eval-batch-size", type=int, default=64)
+    hero_evaluate_parser.add_argument("--threads", type=int, default=2)
+    hero_evaluate_parser.add_argument(
+        "--gpu-monitor-interval-ms",
+        type=int,
+        default=100,
+    )
+    hero_evaluate_parser.add_argument(
+        "--allow-blind-terminal",
+        action="store_true",
+    )
+    hero_evaluate_parser.set_defaults(handler=evaluate_hero_pool)
 
     evaluate_parser = subparsers.add_parser("evaluate")
     evaluate_parser.add_argument("--source-state", type=Path, default=_SOURCE_STATE)
