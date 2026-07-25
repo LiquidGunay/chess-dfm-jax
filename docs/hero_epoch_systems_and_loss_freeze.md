@@ -262,6 +262,32 @@ The evaluation batch remains frozen at 64. A requested batch-256 invocation
 failed closed before model loading because changing that batch would change
 the per-batch SIGReg/evaluation protocol.
 
+Commit `83f1fef` adds one deterministic CPU prefetch slot without changing
+batch order, stochastic choices, or the batch-64 metric contract. A repeated
+fast-pool run reproduced every metric exactly, reduced evaluation time from
+`345.241` to `268.400` seconds (`1.286x` speedup), and raised mean GPU
+utilization from `22.24%` to `28.52%`. Its report is
+`research/runs/torch_hero_init_fast_eval_prefetch_v1/report.json`, SHA-256
+`7ffcee6a1e519396d3063f5e8a89fb00e56b5fd75a35e8f2a9b6e3ab448d7bb5`.
+
+The disjoint 65,536-position primary initialization gate then passed in
+`655.139` seconds. Its anchors are:
+
+| Metric | Value |
+|---|---:|
+| Total weighted loss | `13.472500` |
+| All-horizon DFM CE | `7.443514` |
+| Root legal-conditional CE | `2.914379` |
+| Root legal top-1 | `20.0485%` |
+| Root legal mass | `2.3147%` |
+| JEPA raw MSE | `0.786217` |
+| Target / prediction SIGReg | `0.693541 / 0.668344` |
+| WDL CE / Brier | `1.246055 / 0.759601` |
+
+The primary report is
+`research/runs/torch_hero_init_primary_eval_v1/report.json`, SHA-256
+`9155673862b578fc1bcf3f9cfe20f496eea7e5ac6da170952a05affce6463dde`.
+
 Exact recovery is also complete. Commit `bfc2106` adds an atomic 1.864 GB
 model-plus-optimizer safetensors state with all Muon/AdamW moments, optimizer
 and example counters, the next data cursor, checksums, and a strict resume
@@ -283,8 +309,26 @@ The complete compact audit is
 The raw safetensors file hashes differ because the serializer emitted the same
 metadata map in a different key order; named tensor content is exactly equal.
 
-The remaining launch work is to run the primary initialization validation and
-update-zero canonical Arena gate, freeze the terminal command and hashes, and
-start the one-epoch job. The epoch will request only update `13,840` as the
-sparse recovery state plus one terminal model checkpoint; the sparse state is
-deleted only after the terminal cross-framework audit passes.
+Update-zero policy and Arena gates are complete:
+
+- guarded JAX-GPU versus Torch-GPU raw-BT4 inference selected the same legal
+  action on all 8 checked canonical positions, while confirming that both DFM
+  residual-output tensors are exactly zero; the report is
+  `artifacts/pytorch/hero_init_policy_parity_v1.json`, SHA-256
+  `d52246dedba06205b82ebf7165e98c138f6c564325cd6acc832acdffd50cbd3f`;
+- commit `a5f9b55` adds a raw-BT4 candidate alias and a 16-pair correctness
+  tier backed by the exact 2,048-opening hero pool; and
+- the color-reversed self-match produced sixteen pair scores of exactly
+  `1.0`, candidate score `0.5`, and zero faults over 512 evaluated positions
+  per model. The immutable block is
+  `artifacts/arena/hero-update-zero-canonical-selfmatch-16pairs-v1/blocks/`
+  `block-00000000-pairs-0016.json`, SHA-256
+  `25bf5a5b48084330b1ecc64f229ff5e61ef4e939041e7bb3cc1440bffb0f8d43`.
+
+The remaining launch work is to add in-process fast validation and a native
+Torch Arena adapter at the preregistered training milestones, freeze the
+terminal command and hashes, and start the one-epoch job. In-process
+measurement is required so the 25% and 75% Arena points do not create extra
+model snapshots. The epoch will request only update `13,840` as the sparse
+recovery state plus one terminal model checkpoint; the sparse state is deleted
+only after the terminal cross-framework audit passes.
