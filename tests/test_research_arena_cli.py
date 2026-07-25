@@ -30,6 +30,7 @@ from research.evaluate_arena import (
     _resolved_run_options,
     _static_inference_batch_size,
     load_run_state,
+    parse_args,
     run_blocks,
     torch_research_checkpoint_descriptor,
 )
@@ -74,6 +75,22 @@ def _history(*moves: str) -> list[str]:
         board.push_uci(move)
         result.append(board.fen(en_passant="legal"))
     return result
+
+
+def test_arena_cli_accepts_raw_bt4_update_zero_self_match(workspace_tmp: Path):
+    args = parse_args(
+        [
+            "--candidate-raw-bt4",
+            "--opponent-raw-bt4",
+            "--output-dir",
+            str(workspace_tmp / "raw-self-match"),
+        ]
+    )
+
+    assert args.candidate_raw_bt4 is True
+    assert args.candidate is None
+    assert args.candidate_torch is None
+    assert args.opponent_raw_bt4 is True
 
 
 def _fixture_assets(root: Path):

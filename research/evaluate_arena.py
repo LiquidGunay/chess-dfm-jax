@@ -108,6 +108,31 @@ class FrozenTier:
 
 
 FROZEN_TIERS = {
+    "hero_correctness": FrozenTier(
+        name="hero_correctness",
+        pool_path=REPO_ROOT
+        / "research"
+        / "assets"
+        / "arena"
+        / "promotion-ply12-n2048-v3.json",
+        pool_sha256=(
+            "e750e87643c482d28b4201668bd355234fe1fb27f2a690bf784706b1ddd37459"
+        ),
+        histories_path=REPO_ROOT
+        / "research"
+        / "assets"
+        / "arena"
+        / "promotion-ply12-n2048-histories-v3.json",
+        history_manifest_sha256=(
+            "d8781efb5d76066bcf2ce2e9ab2897f3261b20f7c4488c90992a8eadcc918a4b"
+        ),
+        default_pair_count=16,
+        default_block_pairs=16,
+        default_additional_ply_cap=16,
+        promotion_eligible=False,
+        available=True,
+        unavailable_reason=None,
+    ),
     "correctness": FrozenTier(
         name="correctness",
         pool_path=REPO_ROOT / "artifacts" / "arena" / "development-ply12-n128-v1.json",
@@ -1516,6 +1541,14 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         type=Path,
         help="Strict model-only checkpoint from research/train_torch.py.",
     )
+    candidate.add_argument(
+        "--candidate-raw-bt4",
+        action="store_true",
+        help=(
+            "Use a separately identified copy of raw BT4 as the candidate. "
+            "This is the update-zero self-play/codec correctness control."
+        ),
+    )
     opponent = parser.add_mutually_exclusive_group()
     opponent.add_argument(
         "--opponent-checkpoint",
@@ -1623,23 +1656,32 @@ def main(argv: Sequence[str] | None = None) -> int:
         expected_manifest_sha256=tier.history_manifest_sha256,
     )
 
-    if args.candidate_torch is None:
+    if args.candidate_raw_bt4:
+        candidate_descriptor = None
+        candidate_record = raw_bt4_descriptor(models_dir=models_dir)
+        candidate_id = (
+            "candidate-raw-bt4-"
+            + candidate_record["bt4_checkpoint"]["sha256"][:12]
+        )
+    elif args.candidate_torch is None:
         candidate_descriptor = research_checkpoint_descriptor(
             args.candidate,
             models_dir=models_dir,
         )
+        candidate_record = candidate_descriptor.descriptor
         candidate_id = (
             "candidate-"
-            + candidate_descriptor.descriptor["state"]["sha256"][:12]
+            + candidate_record["state"]["sha256"][:12]
         )
     else:
         candidate_descriptor = torch_research_checkpoint_descriptor(
             args.candidate_torch,
             models_dir=models_dir,
         )
+        candidate_record = candidate_descriptor.descriptor
         candidate_id = (
             "candidate-torch-"
-            + candidate_descriptor.descriptor["state"]["sha256"][:12]
+            + candidate_record["state"]["sha256"][:12]
         )
     if args.opponent_raw_bt4:
         opponent_descriptor = raw_bt4_descriptor(models_dir=models_dir)
@@ -1681,7 +1723,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         "models": {
             "candidate": {
                 "model_id": candidate_id,
-                **candidate_descriptor.descriptor,
+                **candidate_record,
             },
             "opponent": {
                 "model_id": opponent_id,
@@ -1731,7 +1773,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         ),
         "codec_capabilities": {
             "candidate": action_codec_capability(
-                str(candidate_descriptor.descriptor["action_codec_id"])
+                str(candidate_record["action_codec_id"])
             ),
             "opponent": action_codec_capability(
                 str(opponent_descriptor["action_codec_id"])
@@ -1750,7 +1792,14 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 0
 
     bt4_params = load_mapped_bt4_params(models_dir=models_dir)
-    if args.candidate_torch is None:
+    if args.candidate_raw_bt4:
+        candidate_policy, candidate_load = load_raw_bt4_policy(
+            bt4_params=bt4_params,
+            model_id=candidate_id,
+            inference_batch_size=inference_batch_size,
+        )
+    elif args.candidate_torch is None:
+        assert isinstance(candidate_descriptor, ResearchCheckpointDescriptor)
         candidate_policy, candidate_load = load_research_policy(
             candidate_descriptor,
             bt4_params=bt4_params,
@@ -1761,6 +1810,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             inference_batch_size=inference_batch_size,
         )
     else:
+        assert isinstance(
+            candidate_descriptor,
+            TorchResearchCheckpointDescriptor,
+        )
         candidate_policy, candidate_load = load_torch_research_policy(
             candidate_descriptor,
             bt4_params=bt4_params,
