@@ -1920,3 +1920,14 @@ sweeps, held-out data, and repeated seeds.
   terminal train loss, for cross-experiment quality plots. Consider regional
   `torch.compile` only if measured end-to-end payback occurs within a typical
   run; return selected architectures to JAX for hero runs.
+- [ ] Execute the approved clean one-epoch BT4 + DFM + JEPA hero run under
+  `docs/hero_epoch_plan.md`. This replaces continuation-checkpoint
+  autoresearch as the immediate priority. Start from raw BT4 plus fresh
+  modules, use canonical actions and a zero-initialized DFM policy residual,
+  train joint action/state/WDL objectives with equal normalized target and
+  prediction SIGReg coefficients, freeze checksummed validation/Elo
+  manifests, and complete a dedicated guarded PyTorch compiler/kernel
+  optimization phase before launch. Physical batch changes do not rescale the
+  normalized SIGReg coefficient; keep the SIGReg estimator sample fixed
+  during systems comparisons and re-audit gradients after the runtime batch
+  is selected.
