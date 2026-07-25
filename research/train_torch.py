@@ -25,6 +25,7 @@ import shutil
 import stat
 import subprocess
 import sys
+import tempfile
 import time
 import zipfile
 from collections import OrderedDict
@@ -2773,6 +2774,27 @@ def _write_json(path: Path, value: Any) -> None:
     os.replace(temporary, target)
 
 
+def _json_sha256(value: Any) -> str:
+    payload = json.dumps(
+        value,
+        allow_nan=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
+def _fsync_path(path: Path) -> None:
+    try:
+        descriptor = os.open(path, os.O_RDONLY)
+    except OSError:
+        return
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
 def _sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
     with _require_workspace(path, exists=True).open("rb") as handle:
@@ -2888,6 +2910,238 @@ def save_model_checkpoint(
         },
     }
     _write_json(checkpoint_dir / "manifest.json", manifest)
+    return manifest
+
+
+def save_training_checkpoint(
+    *,
+    output_dir: Path,
+    model: nn.Module,
+    optimizer: MuonAdamW,
+    source_mapping_sha256: str,
+    next_data_cursor: int,
+    resume_contract: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Atomically write one exact model-and-optimizer recovery checkpoint."""
+
+    from safetensors.torch import save_file
+
+    if (
+        optimizer._main_learning_rate_override is not None
+        or optimizer._bt4_learning_rate_override is not None
+    ):
+        raise ValueError("Recovery checkpoints do not support LR overrides")
+    optimizer_update = int(optimizer.update)
+    optimizer_examples_seen = int(optimizer.examples_seen)
+    next_data_cursor = int(next_data_cursor)
+    if optimizer_update < 0 or optimizer_examples_seen < 0 or next_data_cursor < 0:
+        raise ValueError("Recovery checkpoint counters must be non-negative")
+    if (
+        optimizer.examples_per_update is not None
+        and optimizer_examples_seen
+        != optimizer_update * optimizer.examples_per_update
+    ):
+        raise ValueError(
+            "Optimizer examples_seen is inconsistent with update and batch size"
+        )
+
+    checkpoint_root = _require_workspace(output_dir / "checkpoints")
+    checkpoint_root.mkdir(parents=True, exist_ok=True)
+    final_dir = checkpoint_root / f"update{optimizer_update:08d}"
+    if final_dir.exists():
+        raise FileExistsError(f"Recovery checkpoint already exists: {final_dir}")
+    temporary_dir = Path(
+        tempfile.mkdtemp(
+            prefix=f".update{optimizer_update:08d}.partial-",
+            dir=checkpoint_root,
+        )
+    )
+    try:
+        tensors: dict[str, Tensor] = {
+            f"model.{name}": parameter.detach().cpu().contiguous()
+            for name, parameter in model.named_parameters()
+        }
+        for leaf in optimizer.leaves:
+            tensors[f"optimizer.first.{leaf.name}"] = (
+                leaf.first_moment.detach().cpu().contiguous()
+            )
+            if leaf.second_moment is not None:
+                tensors[f"optimizer.second.{leaf.name}"] = (
+                    leaf.second_moment.detach().cpu().contiguous()
+                )
+
+        normalized_contract = dict(resume_contract)
+        resume_contract_sha256 = _json_sha256(normalized_contract)
+        partition = optimizer.partition_manifest()
+        partition_sha256 = _json_sha256(partition)
+        state_path = temporary_dir / "state.safetensors"
+        save_file(
+            tensors,
+            str(state_path),
+            metadata={
+                "format": "chess-dfm-torch-training-v1",
+                "optimizer_update": str(optimizer_update),
+                "optimizer_examples_seen": str(optimizer_examples_seen),
+                "next_data_cursor": str(next_data_cursor),
+                "resume_contract_sha256": resume_contract_sha256,
+                "source_mapping_sha256": source_mapping_sha256,
+            },
+        )
+        tensor_count = len(tensors)
+        del tensors
+        _fsync_path(state_path)
+        manifest = {
+            "format": "chess-dfm-torch-training-v1",
+            "created_utc": datetime.now(UTC).isoformat(),
+            "model_only": False,
+            "optimizer_resume_supported": True,
+            "optimizer_update": optimizer_update,
+            "optimizer_examples_seen": optimizer_examples_seen,
+            "next_data_cursor": next_data_cursor,
+            "source_mapping_sha256": source_mapping_sha256,
+            "resume_contract": normalized_contract,
+            "resume_contract_sha256": resume_contract_sha256,
+            "optimizer_partition_sha256": partition_sha256,
+            "state": {
+                "path": state_path.name,
+                "size_bytes": state_path.stat().st_size,
+                "sha256": _sha256_file(state_path),
+                "tensor_count": tensor_count,
+                "model_leaf_count": len(tuple(model.named_parameters())),
+                "first_moment_count": len(optimizer.leaves),
+                "second_moment_count": sum(
+                    leaf.second_moment is not None for leaf in optimizer.leaves
+                ),
+            },
+        }
+        manifest_path = temporary_dir / "manifest.json"
+        _write_json(manifest_path, manifest)
+        _fsync_path(manifest_path)
+        _fsync_path(temporary_dir)
+        os.replace(temporary_dir, final_dir)
+        _fsync_path(checkpoint_root)
+    except BaseException:
+        shutil.rmtree(temporary_dir, ignore_errors=True)
+        raise
+    return manifest
+
+
+def _verified_training_checkpoint(
+    checkpoint_dir: Path,
+    *,
+    expected_resume_contract: Mapping[str, Any] | None = None,
+) -> tuple[Path, dict[str, Any]]:
+    root = _require_workspace(checkpoint_dir, exists=True)
+    manifest_path = _require_workspace(root / "manifest.json", exists=True)
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if manifest.get("format") != "chess-dfm-torch-training-v1":
+        raise ValueError(
+            f"Unsupported torch training checkpoint format: {manifest.get('format')}"
+        )
+    if manifest.get("model_only") is not False:
+        raise ValueError("Training checkpoint must declare model_only=false")
+    if manifest.get("optimizer_resume_supported") is not True:
+        raise ValueError("Training checkpoint must support optimizer resume")
+    contract = manifest.get("resume_contract")
+    if not isinstance(contract, dict):
+        raise ValueError("Training checkpoint has no resume contract")
+    observed_contract_sha256 = _json_sha256(contract)
+    if observed_contract_sha256 != manifest.get("resume_contract_sha256"):
+        raise ValueError("Training checkpoint resume-contract checksum mismatch")
+    if (
+        expected_resume_contract is not None
+        and _json_sha256(dict(expected_resume_contract))
+        != observed_contract_sha256
+    ):
+        raise ValueError(
+            "Training checkpoint resume contract does not match this run"
+        )
+    state_path = _require_workspace(root / manifest["state"]["path"], exists=True)
+    if state_path.stat().st_size != int(manifest["state"]["size_bytes"]):
+        raise ValueError(f"Training checkpoint size mismatch: {state_path}")
+    if _sha256_file(state_path) != manifest["state"]["sha256"]:
+        raise ValueError(f"Training checkpoint checksum mismatch: {state_path}")
+    return state_path, manifest
+
+
+def load_training_checkpoint(
+    *,
+    checkpoint_dir: Path,
+    model: nn.Module,
+    optimizer: MuonAdamW,
+    expected_source_mapping_sha256: str,
+    expected_resume_contract: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Strictly restore an exact model, optimizer, schedule, and data cursor."""
+
+    from safetensors.torch import load_file
+
+    state_path, manifest = _verified_training_checkpoint(
+        checkpoint_dir,
+        expected_resume_contract=expected_resume_contract,
+    )
+    if manifest.get("source_mapping_sha256") != expected_source_mapping_sha256:
+        raise ValueError("Training checkpoint source mapping does not match")
+    partition_sha256 = _json_sha256(optimizer.partition_manifest())
+    if manifest.get("optimizer_partition_sha256") != partition_sha256:
+        raise ValueError("Training checkpoint optimizer partition does not match")
+
+    named = dict(model.named_parameters())
+    leaves = {leaf.name: leaf for leaf in optimizer.leaves}
+    if set(named) != set(leaves):
+        raise ValueError("Optimizer/model leaf paths do not match")
+    expected_keys = {f"model.{name}" for name in named}
+    expected_keys.update(f"optimizer.first.{name}" for name in leaves)
+    expected_keys.update(
+        f"optimizer.second.{name}"
+        for name, leaf in leaves.items()
+        if leaf.second_moment is not None
+    )
+    loaded = load_file(str(state_path), device="cpu")
+    if set(loaded) != expected_keys:
+        raise ValueError(
+            "Training checkpoint tensor mismatch: "
+            f"missing={sorted(expected_keys - set(loaded))[:10]}, "
+            f"extra={sorted(set(loaded) - expected_keys)[:10]}"
+        )
+    if int(manifest["state"]["tensor_count"]) != len(loaded):
+        raise ValueError("Training checkpoint tensor count does not match manifest")
+
+    def copy_exact(target: Tensor, source: Tensor, name: str) -> None:
+        if source.shape != target.shape or source.dtype != target.dtype:
+            raise ValueError(
+                f"Training checkpoint ABI mismatch at {name}: "
+                f"{source.shape}/{source.dtype} != {target.shape}/{target.dtype}"
+            )
+        target.copy_(source.to(target.device))
+
+    with torch.no_grad():
+        for name, parameter in named.items():
+            copy_exact(parameter, loaded[f"model.{name}"], f"model.{name}")
+        for name, leaf in leaves.items():
+            copy_exact(
+                leaf.first_moment,
+                loaded[f"optimizer.first.{name}"],
+                f"optimizer.first.{name}",
+            )
+            if leaf.second_moment is not None:
+                copy_exact(
+                    leaf.second_moment,
+                    loaded[f"optimizer.second.{name}"],
+                    f"optimizer.second.{name}",
+                )
+
+    optimizer.update = int(manifest["optimizer_update"])
+    optimizer.examples_seen = int(manifest["optimizer_examples_seen"])
+    next_data_cursor = int(manifest["next_data_cursor"])
+    if optimizer.update < 0 or optimizer.examples_seen < 0 or next_data_cursor < 0:
+        raise ValueError("Restored training counters must be non-negative")
+    if (
+        optimizer.examples_per_update is not None
+        and optimizer.examples_seen
+        != optimizer.update * optimizer.examples_per_update
+    ):
+        raise ValueError("Restored optimizer example counter is inconsistent")
     return manifest
 
 
@@ -3314,6 +3568,50 @@ def _compile_counter_snapshot() -> dict[str, dict[str, int]]:
     }
 
 
+def _training_resume_contract(
+    *,
+    args: argparse.Namespace,
+    config: Config,
+    source_mapping_sha256: str,
+    optimizer_partition: Mapping[str, Any],
+    data_provenance: Mapping[str, Any],
+    compiled_regions: Sequence[str],
+    git_commit: str,
+) -> dict[str, Any]:
+    """Pin every state-independent input needed for exact stateless resume."""
+
+    return {
+        "schema_version": "torch-training-resume-contract-v1",
+        "git_commit": git_commit,
+        "framework": "torch",
+        "torch_version": torch.__version__,
+        "cuda_version": torch.version.cuda,
+        "compute_dtype": "torch.bfloat16",
+        "recipe": args.recipe,
+        "config": dataclasses.asdict(config),
+        "source_mapping_sha256": source_mapping_sha256,
+        "optimizer_partition": dict(optimizer_partition),
+        "data": dict(data_provenance),
+        "schedule": {
+            "target_updates": args.steps,
+            "batch_size": args.batch_size,
+            "seed": args.seed,
+            "initial_data_cursor": args.data_start,
+        },
+        "runtime": {
+            "remat_mode": args.remat_mode,
+            "attention_impl": args.attention_impl,
+            "compile_regions": args.compile_regions,
+            "compiled_regions": list(compiled_regions),
+            "prefetch_depth": args.prefetch_depth,
+        },
+        "stochastic_state": (
+            "all step choices derive from seed/update; data derives from "
+            "seed/data_cursor; no mutable RNG state"
+        ),
+    }
+
+
 def train(args: argparse.Namespace) -> int:
     config = HERO_CONFIG if args.recipe == "hero" else CONFIG
     lr_range_start = getattr(args, "lr_range_start", None)
@@ -3363,12 +3661,29 @@ def train(args: argparse.Namespace) -> int:
         raise ValueError("--profile-update must be non-negative")
     if args.profile_update > 0 and args.steps > 0 and args.profile_update > args.steps:
         raise ValueError("--profile-update cannot exceed --steps")
-    if args.save_every != 0 or args.save_updates:
+    save_updates = tuple(int(value) for value in args.save_updates)
+    if args.save_every != 0:
         raise ValueError(
-            "Periodic/sparse checkpoints are disabled during migration; use at most --save-final"
+            "Periodic checkpoints are disabled; use one explicit --save-updates value"
         )
-    if args.max_checkpoints not in (0, 1):
-        raise ValueError("--max-checkpoints must be 0 or 1 for PyTorch migration")
+    if len(save_updates) > 1 or len(set(save_updates)) != len(save_updates):
+        raise ValueError("Use at most one unique sparse recovery checkpoint")
+    if save_updates and (
+        args.steps <= 0
+        or save_updates[0] <= 0
+        or save_updates[0] > args.steps
+    ):
+        raise ValueError("Sparse checkpoint update must be in [1, --steps]")
+    if args.max_checkpoints not in (0, 1, 2):
+        raise ValueError("--max-checkpoints must be 0, 1, or 2")
+    planned_checkpoints = len(save_updates) + int(args.save_final)
+    if planned_checkpoints > args.max_checkpoints:
+        raise ValueError(
+            "Requested checkpoint writes exceed --max-checkpoints: "
+            f"{planned_checkpoints} > {args.max_checkpoints}"
+        )
+    if args.resume_checkpoint is not None and lr_range_enabled:
+        raise ValueError("LR-range calibration cannot resume")
     if lr_range_enabled:
         assert lr_range_start is not None and lr_range_end is not None
         if args.recipe != "hero":
@@ -3428,7 +3743,6 @@ def train(args: argparse.Namespace) -> int:
             args.batch_size if config.lr_schedule_unit == "examples" else None
         ),
     )
-    restore_seconds = time.perf_counter() - restore_started
     partition = optimizer.partition_manifest()
     _write_json(output_dir / "optimizer_partition.json", partition)
 
@@ -3445,10 +3759,45 @@ def train(args: argparse.Namespace) -> int:
         shuffle_files=True,
         batch_schedule="global_permutation",
     )
+    git_commit = _git_commit()
+    data_provenance = batches.provenance()
+    resume_contract = _training_resume_contract(
+        args=args,
+        config=config,
+        source_mapping_sha256=source_mapping["combined_sha256"],
+        optimizer_partition=partition,
+        data_provenance=data_provenance,
+        compiled_regions=compiled_regions,
+        git_commit=git_commit,
+    )
+    resume_manifest = None
+    if args.resume_checkpoint is not None:
+        resume_manifest = load_training_checkpoint(
+            checkpoint_dir=args.resume_checkpoint,
+            model=model,
+            optimizer=optimizer,
+            expected_source_mapping_sha256=source_mapping["combined_sha256"],
+            expected_resume_contract=resume_contract,
+        )
+        initial_update = int(resume_manifest["optimizer_update"])
+        initial_data_cursor = int(resume_manifest["next_data_cursor"])
+        if args.steps > 0 and initial_update >= args.steps:
+            raise ValueError(
+                "Resume checkpoint is already at or beyond --steps: "
+                f"{initial_update} >= {args.steps}"
+            )
+        if save_updates and save_updates[0] <= initial_update:
+            raise ValueError(
+                "Sparse checkpoint update must be after the restored update"
+            )
+    else:
+        initial_update = 0
+        initial_data_cursor = args.data_start
+    restore_seconds = time.perf_counter() - restore_started
     run_config = {
         "schema_version": "torch-eager-train-run-v1",
         "created_utc": datetime.now(UTC).isoformat(),
-        "git_commit": _git_commit(),
+        "git_commit": git_commit,
         "framework": "torch",
         "execution": (
             "eager" if args.compile_regions == "none" else "regional-compile"
@@ -3477,7 +3826,22 @@ def train(args: argparse.Namespace) -> int:
         },
         "source": source_record,
         "optimizer_partition": {key: value for key, value in partition.items() if key != "leaves"},
-        "data": batches.provenance(),
+        "data": data_provenance,
+        "resume_contract": resume_contract,
+        "resume_contract_sha256": _json_sha256(resume_contract),
+        "resume": (
+            {
+                "enabled": True,
+                "checkpoint_dir": str(
+                    _require_workspace(args.resume_checkpoint, exists=True)
+                ),
+                "optimizer_update": initial_update,
+                "next_data_cursor": initial_data_cursor,
+                "checkpoint_state_sha256": resume_manifest["state"]["sha256"],
+            }
+            if resume_manifest is not None
+            else {"enabled": False}
+        ),
         "prefetch": {
             "depth": args.prefetch_depth,
             "workers": 1 if args.prefetch_depth == 1 else 0,
@@ -3508,8 +3872,11 @@ def train(args: argparse.Namespace) -> int:
     deadline = run_started + args.train_seconds if args.train_seconds > 0 else None
     records: list[dict[str, Any]] = []
     profiler_summary: dict[str, Any] | None = None
-    update = 0
-    data_cursor = args.data_start
+    update = initial_update
+    data_cursor = initial_data_cursor
+    segment_start_update = initial_update
+    saved_recovery_checkpoints: list[dict[str, Any]] = []
+    checkpoint_save_seconds = 0.0
     monitor = (
         _start_gpu_monitor(
             output_dir,
@@ -3648,13 +4015,47 @@ def train(args: argparse.Namespace) -> int:
             optimizer_cuda_seconds = event_backward.elapsed_time(event_optimizer) / 1000.0
             update += 1
             data_cursor += 1
+            if optimizer.update != update:
+                raise RuntimeError(
+                    "Optimizer/local update drift: "
+                    f"{optimizer.update} != {update}"
+                )
+            checkpoint_write_seconds = 0.0
+            recovery_checkpoint_path = None
+            if update in save_updates:
+                checkpoint_started = time.perf_counter()
+                recovery_manifest = save_training_checkpoint(
+                    output_dir=output_dir,
+                    model=model,
+                    optimizer=optimizer,
+                    source_mapping_sha256=source_mapping["combined_sha256"],
+                    next_data_cursor=data_cursor,
+                    resume_contract=resume_contract,
+                )
+                checkpoint_write_seconds = time.perf_counter() - checkpoint_started
+                checkpoint_save_seconds += checkpoint_write_seconds
+                recovery_checkpoint_path = str(
+                    output_dir / "checkpoints" / f"update{update:08d}"
+                )
+                saved_recovery_checkpoints.append(
+                    {
+                        "path": recovery_checkpoint_path,
+                        "optimizer_update": update,
+                        "next_data_cursor": data_cursor,
+                        "state": recovery_manifest["state"],
+                        "write_seconds": checkpoint_write_seconds,
+                    }
+                )
             elapsed = time.perf_counter() - run_started
+            segment_updates = update - segment_start_update
             record = {
                 "schema_version": "torch-eager-train-metrics-v1",
                 "update": update,
+                "segment_update": segment_updates,
                 "optimizer_update": int(optimizer_metrics["optimizer_update"]),
                 "data_cursor": data_cursor,
                 "examples": update * args.batch_size,
+                "segment_examples": segment_updates * args.batch_size,
                 "elapsed_seconds": elapsed,
                 "data_seconds": data_wait_seconds,
                 "data_wait_seconds": data_wait_seconds,
@@ -3676,7 +4077,11 @@ def train(args: argparse.Namespace) -> int:
                     0.0,
                 ),
                 "examples_per_second_step": args.batch_size / step_seconds,
-                "examples_per_second_end_to_end": (update * args.batch_size / elapsed),
+                "examples_per_second_end_to_end": (
+                    segment_updates * args.batch_size / elapsed
+                ),
+                "checkpoint_write_seconds": checkpoint_write_seconds,
+                "recovery_checkpoint_path": recovery_checkpoint_path,
                 "gpu_memory_allocated_bytes": torch.cuda.memory_allocated(),
                 "gpu_memory_reserved_bytes": torch.cuda.memory_reserved(),
                 "gpu_peak_memory_allocated_bytes": (torch.cuda.max_memory_allocated()),
@@ -3722,14 +4127,28 @@ def train(args: argparse.Namespace) -> int:
         )
     loss_summary = _summarize_training_records(records)
     _write_json(output_dir / "loss_summary.json", loss_summary)
+    completed_segment_updates = update - segment_start_update
+    completed_segment_examples = completed_segment_updates * args.batch_size
     report = {
         "schema_version": "torch-eager-train-report-v1",
         "completed_utc": datetime.now(UTC).isoformat(),
         "updates": update,
+        "segment_start_update": segment_start_update,
+        "segment_updates": completed_segment_updates,
         "examples": update * args.batch_size,
+        "segment_examples": completed_segment_examples,
         "next_data_cursor": data_cursor,
         "train_seconds": train_seconds,
-        "examples_per_second_end_to_end": (update * args.batch_size / max(train_seconds, 1e-12)),
+        "examples_per_second_end_to_end": (
+            completed_segment_examples / max(train_seconds, 1e-12)
+        ),
+        "checkpoint_save_seconds": checkpoint_save_seconds,
+        "recovery_checkpoints": saved_recovery_checkpoints,
+        "resumed_from": (
+            str(_require_workspace(args.resume_checkpoint, exists=True))
+            if args.resume_checkpoint is not None
+            else None
+        ),
         "mean_data_seconds": float(np.mean([row["data_seconds"] for row in records])),
         "mean_data_wait_seconds": float(np.mean([row["data_wait_seconds"] for row in records])),
         "mean_data_prepare_seconds": float(
@@ -5581,6 +6000,7 @@ def build_parser() -> argparse.ArgumentParser:
     train_parser.add_argument("--source-state", type=Path, default=_SOURCE_STATE)
     train_parser.add_argument("--raw-bt4-path", type=Path, default=_RAW_BT4_PATH)
     train_parser.add_argument("--data-root", type=Path, default=_DATA_ROOT)
+    train_parser.add_argument("--resume-checkpoint", type=Path)
     train_parser.add_argument("--output-dir", type=Path, required=True)
     train_parser.add_argument("--batch-size", type=int, default=64)
     train_parser.add_argument("--steps", type=int, default=1)
@@ -5638,6 +6058,7 @@ def build_parser() -> argparse.ArgumentParser:
         attention_impl="sdpa-all",
         compile_regions="fresh",
         source_state=_SOURCE_STATE,
+        resume_checkpoint=None,
         train_seconds=0.0,
         profile_update=0,
         save_every=0,
