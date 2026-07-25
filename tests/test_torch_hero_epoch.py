@@ -16,6 +16,7 @@ from research.train_torch import (
     HERO_CONFIG,
     MuonAdamW,
     StateProjector,
+    _analyze_lr_range_records,
     _polarized_gradient_cosines,
     _shared_sigreg_gradient_projection,
     _sigreg_v_stat,
@@ -317,3 +318,35 @@ def test_hero_schedule_is_example_based_and_decay_is_fresh_matrix_only():
         "fresh_embedding": False,
         "encoder.raw": False,
     }
+    small_batch.set_learning_rates(main=7e-4, bt4=2e-5)
+    assert small_batch._learning_rate("main") == 7e-4
+    assert small_batch._learning_rate("bt4") == 2e-5
+
+
+def test_lr_range_analysis_is_plot_ready_and_finds_descent_candidates():
+    learning_rates = np.geomspace(1e-5, 1e-2, num=64)
+    records = [
+        {
+            "update": index + 1,
+            "learning_rate": learning_rate,
+            "bt4_learning_rate": learning_rate / 30.0,
+            "loss": 10.0 + (np.log10(learning_rate) + 3.2) ** 2,
+        }
+        for index, learning_rate in enumerate(learning_rates)
+    ]
+
+    analysis = _analyze_lr_range_records(
+        records,
+        smoothing_beta=0.0,
+        regression_radius=3,
+    )
+
+    assert len(analysis["curve"]) == len(records)
+    assert analysis["curve"][0]["local_loss_slope_per_log_lr"] is None
+    assert (
+        analysis["candidates"]["steepest_smoothed_descent"]["learning_rate"]
+        < analysis["candidates"]["minimum_smoothed_loss"]["learning_rate"]
+    )
+    assert 1e-5 <= analysis["candidates"]["one_decade_below_minimum_loss"][
+        "learning_rate"
+    ] <= 1e-2

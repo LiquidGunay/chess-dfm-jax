@@ -27,7 +27,7 @@ import subprocess
 import sys
 import time
 import zipfile
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from concurrent.futures import Future, ThreadPoolExecutor
 from datetime import UTC, datetime
 from pathlib import Path
@@ -1496,6 +1496,8 @@ class MuonAdamW:
         self.config = config
         self.update = 0
         self.examples_seen = 0
+        self._main_learning_rate_override: float | None = None
+        self._bt4_learning_rate_override: float | None = None
         self.examples_per_update = (
             None if examples_per_update is None else int(examples_per_update)
         )
@@ -1605,8 +1607,23 @@ class MuonAdamW:
         )
 
     def _learning_rate(self, kind: str) -> float:
+        override = (
+            self._bt4_learning_rate_override
+            if kind == "bt4"
+            else self._main_learning_rate_override
+        )
+        if override is not None:
+            return override
         peak = self.config.bt4_learning_rate if kind == "bt4" else self.config.learning_rate
         return peak * self.learning_rate_ratio()
+
+    def set_learning_rates(self, *, main: float, bt4: float) -> None:
+        if not math.isfinite(main) or main <= 0.0:
+            raise ValueError("main learning-rate override must be finite and positive")
+        if not math.isfinite(bt4) or bt4 <= 0.0:
+            raise ValueError("BT4 learning-rate override must be finite and positive")
+        self._main_learning_rate_override = float(main)
+        self._bt4_learning_rate_override = float(bt4)
 
     @staticmethod
     def _orthogonalize(update: Tensor) -> Tensor:
@@ -3056,6 +3073,13 @@ def _compile_counter_snapshot() -> dict[str, dict[str, int]]:
 
 def train(args: argparse.Namespace) -> int:
     config = HERO_CONFIG if args.recipe == "hero" else CONFIG
+    lr_range_start = getattr(args, "lr_range_start", None)
+    lr_range_end = getattr(args, "lr_range_end", None)
+    lr_range_enabled = lr_range_start is not None or lr_range_end is not None
+    if lr_range_enabled:
+        if lr_range_start is None or lr_range_end is None:
+            raise ValueError("LR range requires both start and end rates")
+        config = dataclasses.replace(config, weight_decay=0.0)
     remat_modes = {
         "all": (True, True, True),
         "none": (False, False, False),
@@ -3102,6 +3126,21 @@ def train(args: argparse.Namespace) -> int:
         )
     if args.max_checkpoints not in (0, 1):
         raise ValueError("--max-checkpoints must be 0 or 1 for PyTorch migration")
+    if lr_range_enabled:
+        assert lr_range_start is not None and lr_range_end is not None
+        if args.recipe != "hero":
+            raise ValueError("LR range is defined only for the clean hero recipe")
+        if args.steps < 2 or args.train_seconds != 0.0:
+            raise ValueError("LR range requires --steps >= 2 and no time limit")
+        if args.save_final or args.max_checkpoints != 0:
+            raise ValueError("LR range must discard model state and write no checkpoint")
+        if (
+            not math.isfinite(lr_range_start)
+            or not math.isfinite(lr_range_end)
+            or lr_range_start <= 0.0
+            or lr_range_end <= lr_range_start
+        ):
+            raise ValueError("LR range must satisfy 0 < start < end")
 
     output_dir = _require_workspace(args.output_dir)
     if output_dir.exists():
@@ -3201,6 +3240,21 @@ def train(args: argparse.Namespace) -> int:
             "workers": 1 if args.prefetch_depth == 1 else 0,
             "deterministic_update_and_cursor_keys": True,
         },
+        "lr_range": (
+            {
+                "enabled": True,
+                "start_main_learning_rate": lr_range_start,
+                "end_main_learning_rate": lr_range_end,
+                "main_to_bt4_ratio": (
+                    HERO_CONFIG.learning_rate / HERO_CONFIG.bt4_learning_rate
+                ),
+                "spacing": "exponential_per_update",
+                "weight_decay": 0.0,
+                "model_state_retained": False,
+            }
+            if lr_range_enabled
+            else {"enabled": False}
+        ),
         "restore_seconds": restore_seconds,
     }
     _write_json(output_dir / "run_config.json", run_config)
@@ -3281,6 +3335,24 @@ def train(args: argparse.Namespace) -> int:
                 )
             else:
                 prepared_future = None
+
+            lr_range_position: float | None = None
+            if lr_range_enabled:
+                assert lr_range_start is not None and lr_range_end is not None
+                lr_range_position = update / (args.steps - 1)
+                main_learning_rate = math.exp(
+                    math.log(lr_range_start)
+                    + lr_range_position
+                    * (math.log(lr_range_end) - math.log(lr_range_start))
+                )
+                optimizer.set_learning_rates(
+                    main=main_learning_rate,
+                    bt4=(
+                        main_learning_rate
+                        * HERO_CONFIG.bt4_learning_rate
+                        / HERO_CONFIG.learning_rate
+                    ),
+                )
 
             transfer_started = time.perf_counter()
             batch = _torch_batch(compact_batch, device)
@@ -3369,6 +3441,8 @@ def train(args: argparse.Namespace) -> int:
                 **_json_scalars(aux),
                 **optimizer_metrics,
             }
+            if lr_range_position is not None:
+                record["lr_range_position"] = lr_range_position
             records.append(record)
             with metrics_path.open("a", encoding="utf-8") as handle:
                 handle.write(json.dumps(record, sort_keys=True) + "\n")
@@ -3443,10 +3517,218 @@ def train(args: argparse.Namespace) -> int:
         "last_metrics": records[-1],
         "loss_summary": loss_summary,
         "checkpoint": checkpoint_manifest,
+        "lr_range_enabled": lr_range_enabled,
     }
     _write_json(output_dir / "report.json", report)
     print(json.dumps(report, sort_keys=True), flush=True)
     return 0
+
+
+def _analyze_lr_range_records(
+    records: Sequence[Mapping[str, Any]],
+    *,
+    smoothing_beta: float = 0.98,
+    regression_radius: int = 4,
+) -> dict[str, Any]:
+    if len(records) < 16:
+        raise ValueError("LR-range analysis requires at least 16 updates")
+    if not 0.0 <= smoothing_beta < 1.0:
+        raise ValueError("smoothing_beta must be in [0, 1)")
+    if regression_radius < 2 or 2 * regression_radius + 1 >= len(records):
+        raise ValueError("Invalid LR-range regression radius")
+
+    learning_rates = np.asarray(
+        [float(record["learning_rate"]) for record in records],
+        dtype=np.float64,
+    )
+    losses = np.asarray(
+        [float(record["loss"]) for record in records],
+        dtype=np.float64,
+    )
+    if (
+        not np.all(np.isfinite(learning_rates))
+        or not np.all(learning_rates > 0.0)
+        or not np.all(np.diff(learning_rates) > 0.0)
+    ):
+        raise ValueError("LR-range rates must be finite, positive, and increasing")
+    if not np.all(np.isfinite(losses)):
+        raise ValueError("LR-range losses must be finite")
+
+    smoothed = np.empty_like(losses)
+    moving = 0.0
+    for index, value in enumerate(losses):
+        moving = smoothing_beta * moving + (1.0 - smoothing_beta) * value
+        correction = 1.0 - smoothing_beta ** (index + 1)
+        smoothed[index] = moving / correction
+
+    log_learning_rates = np.log(learning_rates)
+    slopes = np.full_like(losses, np.nan)
+    for index in range(regression_radius, len(records) - regression_radius):
+        region = slice(index - regression_radius, index + regression_radius + 1)
+        centered_x = log_learning_rates[region] - log_learning_rates[index]
+        slopes[index] = float(
+            np.dot(centered_x, smoothed[region])
+            / np.dot(centered_x, centered_x)
+        )
+
+    eligible_start = max(regression_radius, 10, len(records) // 10)
+    eligible_stop = len(records) - regression_radius
+    eligible = np.arange(eligible_start, eligible_stop)
+    minimum_index = int(eligible[np.argmin(smoothed[eligible])])
+    steepest_index = int(eligible[np.nanargmin(slopes[eligible])])
+
+    best_seen = math.inf
+    divergence_index: int | None = None
+    for index in range(eligible_start, len(records)):
+        best_seen = min(best_seen, float(smoothed[index]))
+        threshold = max(1.5 * best_seen, best_seen + 2.0)
+        if index > minimum_index and smoothed[index] > threshold:
+            divergence_index = index
+            break
+
+    curve_metrics = (
+        "loss",
+        "dfm_ce_loss",
+        "root_legal_conditional_ce",
+        "weighted_root_legal_conditional_ce",
+        "weighted_legality_loss",
+        "jepa_raw_mse",
+        "jepa_sigreg_loss",
+        "jepa_pred_sigreg_loss",
+        "wdl_weighted_loss",
+        "gradient_global_norm",
+        "gradient_clip_scale",
+        "z_state_norm",
+        "z_target_norm",
+        "z_pred_norm",
+        "accuracy",
+    )
+    curve: list[dict[str, Any]] = []
+    for index, record in enumerate(records):
+        row: dict[str, Any] = {
+            "update": int(record["update"]),
+            "learning_rate": float(learning_rates[index]),
+            "bt4_learning_rate": float(record["bt4_learning_rate"]),
+            "smoothed_loss": float(smoothed[index]),
+            "local_loss_slope_per_log_lr": (
+                float(slopes[index]) if math.isfinite(slopes[index]) else None
+            ),
+        }
+        for name in curve_metrics:
+            if name in record:
+                row[name] = float(record[name])
+        curve.append(row)
+
+    def candidate(index: int) -> dict[str, Any]:
+        return {
+            "update": int(records[index]["update"]),
+            "learning_rate": float(learning_rates[index]),
+            "bt4_learning_rate": float(records[index]["bt4_learning_rate"]),
+            "loss": float(losses[index]),
+            "smoothed_loss": float(smoothed[index]),
+            "local_loss_slope_per_log_lr": (
+                float(slopes[index]) if math.isfinite(slopes[index]) else None
+            ),
+        }
+
+    conservative_from_minimum = max(
+        float(learning_rates[0]),
+        float(learning_rates[minimum_index]) / 10.0,
+    )
+    return {
+        "schema_version": "torch-hero-lr-range-analysis-v1",
+        "smoothing_beta": smoothing_beta,
+        "regression_radius": regression_radius,
+        "eligible_update_indices_zero_based": [
+            eligible_start,
+            eligible_stop - 1,
+        ],
+        "candidates": {
+            "steepest_smoothed_descent": candidate(steepest_index),
+            "minimum_smoothed_loss": candidate(minimum_index),
+            "one_decade_below_minimum_loss": {
+                "learning_rate": conservative_from_minimum,
+                "bt4_learning_rate": (
+                    conservative_from_minimum
+                    * HERO_CONFIG.bt4_learning_rate
+                    / HERO_CONFIG.learning_rate
+                ),
+                "heuristic_only": True,
+            },
+        },
+        "divergence": (
+            None if divergence_index is None else candidate(divergence_index)
+        ),
+        "curve": curve,
+    }
+
+
+def lr_range(args: argparse.Namespace) -> int:
+    """Run and discard a clean hero model while exponentially sweeping LR."""
+
+    result = train(args)
+    output_dir = _require_workspace(args.output_dir, exists=True)
+    metrics_path = _require_workspace(output_dir / "metrics.jsonl", exists=True)
+    records = [
+        json.loads(line)
+        for line in metrics_path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    analysis = _analyze_lr_range_records(records)
+    run_config_path = _require_workspace(output_dir / "run_config.json", exists=True)
+    train_report_path = _require_workspace(output_dir / "report.json", exists=True)
+    run_config = json.loads(run_config_path.read_text(encoding="utf-8"))
+    train_report = json.loads(train_report_path.read_text(encoding="utf-8"))
+    gate_checks = {
+        "clean_hero_initialization": run_config["recipe"] == "hero",
+        "zero_weight_decay": run_config["config"]["weight_decay"] == 0.0,
+        "no_checkpoint": train_report["checkpoint"] is None,
+        "all_updates_completed": train_report["updates"] == args.steps,
+        "all_optimizer_updates_finite": all(
+            not bool(record["optimizer_skipped_nonfinite"]) for record in records
+        ),
+        "range_endpoints_reproduced": (
+            math.isclose(
+                float(records[0]["learning_rate"]),
+                float(args.lr_range_start),
+                rel_tol=1e-12,
+            )
+            and math.isclose(
+                float(records[-1]["learning_rate"]),
+                float(args.lr_range_end),
+                rel_tol=1e-12,
+            )
+        ),
+    }
+    report = {
+        "schema_version": "torch-hero-lr-range-report-v1",
+        "created_utc": datetime.now(UTC).isoformat(),
+        "git_commit": _git_commit(),
+        "model_state_retained": False,
+        "metrics_path": metrics_path.name,
+        "metrics_sha256": _sha256_file(metrics_path),
+        "run_config_sha256": _sha256_file(run_config_path),
+        "train_report_sha256": _sha256_file(train_report_path),
+        "analysis": analysis,
+        "gate_checks": gate_checks,
+        "gate_pass": all(gate_checks.values()),
+    }
+    _write_json(output_dir / "lr_range_report.json", report)
+    print(
+        json.dumps(
+            {
+                "lr_range_report": str(output_dir / "lr_range_report.json"),
+                "candidates": analysis["candidates"],
+                "divergence": analysis["divergence"],
+                "gate_pass": report["gate_pass"],
+            },
+            sort_keys=True,
+        ),
+        flush=True,
+    )
+    if not report["gate_pass"]:
+        raise RuntimeError("Hero LR-range gate failed")
+    return result
 
 
 def _gradient_audit_group(name: str) -> str:
@@ -4849,6 +5131,49 @@ def build_parser() -> argparse.ArgumentParser:
     train_parser.add_argument("--save-final", action="store_true")
     train_parser.add_argument("--max-checkpoints", type=int, default=1)
     train_parser.set_defaults(handler=train)
+
+    lr_range_parser = subparsers.add_parser("lr-range")
+    lr_range_parser.add_argument("--raw-bt4-path", type=Path, default=_RAW_BT4_PATH)
+    lr_range_parser.add_argument("--data-root", type=Path, default=_DATA_ROOT)
+    lr_range_parser.add_argument("--output-dir", type=Path, required=True)
+    lr_range_parser.add_argument("--batch-size", type=int, default=1024)
+    lr_range_parser.add_argument("--steps", type=int, default=128)
+    lr_range_parser.add_argument("--data-start", type=int, default=0)
+    lr_range_parser.add_argument("--seed", type=int, default=0)
+    lr_range_parser.add_argument("--threads", type=int, default=2)
+    lr_range_parser.add_argument("--log-every", type=int, default=8)
+    lr_range_parser.add_argument("--prefetch-depth", type=int, default=1)
+    lr_range_parser.add_argument(
+        "--gpu-monitor-interval-ms",
+        type=int,
+        default=100,
+    )
+    lr_range_parser.add_argument(
+        "--start-lr",
+        dest="lr_range_start",
+        type=float,
+        default=1e-5,
+    )
+    lr_range_parser.add_argument(
+        "--end-lr",
+        dest="lr_range_end",
+        type=float,
+        default=1e-3,
+    )
+    lr_range_parser.set_defaults(
+        handler=lr_range,
+        recipe="hero",
+        remat_mode="bt4-projector",
+        attention_impl="sdpa-all",
+        compile_regions="fresh",
+        source_state=_SOURCE_STATE,
+        train_seconds=0.0,
+        profile_update=0,
+        save_every=0,
+        save_updates=(),
+        save_final=False,
+        max_checkpoints=0,
+    )
 
     evaluate_parser = subparsers.add_parser("evaluate")
     evaluate_parser.add_argument("--source-state", type=Path, default=_SOURCE_STATE)
