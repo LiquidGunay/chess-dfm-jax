@@ -1,0 +1,78 @@
+{
+  "action_codec": "lc0_canonical_1858",
+  "created_utc": "2026-07-25T13:45:29.517537+00:00",
+  "dataset": {
+    "archive_sha256": "d8feffa259580563c8097fa4a604ca415469dd80da66dabda170ac9ce929b968",
+    "manifest": "/mountpoint/.exp/chess-dfm-jax/data/trajectory_v3/manifest.json",
+    "split_disjointness": {
+      "construction": "scripts/process_lc0_pgns_to_gcs.py hashes 'archive URL | PGN header id | stream ordinal' once per game and assigns the complete sliced game to train, val, or test",
+      "local_reaudit_limitation": "trajectory metadata stores only the PGN-header component of the augmented split id; archive URL and stream ordinal were not retained, so local shards cannot independently re-join all positions by the original split key",
+      "status": "game-disjoint-by-construction"
+    },
+    "test": {
+      "filename_size_manifest_sha256": "426f4bbd454f643e23318410344e445ad3f97281eb5934d3458828c0dcf0cb94",
+      "path": "/mountpoint/.exp/chess-dfm-jax/data/trajectory_v3/test",
+      "sample_count": 1559552,
+      "samples_per_shard": 1024,
+      "shard_count": 1523
+    },
+    "val": {
+      "filename_size_manifest_sha256": "c02ecfd114fa1dbf59e0d7189cc32b0aedd5a468c6e24145b131e0e58745b281",
+      "path": "/mountpoint/.exp/chess-dfm-jax/data/trajectory_v3/val",
+      "sample_count": 1560576,
+      "samples_per_shard": 1024,
+      "shard_count": 1524
+    }
+  },
+  "horizon": 8,
+  "immutable_after_creation": true,
+  "paired_arena": {
+    "opening_contract": {
+      "path": "/mountpoint/.exp/chess-dfm-jax/research/assets/arena/promotion-ply12-n2048-v3-contract.json",
+      "sha256": "39a0fb54695ce8846b6d474a1d2514fb2d28082323e23f6a63281d8f5bf915cd",
+      "size_bytes": 5026
+    },
+    "opening_count": 2048,
+    "opening_histories": {
+      "path": "/mountpoint/.exp/chess-dfm-jax/research/assets/arena/promotion-ply12-n2048-histories-v3.json",
+      "sha256": "bac58cc7380d9a4173e7618a765917aa0990355e1f8e460196affbe28580ed37",
+      "size_bytes": 2320975
+    },
+    "opening_ply": 12,
+    "opening_pool": {
+      "path": "/mountpoint/.exp/chess-dfm-jax/research/assets/arena/promotion-ply12-n2048-v3.json",
+      "sha256": "5632cc726112c2ab700e0f4d935fa83d58418b406fc100262f3aa19ce3befe2e",
+      "size_bytes": 1081628
+    },
+    "pairing": "each opening is played with colors reversed",
+    "source_positions_excluded_from_blind_test": 2048
+  },
+  "position_indices": {
+    "blind_test": {
+      "array": "blind_test_global_index",
+      "count": 65536,
+      "disjoint_from_paired_arena_sources": true,
+      "seed": 2026072502,
+      "selection_use": "terminal hero evaluation only",
+      "split": "test"
+    },
+    "fast_validation": {
+      "array": "fast_val_global_index",
+      "count": 8192,
+      "seed": 2026072501,
+      "split": "val"
+    },
+    "global_index_definition": "sorted shard filename ordinal * samples_per_shard + row ordinal",
+    "path": "/mountpoint/.exp/chess-dfm-jax/research/eval/hero_epoch_v1/position_indices.npz",
+    "primary_validation": {
+      "array": "primary_val_global_index",
+      "count": 65536,
+      "disjoint_from_fast": true,
+      "seed": 2026072501,
+      "split": "val"
+    },
+    "sha256": "c20102b49358dda5c9d6828e703cf133b196b3bf3b018cb143290aa8c1dc3e96",
+    "size_bytes": 557910
+  },
+  "schema_version": "chess-dfm-hero-eval-manifest-v1"
+}
