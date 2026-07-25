@@ -17,10 +17,12 @@ from research.train_torch import (
     MuonAdamW,
     StateProjector,
     _analyze_lr_range_records,
+    _hero_milestone_update,
     _normalize_frozen_indices,
     _polarized_gradient_cosines,
     _shared_sigreg_gradient_projection,
     _sigreg_v_stat,
+    _torch_refine_dfm_actions,
     canonicalize_trajectory_batch,
 )
 
@@ -183,6 +185,72 @@ def test_hero_optimizer_hyperparameters_are_frozen_after_lr_range():
     assert HERO_CONFIG.learning_rate == 5e-4
     assert HERO_CONFIG.bt4_learning_rate == pytest.approx(5e-4 / 30.0)
     assert HERO_CONFIG.weight_decay == 1e-2
+
+
+def test_hero_milestones_round_up_by_examples():
+    expected = {
+        10: 2768,
+        20: 5536,
+        25: 6920,
+        50: 13840,
+        75: 20760,
+        100: 27679,
+    }
+    assert {
+        percentage: _hero_milestone_update(
+            percentage,
+            total_examples=28_343_296,
+            batch_size=1024,
+        )
+        for percentage in expected
+    } == expected
+
+
+class _FixedArenaPlanner:
+    class _Config:
+        horizon = 8
+
+    config = _Config()
+
+    def planner(
+        self,
+        z_dfm,
+        action_tokens,
+        t,
+        compute_dtype,
+        *,
+        base_root_logits,
+    ):
+        del action_tokens, t, compute_dtype, base_root_logits
+        batch_size = z_dfm.shape[0]
+        logits = torch.full(
+            (batch_size, 8, 1858),
+            -8.0,
+            dtype=torch.float32,
+        )
+        logits[:, 0, 100] = 20.0
+        logits[:, 0, 3] = 1.0
+        logits[:, 0, 5] = 2.0
+        for horizon in range(1, 8):
+            logits[:, horizon, 10 + horizon] = 3.0 + horizon
+        return logits
+
+
+def test_torch_dfm_refinement_masks_root_and_unmasks_all_positions():
+    model = _FixedArenaPlanner()
+    root_legal_mask = torch.zeros((2, 1858), dtype=torch.bool)
+    root_legal_mask[:, 3] = True
+    root_legal_mask[:, 5] = True
+    selected = _torch_refine_dfm_actions(
+        model,
+        torch.zeros((2, 64, 256)),
+        torch.zeros((2, 1858)),
+        root_legal_mask,
+        refinement_passes=8,
+        compute_dtype=torch.float32,
+    )
+
+    torch.testing.assert_close(selected, torch.full((2,), 5))
 
 
 def test_gradient_polarization_recovers_component_cosine():

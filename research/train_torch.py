@@ -35,6 +35,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import IO, Any, NamedTuple
 
+import chess
 import ml_dtypes
 import numpy as np
 import torch
@@ -45,6 +46,22 @@ from torch.utils.checkpoint import checkpoint
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
+from chess_dfm_jax.encoding import TOTAL_PLANES, encode_board  # noqa: E402
+from chess_dfm_jax.policy import (  # noqa: E402
+    ACTION_CODEC_LC0_CANONICAL_1858,
+    ACTION_VOCAB_SIZE,
+    LC0_CANONICAL_1858_INPUT_FORMAT,
+    ActionCodecError,
+    legal_action_mask,
+)
+from research.arena_history_trust import (  # noqa: E402
+    HISTORY_VALIDATION_FULL_REPLAY,
+    HISTORY_VALIDATION_SCHEMA,
+    HISTORY_VALIDATION_TRUSTED_ARENA_ENDPOINT,
+    TrustedArenaHistoryEndpoint,
+    verify_trusted_arena_history_endpoint,
+)
+
 _WORKSPACE_ROOT = Path("/mountpoint/.exp")
 _SOURCE_STATE = (
     _REPO_ROOT
@@ -62,6 +79,11 @@ _RAW_BT4_PATH = (
 _HERO_EVAL_MANIFEST = (
     _REPO_ROOT / "research" / "eval" / "hero_epoch_v1" / "manifest.json"
 )
+_HERO_FAST_VALIDATION_PERCENTAGES = tuple(range(10, 101, 10))
+_HERO_ARENA_PERCENTAGES = (25, 50, 75)
+_HERO_ARENA_PAIRS = 16
+_HERO_ARENA_ADDITIONAL_PLY_CAP = 16
+_HERO_ARENA_INFERENCE_BATCH_SIZE = 16
 _RAW_BT4_SIZE_BYTES = 335_916_563
 _RAW_BT4_SHA256 = "61e43e98d2c4cb747498c6bc13a5bbb3b07e985d3f5d87f0351a4db855fa0651"
 _SOURCE_SIZE_BYTES = 1_851_704_172
@@ -812,6 +834,444 @@ class JointModel(nn.Module):
             z = self.jepa_transition(z, condition, compute_dtype)
             predictions.append(z)
         return torch.stack(predictions, dim=1)
+
+
+class TorchArenaSelection(NamedTuple):
+    """Minimal host-resident result consumed by the fail-closed arena."""
+
+    action_indices: np.ndarray
+
+
+def _canonical_arena_fen(board: chess.Board) -> str:
+    return board.fen(en_passant="legal")
+
+
+def _checked_arena_board(value: Any, *, row: int) -> chess.Board:
+    if not isinstance(value, chess.Board):
+        raise TypeError(f"boards[{row}] must be a python-chess Board")
+    if value.chess960:
+        raise ValueError(f"boards[{row}] must use standard chess")
+    if not value.is_valid():
+        raise ValueError(f"boards[{row}] is not a valid standard-chess position")
+    checked = value.copy(stack=False)
+    if checked.is_game_over(claim_draw=False):
+        raise ValueError(f"boards[{row}] is locally terminal")
+    return checked
+
+
+def _matching_arena_transition(
+    previous: chess.Board,
+    target: chess.Board,
+    *,
+    row: int,
+    history_index: int,
+) -> chess.Move:
+    target_fen = _canonical_arena_fen(target)
+    matches: list[chess.Move] = []
+    for move in previous.legal_moves:
+        candidate = previous.copy(stack=False)
+        candidate.push(move)
+        if _canonical_arena_fen(candidate) == target_fen:
+            matches.append(move)
+    if len(matches) != 1:
+        raise ValueError(
+            f"histories[{row}][{history_index - 1}:{history_index + 1}] "
+            f"must describe exactly one legal ply; found {len(matches)}"
+        )
+    return matches[0]
+
+
+def _validate_torch_arena_history(
+    original_board: chess.Board,
+    checked_board: chess.Board,
+    history: Any,
+    *,
+    row: int,
+    mode: str,
+) -> None:
+    if mode == HISTORY_VALIDATION_TRUSTED_ARENA_ENDPOINT:
+        try:
+            endpoint = verify_trusted_arena_history_endpoint(history)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                f"trusted arena endpoint for row {row} is invalid"
+            ) from exc
+        if original_board.move_stack:
+            raise ValueError(
+                f"boards[{row}] must be a stackless trusted arena copy"
+            )
+        if endpoint.current_fen != _canonical_arena_fen(checked_board):
+            raise ValueError(
+                f"trusted arena endpoint must match boards[{row}]"
+            )
+        if endpoint.authoritative_move_stack_length != checked_board.ply():
+            raise ValueError(
+                f"trusted arena endpoint ply must match boards[{row}]"
+            )
+        if endpoint.position_count != checked_board.ply() + 1:
+            raise ValueError(
+                f"trusted arena endpoint position count must match boards[{row}]"
+            )
+        return
+    if mode != HISTORY_VALIDATION_FULL_REPLAY:
+        raise ValueError(f"Unsupported arena history mode: {mode!r}")
+    if isinstance(history, (str, bytes, chess.Board)):
+        raise TypeError(f"histories[{row}] must be a sequence of boards")
+    try:
+        positions = tuple(history)
+    except TypeError as exc:
+        raise TypeError(f"histories[{row}] must be iterable") from exc
+    if not positions:
+        raise ValueError(f"histories[{row}] must not be empty")
+    checked_positions = tuple(
+        _checked_arena_board(position, row=row)
+        for position in positions
+    )
+    replay = chess.Board()
+    if _canonical_arena_fen(checked_positions[0]) != _canonical_arena_fen(replay):
+        raise ValueError(
+            f"histories[{row}] must start at the standard initial position"
+        )
+    for history_index, target in enumerate(checked_positions[1:], start=1):
+        replay.push(
+            _matching_arena_transition(
+                replay,
+                target,
+                row=row,
+                history_index=history_index,
+            )
+        )
+    if _canonical_arena_fen(replay) != _canonical_arena_fen(checked_board):
+        raise ValueError(f"histories[{row}] does not reproduce boards[{row}]")
+
+
+def _torch_refine_dfm_actions(
+    model: JointModel,
+    z_dfm: Tensor,
+    base_root_logits: Tensor,
+    root_legal_mask: Tensor,
+    *,
+    refinement_passes: int,
+    compute_dtype: torch.dtype,
+) -> Tensor:
+    """Run the frozen stable-rank iterative DFM decoder without JEPA feedback."""
+
+    batch_size = z_dfm.shape[0]
+    horizon = model.config.horizon
+    if refinement_passes < 1:
+        raise ValueError("refinement_passes must be positive")
+    if root_legal_mask.shape != (batch_size, _VOCAB_SIZE):
+        raise ValueError("root_legal_mask has the wrong physical shape")
+    if root_legal_mask.dtype != torch.bool:
+        raise TypeError("root_legal_mask must be boolean")
+    if not bool(torch.all(root_legal_mask.any(dim=-1))):
+        raise ValueError("root_legal_mask contains an empty row")
+    action_tokens = torch.full(
+        (batch_size, horizon),
+        _MASK_TOKEN,
+        dtype=torch.long,
+        device=z_dfm.device,
+    )
+    for pass_index in range(refinement_passes):
+        t = torch.full(
+            (batch_size,),
+            pass_index / refinement_passes,
+            dtype=torch.float32,
+            device=z_dfm.device,
+        )
+        logits = model.planner(
+            z_dfm,
+            action_tokens,
+            t,
+            compute_dtype,
+            base_root_logits=base_root_logits,
+        )
+        assert isinstance(logits, Tensor)
+        logits_f32 = logits.float()
+        if not bool(torch.all(torch.isfinite(logits_f32))):
+            raise FloatingPointError(
+                f"DFM arena logits are non-finite at pass {pass_index}"
+            )
+        root_logits = torch.where(
+            root_legal_mask,
+            logits_f32[:, 0],
+            torch.full_like(logits_f32[:, 0], -torch.inf),
+        )
+        selection_log_probs = torch.cat(
+            (
+                F.log_softmax(root_logits, dim=-1).unsqueeze(1),
+                F.log_softmax(logits_f32[:, 1:], dim=-1),
+            ),
+            dim=1,
+        )
+        predictions = selection_log_probs.argmax(dim=-1)
+        confidence = selection_log_probs.amax(dim=-1).exp()
+        confidence = torch.where(
+            action_tokens == _MASK_TOKEN,
+            confidence,
+            torch.full_like(confidence, torch.inf),
+        )
+        target_unmasked = (
+            horizon * (pass_index + 1)
+        ) // refinement_passes
+        position_order = torch.argsort(
+            -confidence,
+            dim=-1,
+            stable=True,
+        )
+        position_ranks = torch.argsort(
+            position_order,
+            dim=-1,
+            stable=True,
+        )
+        action_tokens = torch.where(
+            position_ranks < target_unmasked,
+            predictions,
+            action_tokens,
+        )
+    if bool(torch.any(action_tokens == _MASK_TOKEN)):
+        raise RuntimeError(
+            "Refinement passes did not unmask every action position"
+        )
+    root_actions = action_tokens[:, 0]
+    if not bool(
+        torch.all(
+            torch.gather(
+                root_legal_mask,
+                1,
+                root_actions.unsqueeze(1),
+            )
+        )
+    ):
+        raise RuntimeError("DFM refinement selected an illegal root action")
+    return root_actions
+
+
+@dataclasses.dataclass(frozen=True)
+class TorchHeroArenaPolicy:
+    """Native Torch adapter for live hero milestones and raw-BT4 controls."""
+
+    model: JointModel
+    model_id: str
+    policy_mode: str
+    inference_batch_size: int = _HERO_ARENA_INFERENCE_BATCH_SIZE
+    refinement_passes: int = 8
+    action_codec_id: str = dataclasses.field(
+        default=ACTION_CODEC_LC0_CANONICAL_1858,
+        init=False,
+    )
+    history_validation_mode: str = dataclasses.field(
+        default=HISTORY_VALIDATION_TRUSTED_ARENA_ENDPOINT,
+        init=False,
+    )
+    trusted_arena_history_schema: str = dataclasses.field(
+        default=HISTORY_VALIDATION_SCHEMA,
+        init=False,
+    )
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.model_id, str) or not self.model_id.strip():
+            raise ValueError("model_id must be non-empty")
+        if self.policy_mode not in {"dfm", "raw_bt4"}:
+            raise ValueError("policy_mode must be 'dfm' or 'raw_bt4'")
+        if (
+            isinstance(self.inference_batch_size, bool)
+            or self.inference_batch_size < 1
+        ):
+            raise ValueError("inference_batch_size must be positive")
+        if self.model.config.action_codec != ACTION_CODEC_LC0_CANONICAL_1858:
+            raise ValueError("Torch arena policy requires the canonical codec")
+        if self.policy_mode == "dfm" and (
+            self.refinement_passes != self.model.config.horizon
+        ):
+            raise ValueError(
+                "The frozen hero arena requires one refinement pass per horizon"
+            )
+
+    def select_actions(
+        self,
+        boards: Sequence[chess.Board],
+        histories: Sequence[Sequence[chess.Board]],
+    ) -> TorchArenaSelection:
+        return self._select_actions(
+            boards,
+            histories,
+            mode=HISTORY_VALIDATION_FULL_REPLAY,
+        )
+
+    def select_actions_from_trusted_arena(
+        self,
+        boards: Sequence[chess.Board],
+        endpoints: Sequence[TrustedArenaHistoryEndpoint],
+    ) -> TorchArenaSelection:
+        return self._select_actions(
+            boards,
+            endpoints,
+            mode=HISTORY_VALIDATION_TRUSTED_ARENA_ENDPOINT,
+        )
+
+    def _select_actions(
+        self,
+        boards: Sequence[chess.Board],
+        histories: Sequence[Any],
+        *,
+        mode: str,
+    ) -> TorchArenaSelection:
+        if isinstance(boards, (str, bytes, chess.Board)):
+            raise TypeError("boards must be a non-empty sequence")
+        board_items = tuple(boards)
+        history_items = tuple(histories)
+        if not board_items:
+            raise ValueError("boards must not be empty")
+        if len(history_items) != len(board_items):
+            raise ValueError("histories must contain one entry per board")
+        if len(board_items) > self.inference_batch_size:
+            raise ValueError(
+                f"active batch {len(board_items)} exceeds physical arena batch "
+                f"{self.inference_batch_size}"
+            )
+        checked_boards = tuple(
+            _checked_arena_board(board, row=row)
+            for row, board in enumerate(board_items)
+        )
+        for row, (original, checked, history) in enumerate(
+            zip(board_items, checked_boards, history_items, strict=True)
+        ):
+            _validate_torch_arena_history(
+                original,
+                checked,
+                history,
+                row=row,
+                mode=mode,
+            )
+
+        plane_rows: list[np.ndarray] = []
+        mask_rows: list[np.ndarray] = []
+        for row, board in enumerate(checked_boards):
+            planes = np.asarray(
+                encode_board(
+                    board,
+                    [],
+                    planes_layout="nchw",
+                    input_format=LC0_CANONICAL_1858_INPUT_FORMAT,
+                )
+            )
+            if planes.shape != (TOTAL_PLANES, 8, 8):
+                raise ValueError(
+                    f"encoded planes for row {row} have shape {planes.shape}"
+                )
+            if planes.dtype != np.dtype(np.float32) or not np.all(
+                np.isfinite(planes)
+            ):
+                raise ValueError(
+                    f"encoded planes for row {row} are not finite float32"
+                )
+            try:
+                mask = np.asarray(
+                    legal_action_mask(
+                        board,
+                        codec_id=ACTION_CODEC_LC0_CANONICAL_1858,
+                        input_format=LC0_CANONICAL_1858_INPUT_FORMAT,
+                    )
+                )
+            except (
+                ActionCodecError,
+                IndexError,
+                KeyError,
+                TypeError,
+                ValueError,
+            ) as exc:
+                raise ValueError(
+                    f"could not construct root legality mask for row {row}"
+                ) from exc
+            if (
+                mask.shape != (ACTION_VOCAB_SIZE,)
+                or mask.dtype != np.dtype(np.bool_)
+                or int(mask.sum()) != board.legal_moves.count()
+                or not bool(mask.any())
+            ):
+                raise ValueError(
+                    f"canonical legality mask failed coverage for row {row}"
+                )
+            plane_rows.append(planes)
+            mask_rows.append(mask)
+
+        active_batch_size = len(checked_boards)
+        physical_batch_size = self.inference_batch_size
+        current_planes = np.stack(plane_rows)
+        root_legal_mask = np.stack(mask_rows)
+        if active_batch_size < physical_batch_size:
+            padding = physical_batch_size - active_batch_size
+            current_planes = np.concatenate(
+                (
+                    current_planes,
+                    np.repeat(current_planes[:1], padding, axis=0),
+                )
+            )
+            root_legal_mask = np.concatenate(
+                (
+                    root_legal_mask,
+                    np.repeat(root_legal_mask[:1], padding, axis=0),
+                )
+            )
+
+        device = next(self.model.parameters()).device
+        planes_tensor = torch.from_numpy(
+            np.ascontiguousarray(current_planes)
+        ).to(device)
+        legal_tensor = torch.from_numpy(
+            np.ascontiguousarray(root_legal_mask)
+        ).to(device)
+        with torch.inference_mode():
+            tokens = self.model.encoder.encode_current(
+                planes_tensor,
+                compute_dtype=torch.bfloat16,
+                remat=False,
+            )
+            if self.model.encoder.policy_head is None:
+                raise RuntimeError("Torch hero arena model has no policy head")
+            base_root_logits = self.model.encoder.policy_head(
+                tokens,
+                torch.bfloat16,
+            )
+            if self.policy_mode == "raw_bt4":
+                if not bool(torch.all(torch.isfinite(base_root_logits.float()))):
+                    raise FloatingPointError("Raw BT4 arena logits are non-finite")
+                selected = torch.where(
+                    legal_tensor,
+                    base_root_logits.float(),
+                    torch.full_like(base_root_logits.float(), -torch.inf),
+                ).argmax(dim=-1)
+            else:
+                z_dfm = self.model.dfm_state_projector(
+                    tokens,
+                    torch.bfloat16,
+                )
+                selected = _torch_refine_dfm_actions(
+                    self.model,
+                    z_dfm,
+                    base_root_logits,
+                    legal_tensor,
+                    refinement_passes=self.refinement_passes,
+                    compute_dtype=torch.bfloat16,
+                )
+            if device.type == "cuda":
+                torch.cuda.synchronize(device)
+            actions = (
+                selected[:active_batch_size]
+                .to(dtype=torch.int32)
+                .cpu()
+                .numpy()
+            )
+        if actions.shape != (active_batch_size,):
+            raise RuntimeError("Torch arena adapter returned the wrong shape")
+        for row, action in enumerate(actions):
+            if not root_legal_mask[row, int(action)]:
+                raise RuntimeError(
+                    f"Torch arena adapter selected an illegal action for row {row}"
+                )
+        actions.flags.writeable = False
+        return TorchArenaSelection(action_indices=actions)
 
 
 class StepChoices(NamedTuple):
@@ -2435,7 +2895,9 @@ def canonicalize_trajectory_batch(
     return result
 
 
-from research.prepare import FixedTrajectoryBatches as _FixedTrajectoryBatches
+from research.prepare import (  # noqa: E402
+    FixedTrajectoryBatches as _FixedTrajectoryBatches,
+)
 
 
 class CanonicalTrajectoryBatches(_FixedTrajectoryBatches):
@@ -3267,9 +3729,14 @@ def _start_gpu_monitor(
     output_dir: Path,
     *,
     interval_ms: int,
+    append: bool = False,
 ) -> tuple[subprocess.Popen[str], IO[str], IO[str]]:
-    samples = (output_dir / "gpu_samples.csv").open("w", encoding="utf-8")
-    stderr = (output_dir / "gpu_monitor.stderr.log").open("w", encoding="utf-8")
+    mode = "a" if append else "w"
+    samples = (output_dir / "gpu_samples.csv").open(mode, encoding="utf-8")
+    stderr = (output_dir / "gpu_monitor.stderr.log").open(
+        mode,
+        encoding="utf-8",
+    )
     fields = (
         "timestamp,utilization.gpu,utilization.memory,memory.used,memory.total,"
         "power.draw,clocks.sm,clocks.mem"
@@ -3604,6 +4071,12 @@ def _training_resume_contract(
             "compile_regions": args.compile_regions,
             "compiled_regions": list(compiled_regions),
             "prefetch_depth": args.prefetch_depth,
+            "hero_milestones": _hero_milestone_contract(
+                args,
+                enabled=bool(
+                    getattr(args, "hero_milestones", False)
+                ),
+            ),
         },
         "stochastic_state": (
             "all step choices derive from seed/update; data derives from "
@@ -3614,6 +4087,9 @@ def _training_resume_contract(
 
 def train(args: argparse.Namespace) -> int:
     config = HERO_CONFIG if args.recipe == "hero" else CONFIG
+    hero_milestones_enabled = bool(
+        getattr(args, "hero_milestones", False)
+    )
     lr_range_start = getattr(args, "lr_range_start", None)
     lr_range_end = getattr(args, "lr_range_end", None)
     lr_range_enabled = lr_range_start is not None or lr_range_end is not None
@@ -3684,6 +4160,66 @@ def train(args: argparse.Namespace) -> int:
         )
     if args.resume_checkpoint is not None and lr_range_enabled:
         raise ValueError("LR-range calibration cannot resume")
+    if hero_milestones_enabled:
+        if args.recipe != "hero" or lr_range_enabled:
+            raise ValueError(
+                "Hero milestone instrumentation requires the clean hero recipe"
+            )
+        if args.batch_size != 1024:
+            raise ValueError(
+                "The frozen hero milestone run requires batch size 1024"
+            )
+        if (
+            args.steps * args.batch_size != _HERO_TRAIN_EXAMPLES
+            or args.train_seconds != 0.0
+        ):
+            raise ValueError(
+                "Hero milestones require exactly one example-count epoch"
+            )
+        if (
+            args.remat_mode != "bt4-projector"
+            or args.attention_impl != "sdpa-all"
+            or args.compile_regions != "fresh"
+            or args.prefetch_depth != 1
+        ):
+            raise ValueError(
+                "Hero milestones require the frozen compiled Torch runtime"
+            )
+        if args.data_start != 0 or args.seed != 0:
+            raise ValueError(
+                "The frozen hero milestone run requires data-start 0 and seed 0"
+            )
+        if (
+            args.hero_arena_pairs != _HERO_ARENA_PAIRS
+            or args.hero_arena_additional_ply_cap
+            != _HERO_ARENA_ADDITIONAL_PLY_CAP
+            or args.hero_arena_inference_batch_size
+            != _HERO_ARENA_INFERENCE_BATCH_SIZE
+        ):
+            raise ValueError("Hero arena milestone contract drift")
+        halfway_update = _hero_milestone_update(
+            50,
+            total_examples=_HERO_TRAIN_EXAMPLES,
+            batch_size=args.batch_size,
+        )
+        if args.resume_checkpoint is None:
+            if (
+                save_updates != (halfway_update,)
+                or not args.save_final
+                or args.max_checkpoints != 2
+            ):
+                raise ValueError(
+                    "A fresh hero epoch requires one halfway recovery state "
+                    "and one terminal checkpoint"
+                )
+        elif (
+            save_updates
+            or not args.save_final
+            or args.max_checkpoints not in (1, 2)
+        ):
+            raise ValueError(
+                "A resumed hero epoch must write only the terminal checkpoint"
+            )
     if lr_range_enabled:
         assert lr_range_start is not None and lr_range_end is not None
         if args.recipe != "hero":
@@ -3761,6 +4297,18 @@ def train(args: argparse.Namespace) -> int:
     )
     git_commit = _git_commit()
     data_provenance = batches.provenance()
+    hero_milestone_contract = _hero_milestone_contract(
+        args,
+        enabled=hero_milestones_enabled,
+    )
+    hero_milestone_resources = (
+        _load_hero_milestone_resources(
+            manifest_path=args.hero_eval_manifest,
+            arena_pairs=args.hero_arena_pairs,
+        )
+        if hero_milestones_enabled
+        else None
+    )
     resume_contract = _training_resume_contract(
         args=args,
         config=config,
@@ -3847,6 +4395,17 @@ def train(args: argparse.Namespace) -> int:
             "workers": 1 if args.prefetch_depth == 1 else 0,
             "deterministic_update_and_cursor_keys": True,
         },
+        "hero_milestones": (
+            {
+                **hero_milestone_contract,
+                "fast_pool": hero_milestone_resources.fast_pool,
+                "paired_arena_provenance": (
+                    hero_milestone_resources.arena_provenance
+                ),
+            }
+            if hero_milestone_resources is not None
+            else hero_milestone_contract
+        ),
         "lr_range": (
             {
                 "enabled": True,
@@ -3877,6 +4436,33 @@ def train(args: argparse.Namespace) -> int:
     segment_start_update = initial_update
     saved_recovery_checkpoints: list[dict[str, Any]] = []
     checkpoint_save_seconds = 0.0
+    milestone_evaluation_seconds = 0.0
+    hero_validation_records: list[dict[str, Any]] = []
+    hero_arena_records: list[dict[str, Any]] = []
+    validation_milestones_by_update = (
+        {
+            _hero_milestone_update(
+                percentage,
+                total_examples=_HERO_TRAIN_EXAMPLES,
+                batch_size=args.batch_size,
+            ): percentage
+            for percentage in _HERO_FAST_VALIDATION_PERCENTAGES
+        }
+        if hero_milestones_enabled
+        else {}
+    )
+    arena_milestones_by_update = (
+        {
+            _hero_milestone_update(
+                percentage,
+                total_examples=_HERO_TRAIN_EXAMPLES,
+                batch_size=args.batch_size,
+            ): percentage
+            for percentage in _HERO_ARENA_PERCENTAGES
+        }
+        if hero_milestones_enabled
+        else {}
+    )
     monitor = (
         _start_gpu_monitor(
             output_dir,
@@ -3885,6 +4471,95 @@ def train(args: argparse.Namespace) -> int:
         if args.gpu_monitor_interval_ms > 0
         else None
     )
+
+    def run_live_milestones(
+        milestone_update: int,
+        *,
+        restart_monitor: bool,
+    ) -> None:
+        nonlocal monitor, milestone_evaluation_seconds
+        validation_percentage = validation_milestones_by_update.get(
+            milestone_update
+        )
+        arena_percentage = arena_milestones_by_update.get(milestone_update)
+        if (
+            hero_milestone_resources is None
+            or (
+                validation_percentage is None
+                and arena_percentage is None
+            )
+        ):
+            return
+        milestone_started = time.perf_counter()
+        _stop_gpu_monitor(monitor)
+        monitor = None
+        milestone_succeeded = False
+        try:
+            if validation_percentage is not None:
+                hero_validation_records.append(
+                    _run_hero_validation_milestone(
+                        model,
+                        hero_milestone_resources,
+                        output_dir=output_dir,
+                        update=milestone_update,
+                        batch_size=args.batch_size,
+                        percentage=validation_percentage,
+                        device=device,
+                    )
+                )
+            if arena_percentage is not None:
+                hero_arena_records.append(
+                    _run_hero_arena_milestone(
+                        model,
+                        hero_milestone_resources,
+                        output_dir=output_dir,
+                        raw_bt4_path=args.raw_bt4_path,
+                        update=milestone_update,
+                        batch_size=args.batch_size,
+                        percentage=arena_percentage,
+                        arena_pairs=args.hero_arena_pairs,
+                        additional_ply_cap=(
+                            args.hero_arena_additional_ply_cap
+                        ),
+                        inference_batch_size=(
+                            args.hero_arena_inference_batch_size
+                        ),
+                        device=device,
+                    )
+                )
+            milestone_succeeded = True
+        finally:
+            try:
+                if (
+                    milestone_succeeded
+                    and restart_monitor
+                    and args.gpu_monitor_interval_ms > 0
+                ):
+                    monitor = _start_gpu_monitor(
+                        output_dir,
+                        interval_ms=args.gpu_monitor_interval_ms,
+                        append=True,
+                    )
+            finally:
+                milestone_evaluation_seconds += (
+                    time.perf_counter() - milestone_started
+                )
+
+    if (
+        hero_milestones_enabled
+        and initial_update > 0
+        and (
+            initial_update in validation_milestones_by_update
+            or initial_update in arena_milestones_by_update
+        )
+    ):
+        run_live_milestones(
+            initial_update,
+            restart_monitor=(
+                args.steps == 0 or initial_update < args.steps
+            ),
+        )
+
     prefetch_executor = (
         ThreadPoolExecutor(
             max_workers=1,
@@ -4046,7 +4721,11 @@ def train(args: argparse.Namespace) -> int:
                         "write_seconds": checkpoint_write_seconds,
                     }
                 )
-            elapsed = time.perf_counter() - run_started
+            elapsed = (
+                time.perf_counter()
+                - run_started
+                - milestone_evaluation_seconds
+            )
             segment_updates = update - segment_start_update
             record = {
                 "schema_version": "torch-eager-train-metrics-v1",
@@ -4107,6 +4786,12 @@ def train(args: argparse.Namespace) -> int:
             )
             if bool(optimizer_metrics["optimizer_skipped_nonfinite"]):
                 raise FloatingPointError(f"Non-finite update at {update}")
+            run_live_milestones(
+                update,
+                restart_monitor=(
+                    args.steps == 0 or update < args.steps
+                ),
+            )
     finally:
         if prepared_future is not None:
             prepared_future.cancel()
@@ -4115,7 +4800,8 @@ def train(args: argparse.Namespace) -> int:
         _stop_gpu_monitor(monitor)
 
     torch.cuda.synchronize()
-    train_seconds = time.perf_counter() - run_started
+    train_wall_seconds = time.perf_counter() - run_started
+    train_seconds = train_wall_seconds - milestone_evaluation_seconds
     checkpoint_manifest = None
     if args.save_final:
         checkpoint_manifest = save_model_checkpoint(
@@ -4139,6 +4825,8 @@ def train(args: argparse.Namespace) -> int:
         "segment_examples": completed_segment_examples,
         "next_data_cursor": data_cursor,
         "train_seconds": train_seconds,
+        "train_wall_seconds": train_wall_seconds,
+        "milestone_evaluation_seconds": milestone_evaluation_seconds,
         "examples_per_second_end_to_end": (
             completed_segment_examples / max(train_seconds, 1e-12)
         ),
@@ -4180,6 +4868,11 @@ def train(args: argparse.Namespace) -> int:
         "loss_summary": loss_summary,
         "checkpoint": checkpoint_manifest,
         "lr_range_enabled": lr_range_enabled,
+        "hero_milestones": {
+            "contract": hero_milestone_contract,
+            "validation_records": hero_validation_records,
+            "arena_records": hero_arena_records,
+        },
     }
     _write_json(output_dir / "report.json", report)
     print(json.dumps(report, sort_keys=True), flush=True)
@@ -5451,6 +6144,587 @@ def _load_hero_frozen_pool(
     }
 
 
+@dataclasses.dataclass(frozen=True)
+class _HeroMilestoneResources:
+    fast_batches: FrozenIndexTrajectoryBatches
+    fast_pool: dict[str, Any]
+    opening_pool: dict[str, Any]
+    loaded_histories: Any
+    arena_provenance: dict[str, Any]
+
+
+def _hero_milestone_update(
+    percentage: int,
+    *,
+    total_examples: int,
+    batch_size: int,
+) -> int:
+    if not 1 <= percentage <= 100:
+        raise ValueError("percentage must be in [1, 100]")
+    if total_examples < 1 or batch_size < 1:
+        raise ValueError("total_examples and batch_size must be positive")
+    return (
+        percentage * total_examples + 100 * batch_size - 1
+    ) // (100 * batch_size)
+
+
+def _hero_milestone_contract(
+    args: argparse.Namespace,
+    *,
+    enabled: bool,
+) -> dict[str, Any]:
+    if not enabled:
+        return {"enabled": False}
+    validation_updates = {
+        str(percentage): _hero_milestone_update(
+            percentage,
+            total_examples=_HERO_TRAIN_EXAMPLES,
+            batch_size=args.batch_size,
+        )
+        for percentage in _HERO_FAST_VALIDATION_PERCENTAGES
+    }
+    arena_updates = {
+        str(percentage): _hero_milestone_update(
+            percentage,
+            total_examples=_HERO_TRAIN_EXAMPLES,
+            batch_size=args.batch_size,
+        )
+        for percentage in _HERO_ARENA_PERCENTAGES
+    }
+    return {
+        "enabled": True,
+        "schedule_unit": "examples",
+        "total_examples": _HERO_TRAIN_EXAMPLES,
+        "fast_validation": {
+            "percentages": list(_HERO_FAST_VALIDATION_PERCENTAGES),
+            "updates": validation_updates,
+            "batch_size": HERO_CONFIG.sigreg_example_count,
+            "pool": "fast",
+        },
+        "paired_arena": {
+            "percentages": list(_HERO_ARENA_PERCENTAGES),
+            "updates": arena_updates,
+            "pair_count": int(args.hero_arena_pairs),
+            "additional_ply_cap": int(args.hero_arena_additional_ply_cap),
+            "refinement_passes": HERO_CONFIG.horizon,
+            "inference_batch_size": int(
+                args.hero_arena_inference_batch_size
+            ),
+            "opponent": "raw_bt4",
+        },
+        "manifest_path": str(
+            _require_workspace(args.hero_eval_manifest, exists=True)
+        ),
+        "resume_boundary_policy": (
+            "a milestone exactly equal to the restored update is repeated; "
+            "earlier milestones are skipped"
+        ),
+        "checkpoint_policy": (
+            "milestone evaluations use the live model and serialize no model state"
+        ),
+    }
+
+
+def _verified_hero_manifest_asset(
+    record: Mapping[str, Any],
+    *,
+    label: str,
+) -> Path:
+    try:
+        path = _require_workspace(record["path"], exists=True)
+        expected_size = int(record["size_bytes"])
+        expected_sha256 = str(record["sha256"])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError(f"Malformed {label} record in hero manifest") from exc
+    if path.stat().st_size != expected_size:
+        raise ValueError(f"{label} size drift")
+    if _sha256_file(path) != expected_sha256:
+        raise ValueError(f"{label} checksum drift")
+    return path
+
+
+def _load_hero_milestone_resources(
+    *,
+    manifest_path: Path,
+    arena_pairs: int,
+) -> _HeroMilestoneResources:
+    from research.arena import load_opening_pool
+    from research.play_arena import load_opening_history_sidecar
+
+    if arena_pairs < 1:
+        raise ValueError("hero arena pair count must be positive")
+    fast_batches, fast_pool = _load_hero_frozen_pool(
+        manifest_path=manifest_path,
+        pool_name="fast",
+        batch_size=HERO_CONFIG.sigreg_example_count,
+    )
+    manifest_source = _require_workspace(manifest_path, exists=True)
+    manifest = json.loads(manifest_source.read_text(encoding="utf-8"))
+    try:
+        paired = manifest["paired_arena"]
+        pool_record = paired["opening_pool"]
+        history_record = paired["opening_histories"]
+        contract_record = paired["opening_contract"]
+    except (KeyError, TypeError) as exc:
+        raise ValueError("Hero manifest lacks the paired arena contract") from exc
+    pool_path = _verified_hero_manifest_asset(
+        pool_record,
+        label="hero arena opening pool",
+    )
+    history_path = _verified_hero_manifest_asset(
+        history_record,
+        label="hero arena history sidecar",
+    )
+    contract_path = _verified_hero_manifest_asset(
+        contract_record,
+        label="hero arena opening contract",
+    )
+    opening_pool = load_opening_pool(pool_path)
+    openings = opening_pool.get("openings")
+    if not isinstance(openings, list) or len(openings) != int(
+        paired["opening_count"]
+    ):
+        raise ValueError("Hero arena opening count drift")
+    if arena_pairs > len(openings):
+        raise ValueError(
+            f"Requested {arena_pairs} arena pairs from {len(openings)} openings"
+        )
+    sidecar_payload = json.loads(history_path.read_text(encoding="utf-8"))
+    expected_sidecar_manifest = str(
+        sidecar_payload.get("manifest_sha256", "")
+    )
+    loaded_histories = load_opening_history_sidecar(
+        history_path,
+        opening_pool=opening_pool,
+        expected_manifest_sha256=expected_sidecar_manifest,
+    )
+    return _HeroMilestoneResources(
+        fast_batches=fast_batches,
+        fast_pool=fast_pool,
+        opening_pool=opening_pool,
+        loaded_histories=loaded_histories,
+        arena_provenance={
+            "manifest_path": str(manifest_source),
+            "manifest_sha256": _sha256_file(manifest_source),
+            "opening_pool": {
+                **dict(pool_record),
+                "pool_sha256": opening_pool["pool_sha256"],
+            },
+            "opening_histories": {
+                **dict(history_record),
+                "manifest_sha256": loaded_histories.manifest_sha256,
+                "pool_sha256": loaded_histories.pool_sha256,
+            },
+            "opening_contract": {
+                **dict(contract_record),
+                "verified_path": str(contract_path),
+            },
+            "opening_count": len(openings),
+        },
+    )
+
+
+def _append_jsonl(path: Path, record: Mapping[str, Any]) -> None:
+    destination = _require_workspace(path)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    with destination.open("a", encoding="utf-8") as handle:
+        handle.write(
+            json.dumps(
+                dict(record),
+                allow_nan=False,
+                sort_keys=True,
+            )
+            + "\n"
+        )
+        handle.flush()
+        os.fsync(handle.fileno())
+
+
+def _run_hero_validation_milestone(
+    model: JointModel,
+    resources: _HeroMilestoneResources,
+    *,
+    output_dir: Path,
+    update: int,
+    batch_size: int,
+    percentage: int,
+    device: torch.device,
+) -> dict[str, Any]:
+    was_training = model.training
+    try:
+        metrics, evaluation_seconds = _evaluate_validation_pool(
+            model,
+            resources.fast_batches,
+            count=resources.fast_batches.steps_per_epoch,
+            seed=int(resources.fast_pool["pool_definition"]["seed"]),
+            device=device,
+        )
+    finally:
+        model.train(was_training)
+    record = {
+        "schema_version": "torch-hero-live-validation-milestone-v1",
+        "created_utc": datetime.now(UTC).isoformat(),
+        "git_commit": _git_commit(),
+        "update": update,
+        "examples": update * batch_size,
+        "target_percentage": percentage,
+        "observed_fraction": (
+            update * batch_size / _HERO_TRAIN_EXAMPLES
+        ),
+        "pool": resources.fast_pool,
+        "evaluation_examples": int(
+            resources.fast_batches.global_indices.size
+        ),
+        "evaluation_seconds": evaluation_seconds,
+        "metrics": metrics,
+        "serialized_model_state": False,
+    }
+    _append_jsonl(
+        output_dir / "hero_validation_metrics.jsonl",
+        record,
+    )
+    print(
+        json.dumps(
+            {
+                "hero_validation_milestone": percentage,
+                "update": update,
+                "evaluation_seconds": evaluation_seconds,
+                "metrics": metrics,
+            },
+            sort_keys=True,
+        ),
+        flush=True,
+    )
+    return record
+
+
+def _arena_warmup_inputs(
+    resources: _HeroMilestoneResources,
+) -> tuple[list[chess.Board], list[tuple[chess.Board, ...]]]:
+    opening = resources.opening_pool["openings"][0]
+    board = chess.Board(str(opening["fen"]))
+    history_fens = resources.loaded_histories.histories_by_opening_index[0]
+    history = tuple(chess.Board(fen) for fen in history_fens)
+    return [board], [history]
+
+
+def _run_hero_arena_milestone(
+    model: JointModel,
+    resources: _HeroMilestoneResources,
+    *,
+    output_dir: Path,
+    raw_bt4_path: Path,
+    update: int,
+    batch_size: int,
+    percentage: int,
+    arena_pairs: int,
+    additional_ply_cap: int,
+    inference_batch_size: int,
+    device: torch.device,
+) -> dict[str, Any]:
+    from research.arena import (
+        make_color_reversed_pairs,
+        pair_aware_score_elo_interval,
+        pair_score_for_model,
+        pentanomial_stats,
+    )
+    from research.play_arena import (
+        histories_for_pairs,
+        play_arena_pairs,
+    )
+
+    candidate_id = f"hero-live-u{update:08d}"
+    opponent_id = "raw-bt4"
+    was_training = model.training
+    model.eval()
+    gc.collect()
+    torch.cuda.empty_cache()
+    opponent: JointModel | None = None
+    candidate_policy: TorchHeroArenaPolicy | None = None
+    opponent_policy: TorchHeroArenaPolicy | None = None
+    try:
+        opponent, opponent_initialization = load_raw_bt4_hero_model(
+            device=device,
+            raw_bt4_path=raw_bt4_path,
+            config=HERO_CONFIG,
+        )
+        opponent.eval()
+        candidate_policy = TorchHeroArenaPolicy(
+            model=model,
+            model_id=candidate_id,
+            policy_mode="dfm",
+            inference_batch_size=inference_batch_size,
+            refinement_passes=HERO_CONFIG.horizon,
+        )
+        opponent_policy = TorchHeroArenaPolicy(
+            model=opponent,
+            model_id=opponent_id,
+            policy_mode="raw_bt4",
+            inference_batch_size=inference_batch_size,
+            refinement_passes=HERO_CONFIG.horizon,
+        )
+        warm_boards, warm_histories = _arena_warmup_inputs(resources)
+        warm_started = time.perf_counter()
+        candidate_policy.select_actions(warm_boards, warm_histories)
+        opponent_policy.select_actions(warm_boards, warm_histories)
+        warmup_seconds = time.perf_counter() - warm_started
+
+        fens = [
+            str(opening["fen"])
+            for opening in resources.opening_pool["openings"][:arena_pairs]
+        ]
+        pairs = make_color_reversed_pairs(
+            fens,
+            model_a=candidate_id,
+            model_b=opponent_id,
+        )
+        opening_histories = histories_for_pairs(
+            pairs,
+            resources.loaded_histories,
+        )
+        arena_started = time.perf_counter()
+        gameplay = play_arena_pairs(
+            pairs,
+            opening_histories=opening_histories,
+            policies={
+                candidate_id: candidate_policy,
+                opponent_id: opponent_policy,
+            },
+            additional_ply_cap=additional_ply_cap,
+            policy_timeout_seconds=30.0,
+            policy_batch_size_cap=inference_batch_size,
+        )
+        arena_seconds = time.perf_counter() - arena_started
+        outcomes = tuple(record.outcome for record in gameplay.records)
+        pair_scores = [
+            pair_score_for_model(
+                outcomes[offset : offset + 2],
+                model_id=candidate_id,
+            )
+            for offset in range(0, len(outcomes), 2)
+        ]
+        stats = pentanomial_stats(pair_scores)
+        interval = pair_aware_score_elo_interval(stats)
+        gameplay_payload = gameplay.as_dict()
+        report = {
+            "schema_version": "torch-hero-live-arena-milestone-v1",
+            "created_utc": datetime.now(UTC).isoformat(),
+            "git_commit": _git_commit(),
+            "update": update,
+            "examples": update * batch_size,
+            "target_percentage": percentage,
+            "observed_fraction": (
+                update * batch_size / _HERO_TRAIN_EXAMPLES
+            ),
+            "candidate_model_id": candidate_id,
+            "opponent_model_id": opponent_id,
+            "action_codec": ACTION_CODEC_LC0_CANONICAL_1858,
+            "refinement_passes": HERO_CONFIG.horizon,
+            "inference_batch_size": inference_batch_size,
+            "additional_ply_cap": additional_ply_cap,
+            "pair_scores": pair_scores,
+            "pentanomial": stats.as_dict(),
+            "descriptive_logistic_elo_interval": dataclasses.asdict(interval),
+            "warmup_seconds": warmup_seconds,
+            "arena_seconds": arena_seconds,
+            "gameplay": gameplay_payload,
+            "arena_provenance": resources.arena_provenance,
+            "opponent_initialization": {
+                "combined_sha256": opponent_initialization[
+                    "combined_sha256"
+                ],
+                "leaf_count": opponent_initialization["leaf_count"],
+                "raw_asset": opponent_initialization["raw_asset"],
+            },
+            "serialized_model_state": False,
+        }
+        report_path = (
+            output_dir
+            / "hero_arena_milestones"
+            / f"update{update:08d}.json"
+        )
+        _write_json(report_path, report)
+        summary = {
+            key: value
+            for key, value in report.items()
+            if key not in {"gameplay", "pair_scores", "arena_provenance"}
+        }
+        summary["report_path"] = str(report_path)
+        summary["gameplay_payload_sha256"] = gameplay_payload[
+            "payload_sha256"
+        ]
+        summary["gameplay_stats"] = gameplay_payload["stats"]
+        _append_jsonl(
+            output_dir / "hero_arena_metrics.jsonl",
+            summary,
+        )
+        print(
+            json.dumps(
+                {
+                    "hero_arena_milestone": percentage,
+                    "update": update,
+                    "pair_count": stats.pair_count,
+                    "score": stats.score,
+                    "elo": interval.elo,
+                    "elo_lower": interval.elo_lower,
+                    "elo_upper": interval.elo_upper,
+                    "arena_seconds": arena_seconds,
+                    "fault_counts": gameplay_payload["stats"][
+                        "fault_counts"
+                    ],
+                },
+                sort_keys=True,
+            ),
+            flush=True,
+        )
+        return summary
+    finally:
+        candidate_policy = None
+        opponent_policy = None
+        if opponent is not None:
+            del opponent
+        gc.collect()
+        torch.cuda.empty_cache()
+        model.train(was_training)
+
+
+def hero_milestone_smoke(args: argparse.Namespace) -> int:
+    """Compile and exercise the exact live-evaluation shapes without training."""
+
+    if not torch.cuda.is_available():
+        raise RuntimeError("hero-milestone-smoke requires CUDA")
+    if args.threads not in (1, 2):
+        raise ValueError("--threads must be 1 or 2 under the resource guard")
+    if args.gpu_monitor_interval_ms < 50:
+        raise ValueError("--gpu-monitor-interval-ms must be at least 50")
+    output_dir = _require_workspace(args.output_dir)
+    if output_dir.exists():
+        raise FileExistsError(
+            f"Hero milestone smoke output already exists: {output_dir}"
+        )
+    resources = _load_hero_milestone_resources(
+        manifest_path=args.eval_manifest,
+        arena_pairs=1,
+    )
+    device = torch.device("cuda")
+    torch.set_num_threads(args.threads)
+    torch.set_float32_matmul_precision("high")
+    model, initialization = load_raw_bt4_hero_model(
+        device=device,
+        raw_bt4_path=args.raw_bt4_path,
+        config=HERO_CONFIG,
+    )
+    compiled_regions = _apply_compile_regions(model, "fresh")
+    model.eval()
+    output_dir.mkdir(parents=True)
+    run_config = {
+        "schema_version": "torch-hero-milestone-smoke-run-v1",
+        "created_utc": datetime.now(UTC).isoformat(),
+        "git_commit": _git_commit(),
+        "device": torch.cuda.get_device_name(device),
+        "compute_dtype": "bfloat16",
+        "compile_regions": compiled_regions,
+        "compile_settings": {
+            "backend": "inductor",
+            "fullgraph": True,
+            "dynamic": False,
+            "mode": "default",
+            "compile_threads": 1,
+            "max_autotune": False,
+        },
+        "fast_validation_batches": 1,
+        "fast_validation_batch_size": HERO_CONFIG.sigreg_example_count,
+        "arena_pairs": 1,
+        "arena_additional_ply_cap": 2,
+        "arena_inference_batch_size": _HERO_ARENA_INFERENCE_BATCH_SIZE,
+        "arena_refinement_passes": HERO_CONFIG.horizon,
+        "raw_initialization": {
+            "combined_sha256": initialization["combined_sha256"],
+            "leaf_count": initialization["leaf_count"],
+            "raw_asset": initialization["raw_asset"],
+        },
+        "resources": {
+            "fast_pool": resources.fast_pool,
+            "arena": resources.arena_provenance,
+        },
+    }
+    _write_json(output_dir / "run_config.json", run_config)
+    monitor = _start_gpu_monitor(
+        output_dir,
+        interval_ms=args.gpu_monitor_interval_ms,
+    )
+    torch.cuda.synchronize()
+    torch.cuda.reset_peak_memory_stats()
+    wall_started = time.perf_counter()
+    try:
+        validation_metrics, validation_seconds = _evaluate_validation_pool(
+            model,
+            resources.fast_batches,
+            count=1,
+            seed=int(resources.fast_pool["pool_definition"]["seed"]),
+            device=device,
+        )
+        arena_summary = _run_hero_arena_milestone(
+            model,
+            resources,
+            output_dir=output_dir,
+            raw_bt4_path=args.raw_bt4_path,
+            update=0,
+            batch_size=1024,
+            percentage=0,
+            arena_pairs=1,
+            additional_ply_cap=2,
+            inference_batch_size=_HERO_ARENA_INFERENCE_BATCH_SIZE,
+            device=device,
+        )
+    finally:
+        _stop_gpu_monitor(monitor)
+    residual_zero = bool(
+        torch.count_nonzero(model.out_proj).item() == 0
+        and torch.count_nonzero(model.out_bias).item() == 0
+    )
+    gate_checks = {
+        "validation_metrics_finite": all(
+            math.isfinite(value)
+            for value in validation_metrics.values()
+        ),
+        "zero_initialized_dfm_residual": residual_zero,
+        "arena_has_no_faults": not bool(
+            arena_summary["gameplay_stats"]["fault_counts"]
+        ),
+        "arena_update_zero_score_is_half": math.isclose(
+            float(arena_summary["pentanomial"]["score"]),
+            0.5,
+            abs_tol=1e-12,
+        ),
+    }
+    report = {
+        **run_config,
+        "completed_utc": datetime.now(UTC).isoformat(),
+        "wall_seconds": time.perf_counter() - wall_started,
+        "validation_seconds": validation_seconds,
+        "validation_metrics": validation_metrics,
+        "arena": arena_summary,
+        "gpu_monitor": _summarize_gpu_samples(
+            output_dir / "gpu_samples.csv"
+        ),
+        "gpu_peak_memory_allocated_bytes": (
+            torch.cuda.max_memory_allocated()
+        ),
+        "gpu_peak_memory_reserved_bytes": (
+            torch.cuda.max_memory_reserved()
+        ),
+        "compile_counters": _compile_counter_snapshot(),
+        "gate_checks": gate_checks,
+        "gate_pass": all(gate_checks.values()),
+    }
+    _write_json(output_dir / "report.json", report)
+    print(json.dumps(report, sort_keys=True), flush=True)
+    if not report["gate_pass"]:
+        raise RuntimeError("Hero live-milestone smoke gate failed")
+    return 0
+
+
 def evaluate_hero_pool(args: argparse.Namespace) -> int:
     """Evaluate clean hero initialization/checkpoint on one frozen index set."""
 
@@ -6046,6 +7320,34 @@ def build_parser() -> argparse.ArgumentParser:
         default=0,
         help="Capture one bounded CPU/CUDA profiler window at this one-based update.",
     )
+    train_parser.add_argument(
+        "--hero-milestones",
+        action="store_true",
+        help=(
+            "Enable the frozen one-epoch fast-validation and paired-Arena "
+            "milestones without serializing intermediate model snapshots."
+        ),
+    )
+    train_parser.add_argument(
+        "--hero-eval-manifest",
+        type=Path,
+        default=_HERO_EVAL_MANIFEST,
+    )
+    train_parser.add_argument(
+        "--hero-arena-pairs",
+        type=int,
+        default=_HERO_ARENA_PAIRS,
+    )
+    train_parser.add_argument(
+        "--hero-arena-additional-ply-cap",
+        type=int,
+        default=_HERO_ARENA_ADDITIONAL_PLY_CAP,
+    )
+    train_parser.add_argument(
+        "--hero-arena-inference-batch-size",
+        type=int,
+        default=_HERO_ARENA_INFERENCE_BATCH_SIZE,
+    )
     train_parser.add_argument("--save-every", type=int, default=0)
     train_parser.add_argument("--save-updates", type=int, nargs="*", default=())
     train_parser.add_argument("--save-final", action="store_true")
@@ -6094,6 +7396,38 @@ def build_parser() -> argparse.ArgumentParser:
         save_updates=(),
         save_final=False,
         max_checkpoints=0,
+    )
+
+    hero_milestone_smoke_parser = subparsers.add_parser(
+        "hero-milestone-smoke"
+    )
+    hero_milestone_smoke_parser.add_argument(
+        "--raw-bt4-path",
+        type=Path,
+        default=_RAW_BT4_PATH,
+    )
+    hero_milestone_smoke_parser.add_argument(
+        "--eval-manifest",
+        type=Path,
+        default=_HERO_EVAL_MANIFEST,
+    )
+    hero_milestone_smoke_parser.add_argument(
+        "--output-dir",
+        type=Path,
+        required=True,
+    )
+    hero_milestone_smoke_parser.add_argument(
+        "--threads",
+        type=int,
+        default=2,
+    )
+    hero_milestone_smoke_parser.add_argument(
+        "--gpu-monitor-interval-ms",
+        type=int,
+        default=100,
+    )
+    hero_milestone_smoke_parser.set_defaults(
+        handler=hero_milestone_smoke
     )
 
     hero_evaluate_parser = subparsers.add_parser("hero-evaluate")

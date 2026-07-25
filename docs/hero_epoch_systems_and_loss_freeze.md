@@ -325,10 +325,41 @@ Update-zero policy and Arena gates are complete:
   `block-00000000-pairs-0016.json`, SHA-256
   `25bf5a5b48084330b1ecc64f229ff5e61ef4e939041e7bb3cc1440bffb0f8d43`.
 
-The remaining launch work is to add in-process fast validation and a native
-Torch Arena adapter at the preregistered training milestones, freeze the
-terminal command and hashes, and start the one-epoch job. In-process
-measurement is required so the 25% and 75% Arena points do not create extra
-model snapshots. The epoch will request only update `13,840` as the sparse
-recovery state plus one terminal model checkpoint; the sparse state is deleted
-only after the terminal cross-framework audit passes.
+The live milestone instrumentation is now implemented in the one-file Torch
+trainer. Fast validation runs from the live model at the first update crossing
+each 10% example boundary. The native Torch Arena adapter uses current-only
+canonical LC0 planes, a complete root legality mask, fixed batch-16 padding,
+and the frozen stable-rank eight-pass decoder. It compares the live DFM model
+to a separately restored raw-BT4 policy at 25%, 50%, and 75%, then unloads the
+opponent before training resumes. Neither path serializes an intermediate
+model.
+
+At batch 1024 the exact milestone updates are:
+
+| Fraction | Update | Measurement |
+|---:|---:|---|
+| 10% | `2,768` | fast validation |
+| 20% | `5,536` | fast validation |
+| 25% | `6,920` | 16-pair Arena |
+| 30% | `8,304` | fast validation |
+| 40% | `11,072` | fast validation |
+| 50% | `13,840` | fast validation, 16-pair Arena, recovery state |
+| 60% | `16,608` | fast validation |
+| 70% | `19,376` | fast validation |
+| 75% | `20,760` | 16-pair Arena |
+| 80% | `22,144` | fast validation |
+| 90% | `24,912` | fast validation |
+| 100% | `27,679` | fast validation, then terminal checkpoint |
+
+The training utilization monitor pauses during live evaluation, so evaluation
+does not contaminate training-only utilization or throughput. Evaluation wall
+time is recorded separately. A resume exactly at a milestone deliberately
+repeats that milestone, making a completed halfway recovery state sufficient
+even if the original process failed during the subsequent evaluation.
+
+The remaining launch gate is the guarded compiled-shape smoke for one
+batch-64 validation step and one native Torch Arena pair. After that passes,
+freeze the terminal command and hashes and start the one-epoch job. The epoch
+will request only update `13,840` as the sparse recovery state plus one
+terminal model checkpoint; the sparse state is deleted only after the
+terminal cross-framework audit passes.
