@@ -241,6 +241,50 @@ exactly; all loss/gradient values were finite, prefetch hid data preparation
 after the first update, and the guard recorded `2.432 GB` peak group RSS with
 at least `8.930 GB` host memory available.
 
-The remaining launch work is to run initialization validation/Arena gates,
-verify halfway/terminal recovery and compact-retention behavior, freeze the
-terminal run command and hashes, and then start the one-epoch job.
+The frozen 8,192-position initialization validation then passed. Its update-zero
+anchors are:
+
+| Metric | Value |
+|---|---:|
+| Total weighted loss | `13.432807` |
+| All-horizon DFM CE | `7.441815` |
+| Root legal-conditional CE | `2.903243` |
+| Root legal top-1 | `19.9585%` |
+| Root legal mass | `2.3251%` |
+| JEPA raw MSE | `0.786685` |
+| Target / prediction SIGReg | `0.681952 / 0.661630` |
+| WDL CE / Brier | `1.243358 / 0.758591` |
+
+The report is
+`research/runs/torch_hero_init_fast_eval_v2/report.json`, SHA-256
+`4e0664534c42e350ed30d2f5de3ba618b4fa011df6ed6441c65daee08fd6d49d`.
+The evaluation batch remains frozen at 64. A requested batch-256 invocation
+failed closed before model loading because changing that batch would change
+the per-batch SIGReg/evaluation protocol.
+
+Exact recovery is also complete. Commit `bfc2106` adds an atomic 1.864 GB
+model-plus-optimizer safetensors state with all Muon/AdamW moments, optimizer
+and example counters, the next data cursor, checksums, and a strict resume
+contract. A guarded batch-1024 regional-compile audit saved after update 1,
+resumed update 2, and compared against an uninterrupted two-update control:
+
+- all 462 terminal model tensors and 712,293,144 tensor bytes were bitwise
+  identical;
+- the canonical terminal state digest was
+  `ee59c9be0fa6e847bc628029c5c36e887bfa90507fa7b04f54f45de2152c5b75`;
+- every non-timing update-2 metric was identical;
+- the recovery write took `13.674` seconds; and
+- checkpoint-stage peak process-group RSS was `3.955 GB`, below the fixed
+  `7 GiB` ceiling.
+
+The complete compact audit is
+`artifacts/pytorch/hero_recovery_audit_v1.json`, SHA-256
+`71acc893def5b0ab33c345543dfc78a8fffa23395144b555216f6a20e42ea48c`.
+The raw safetensors file hashes differ because the serializer emitted the same
+metadata map in a different key order; named tensor content is exactly equal.
+
+The remaining launch work is to run the primary initialization validation and
+update-zero canonical Arena gate, freeze the terminal command and hashes, and
+start the one-epoch job. The epoch will request only update `13,840` as the
+sparse recovery state plus one terminal model checkpoint; the sparse state is
+deleted only after the terminal cross-framework audit passes.
