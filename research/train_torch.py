@@ -5300,56 +5300,80 @@ def _evaluate_validation_pool(
     totals: dict[str, float] = {}
     started = time.perf_counter()
     model.eval()
-    with torch.inference_mode():
-        for index in range(count):
-            numpy_batch = batches.batch_at(index)
-            batch = _torch_batch(numpy_batch, device)
-            choices = materialize_step_choices(
-                seed=seed,
-                update=index,
-                batch_size=batches.batch_size,
-                config=model.config,
-                device=device,
-            )
-            permutation_rng = np.random.Generator(
-                np.random.PCG64(np.random.SeedSequence([int(seed), int(index), 0xC011A95E]))
-            )
-            target_shuffle = torch.from_numpy(
-                permutation_rng.permutation(batches.batch_size).astype(
-                    np.int64,
-                    copy=False,
+    prefetch_executor = ThreadPoolExecutor(
+        max_workers=1,
+        thread_name_prefix="frozen-eval-prefetch",
+    )
+    prepared_future: Future[dict[str, Any]] | None = prefetch_executor.submit(
+        batches.batch_at,
+        0,
+    )
+    try:
+        with torch.inference_mode():
+            for index in range(count):
+                assert prepared_future is not None
+                numpy_batch = prepared_future.result()
+                prepared_future = (
+                    prefetch_executor.submit(batches.batch_at, index + 1)
+                    if index + 1 < count
+                    else None
                 )
-            ).to(device)
-            action_shuffle = torch.from_numpy(
-                permutation_rng.permutation(batches.batch_size).astype(
-                    np.int64,
-                    copy=False,
+                batch = _torch_batch(numpy_batch, device)
+                choices = materialize_step_choices(
+                    seed=seed,
+                    update=index,
+                    batch_size=batches.batch_size,
+                    config=model.config,
+                    device=device,
                 )
-            ).to(device)
-            metrics = full_horizon_evaluation_aux(
-                model,
-                batch,
-                choices,
-                target_shuffle=target_shuffle,
-                action_shuffle=action_shuffle,
-                compute_dtype=torch.bfloat16,
-            )
-            torch.cuda.synchronize()
-            row = _flatten_torch_metrics(metrics)
-            for key, value in row.items():
-                if not math.isfinite(value):
-                    raise FloatingPointError(
-                        f"Non-finite validation metric {key} at seed={seed}, batch={index}: {value}"
+                permutation_rng = np.random.Generator(
+                    np.random.PCG64(
+                        np.random.SeedSequence(
+                            [int(seed), int(index), 0xC011A95E]
+                        )
                     )
-                totals[key] = totals.get(key, 0.0) + value
-            del (
-                numpy_batch,
-                batch,
-                choices,
-                target_shuffle,
-                action_shuffle,
-                metrics,
-            )
+                )
+                target_shuffle = torch.from_numpy(
+                    permutation_rng.permutation(batches.batch_size).astype(
+                        np.int64,
+                        copy=False,
+                    )
+                ).to(device)
+                action_shuffle = torch.from_numpy(
+                    permutation_rng.permutation(batches.batch_size).astype(
+                        np.int64,
+                        copy=False,
+                    )
+                ).to(device)
+                metrics = full_horizon_evaluation_aux(
+                    model,
+                    batch,
+                    choices,
+                    target_shuffle=target_shuffle,
+                    action_shuffle=action_shuffle,
+                    compute_dtype=torch.bfloat16,
+                )
+                torch.cuda.synchronize()
+                row = _flatten_torch_metrics(metrics)
+                for key, value in row.items():
+                    if not math.isfinite(value):
+                        raise FloatingPointError(
+                            "Non-finite validation metric "
+                            f"{key} at seed={seed}, batch={index}: {value}"
+                        )
+                    totals[key] = totals.get(key, 0.0) + value
+                del (
+                    numpy_batch,
+                    batch,
+                    choices,
+                    target_shuffle,
+                    action_shuffle,
+                    metrics,
+                )
+    finally:
+        if prepared_future is not None:
+            prepared_future.cancel()
+        prefetch_executor.shutdown(wait=True, cancel_futures=True)
     return (
         {key: value / count for key, value in totals.items()},
         time.perf_counter() - started,
@@ -5493,6 +5517,11 @@ def evaluate_hero_pool(args: argparse.Namespace) -> int:
         "stochastic_choices": (
             "PCG64 keyed by the frozen pool seed and ascending batch index"
         ),
+        "prefetch": {
+            "depth": 1,
+            "workers": 1,
+            "deterministic_batch_order": True,
+        },
         "compute_dtype": "bfloat16",
         "execution": "eager",
         "config": dataclasses.asdict(HERO_CONFIG),
