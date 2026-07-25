@@ -357,9 +357,59 @@ time is recorded separately. A resume exactly at a milestone deliberately
 repeats that milestone, making a completed halfway recovery state sufficient
 even if the original process failed during the subsequent evaluation.
 
-The remaining launch gate is the guarded compiled-shape smoke for one
-batch-64 validation step and one native Torch Arena pair. After that passes,
-freeze the terminal command and hashes and start the one-epoch job. The epoch
-will request only update `13,840` as the sparse recovery state plus one
-terminal model checkpoint; the sparse state is deleted only after the
-terminal cross-framework audit passes.
+The guarded compiled-shape smoke passed at commit `d626187`:
+
+- one batch-64 validation step, including cold regional compilation, completed
+  in `57.603` seconds with finite metrics;
+- fixed batch-16, eight-pass Arena inference compiled and warmed in `22.856`
+  seconds, after which one color-reversed pair completed in `0.178` seconds;
+- update-zero candidate score was exactly `0.5`, with no illegal-action,
+  exception, or timeout faults;
+- peak process-group RSS was `3.823 GB`, minimum available host RAM was
+  `7.635 GB`, and no checkpoint was written; and
+- peak allocated/reserved HBM was `2.503/3.892 GB`.
+
+The compact report is
+`research/runs/torch_hero_live_milestone_smoke_v1/report.json`, SHA-256
+`c25a7216441514bafee5619aa8d1a66a7e2436008b5a08628c7fabc0a8fc92ad`.
+The native Arena payload is
+`research/runs/torch_hero_live_milestone_smoke_v1/hero_arena_milestones/`
+`update00000000.json`, SHA-256
+`5d9db1202eb2ec882578f33f0cf0860c98194d39e6d8862463edb0b746797d1c`.
+
+All launch gates are now closed. Freeze the terminal command and start the
+one-epoch job. The epoch will request only update `13,840` as the sparse
+recovery state plus one terminal model checkpoint; the sparse state is deleted
+only after the terminal cross-framework audit passes.
+
+The frozen fresh-run command is:
+
+```bash
+research/run_gpu.sh .venv/bin/python research/train_torch.py train \
+  --recipe hero \
+  --remat-mode bt4-projector \
+  --attention-impl sdpa-all \
+  --compile-regions fresh \
+  --raw-bt4-path models/source/extracted/BT4_exported.pb.gz \
+  --data-root data/trajectory_v3 \
+  --output-dir research/runs/torch_hero_epoch_v1 \
+  --batch-size 1024 \
+  --steps 27679 \
+  --train-seconds 0 \
+  --data-start 0 \
+  --seed 0 \
+  --threads 2 \
+  --log-every 20 \
+  --prefetch-depth 1 \
+  --gpu-monitor-interval-ms 100 \
+  --profile-update 0 \
+  --hero-milestones \
+  --hero-eval-manifest research/eval/hero_epoch_v1/manifest.json \
+  --hero-arena-pairs 16 \
+  --hero-arena-additional-ply-cap 16 \
+  --hero-arena-inference-batch-size 16 \
+  --save-every 0 \
+  --save-updates 13840 \
+  --save-final \
+  --max-checkpoints 2
+```
