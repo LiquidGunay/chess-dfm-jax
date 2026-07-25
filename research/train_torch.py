@@ -51,6 +51,11 @@ _SOURCE_STATE = (
     / "state.npz"
 )
 _DATA_ROOT = _REPO_ROOT / "data" / "trajectory_v3"
+_RAW_BT4_PATH = (
+    _REPO_ROOT / "models" / "source" / "extracted" / "BT4_exported.pb.gz"
+)
+_RAW_BT4_SIZE_BYTES = 335_916_563
+_RAW_BT4_SHA256 = "61e43e98d2c4cb747498c6bc13a5bbb3b07e985d3f5d87f0351a4db855fa0651"
 _SOURCE_SIZE_BYTES = 1_851_704_172
 _SOURCE_SHA256 = "16a3c7e77e411a8a7577ff04dac1ca5173ce24ecb343b5fa4938e2d2b5fb8906"
 _SOURCE_STEP = 265_000
@@ -118,9 +123,37 @@ class Config:
     use_qk_norm: bool = True
     use_xsa: bool = True
     remat_blocks: bool = True
+    action_codec: str = "legacy_absolute_1858"
+    use_bt4_policy_residual: bool = False
+    root_legal_ce_coeff: float = 0.0
+    wdl_coeff: float = 0.0
+    selective_weight_decay: bool = False
+    lr_schedule_unit: str = "updates"
+    lr_warmup_examples: int = 0
+    lr_total_examples: int = 0
+    init_seed: int = 0
 
 
 CONFIG = Config()
+_HERO_TRAIN_EXAMPLES = 28_343_296
+HERO_CONFIG = dataclasses.replace(
+    CONFIG,
+    action_codec="lc0_canonical_1858",
+    use_bt4_policy_residual=True,
+    root_legal_ce_coeff=0.0,
+    wdl_coeff=0.25,
+    target_sigreg_coeff=2.0,
+    pred_sigreg_coeff=2.0,
+    loss_clip_value=0.0,
+    learning_rate=3e-4,
+    bt4_learning_rate=1e-5,
+    weight_decay=1e-2,
+    selective_weight_decay=True,
+    lr_schedule_unit="examples",
+    lr_warmup_examples=round(0.02 * _HERO_TRAIN_EXAMPLES),
+    lr_total_examples=_HERO_TRAIN_EXAMPLES,
+    lr_min_ratio=1e-3,
+)
 
 
 def _require_workspace(path: str | os.PathLike[str], *, exists: bool = False) -> Path:
@@ -290,11 +323,51 @@ class BT4EncoderLayer(nn.Module):
         )
 
 
-class BT4Encoder(nn.Module):
+class BT4PolicyHead(nn.Module):
+    """Native BT4 attention-policy head in the source ``[input, output]`` layout."""
+
     def __init__(self):
+        super().__init__()
+        from chess_dfm_jax.policy import attention_policy_map
+
+        dtype = torch.bfloat16
+        self.dense1 = RawLinear(1024, 1024, dtype=dtype)
+        self.q = RawLinear(1024, 1024, dtype=dtype)
+        self.k = RawLinear(1024, 1024, dtype=dtype)
+        self.prom_w = _raw_parameter((1024, 4), dtype)
+        self.register_buffer(
+            "mapping_table",
+            torch.from_numpy(attention_policy_map().astype(np.int64, copy=False)),
+            persistent=False,
+        )
+
+    def forward(self, x: Tensor, compute_dtype: torch.dtype) -> Tensor:
+        batch = x.shape[0]
+        policy = F.mish(self.dense1(x, compute_dtype))
+        q = self.q(policy, compute_dtype).reshape(batch, 64, -1)
+        k = self.k(policy, compute_dtype).reshape(batch, 64, -1)
+        attention = (q @ k.transpose(1, 2)) * (1.0 / math.sqrt(k.shape[-1]))
+
+        promotion = k[:, 56:64, :] @ self.prom_w.to(compute_dtype)
+        promotion = promotion.transpose(1, 2)
+        promotion = promotion[:, :3, :] + promotion[:, 3:4, :]
+        promotion = promotion.transpose(1, 2).reshape(batch, 1, 24)
+
+        pawn_logits = attention[:, 48:56, 56:64].reshape(batch, 64, 1)
+        pawn_logits = torch.cat((pawn_logits, pawn_logits, pawn_logits), dim=2)
+        pawn_logits = pawn_logits.reshape(batch, 8, 24)
+        promotion = (pawn_logits + promotion).reshape(batch, 3, 64)
+
+        policy = torch.cat((attention, promotion), dim=1).reshape(batch, 67 * 64)
+        return policy.index_select(1, self.mapping_table)
+
+
+class BT4Encoder(nn.Module):
+    def __init__(self, *, include_policy_head: bool = False):
         super().__init__()
         self.embedding = BT4InputEmbedding()
         self.layers = nn.ModuleList(BT4EncoderLayer() for _ in range(15))
+        self.policy_head = BT4PolicyHead() if include_policy_head else None
         self.alpha = float((2.0 * len(self.layers)) ** -0.25)
 
     def encode_current(
@@ -544,13 +617,28 @@ class ValueWDLHead(nn.Module):
         self.wdl_w = _raw_parameter((hidden, 3), dtype)
         self.wdl_b = _raw_parameter((3,), dtype)
 
+    def forward(
+        self,
+        z: Tensor,
+        compute_dtype: torch.dtype,
+    ) -> tuple[Tensor, Tensor]:
+        hidden = F.mish(
+            z.to(compute_dtype) @ self.w1.to(compute_dtype)
+            + self.b1.to(compute_dtype)
+        )
+        value = hidden @ self.value_w.to(compute_dtype) + self.value_b.to(compute_dtype)
+        wdl = hidden @ self.wdl_w.to(compute_dtype) + self.wdl_b.to(compute_dtype)
+        return value.squeeze(-1), wdl
+
 
 class JointModel(nn.Module):
     def __init__(self, config: Config = CONFIG):
         super().__init__()
         self.config = config
         dtype = torch.float32
-        self.encoder = BT4Encoder()
+        self.encoder = BT4Encoder(
+            include_policy_head=config.use_bt4_policy_residual,
+        )
         self.state_projector = StateProjector(config)
         self.dfm_state_projector = RawLinear(1024, config.token_dim, dtype=dtype)
         self.jepa_action_embed = RawEmbedding(_VOCAB_SIZE + 1, config.z_dim, dtype=dtype)
@@ -581,7 +669,7 @@ class JointModel(nn.Module):
         current_planes: Tensor,
         selected_future_planes: Tensor,
         compute_dtype: torch.dtype,
-    ) -> tuple[Tensor, Tensor]:
+    ) -> tuple[Tensor, Tensor, Tensor | None]:
         current = self.encoder.encode_current(
             current_planes,
             compute_dtype=compute_dtype,
@@ -598,7 +686,12 @@ class JointModel(nn.Module):
             batch, 2, self.config.z_dim
         )
         z_dfm = self.dfm_state_projector(current, compute_dtype)
-        return z_all, z_dfm
+        base_policy_logits = (
+            None
+            if self.encoder.policy_head is None
+            else self.encoder.policy_head(current, compute_dtype)
+        )
+        return z_all, z_dfm, base_policy_logits
 
     def _time_embedding(self, t: Tensor, compute_dtype: torch.dtype) -> Tensor:
         hidden = F.relu(t.to(compute_dtype).unsqueeze(-1) @ self.time_embed1.to(compute_dtype))
@@ -611,6 +704,7 @@ class JointModel(nn.Module):
         t: Tensor,
         compute_dtype: torch.dtype,
         *,
+        base_root_logits: Tensor | None = None,
         return_hidden: bool = False,
     ) -> Tensor | tuple[Tensor, Tensor]:
         horizon = action_tokens.shape[1]
@@ -622,6 +716,21 @@ class JointModel(nn.Module):
         action_hidden = sequence[:, 64:, :]
         normalized = self.dfm_out_norm(action_hidden, compute_dtype)
         logits = normalized @ self.out_proj.to(compute_dtype) + self.out_bias.to(compute_dtype)
+        if base_root_logits is not None:
+            if not self.config.use_bt4_policy_residual:
+                raise ValueError("Base root logits require the BT4 residual-policy recipe")
+            if logits.shape[1] < 1 or base_root_logits.shape != logits[:, 0].shape:
+                raise ValueError(
+                    "Base root logits shape mismatch: "
+                    f"{tuple(base_root_logits.shape)} versus {tuple(logits[:, 0].shape)}"
+                )
+            logits = torch.cat(
+                (
+                    logits[:, :1] + base_root_logits.to(logits.dtype).unsqueeze(1),
+                    logits[:, 1:],
+                ),
+                dim=1,
+            )
         if return_hidden:
             return logits, action_hidden
         return logits
@@ -707,6 +816,39 @@ def _legal_mass(
     return torch.where(valid, gathered, 0.0).sum(dim=-1).clamp(0.0, 1.0)
 
 
+def _legal_conditional_ce(
+    logits: Tensor,
+    targets: Tensor,
+    legal_idx: Tensor,
+    legal_count: Tensor,
+) -> Tensor:
+    """Per-example CE after renormalizing logits over the complete legal set."""
+
+    safe = legal_idx.long().clamp(0, logits.shape[-1] - 1)
+    legal_logits = torch.gather(logits.float(), -1, safe)
+    slots = torch.arange(safe.shape[-1], device=safe.device)
+    valid_slots = slots < legal_count.long().unsqueeze(-1)
+    legal_logits = torch.where(
+        valid_slots,
+        legal_logits,
+        torch.full_like(legal_logits, -torch.inf),
+    )
+    target_logits = torch.gather(
+        logits.float(),
+        -1,
+        targets.long().unsqueeze(-1),
+    ).squeeze(-1)
+    result = torch.logsumexp(legal_logits, dim=-1) - target_logits
+    return torch.where(legal_count > 0, result, torch.zeros_like(result))
+
+
+def _uniform_horizon_mean(values: Tensor, weight: Tensor) -> Tensor:
+    denominator = weight.sum(dim=0)
+    means = (values * weight).sum(dim=0) / denominator.clamp_min(1.0)
+    active = (denominator > 0).float()
+    return (means * active).sum() / active.sum().clamp_min(1.0)
+
+
 def _sigreg_v_stat(
     z: Tensor,
     sample_weight: Tensor,
@@ -759,14 +901,24 @@ def loss_and_aux(
         else batch["future_planes"][rows, selected]
     )
     selected_valid = future_valid[rows, selected].unsqueeze(1)
-    z_all, z_dfm = model.encode_selected(batch["current_planes"], selected_planes, compute_dtype)
+    z_all, z_dfm, base_policy_logits = model.encode_selected(
+        batch["current_planes"],
+        selected_planes,
+        compute_dtype,
+    )
     z_jepa = z_all[:, 0]
     target_z = z_all[:, 1:]
 
     t = choices.training_time
     is_masked = choices.mask_uniform < (1.0 - t).unsqueeze(1)
     noisy_actions = torch.where(is_masked, torch.full_like(actions, _MASK_TOKEN), actions)
-    logits = model.planner(z_dfm, noisy_actions, t, compute_dtype)
+    logits = model.planner(
+        z_dfm,
+        noisy_actions,
+        t,
+        compute_dtype,
+        base_root_logits=base_policy_logits,
+    )
     assert isinstance(logits, Tensor)
     log_probabilities = F.log_softmax(logits, dim=-1)
     ce = -torch.gather(log_probabilities, -1, actions.unsqueeze(-1)).squeeze(-1)
@@ -787,9 +939,25 @@ def loss_and_aux(
         legal_valid = batch["legal_masks_valid"][:, 0].float()
     legal_gate = valid * legal_valid * is_masked[:, 0].float()
     legality = _weighted_mean(1.0 - first_legal_mass, legal_gate)
+    root_legal_ce = _weighted_mean(
+        _legal_conditional_ce(
+            logits[:, 0],
+            actions[:, 0],
+            batch["legal_idx"][:, 0],
+            batch["legal_count"][:, 0],
+        ),
+        legal_gate,
+    )
 
     clean_t = torch.ones(batch_size, device=actions.device, dtype=torch.float32)
-    clean_result = model.planner(z_dfm, actions, clean_t, compute_dtype, return_hidden=True)
+    clean_result = model.planner(
+        z_dfm,
+        actions,
+        clean_t,
+        compute_dtype,
+        base_root_logits=base_policy_logits,
+        return_hidden=True,
+    )
     assert isinstance(clean_result, tuple)
     _, clean_hidden = clean_result
     pred_z = model.jepa_rollout(z_jepa, actions, clean_hidden, compute_dtype)
@@ -822,19 +990,65 @@ def loss_and_aux(
         reference_count=config.sigreg_reference_count,
     )
 
+    wdl_loss = torch.zeros((), device=actions.device, dtype=torch.float32)
+    wdl_accuracy = torch.zeros_like(wdl_loss)
+    wdl_expected_value_mse = torch.zeros_like(wdl_loss)
+    wdl_valid_count = torch.zeros_like(wdl_loss)
+    if config.wdl_coeff != 0.0:
+        if "wdl_targets" not in batch:
+            raise ValueError("Nonzero wdl_coeff requires per-horizon wdl_targets")
+        _, wdl_logits = model.value_wdl_head(pred_z, compute_dtype)
+        raw_wdl_targets = batch["wdl_targets"][:, : config.horizon].float()
+        if raw_wdl_targets.shape != wdl_logits.shape:
+            raise ValueError(
+                "wdl_targets must match predicted WDL logits: "
+                f"{tuple(raw_wdl_targets.shape)} != {tuple(wdl_logits.shape)}"
+            )
+        wdl_sum = raw_wdl_targets.sum(dim=-1, keepdim=True)
+        wdl_targets = raw_wdl_targets / wdl_sum.clamp_min(1e-12)
+        wdl_weight = (
+            valid.unsqueeze(1)
+            * future_valid
+            * (wdl_sum[..., 0] > 0).float()
+        )
+        wdl_valid_count = wdl_weight.sum()
+        wdl_log_probabilities = F.log_softmax(wdl_logits.float(), dim=-1)
+        wdl_probabilities = wdl_log_probabilities.exp()
+        sample_wdl_ce = -(wdl_targets * wdl_log_probabilities).sum(dim=-1)
+        wdl_loss = _uniform_horizon_mean(sample_wdl_ce, wdl_weight)
+        wdl_accuracy = _uniform_horizon_mean(
+            (wdl_logits.argmax(dim=-1) == wdl_targets.argmax(dim=-1)).float(),
+            wdl_weight,
+        )
+        expected_value = wdl_probabilities[..., 0] - wdl_probabilities[..., 2]
+        target_value = wdl_targets[..., 0] - wdl_targets[..., 2]
+        wdl_expected_value_mse = _uniform_horizon_mean(
+            (expected_value - target_value).square(),
+            wdl_weight,
+        )
+
     unclipped = (
         config.dfm_ce_coeff * dfm_ce
+        + config.root_legal_ce_coeff * root_legal_ce
         + config.legality_coeff * legality
         + config.jepa_positive_coeff * jepa_positive
         + config.target_sigreg_coeff * target_sigreg
         + config.pred_sigreg_coeff * pred_sigreg
+        + config.wdl_coeff * wdl_loss
     ).float()
-    stopped = unclipped.detach().clamp_min(1e-6)
-    clip_scale = torch.minimum(
-        torch.ones_like(stopped),
-        torch.as_tensor(config.loss_clip_value, device=stopped.device, dtype=stopped.dtype)
-        / stopped,
-    )
+    if config.loss_clip_value > 0.0:
+        stopped = unclipped.detach().clamp_min(1e-6)
+        clip_scale = torch.minimum(
+            torch.ones_like(stopped),
+            torch.as_tensor(
+                config.loss_clip_value,
+                device=stopped.device,
+                dtype=stopped.dtype,
+            )
+            / stopped,
+        )
+    else:
+        clip_scale = torch.ones_like(unclipped)
     loss = unclipped * clip_scale
     accuracy = _weighted_mean((logits.argmax(dim=-1) == actions).float(), ce_weight)
     aux = {
@@ -842,6 +1056,10 @@ def loss_and_aux(
         "unclipped_loss": unclipped.detach(),
         "loss_clip_scale": clip_scale.detach(),
         "dfm_ce_loss": dfm_ce.detach(),
+        "root_legal_conditional_ce": root_legal_ce.detach(),
+        "weighted_root_legal_conditional_ce": (
+            config.root_legal_ce_coeff * root_legal_ce
+        ).detach(),
         "first_legality_loss": legality.detach(),
         "first_legal_mass": (1.0 - legality).detach(),
         "weighted_legality_loss": (config.legality_coeff * legality).detach(),
@@ -852,6 +1070,11 @@ def loss_and_aux(
         "jepa_pred_sigreg_loss": pred_sigreg.detach(),
         "jepa_sigreg_valid_count": target_sigreg_count.detach(),
         "jepa_pred_sigreg_valid_count": pred_sigreg_count.detach(),
+        "wdl_loss": wdl_loss.detach(),
+        "wdl_weighted_loss": (config.wdl_coeff * wdl_loss).detach(),
+        "wdl_accuracy": wdl_accuracy.detach(),
+        "wdl_expected_value_mse": wdl_expected_value_mse.detach(),
+        "wdl_valid_count": wdl_valid_count.detach(),
         "accuracy": accuracy.detach(),
         "mask_prob": (1.0 - t).mean().detach(),
         "z_state_norm": z_all.float().norm(dim=-1).mean().detach(),
@@ -895,6 +1118,11 @@ def full_horizon_evaluation_aux(
         compute_dtype=compute_dtype,
         remat=False,
     )
+    base_policy_logits = (
+        None
+        if model.encoder.policy_head is None
+        else model.encoder.policy_head(current_tokens, compute_dtype)
+    )
     flat_future = future_planes.reshape(
         batch_size * horizon,
         *future_planes.shape[2:],
@@ -915,7 +1143,13 @@ def full_horizon_evaluation_aux(
 
     t = torch.zeros(batch_size, device=actions.device, dtype=torch.float32)
     noisy_actions = torch.full_like(actions, _MASK_TOKEN)
-    logits = model.planner(z_dfm, noisy_actions, t, compute_dtype)
+    logits = model.planner(
+        z_dfm,
+        noisy_actions,
+        t,
+        compute_dtype,
+        base_root_logits=base_policy_logits,
+    )
     assert isinstance(logits, Tensor)
     log_probabilities = F.log_softmax(logits, dim=-1)
     ce = -torch.gather(
@@ -940,6 +1174,15 @@ def full_horizon_evaluation_aux(
         legal_valid = batch["legal_masks_valid"][:, 0].float()
     legal_gate = valid * legal_valid
     legality = _weighted_mean(1.0 - first_legal_mass, legal_gate)
+    root_legal_ce = _weighted_mean(
+        _legal_conditional_ce(
+            logits[:, 0],
+            actions[:, 0],
+            batch["legal_idx"][:, 0],
+            batch["legal_count"][:, 0],
+        ),
+        legal_gate,
+    )
 
     clean_t = torch.ones(batch_size, device=actions.device, dtype=torch.float32)
     clean_result = model.planner(
@@ -947,6 +1190,7 @@ def full_horizon_evaluation_aux(
         actions,
         clean_t,
         compute_dtype,
+        base_root_logits=base_policy_logits,
         return_hidden=True,
     )
     assert isinstance(clean_result, tuple)
@@ -992,22 +1236,64 @@ def full_horizon_evaluation_aux(
         reference_count=config.sigreg_reference_count,
     )
 
+    wdl_loss = torch.zeros((), device=actions.device, dtype=torch.float32)
+    wdl_accuracy = torch.zeros_like(wdl_loss)
+    wdl_expected_value_mse = torch.zeros_like(wdl_loss)
+    wdl_valid_count = torch.zeros_like(wdl_loss)
+    if config.wdl_coeff != 0.0:
+        if "wdl_targets" not in batch:
+            raise ValueError("Nonzero wdl_coeff requires per-horizon wdl_targets")
+        _, wdl_logits = model.value_wdl_head(pred_z, compute_dtype)
+        raw_wdl_targets = batch["wdl_targets"][:, : config.horizon].float()
+        if raw_wdl_targets.shape != wdl_logits.shape:
+            raise ValueError(
+                "wdl_targets must match predicted WDL logits: "
+                f"{tuple(raw_wdl_targets.shape)} != {tuple(wdl_logits.shape)}"
+            )
+        wdl_sum = raw_wdl_targets.sum(dim=-1, keepdim=True)
+        wdl_targets = raw_wdl_targets / wdl_sum.clamp_min(1e-12)
+        wdl_weight = (
+            valid.unsqueeze(1)
+            * future_valid
+            * (wdl_sum[..., 0] > 0).float()
+        )
+        wdl_valid_count = wdl_weight.sum()
+        wdl_log_probabilities = F.log_softmax(wdl_logits.float(), dim=-1)
+        wdl_probabilities = wdl_log_probabilities.exp()
+        sample_wdl_ce = -(wdl_targets * wdl_log_probabilities).sum(dim=-1)
+        wdl_loss = _uniform_horizon_mean(sample_wdl_ce, wdl_weight)
+        wdl_accuracy = _uniform_horizon_mean(
+            (wdl_logits.argmax(dim=-1) == wdl_targets.argmax(dim=-1)).float(),
+            wdl_weight,
+        )
+        expected_value = wdl_probabilities[..., 0] - wdl_probabilities[..., 2]
+        target_value = wdl_targets[..., 0] - wdl_targets[..., 2]
+        wdl_expected_value_mse = _uniform_horizon_mean(
+            (expected_value - target_value).square(),
+            wdl_weight,
+        )
+
     unclipped = (
         config.dfm_ce_coeff * dfm_ce
+        + config.root_legal_ce_coeff * root_legal_ce
         + config.legality_coeff * legality
         + config.jepa_positive_coeff * jepa_positive
         + config.target_sigreg_coeff * target_sigreg
         + config.pred_sigreg_coeff * pred_sigreg
+        + config.wdl_coeff * wdl_loss
     ).float()
-    clip_scale = torch.minimum(
-        torch.ones_like(unclipped),
-        torch.as_tensor(
-            config.loss_clip_value,
-            device=unclipped.device,
-            dtype=unclipped.dtype,
+    if config.loss_clip_value > 0.0:
+        clip_scale = torch.minimum(
+            torch.ones_like(unclipped),
+            torch.as_tensor(
+                config.loss_clip_value,
+                device=unclipped.device,
+                dtype=unclipped.dtype,
+            )
+            / unclipped.detach().clamp_min(1e-6),
         )
-        / unclipped.detach().clamp_min(1e-6),
-    )
+    else:
+        clip_scale = torch.ones_like(unclipped)
     loss = unclipped * clip_scale
     accuracy = _weighted_mean(
         (logits.argmax(dim=-1) == actions).float(),
@@ -1068,6 +1354,10 @@ def full_horizon_evaluation_aux(
         "loss_clip_scale": clip_scale,
         "dfm_ce_loss": dfm_ce,
         "dfm_ce_loss_by_horizon": ce_by_horizon,
+        "root_legal_conditional_ce": root_legal_ce,
+        "weighted_root_legal_conditional_ce": (
+            config.root_legal_ce_coeff * root_legal_ce
+        ),
         "first_legality_loss": legality,
         "first_legal_mass": 1.0 - legality,
         "weighted_legality_loss": config.legality_coeff * legality,
@@ -1078,6 +1368,11 @@ def full_horizon_evaluation_aux(
         "jepa_pred_sigreg_loss": pred_sigreg,
         "jepa_sigreg_valid_count": target_sigreg_count,
         "jepa_pred_sigreg_valid_count": pred_sigreg_count,
+        "wdl_loss": wdl_loss,
+        "wdl_weighted_loss": config.wdl_coeff * wdl_loss,
+        "wdl_accuracy": wdl_accuracy,
+        "wdl_expected_value_mse": wdl_expected_value_mse,
+        "wdl_valid_count": wdl_valid_count,
         "accuracy": accuracy,
         "mask_prob": torch.ones((), device=actions.device),
         "z_state_norm": z_all.float().norm(dim=-1).mean(),
@@ -1110,6 +1405,7 @@ class _OptimizerLeaf:
     parameter: nn.Parameter
     learning_rate_kind: str
     use_muon: bool
+    apply_weight_decay: bool
     first_moment: Tensor
     second_moment: Tensor | None
 
@@ -1122,22 +1418,47 @@ class MuonAdamW:
     ``optax.contrib.muon``. Parameter tensors retain their source dtypes.
     """
 
-    def __init__(self, model: JointModel, config: Config = CONFIG):
+    def __init__(
+        self,
+        model: nn.Module,
+        config: Config = CONFIG,
+        *,
+        examples_per_update: int | None = None,
+    ):
         self.config = config
         self.update = 0
+        self.examples_seen = 0
+        self.examples_per_update = (
+            None if examples_per_update is None else int(examples_per_update)
+        )
+        if self.config.lr_schedule_unit == "examples":
+            if self.examples_per_update is None or self.examples_per_update < 1:
+                raise ValueError(
+                    "Example-based LR scheduling requires a positive examples_per_update"
+                )
+            if not (
+                0 < self.config.lr_warmup_examples < self.config.lr_total_examples
+            ):
+                raise ValueError("Invalid example-based warmup/total schedule")
+        elif self.config.lr_schedule_unit != "updates":
+            raise ValueError(
+                f"Unsupported lr_schedule_unit: {self.config.lr_schedule_unit!r}"
+            )
         self.leaves: list[_OptimizerLeaf] = []
         for name, parameter in model.named_parameters():
             use_muon = self._use_muon(name, parameter)
+            learning_rate_kind = "bt4" if name.startswith("encoder.") else "main"
             self.leaves.append(
                 _OptimizerLeaf(
                     name=name,
                     parameter=parameter,
-                    learning_rate_kind=(
-                        "bt4"
-                        if name.startswith(("encoder.embedding.", "encoder.layers."))
-                        else "main"
-                    ),
+                    learning_rate_kind=learning_rate_kind,
                     use_muon=use_muon,
+                    apply_weight_decay=self._apply_weight_decay(
+                        name,
+                        parameter,
+                        learning_rate_kind=learning_rate_kind,
+                    ),
                     first_moment=torch.zeros_like(parameter),
                     second_moment=(None if use_muon else torch.zeros_like(parameter)),
                 )
@@ -1166,7 +1487,47 @@ class MuonAdamW:
             return False
         return max(rows, columns) / min(rows, columns) <= 2.0
 
+    def _apply_weight_decay(
+        self,
+        name: str,
+        parameter: Tensor,
+        *,
+        learning_rate_kind: str,
+    ) -> bool:
+        if not self.config.selective_weight_decay:
+            return True
+        if learning_rate_kind == "bt4" or parameter.ndim < 2:
+            return False
+        path = name.replace(".", "/").lower()
+        return not any(
+            token in path
+            for token in (
+                "bias",
+                "_b",
+                "/b",
+                "norm",
+                "ln",
+                "embed",
+                "embedding",
+            )
+        )
+
     def learning_rate_ratio(self) -> float:
+        if self.config.lr_schedule_unit == "examples":
+            assert self.examples_per_update is not None
+            position = min(
+                self.examples_seen + self.examples_per_update,
+                self.config.lr_total_examples,
+            )
+            if position <= self.config.lr_warmup_examples:
+                return position / self.config.lr_warmup_examples
+            progress = (
+                (position - self.config.lr_warmup_examples)
+                / (self.config.lr_total_examples - self.config.lr_warmup_examples)
+            )
+            return self.config.lr_min_ratio + (
+                1.0 - self.config.lr_min_ratio
+            ) * 0.5 * (1.0 + math.cos(math.pi * progress))
         relative = min(
             max(self.update - self.config.lr_decay_start, 0),
             self.config.lr_decay_steps,
@@ -1263,13 +1624,16 @@ class MuonAdamW:
                 corrected_variance = leaf.second_moment / (1.0 - beta2**count)
                 update = nesterov / (torch.sqrt(corrected_variance) + 1e-8)
 
-            update = update + self.config.weight_decay * parameter
+            if leaf.apply_weight_decay:
+                update = update + self.config.weight_decay * parameter
             parameter.add_(update, alpha=-self._learning_rate(leaf.learning_rate_kind))
 
         main_lr = self._learning_rate("main")
         bt4_lr = self._learning_rate("bt4")
         completed_update = self.update
         self.update += 1
+        if self.examples_per_update is not None:
+            self.examples_seen += self.examples_per_update
         self.zero_grad()
         return {
             "optimizer_update": completed_update,
@@ -1290,6 +1654,7 @@ class MuonAdamW:
                 "path": leaf.name,
                 "optimizer": "muon" if leaf.use_muon else "nesterov_adamw",
                 "learning_rate_kind": leaf.learning_rate_kind,
+                "apply_weight_decay": leaf.apply_weight_decay,
                 "shape": list(leaf.parameter.shape),
                 "dtype": str(leaf.parameter.dtype),
             }
@@ -1507,6 +1872,404 @@ def load_source_model(
     return model.to(device), mapping
 
 
+def _copy_parameter_array(
+    parameter: nn.Parameter,
+    value: Any,
+    *,
+    name: str,
+) -> dict[str, Any]:
+    array = np.asarray(value)
+    if tuple(parameter.shape) != tuple(array.shape):
+        raise ValueError(
+            f"Raw BT4 shape mismatch at {name}: "
+            f"{tuple(parameter.shape)} != {tuple(array.shape)}"
+        )
+    array_f32 = np.ascontiguousarray(array.astype(np.float32, copy=False))
+    with torch.no_grad():
+        parameter.copy_(torch.from_numpy(array_f32).to(parameter.dtype))
+    return {
+        "path": name,
+        "shape": list(array.shape),
+        "source_dtype": str(array.dtype),
+        "torch_dtype": str(parameter.dtype),
+        "sha256": hashlib.sha256(array.tobytes(order="C")).hexdigest(),
+    }
+
+
+def bind_raw_bt4(
+    model: JointModel,
+    mapped: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Bind the raw exported BT4 encoder and native policy head exactly once."""
+
+    if model.encoder.policy_head is None:
+        raise ValueError("Raw BT4 hero initialization requires a native policy head")
+    records: list[dict[str, Any]] = []
+
+    def copy(parameter: nn.Parameter, value: Any, name: str) -> None:
+        records.append(_copy_parameter_array(parameter, value, name=name))
+
+    embedding = model.encoder.embedding
+    source_embedding = mapped["embedding"]
+    copy(embedding.preproc.w, source_embedding["preproc_w"], "encoder.embedding.preproc.w")
+    copy(embedding.preproc.b, source_embedding["preproc_b"], "encoder.embedding.preproc.b")
+    copy(embedding.proj.w, source_embedding["w"], "encoder.embedding.proj.w")
+    copy(embedding.proj.b, source_embedding["b"], "encoder.embedding.proj.b")
+    copy(embedding.ln.scale, source_embedding["ln_scale"], "encoder.embedding.ln.scale")
+    copy(embedding.ln.bias, source_embedding["ln_bias"], "encoder.embedding.ln.bias")
+    copy(embedding.mul_gate, source_embedding["mul_gate"], "encoder.embedding.mul_gate")
+    copy(embedding.add_gate, source_embedding["add_gate"], "encoder.embedding.add_gate")
+    copy(
+        embedding.ffn1.w,
+        source_embedding["ffn"]["dense1_w"],
+        "encoder.embedding.ffn1.w",
+    )
+    copy(
+        embedding.ffn1.b,
+        source_embedding["ffn"]["dense1_b"],
+        "encoder.embedding.ffn1.b",
+    )
+    copy(
+        embedding.ffn2.w,
+        source_embedding["ffn"]["dense2_w"],
+        "encoder.embedding.ffn2.w",
+    )
+    copy(
+        embedding.ffn2.b,
+        source_embedding["ffn"]["dense2_b"],
+        "encoder.embedding.ffn2.b",
+    )
+    copy(
+        embedding.ffn_ln.scale,
+        source_embedding["ffn_ln_scale"],
+        "encoder.embedding.ffn_ln.scale",
+    )
+    copy(
+        embedding.ffn_ln.bias,
+        source_embedding["ffn_ln_bias"],
+        "encoder.embedding.ffn_ln.bias",
+    )
+
+    source_layers = mapped["encoder"]
+    if len(source_layers) != len(model.encoder.layers):
+        raise ValueError(
+            f"Raw BT4 encoder depth drift: {len(source_layers)} != "
+            f"{len(model.encoder.layers)}"
+        )
+    for index, (layer, source_layer) in enumerate(
+        zip(model.encoder.layers, source_layers, strict=True)
+    ):
+        prefix = f"encoder.layers.{index}"
+        mha = source_layer["mha"]
+        copy(layer.wq, mha["q_w"], f"{prefix}.wq")
+        copy(layer.wq_b, mha["q_b"], f"{prefix}.wq_b")
+        copy(layer.wk, mha["k_w"], f"{prefix}.wk")
+        copy(layer.wk_b, mha["k_b"], f"{prefix}.wk_b")
+        copy(layer.wv, mha["v_w"], f"{prefix}.wv")
+        copy(layer.wv_b, mha["v_b"], f"{prefix}.wv_b")
+        copy(layer.wo.w, mha["dense_w"], f"{prefix}.wo.w")
+        copy(layer.wo.b, mha["dense_b"], f"{prefix}.wo.b")
+        copy(layer.ln_attn.scale, source_layer["ln1"]["scale"], f"{prefix}.ln_attn.scale")
+        copy(layer.ln_attn.bias, source_layer["ln1"]["bias"], f"{prefix}.ln_attn.bias")
+        copy(layer.ffn1.w, source_layer["ffn"]["dense1_w"], f"{prefix}.ffn1.w")
+        copy(layer.ffn1.b, source_layer["ffn"]["dense1_b"], f"{prefix}.ffn1.b")
+        copy(layer.ffn2.w, source_layer["ffn"]["dense2_w"], f"{prefix}.ffn2.w")
+        copy(layer.ffn2.b, source_layer["ffn"]["dense2_b"], f"{prefix}.ffn2.b")
+        copy(layer.ln_ffn.scale, source_layer["ln2"]["scale"], f"{prefix}.ln_ffn.scale")
+        copy(layer.ln_ffn.bias, source_layer["ln2"]["bias"], f"{prefix}.ln_ffn.bias")
+        smolgen = mha["smolgen"]
+        copy(layer.smolgen.compress.w, smolgen["compress_w"], f"{prefix}.smolgen.compress.w")
+        copy(layer.smolgen.dense1.w, smolgen["dense1_w"], f"{prefix}.smolgen.dense1.w")
+        copy(layer.smolgen.dense1.b, smolgen["dense1_b"], f"{prefix}.smolgen.dense1.b")
+        copy(layer.smolgen.ln1.scale, smolgen["ln1_scale"], f"{prefix}.smolgen.ln1.scale")
+        copy(layer.smolgen.ln1.bias, smolgen["ln1_bias"], f"{prefix}.smolgen.ln1.bias")
+        copy(layer.smolgen.dense2.w, smolgen["dense2_w"], f"{prefix}.smolgen.dense2.w")
+        copy(layer.smolgen.dense2.b, smolgen["dense2_b"], f"{prefix}.smolgen.dense2.b")
+        copy(layer.smolgen.ln2.scale, smolgen["ln2_scale"], f"{prefix}.smolgen.ln2.scale")
+        copy(layer.smolgen.ln2.bias, smolgen["ln2_bias"], f"{prefix}.smolgen.ln2.bias")
+        copy(layer.smolgen.shared_w, mapped["smolgen_w"], f"{prefix}.smolgen.shared_w")
+
+    policy = model.encoder.policy_head
+    source_policy = mapped["policy"]
+    copy(policy.dense1.w, source_policy["dense1_w"], "encoder.policy_head.dense1.w")
+    copy(policy.dense1.b, source_policy["dense1_b"], "encoder.policy_head.dense1.b")
+    copy(policy.q.w, source_policy["q_w"], "encoder.policy_head.q.w")
+    copy(policy.q.b, source_policy["q_b"], "encoder.policy_head.q.b")
+    copy(policy.k.w, source_policy["k_w"], "encoder.policy_head.k.w")
+    copy(policy.k.b, source_policy["k_b"], "encoder.policy_head.k.b")
+    copy(policy.prom_w, source_policy["prom_w"], "encoder.policy_head.prom_w")
+    np.testing.assert_array_equal(
+        policy.mapping_table.cpu().numpy(),
+        np.asarray(mapped["mapping_table"], dtype=np.int64),
+    )
+
+    combined = hashlib.sha256()
+    for record in records:
+        combined.update(record["path"].encode("utf-8"))
+        combined.update(b"\0")
+        combined.update(record["sha256"].encode("ascii"))
+    return {
+        "schema_version": "torch-raw-bt4-map-v1",
+        "leaf_count": len(records),
+        "combined_sha256": combined.hexdigest(),
+        "records": records,
+    }
+
+
+def initialize_fresh_modules(model: JointModel, *, seed: int) -> dict[str, Any]:
+    """Deterministically initialize only the non-BT4 hero modules."""
+
+    generator = torch.Generator(device="cpu")
+    generator.manual_seed(int(seed))
+    initialized: list[str] = []
+
+    def fill_normal(parameter: nn.Parameter, standard_deviation: float) -> None:
+        value = torch.randn(
+            tuple(parameter.shape),
+            generator=generator,
+            device="cpu",
+            dtype=torch.float32,
+        )
+        value.mul_(float(standard_deviation))
+        parameter.copy_(value.to(parameter.dtype))
+
+    with torch.no_grad():
+        for name, parameter in model.named_parameters():
+            if name.startswith("encoder."):
+                continue
+            leaf = name.rsplit(".", 1)[-1]
+            if name in {"out_proj", "out_bias", "state_projector.cls"}:
+                parameter.zero_()
+            elif name.startswith("jepa_transition.cond_"):
+                parameter.zero_()
+            elif (
+                leaf
+                in {
+                    "b",
+                    "b1",
+                    "bias",
+                    "in_bias",
+                    "time_bias",
+                    "out_bias",
+                    "value_b",
+                    "wdl_b",
+                }
+                or leaf.startswith("b_")
+                or leaf.endswith("_bias")
+            ):
+                parameter.zero_()
+            elif leaf == "scale" or leaf.endswith("norm_scale"):
+                parameter.fill_(1.0)
+            elif name == "state_projector.pos_embed":
+                fill_normal(parameter, 0.02 / math.sqrt(parameter.shape[-1]))
+            elif name == "pos_embed" or name.endswith("_embed.embedding"):
+                fill_normal(parameter, 1.0 / math.sqrt(parameter.shape[-1]))
+            elif name == "jepa_transition.w_down":
+                fill_normal(parameter, 1e-3 / math.sqrt(parameter.shape[-2]))
+            elif parameter.ndim >= 2:
+                fill_normal(parameter, 1.0 / math.sqrt(parameter.shape[-2]))
+            else:
+                raise ValueError(f"No fresh initialization rule for {name}")
+            initialized.append(name)
+    expected = [
+        name for name, _ in model.named_parameters() if not name.startswith("encoder.")
+    ]
+    if initialized != expected:
+        raise RuntimeError("Fresh initialization did not cover every non-BT4 parameter")
+    return {
+        "schema_version": "torch-fresh-init-v1",
+        "seed": int(seed),
+        "leaf_count": len(initialized),
+        "zero_initialized_residual": True,
+        "paths": initialized,
+    }
+
+
+def load_raw_bt4_hero_model(
+    *,
+    device: torch.device,
+    raw_bt4_path: Path = _RAW_BT4_PATH,
+    config: Config = HERO_CONFIG,
+) -> tuple[JointModel, dict[str, Any]]:
+    if not config.use_bt4_policy_residual:
+        raise ValueError("Hero model config must enable the BT4 policy residual")
+    source_path = _require_workspace(raw_bt4_path, exists=True)
+    source_stat = source_path.stat()
+    if source_stat.st_size != _RAW_BT4_SIZE_BYTES:
+        raise ValueError(
+            f"Raw BT4 size drift: {source_stat.st_size} != {_RAW_BT4_SIZE_BYTES}"
+        )
+    with source_path.open("rb") as handle:
+        digest = _sha256_open_file(handle)
+    if not hmac.compare_digest(digest, _RAW_BT4_SHA256):
+        raise ValueError(f"Raw BT4 SHA-256 drift: {digest} != {_RAW_BT4_SHA256}")
+
+    from chess_dfm_jax.policy import attention_policy_map
+    from chess_dfm_jax.weights import load_pb_gz, map_bt4_weights
+
+    model = JointModel(config)
+    fresh_manifest = initialize_fresh_modules(model, seed=config.init_seed)
+    mapped = map_bt4_weights(
+        load_pb_gz(str(source_path)),
+        mapping_table=attention_policy_map(),
+    )
+    raw_mapping = bind_raw_bt4(model, mapped)
+    del mapped
+    gc.collect()
+    return model.to(device), {
+        "schema_version": "torch-hero-init-v1",
+        "combined_sha256": raw_mapping["combined_sha256"],
+        "leaf_count": raw_mapping["leaf_count"],
+        "raw_asset": {
+            "path": str(source_path),
+            "size_bytes": source_stat.st_size,
+            "sha256": digest,
+        },
+        "raw_mapping": raw_mapping,
+        "fresh": fresh_manifest,
+    }
+
+
+_TRAJECTORY_METADATA_KEYS = frozenset(
+    {"source", "game_id", "ply", "result", "fen_t", "input_format", "actions_uci"}
+)
+
+
+def _metadata_text(value: Any) -> str:
+    scalar = np.asarray(value).item()
+    return scalar.decode("utf-8") if isinstance(scalar, bytes) else str(scalar)
+
+
+def canonicalize_trajectory_batch(
+    batch: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Re-encode actions and legal sets in the complete side-to-move LC0 frame."""
+
+    import chess
+
+    from chess_dfm_jax.policy import (
+        LC0_CANONICAL_1858_INPUT_FORMAT,
+        encode_lc0_canonical_1858,
+        legal_mask_lc0_canonical_1858,
+    )
+
+    required = {"fen_t", "input_format", "actions_uci", "future_valid", "legal_idx"}
+    missing = sorted(required - set(batch))
+    if missing:
+        raise KeyError(f"Canonical trajectory conversion requires metadata: {missing}")
+    result = {
+        key: value for key, value in batch.items() if key not in _TRAJECTORY_METADATA_KEYS
+    }
+    future_valid = np.asarray(batch["future_valid"], dtype=np.float32)
+    actions_uci = np.asarray(batch["actions_uci"])
+    if actions_uci.shape != future_valid.shape:
+        raise ValueError(
+            f"actions_uci/future_valid shape drift: "
+            f"{actions_uci.shape} != {future_valid.shape}"
+        )
+    batch_size, horizon = future_valid.shape
+    source_legal = np.asarray(batch["legal_idx"])
+    legal_capacity = int(source_legal.shape[-1])
+    canonical_actions = np.zeros((batch_size, horizon), dtype=np.int32)
+    canonical_legal = np.full(
+        (batch_size, horizon, legal_capacity),
+        _LEGAL_PAD,
+        dtype=np.int32,
+    )
+    canonical_count = np.zeros((batch_size, horizon), dtype=np.int32)
+    canonical_valid = np.zeros((batch_size, horizon), dtype=np.float32)
+    fens = np.asarray(batch["fen_t"])
+    input_formats = np.asarray(batch["input_format"])
+
+    for row in range(batch_size):
+        input_format = _metadata_text(
+            input_formats if input_formats.ndim == 0 else input_formats[row]
+        )
+        if input_format != LC0_CANONICAL_1858_INPUT_FORMAT:
+            raise ValueError(
+                f"Unsupported canonical input format at row {row}: {input_format!r}"
+            )
+        board = chess.Board(_metadata_text(fens if fens.ndim == 0 else fens[row]))
+        for offset in range(horizon):
+            if future_valid[row, offset] <= 0.0:
+                continue
+            move_text = _metadata_text(actions_uci[row, offset])
+            move = chess.Move.from_uci(move_text)
+            action = encode_lc0_canonical_1858(
+                board,
+                move,
+                input_format=input_format,
+            )
+            legal = np.flatnonzero(
+                legal_mask_lc0_canonical_1858(
+                    board,
+                    input_format=input_format,
+                )
+            ).astype(np.int32, copy=False)
+            if legal.size > legal_capacity:
+                raise ValueError(
+                    f"Canonical legal set at row {row}, horizon {offset + 1} "
+                    f"needs {legal.size} slots; shard capacity is {legal_capacity}"
+                )
+            if not np.any(legal == action):
+                raise RuntimeError(
+                    f"Canonical target {action} is absent from its legal set at "
+                    f"row {row}, horizon {offset + 1}"
+                )
+            canonical_actions[row, offset] = action
+            canonical_legal[row, offset, : legal.size] = legal
+            canonical_count[row, offset] = legal.size
+            canonical_valid[row, offset] = 1.0
+            board.push(move)
+
+    result["action_indices"] = canonical_actions
+    result["action_idx"] = canonical_actions[:, 0]
+    result["legal_idx"] = canonical_legal
+    result["legal_count"] = canonical_count
+    result["legal_masks_valid"] = canonical_valid
+    return result
+
+
+from research.prepare import FixedTrajectoryBatches as _FixedTrajectoryBatches
+
+
+class CanonicalTrajectoryBatches(_FixedTrajectoryBatches):
+    """Fixed trajectory schedule with exact canonical action conversion."""
+
+    def _decode_shard(
+        self,
+        path: Path,
+        *,
+        row_slice: slice | None,
+    ) -> dict[str, Any]:
+        from chess_dfm_jax.data.trajectory_v3 import trajectory_v3_to_batch
+
+        try:
+            with np.load(_require_workspace(path, exists=True), allow_pickle=False) as payload:
+                observed_count = (
+                    int(np.asarray(payload["batch_size"]).item())
+                    if "batch_size" in payload
+                    else int(payload["actions_u16"].shape[0])
+                )
+                if observed_count != self.samples_per_shard:
+                    raise ValueError(
+                        f"Shard size changed: expected {self.samples_per_shard}, "
+                        f"found {observed_count} in {path}"
+                    )
+                batch = trajectory_v3_to_batch(
+                    payload,
+                    view=self.view,
+                    horizon=self.horizon,
+                    include_metadata=True,
+                    row_slice=row_slice,
+                )
+            return canonicalize_trajectory_batch(batch)
+        except Exception as exc:
+            raise RuntimeError(
+                f"Failed canonical trajectory decode for required shard {path}"
+            ) from exc
+
+
 _TRAIN_BATCH_KEYS = frozenset(
     {
         "current_planes",
@@ -1518,6 +2281,8 @@ _TRAIN_BATCH_KEYS = frozenset(
         "legal_idx",
         "legal_count",
         "legal_masks_valid",
+        "value_targets",
+        "wdl_targets",
     }
 )
 
@@ -1680,13 +2445,14 @@ def _prepare_training_step(
     update: int,
     data_cursor: int,
     batch_size: int,
+    config: Config = CONFIG,
 ) -> _PreparedTrainingStep:
     started = time.perf_counter()
     choices = materialize_step_choices(
         seed=seed,
         update=update,
         batch_size=batch_size,
-        config=CONFIG,
+        config=config,
         device=torch.device("cpu"),
     )
     raw_batch = batches.batch_at(data_cursor)
@@ -1948,16 +2714,17 @@ def _summarize_gpu_samples(path: Path) -> dict[str, float | int]:
 
 
 def train(args: argparse.Namespace) -> int:
+    config = HERO_CONFIG if args.recipe == "hero" else CONFIG
     if not torch.cuda.is_available():
         raise RuntimeError("research/train_torch.py train requires CUDA")
     if args.steps < 0 or args.train_seconds < 0:
         raise ValueError("--steps and --train-seconds must be non-negative")
     if args.steps == 0 and args.train_seconds == 0:
         raise ValueError("Set --steps or --train-seconds")
-    if args.batch_size < CONFIG.sigreg_example_count:
+    if args.batch_size < config.sigreg_example_count:
         raise ValueError(
             "The accepted fixed-64 SIGReg contract requires --batch-size >= "
-            f"{CONFIG.sigreg_example_count}"
+            f"{config.sigreg_example_count}"
         )
     if args.log_every < 1:
         raise ValueError("--log-every must be positive")
@@ -1984,22 +2751,51 @@ def train(args: argparse.Namespace) -> int:
     torch.set_float32_matmul_precision("high")
 
     restore_started = time.perf_counter()
-    model, source_mapping = load_source_model(
-        device=device,
-        source_path=args.source_state,
-    )
+    if args.recipe == "hero":
+        model, source_mapping = load_raw_bt4_hero_model(
+            device=device,
+            raw_bt4_path=args.raw_bt4_path,
+            config=config,
+        )
+        source_record = source_mapping
+    else:
+        model, source_mapping = load_source_model(
+            device=device,
+            source_path=args.source_state,
+            config=config,
+        )
+        source_record = {
+            "path": str(_require_workspace(args.source_state, exists=True)),
+            "size_bytes": _SOURCE_SIZE_BYTES,
+            "sha256": _SOURCE_SHA256,
+            "step": _SOURCE_STEP,
+            "mapping_sha256": source_mapping["combined_sha256"],
+            "leaf_count": source_mapping["leaf_count"],
+            "model_nbytes": source_mapping["nbytes"],
+            "init": "model-only",
+            "optimizer": "fresh",
+        }
     model.train()
-    optimizer = MuonAdamW(model, CONFIG)
+    optimizer = MuonAdamW(
+        model,
+        config,
+        examples_per_update=(
+            args.batch_size if config.lr_schedule_unit == "examples" else None
+        ),
+    )
     restore_seconds = time.perf_counter() - restore_started
     partition = optimizer.partition_manifest()
     _write_json(output_dir / "optimizer_partition.json", partition)
 
-    from research.prepare import FixedTrajectoryBatches
-
-    batches = FixedTrajectoryBatches(
+    batches_class = (
+        CanonicalTrajectoryBatches
+        if config.action_codec == "lc0_canonical_1858"
+        else _FixedTrajectoryBatches
+    )
+    batches = batches_class(
         _require_workspace(args.data_root) / "train",
         batch_size=args.batch_size,
-        horizon=CONFIG.horizon,
+        horizon=config.horizon,
         seed=args.seed,
         shuffle_files=True,
         batch_schedule="global_permutation",
@@ -2014,23 +2810,14 @@ def train(args: argparse.Namespace) -> int:
         "torch_version": torch.__version__,
         "cuda_version": torch.version.cuda,
         "device": torch.cuda.get_device_name(device),
-        "config": dataclasses.asdict(CONFIG),
+        "recipe": args.recipe,
+        "config": dataclasses.asdict(config),
         "args": {
             key: str(value) if isinstance(value, Path) else value
             for key, value in vars(args).items()
             if key != "handler"
         },
-        "source": {
-            "path": str(_require_workspace(args.source_state, exists=True)),
-            "size_bytes": _SOURCE_SIZE_BYTES,
-            "sha256": _SOURCE_SHA256,
-            "step": _SOURCE_STEP,
-            "mapping_sha256": source_mapping["combined_sha256"],
-            "leaf_count": source_mapping["leaf_count"],
-            "model_nbytes": source_mapping["nbytes"],
-            "init": "model-only",
-            "optimizer": "fresh",
-        },
+        "source": source_record,
         "optimizer_partition": {key: value for key, value in partition.items() if key != "leaves"},
         "data": batches.provenance(),
         "prefetch": {
@@ -2074,6 +2861,7 @@ def train(args: argparse.Namespace) -> int:
             update=update,
             data_cursor=data_cursor,
             batch_size=args.batch_size,
+            config=config,
         )
     try:
         while (args.steps == 0 or update < args.steps) and (
@@ -2087,6 +2875,7 @@ def train(args: argparse.Namespace) -> int:
                     update=update,
                     data_cursor=data_cursor,
                     batch_size=args.batch_size,
+                    config=config,
                 )
             else:
                 prepared = prepared_future.result()
@@ -2111,6 +2900,7 @@ def train(args: argparse.Namespace) -> int:
                     update=update + 1,
                     data_cursor=data_cursor + 1,
                     batch_size=args.batch_size,
+                    config=config,
                 )
             else:
                 prepared_future = None
@@ -2571,12 +3361,150 @@ def cpu_smoke(args: argparse.Namespace) -> int:
     return 0
 
 
+def verify_hero_init(args: argparse.Namespace) -> int:
+    """Gate update-zero Torch policy actions against the pinned raw-BT4 oracle."""
+
+    if args.batch_size < 1:
+        raise ValueError("--batch-size must be positive")
+    if args.threads not in (1, 2):
+        raise ValueError("--threads must be 1 or 2 under the resource guard")
+    output = _require_workspace(args.output)
+    if output.exists():
+        raise FileExistsError(f"Verification output already exists: {output}")
+    torch.set_num_threads(args.threads)
+    torch.set_float32_matmul_precision("high")
+    batches = CanonicalTrajectoryBatches(
+        _require_workspace(args.data_root) / "val",
+        batch_size=args.batch_size,
+        horizon=HERO_CONFIG.horizon,
+        seed=args.seed,
+        shuffle_files=True,
+        batch_schedule="global_permutation",
+    )
+    numpy_batch = batches.batch_at(0)
+
+    import jax
+    import jax.numpy as jnp
+
+    from chess_dfm_jax.nnx_bt4 import jit_bt4_forward, make_bt4_model
+    from chess_dfm_jax.policy import attention_policy_map
+    from chess_dfm_jax.weights import load_pb_gz, map_bt4_weights
+
+    source_path = _require_workspace(args.raw_bt4_path, exists=True)
+    mapped = map_bt4_weights(
+        load_pb_gz(str(source_path)),
+        mapping_table=attention_policy_map(),
+    )
+    jax_model = make_bt4_model(mapped, dtype=jnp.bfloat16)
+    jax_backend = jax.default_backend()
+    jax_logits = np.asarray(
+        jax.device_get(
+            jax.block_until_ready(
+                jit_bt4_forward(
+                    jax_model,
+                    jnp.asarray(numpy_batch["current_planes"], dtype=jnp.bfloat16),
+                )[0]
+            )
+        ),
+        dtype=np.float32,
+    )
+    del jax_model, mapped
+    jax.clear_caches()
+    gc.collect()
+
+    if not torch.cuda.is_available():
+        raise RuntimeError("verify-hero-init requires CUDA")
+    device = torch.device("cuda")
+    model, initialization = load_raw_bt4_hero_model(
+        device=device,
+        raw_bt4_path=args.raw_bt4_path,
+        config=HERO_CONFIG,
+    )
+    model.eval()
+    planes = torch.from_numpy(
+        np.ascontiguousarray(numpy_batch["current_planes"])
+    ).to(device)
+    with torch.inference_mode():
+        tokens = model.encoder.encode_current(
+            planes,
+            compute_dtype=torch.bfloat16,
+            remat=False,
+        )
+        assert model.encoder.policy_head is not None
+        torch_logits = (
+            model.encoder.policy_head(tokens, torch.bfloat16)
+            .float()
+            .cpu()
+            .numpy()
+        )
+    residual_zero = bool(
+        torch.count_nonzero(model.out_proj).item() == 0
+        and torch.count_nonzero(model.out_bias).item() == 0
+    )
+
+    legal_mask = np.zeros((args.batch_size, _VOCAB_SIZE), dtype=bool)
+    legal_idx = np.asarray(numpy_batch["legal_idx"][:, 0], dtype=np.int64)
+    legal_count = np.asarray(numpy_batch["legal_count"][:, 0], dtype=np.int64)
+    for row, count in enumerate(legal_count):
+        legal_mask[row, legal_idx[row, :count]] = True
+    torch_actions = np.argmax(np.where(legal_mask, torch_logits, -np.inf), axis=-1)
+    jax_actions = np.argmax(np.where(legal_mask, jax_logits, -np.inf), axis=-1)
+    targets = np.asarray(numpy_batch["action_indices"][:, 0], dtype=np.int64)
+    difference = torch_logits.astype(np.float64) - jax_logits.astype(np.float64)
+    torch_norm = float(np.linalg.norm(torch_logits.astype(np.float64).reshape(-1)))
+    jax_norm = float(np.linalg.norm(jax_logits.astype(np.float64).reshape(-1)))
+    action_matches = torch_actions == jax_actions
+    report = {
+        "schema_version": "torch-hero-init-policy-parity-v1",
+        "created_utc": datetime.now(UTC).isoformat(),
+        "git_commit": _git_commit(),
+        "batch_size": args.batch_size,
+        "seed": args.seed,
+        "compute_dtype": "bfloat16",
+        "jax_backend": jax_backend,
+        "action_codec": HERO_CONFIG.action_codec,
+        "raw_asset": initialization["raw_asset"],
+        "raw_mapping_sha256": initialization["combined_sha256"],
+        "zero_initialized_dfm_residual": residual_zero,
+        "policy": {
+            "max_absolute_error": float(np.max(np.abs(difference))),
+            "relative_l2_error": float(
+                np.linalg.norm(difference.reshape(-1)) / max(jax_norm, 1e-30)
+            ),
+            "cosine_similarity": float(
+                np.vdot(
+                    torch_logits.astype(np.float64).reshape(-1),
+                    jax_logits.astype(np.float64).reshape(-1),
+                )
+                / max(torch_norm * jax_norm, 1e-30)
+            ),
+        },
+        "legal_action_match_count": int(action_matches.sum()),
+        "legal_action_match_fraction": float(action_matches.mean()),
+        "mismatch_rows": np.flatnonzero(~action_matches).astype(int).tolist(),
+        "torch_dataset_action_accuracy": float(np.mean(torch_actions == targets)),
+        "jax_dataset_action_accuracy": float(np.mean(jax_actions == targets)),
+        "gate_pass": bool(residual_zero and np.all(action_matches)),
+    }
+    _write_json(output, report)
+    print(json.dumps(report, sort_keys=True), flush=True)
+    if not report["gate_pass"]:
+        raise RuntimeError("Update-zero raw-BT4 legal-action parity gate failed")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     train_parser = subparsers.add_parser("train")
+    train_parser.add_argument(
+        "--recipe",
+        choices=("continuation", "hero"),
+        default="continuation",
+    )
     train_parser.add_argument("--source-state", type=Path, default=_SOURCE_STATE)
+    train_parser.add_argument("--raw-bt4-path", type=Path, default=_RAW_BT4_PATH)
     train_parser.add_argument("--data-root", type=Path, default=_DATA_ROOT)
     train_parser.add_argument("--output-dir", type=Path, required=True)
     train_parser.add_argument("--batch-size", type=int, default=64)
@@ -2631,6 +3559,19 @@ def build_parser() -> argparse.ArgumentParser:
     smoke_parser.add_argument("--threads", type=int, default=2)
     smoke_parser.add_argument("--backward", action="store_true")
     smoke_parser.set_defaults(handler=cpu_smoke)
+
+    hero_verify_parser = subparsers.add_parser("verify-hero-init")
+    hero_verify_parser.add_argument("--raw-bt4-path", type=Path, default=_RAW_BT4_PATH)
+    hero_verify_parser.add_argument("--data-root", type=Path, default=_DATA_ROOT)
+    hero_verify_parser.add_argument("--batch-size", type=int, default=8)
+    hero_verify_parser.add_argument("--seed", type=int, default=31_415)
+    hero_verify_parser.add_argument("--threads", type=int, default=2)
+    hero_verify_parser.add_argument(
+        "--output",
+        type=Path,
+        default=_REPO_ROOT / "artifacts" / "pytorch" / "hero_init_policy_parity.json",
+    )
+    hero_verify_parser.set_defaults(handler=verify_hero_init)
     return parser
 
 
