@@ -162,6 +162,35 @@ expectation nor its scalar convention. A future change to the 64-example
 sample is a scientific change and requires another gradient audit, not an
 automatic batch-ratio correction.
 
+### Post-epoch latent-rank and SIGReg-sample audit
+
+The 10% and 20% frozen validations show target and prediction norms
+contracting together while prediction effective rank rises modestly rather
+than collapsing further. The current audit is incomplete because it records
+prediction effective rank but not target effective rank. On the retained
+halfway and terminal checkpoints, add target effective rank, stable rank,
+top-1/8/16/32 explained-variance fractions, centered RMS, and
+prediction-rank/target-rank ratios by horizon. Preserve the existing zero,
+identity, shuffled-target, and shuffled-action controls.
+
+Before the next training run, benchmark SIGReg physical-example counts 64,
+128, and 256 on an identical batch, recording forward/backward time, peak HBM,
+statistic variance, component-gradient norms, and gradient cosines. Treat a
+sample-count change as an objective change and recalibrate the shared target
+and prediction coefficient from gradients; do not multiply it by a batch
+ratio.
+
+A full batch of 1024 is not attempted with the current materialized
+implementation. Training SIGReg receives two target vectors and eight
+prediction vectors per selected physical example, so counts 64, 128, and
+1024 materialize 640, 1,280, and 10,240 latent vectors respectively before
+the 1,024 random projections and 17-point quadrature. The current batch-1024
+training graph already has less than 700 MiB of NVML headroom. Test a
+full-batch estimator only after implementing a bounded-memory differentiable
+chunked/two-pass reduction of the cosine, sine, and count sufficient
+statistics, and compare its learning result rather than assuming that its
+lower sampling noise is automatically a better regularizer.
+
 ## Frozen learning rates and weight decay
 
 Two disposable, no-checkpoint LR-range runs started from the identical raw
