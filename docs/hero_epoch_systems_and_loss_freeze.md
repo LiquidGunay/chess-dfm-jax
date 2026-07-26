@@ -406,10 +406,19 @@ research/run_gpu.sh .venv/bin/python research/train_torch.py train \
   --hero-milestones \
   --hero-eval-manifest research/eval/hero_epoch_v1/manifest.json \
   --hero-arena-pairs 16 \
-  --hero-arena-additional-ply-cap 16 \
+  --hero-arena-additional-ply-cap 256 \
   --hero-arena-inference-batch-size 16 \
   --save-every 0 \
   --save-updates 13840 \
   --save-final \
   --max-checkpoints 2
 ```
+
+The already-running `torch_hero_epoch_v1` process was launched with an
+additional-ply cap of 16; its immutable `run_config.json` remains the
+authoritative provenance for those live milestones. That cap only checks
+gameplay plumbing and cannot produce a useful strength estimate. The command
+above corrects subsequent hero runs to the repository's established
+development-screen cap of 256. Evaluate the retained halfway and terminal
+checkpoints at cap 256 after training so the GPU remains single-purpose and
+the in-flight epoch is not discarded.
