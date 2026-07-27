@@ -1989,3 +1989,13 @@ sweeps, held-out data, and repeated seeds.
   extension on this direction. The complete scalar record and loss plot are
   `research/analysis/sigreg_sample_count_256_experiment_20260727.json` and
   `.png`.
+- [ ] Run the first post-hero loss ablation in
+  `research/experiment_hero_wdl_ablation.md`: reuse the accepted count-64
+  run as control and train one matched fresh candidate with only
+  `wdl_coeff: 0.25 -> 0.0`. Keep DFM CE, JEPA MSE, both coefficient-2 SIGReg
+  terms, batch 1024, schedule, data order, and systems runtime unchanged.
+  Score the untrained WDL head under the fixed evaluator for diagnosis, but
+  select primarily by the identical 128-pair Arena screen with frozen policy
+  and latent-health guardrails. A positive result still requires a fresh
+  repeat and at least 10% of an epoch; a negative result restores coefficient
+  `0.25` without opening a sweep.

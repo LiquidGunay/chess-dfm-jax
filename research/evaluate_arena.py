@@ -607,10 +607,21 @@ def torch_hero_checkpoint_descriptor(
         raise ValueError(
             "Torch hero run has an invalid SIGReg example count."
         )
+    recorded_wdl_coeff = recorded_config.get("wdl_coeff")
+    if (
+        isinstance(recorded_wdl_coeff, bool)
+        or not isinstance(recorded_wdl_coeff, (int, float))
+        or not math.isfinite(float(recorded_wdl_coeff))
+        or float(recorded_wdl_coeff) < 0.0
+    ):
+        raise ValueError(
+            "Torch hero run has an invalid WDL coefficient."
+        )
     expected_config = dataclasses.asdict(
         dataclasses.replace(
             HERO_CONFIG,
             sigreg_example_count=recorded_sigreg_count,
+            wdl_coeff=float(recorded_wdl_coeff),
             remat_bt4_blocks=True,
             remat_projector_blocks=True,
             remat_dfm_blocks=False,

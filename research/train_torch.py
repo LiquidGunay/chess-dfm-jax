@@ -108,6 +108,12 @@ _LOSS_SUMMARY_METRICS = (
     "jepa_positive_loss",
     "jepa_sigreg_loss",
     "jepa_pred_sigreg_loss",
+    "root_legal_conditional_ce",
+    "weighted_root_legal_conditional_ce",
+    "wdl_loss",
+    "wdl_weighted_loss",
+    "wdl_accuracy",
+    "wdl_expected_value_mse",
     "z_state_norm",
     "z_pred_norm",
     "z_target_norm",
@@ -4806,12 +4812,38 @@ def _apply_sigreg_sample_override(
     )
 
 
+def _apply_hero_wdl_override(
+    config: Config,
+    *,
+    recipe: str,
+    wdl_coeff: float | None,
+) -> Config:
+    """Resolve an explicit hero WDL-objective ablation."""
+
+    if wdl_coeff is None:
+        return config
+    if recipe != "hero":
+        raise ValueError("--wdl-coeff is currently a hero-only experiment")
+    if (
+        isinstance(wdl_coeff, bool)
+        or not math.isfinite(wdl_coeff)
+        or wdl_coeff < 0.0
+    ):
+        raise ValueError("--wdl-coeff must be finite and non-negative")
+    return dataclasses.replace(config, wdl_coeff=float(wdl_coeff))
+
+
 def train(args: argparse.Namespace) -> int:
     config = HERO_CONFIG if args.recipe == "hero" else CONFIG
     config = _apply_sigreg_sample_override(
         config,
         recipe=args.recipe,
         sigreg_example_count=getattr(args, "sigreg_example_count", None),
+    )
+    config = _apply_hero_wdl_override(
+        config,
+        recipe=args.recipe,
+        wdl_coeff=getattr(args, "wdl_coeff", None),
     )
     bt4_norm_impl = getattr(args, "bt4_norm_impl", "eager")
     prefetch_launch = getattr(args, "prefetch_launch", "step-start")
@@ -8736,6 +8768,14 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Override the fixed hero SIGReg estimator sample count; this is "
             "an objective ablation and is recorded in the resume contract."
+        ),
+    )
+    train_parser.add_argument(
+        "--wdl-coeff",
+        type=float,
+        help=(
+            "Override the hero predicted-state WDL coefficient; this is an "
+            "objective ablation and is recorded in the resume contract."
         ),
     )
     train_parser.add_argument("--steps", type=int, default=1)

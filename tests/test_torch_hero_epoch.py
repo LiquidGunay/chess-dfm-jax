@@ -18,6 +18,7 @@ from research.train_torch import (
     RawLayerNorm,
     StateProjector,
     _analyze_lr_range_records,
+    _apply_hero_wdl_override,
     _apply_sigreg_sample_override,
     _canonicalize_trajectory_batch_reference,
     _hero_milestone_update,
@@ -278,6 +279,38 @@ def test_sigreg_sample_override_is_explicit_and_hero_only():
             recipe="hero",
             sigreg_example_count=0,
         )
+
+
+def test_wdl_override_is_explicit_and_hero_only():
+    unchanged = _apply_hero_wdl_override(
+        HERO_CONFIG,
+        recipe="hero",
+        wdl_coeff=None,
+    )
+    candidate = _apply_hero_wdl_override(
+        HERO_CONFIG,
+        recipe="hero",
+        wdl_coeff=0.0,
+    )
+    assert unchanged == HERO_CONFIG
+    assert candidate.wdl_coeff == 0.0
+    assert HERO_CONFIG.wdl_coeff == 0.25
+    assert candidate.sigreg_example_count == 64
+    assert candidate.target_sigreg_coeff == candidate.pred_sigreg_coeff == 2.0
+
+    with pytest.raises(ValueError, match="hero-only"):
+        _apply_hero_wdl_override(
+            HERO_CONFIG,
+            recipe="continuation",
+            wdl_coeff=0.0,
+        )
+    for value in (-0.1, float("nan"), float("inf")):
+        with pytest.raises(ValueError, match="finite and non-negative"):
+            _apply_hero_wdl_override(
+                HERO_CONFIG,
+                recipe="hero",
+                wdl_coeff=value,
+            )
 
 
 def test_hero_optimizer_hyperparameters_are_frozen_after_lr_range():
