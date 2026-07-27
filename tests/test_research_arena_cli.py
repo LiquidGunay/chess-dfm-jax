@@ -278,6 +278,98 @@ def test_torch_hero_checkpoint_descriptor_pins_canonical_recipe(
     )
     assert descriptor.descriptor["research_update"] == 27_679
     assert descriptor.descriptor["state"]["sha256"] == state_sha256
+    assert descriptor.descriptor["checkpoint_storage_kind"] == "model_only"
+
+
+def test_torch_hero_checkpoint_descriptor_accepts_recovery_state(
+    workspace_tmp: Path,
+):
+    import dataclasses
+
+    from research.train_torch import HERO_CONFIG
+
+    models_dir = workspace_tmp / "models"
+    models_dir.mkdir()
+    model_path = models_dir / "BT4_exported.pb.gz"
+    model_path.write_bytes(b"fixture-bt4")
+    run_root = workspace_tmp / "torch-hero-run"
+    checkpoint_dir = run_root / "checkpoints" / "update00013840"
+    checkpoint_dir.mkdir(parents=True)
+    state_path = checkpoint_dir / "state.safetensors"
+    state_path.write_bytes(b"fixture-hero-recovery-state")
+    state_sha256 = hashlib.sha256(state_path.read_bytes()).hexdigest()
+    expected_config = dataclasses.asdict(
+        dataclasses.replace(
+            HERO_CONFIG,
+            remat_bt4_blocks=True,
+            remat_projector_blocks=True,
+            remat_dfm_blocks=False,
+            use_bt4_sdpa=True,
+            use_head_sdpa=True,
+        )
+    )
+    compile_regions = [
+        "state_projector_blocks",
+        "dfm_blocks",
+        "jepa_transition",
+    ]
+    git_commit = "c" * 40
+    resume_contract = {
+        "schema_version": "torch-training-resume-contract-v1",
+        "framework": "torch",
+        "recipe": "hero",
+        "git_commit": git_commit,
+        "config": expected_config,
+        "runtime": {"compiled_regions": compile_regions},
+    }
+    manifest = {
+        "format": "chess-dfm-torch-training-v1",
+        "model_only": False,
+        "optimizer_resume_supported": True,
+        "optimizer_update": 13_840,
+        "source_mapping_sha256": "a" * 64,
+        "resume_contract": resume_contract,
+        "resume_contract_sha256": hashlib.sha256(
+            _canonical_json_bytes(resume_contract)
+        ).hexdigest(),
+        "state": {
+            "path": "state.safetensors",
+            "size_bytes": state_path.stat().st_size,
+            "sha256": state_sha256,
+            "model_leaf_count": 462,
+        },
+    }
+    (checkpoint_dir / "manifest.json").write_text(
+        json.dumps(manifest),
+        encoding="utf-8",
+    )
+    run_config = {
+        "framework": "torch",
+        "execution": "regional-compile",
+        "torch_compile": True,
+        "recipe": "hero",
+        "git_commit": git_commit,
+        "compile_regions": compile_regions,
+        "config": expected_config,
+    }
+    (run_root / "run_config.json").write_text(
+        json.dumps(run_config),
+        encoding="utf-8",
+    )
+
+    descriptor = torch_hero_checkpoint_descriptor(
+        checkpoint_dir,
+        models_dir=models_dir,
+    )
+
+    assert descriptor.checkpoint_dir == checkpoint_dir
+    assert descriptor.descriptor["research_update"] == 13_840
+    assert descriptor.descriptor["state"]["sha256"] == state_sha256
+    assert descriptor.descriptor["state"]["leaf_count"] == 462
+    assert (
+        descriptor.descriptor["checkpoint_storage_kind"]
+        == "training_recovery"
+    )
 
 
 def test_hero_development_tier_resolves_large_cap256_run(

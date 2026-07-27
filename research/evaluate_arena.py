@@ -541,10 +541,8 @@ def torch_hero_checkpoint_descriptor(
     candidate = require_within_workspace(path)
     if (candidate / "checkpoint" / "manifest.json").is_file():
         checkpoint_dir = require_within_workspace(candidate / "checkpoint")
-        run_root = candidate
     elif (candidate / "manifest.json").is_file():
         checkpoint_dir = candidate
-        run_root = require_within_workspace(candidate.parent)
     else:
         raise FileNotFoundError(
             f"No Torch hero checkpoint manifest under {candidate}"
@@ -555,14 +553,36 @@ def torch_hero_checkpoint_descriptor(
         manifest_path,
         label="Torch hero checkpoint manifest",
     )
-    if manifest.get("format") != "chess-dfm-torch-model-v1":
+    checkpoint_format = manifest.get("format")
+    if checkpoint_format == "chess-dfm-torch-model-v1":
+        if manifest.get("model_only") is not True:
+            raise ValueError("Torch hero model checkpoint must be model-only.")
+        expected_state_name = "model.safetensors"
+        model_leaf_count_key = "leaf_count"
+        checkpoint_storage_kind = "model_only"
+        run_root = require_within_workspace(checkpoint_dir.parent)
+    elif checkpoint_format == "chess-dfm-torch-training-v1":
+        if (
+            manifest.get("model_only") is not False
+            or manifest.get("optimizer_resume_supported") is not True
+        ):
+            raise ValueError(
+                "Torch hero recovery checkpoint has an invalid resume contract."
+            )
+        if checkpoint_dir.parent.name != "checkpoints":
+            raise ValueError(
+                "Torch hero recovery checkpoint must be under checkpoints/."
+            )
+        expected_state_name = "state.safetensors"
+        model_leaf_count_key = "model_leaf_count"
+        checkpoint_storage_kind = "training_recovery"
+        run_root = require_within_workspace(checkpoint_dir.parent.parent)
+    else:
         raise ValueError("Unsupported Torch hero checkpoint format.")
-    if manifest.get("model_only") is not True:
-        raise ValueError("Torch hero arena checkpoint must be model-only.")
     state = manifest.get("state")
-    if not isinstance(state, dict) or state.get("path") != "model.safetensors":
+    if not isinstance(state, dict) or state.get("path") != expected_state_name:
         raise ValueError("Torch hero checkpoint has an invalid state record.")
-    state_path = require_within_workspace(checkpoint_dir / "model.safetensors")
+    state_path = require_within_workspace(checkpoint_dir / expected_state_name)
     if (
         not state_path.is_file()
         or state_path.stat().st_size != int(state.get("size_bytes", -1))
@@ -604,6 +624,30 @@ def torch_hero_checkpoint_descriptor(
             "Torch hero checkpoint config differs from the checked-out hero "
             "recipe; evaluate it at its recorded git commit."
         )
+    if checkpoint_storage_kind == "training_recovery":
+        resume_contract = manifest.get("resume_contract")
+        if not isinstance(resume_contract, dict):
+            raise ValueError(
+                "Torch hero recovery checkpoint has no resume contract."
+            )
+        if _json_sha256(resume_contract) != manifest.get(
+            "resume_contract_sha256"
+        ):
+            raise ValueError(
+                "Torch hero recovery resume-contract digest mismatch."
+            )
+        runtime = resume_contract.get("runtime")
+        if (
+            resume_contract.get("framework") != "torch"
+            or resume_contract.get("recipe") != "hero"
+            or resume_contract.get("git_commit") != run_config.get("git_commit")
+            or resume_contract.get("config") != expected_config
+            or not isinstance(runtime, dict)
+            or runtime.get("compiled_regions") != expected_compile_regions
+        ):
+            raise ValueError(
+                "Torch hero recovery checkpoint training contract mismatch."
+            )
 
     model_path = require_within_workspace(models_dir / "BT4_exported.pb.gz")
     if not model_path.is_file():
@@ -619,12 +663,13 @@ def torch_hero_checkpoint_descriptor(
         "optimizer_resume_supported": bool(
             manifest.get("optimizer_resume_supported", False)
         ),
+        "checkpoint_storage_kind": checkpoint_storage_kind,
         "source_mapping_sha256": manifest.get("source_mapping_sha256"),
         "state": {
             "path": str(state_path),
             "size_bytes": int(state["size_bytes"]),
             "sha256": str(state["sha256"]),
-            "leaf_count": int(state["leaf_count"]),
+            "leaf_count": int(state[model_leaf_count_key]),
         },
         "lineage": {
             "recipe": "hero",
@@ -928,7 +973,7 @@ def load_torch_hero_policy(
         Config,
         TorchHeroArenaPolicy,
         _apply_compile_regions,
-        load_model_checkpoint,
+        load_checkpoint_model_for_evaluation,
         load_raw_bt4_hero_model,
     )
 
@@ -947,7 +992,7 @@ def load_torch_hero_policy(
         raw_bt4_path=model_path,
         config=config,
     )
-    restored = load_model_checkpoint(
+    restored = load_checkpoint_model_for_evaluation(
         checkpoint_dir=checkpoint.checkpoint_dir,
         model=model,
     )

@@ -3778,6 +3778,67 @@ def load_model_checkpoint(
     return manifest
 
 
+def load_checkpoint_model_for_evaluation(
+    *,
+    checkpoint_dir: Path,
+    model: nn.Module,
+) -> dict[str, Any]:
+    """Restore model tensors from either model-only or recovery state."""
+
+    root = _require_workspace(checkpoint_dir, exists=True)
+    manifest_path = _require_workspace(root / "manifest.json", exists=True)
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    checkpoint_format = manifest.get("format")
+    if checkpoint_format == "chess-dfm-torch-model-v1":
+        return load_model_checkpoint(
+            checkpoint_dir=root,
+            model=model,
+        )
+    if checkpoint_format != "chess-dfm-torch-training-v1":
+        raise ValueError(
+            "Unsupported evaluation checkpoint format: "
+            f"{checkpoint_format!r}"
+        )
+
+    from safetensors import safe_open
+
+    state_path, verified_manifest = _verified_training_checkpoint(root)
+    named = dict(model.named_parameters())
+    with safe_open(state_path, framework="pt", device="cpu") as payload:
+        loaded_keys = set(payload.keys())
+        model_prefix = "model."
+        loaded_model_names = {
+            key[len(model_prefix) :]
+            for key in loaded_keys
+            if key.startswith(model_prefix)
+        }
+        if loaded_model_names != set(named):
+            raise ValueError(
+                "Training checkpoint model tensor mismatch: "
+                f"missing={sorted(set(named) - loaded_model_names)[:10]}, "
+                f"extra={sorted(loaded_model_names - set(named))[:10]}"
+            )
+        if int(verified_manifest["state"]["model_leaf_count"]) != len(named):
+            raise ValueError(
+                "Training checkpoint model leaf count does not match"
+            )
+        with torch.no_grad():
+            for name, parameter in named.items():
+                value = payload.get_tensor(f"{model_prefix}{name}")
+                if (
+                    value.shape != parameter.shape
+                    or value.dtype != parameter.dtype
+                ):
+                    raise ValueError(
+                        f"Training checkpoint model ABI mismatch at {name}: "
+                        f"{value.shape}/{value.dtype} != "
+                        f"{parameter.shape}/{parameter.dtype}"
+                    )
+                parameter.copy_(value.to(parameter.device))
+                del value
+    return verified_manifest
+
+
 def load_model_checkpoint_numpy_tree(
     *,
     checkpoint_dir: Path,
@@ -6885,7 +6946,7 @@ def evaluate_hero_pool(args: argparse.Namespace) -> int:
     )
     checkpoint_manifest = None
     if args.checkpoint_dir is not None:
-        checkpoint_manifest = load_model_checkpoint(
+        checkpoint_manifest = load_checkpoint_model_for_evaluation(
             checkpoint_dir=args.checkpoint_dir,
             model=model,
         )

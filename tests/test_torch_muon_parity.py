@@ -13,6 +13,7 @@ from research.train_torch import (
     MuonAdamW,
     _prepare_training_step,
     _summarize_training_records,
+    load_checkpoint_model_for_evaluation,
     load_model_checkpoint,
     load_model_checkpoint_numpy_tree,
     load_training_checkpoint,
@@ -275,6 +276,31 @@ def test_torch_training_checkpoint_resumes_optimizer_exactly(tmp_path):
     assert manifest["optimizer_update"] == 2
     assert manifest["optimizer_examples_seen"] == 16
     assert manifest["next_data_cursor"] == 19
+
+    evaluation_model = TinyModel(
+        np.zeros_like(matrix),
+        np.zeros_like(bias),
+    )
+    evaluation_manifest = load_checkpoint_model_for_evaluation(
+        checkpoint_dir=checkpoint_dir,
+        model=evaluation_model,
+    )
+    assert evaluation_manifest == manifest
+    for (expected_name, expected_parameter), (
+        evaluation_name,
+        evaluation_parameter,
+    ) in zip(
+        staged_model.named_parameters(),
+        evaluation_model.named_parameters(),
+        strict=True,
+    ):
+        assert evaluation_name == expected_name
+        torch.testing.assert_close(
+            evaluation_parameter,
+            expected_parameter,
+            rtol=0.0,
+            atol=0.0,
+        )
 
     resumed_model = TinyModel(
         np.zeros_like(matrix),
