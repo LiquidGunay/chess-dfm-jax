@@ -596,9 +596,21 @@ def torch_hero_checkpoint_descriptor(
         run_config_path,
         label="Torch hero run config",
     )
+    recorded_config = run_config.get("config")
+    if not isinstance(recorded_config, dict):
+        raise ValueError("Torch hero run has no recorded model config.")
+    recorded_sigreg_count = recorded_config.get("sigreg_example_count")
+    if (
+        type(recorded_sigreg_count) is not int
+        or recorded_sigreg_count < 1
+    ):
+        raise ValueError(
+            "Torch hero run has an invalid SIGReg example count."
+        )
     expected_config = dataclasses.asdict(
         dataclasses.replace(
             HERO_CONFIG,
+            sigreg_example_count=recorded_sigreg_count,
             remat_bt4_blocks=True,
             remat_projector_blocks=True,
             remat_dfm_blocks=False,
@@ -619,7 +631,7 @@ def torch_hero_checkpoint_descriptor(
         or run_config.get("compile_regions") != expected_compile_regions
     ):
         raise ValueError("Torch hero run execution contract mismatch.")
-    if run_config.get("config") != expected_config:
+    if recorded_config != expected_config:
         raise ValueError(
             "Torch hero checkpoint config differs from the checked-out hero "
             "recipe; evaluate it at its recorded git commit."

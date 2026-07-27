@@ -18,6 +18,7 @@ from research.train_torch import (
     RawLayerNorm,
     StateProjector,
     _analyze_lr_range_records,
+    _apply_sigreg_sample_override,
     _canonicalize_trajectory_batch_reference,
     _hero_milestone_update,
     _latent_spectrum_metrics,
@@ -253,6 +254,30 @@ def test_hero_loss_contract_is_frozen_after_gradient_audit():
     assert HERO_CONFIG.target_sigreg_coeff == HERO_CONFIG.pred_sigreg_coeff == 2.0
     assert HERO_CONFIG.sigreg_example_count == 64
     assert HERO_CONFIG.loss_clip_value == 0.0
+
+
+def test_sigreg_sample_override_is_explicit_and_hero_only():
+    candidate = _apply_sigreg_sample_override(
+        HERO_CONFIG,
+        recipe="hero",
+        sigreg_example_count=256,
+    )
+    assert candidate.sigreg_example_count == 256
+    assert HERO_CONFIG.sigreg_example_count == 64
+    assert candidate.target_sigreg_coeff == candidate.pred_sigreg_coeff == 2.0
+
+    with pytest.raises(ValueError, match="hero-only"):
+        _apply_sigreg_sample_override(
+            HERO_CONFIG,
+            recipe="continuation",
+            sigreg_example_count=256,
+        )
+    with pytest.raises(ValueError, match="positive integer"):
+        _apply_sigreg_sample_override(
+            HERO_CONFIG,
+            recipe="hero",
+            sigreg_example_count=0,
+        )
 
 
 def test_hero_optimizer_hyperparameters_are_frozen_after_lr_range():

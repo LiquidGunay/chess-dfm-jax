@@ -1957,16 +1957,26 @@ sweeps, held-out data, and repeated seeds.
   board-enumerating oracle over 8,192 sampled trajectories / 65,536 valid
   actions, and all training metrics match the previous selected runtime
   exactly update by update.
-- [ ] Before changing the objective, benchmark normalized SIGReg sample counts
+- [x] Before changing the objective, benchmark normalized SIGReg sample counts
   64, 128, and 256 on one identical batch. Record target/prediction statistic
   dispersion across deterministic subsets, component and parameter-group
   gradient norms/cosines, forward/backward time, and peak HBM. Do not change
   the shared coefficient automatically; recalibrate it only if a sample-count
-  change is scientifically selected.
+  change is scientifically selected. The no-update fresh/terminal audit keeps
+  the coefficient at `2.0`, finds effectively unchanged peak HBM and only
+  about `3.2 ms` additional isolated statistic time for count 256 versus 64,
+  and reduces shared-statistic subset dispersion by `69.6%` fresh and `79.5%`
+  terminal. Because the terminal gradient changes materially, count 256 is a
+  scientific candidate rather than an automatic baseline update. See
+  `research/analysis/hero_sigreg_sample_audit_20260727.json`.
 - [ ] Resume fresh-initialization one-change Torch research from raw BT4 plus
   fresh DFM/JEPA modules. Use 30-minute runs only as a cheap discovery gate;
   rank them on the frozen validation metrics and record a paired Arena screen,
   but treat its Elo as low-power. Repeat promising changes and extend them to
   at least 10% of the training examples before promotion. Keep the eight-pass
   inference budget, validation pools, opening pairs, loss logging, and
-  checkpoint cap fixed.
+  checkpoint cap fixed. The first matched test is count 64 versus count 256
+  for 1,024 updates each under
+  `research/experiment_sigreg_sample_count_256.md`; the longer budget crosses
+  the fixed 566,866-example LR warmup and makes the comparison more useful
+  than a purely warmup-bound 30-minute screen.

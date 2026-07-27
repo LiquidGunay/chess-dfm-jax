@@ -4781,8 +4781,38 @@ def _training_resume_contract(
     }
 
 
+def _apply_sigreg_sample_override(
+    config: Config,
+    *,
+    recipe: str,
+    sigreg_example_count: int | None,
+) -> Config:
+    """Resolve an explicit scientific estimator-size override."""
+
+    if sigreg_example_count is None:
+        return config
+    if recipe != "hero":
+        raise ValueError(
+            "--sigreg-example-count is currently a hero-only experiment"
+        )
+    if (
+        isinstance(sigreg_example_count, bool)
+        or sigreg_example_count < 1
+    ):
+        raise ValueError("--sigreg-example-count must be a positive integer")
+    return dataclasses.replace(
+        config,
+        sigreg_example_count=sigreg_example_count,
+    )
+
+
 def train(args: argparse.Namespace) -> int:
     config = HERO_CONFIG if args.recipe == "hero" else CONFIG
+    config = _apply_sigreg_sample_override(
+        config,
+        recipe=args.recipe,
+        sigreg_example_count=getattr(args, "sigreg_example_count", None),
+    )
     bt4_norm_impl = getattr(args, "bt4_norm_impl", "eager")
     prefetch_launch = getattr(args, "prefetch_launch", "step-start")
     if args.recipe != "hero" and bt4_norm_impl != "eager":
@@ -4822,7 +4852,7 @@ def train(args: argparse.Namespace) -> int:
         raise ValueError("Set --steps or --train-seconds")
     if args.batch_size < config.sigreg_example_count:
         raise ValueError(
-            "The accepted fixed-64 SIGReg contract requires --batch-size >= "
+            "The selected SIGReg estimator requires --batch-size >= "
             f"{config.sigreg_example_count}"
         )
     if args.log_every < 1:
@@ -8700,6 +8730,14 @@ def build_parser() -> argparse.ArgumentParser:
     train_parser.add_argument("--resume-checkpoint", type=Path)
     train_parser.add_argument("--output-dir", type=Path, required=True)
     train_parser.add_argument("--batch-size", type=int, default=64)
+    train_parser.add_argument(
+        "--sigreg-example-count",
+        type=int,
+        help=(
+            "Override the fixed hero SIGReg estimator sample count; this is "
+            "an objective ablation and is recorded in the resume contract."
+        ),
+    )
     train_parser.add_argument("--steps", type=int, default=1)
     train_parser.add_argument("--train-seconds", type=float, default=0.0)
     train_parser.add_argument("--data-start", type=int, default=0)
