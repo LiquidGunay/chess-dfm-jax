@@ -6991,6 +6991,17 @@ def sigreg_sample_audit(args: argparse.Namespace) -> int:
                 "status": "oom",
                 "error": str(exc),
             }
+            print(
+                json.dumps(
+                    {
+                        "sigreg_sample_audit_count": count,
+                        "status": "oom",
+                        "error": str(exc),
+                    },
+                    sort_keys=True,
+                ),
+                flush=True,
+            )
             model.zero_grad(set_to_none=True)
             torch.cuda.empty_cache()
             break
@@ -7030,6 +7041,7 @@ def sigreg_sample_audit(args: argparse.Namespace) -> int:
                 name: value.detach().to(device="cpu", copy=True)
                 for name, value in captured_inputs.items()
             }
+            del captured_inputs
         else:
             assert reference_gradients is not None
             assert reference_norms is not None
@@ -7070,7 +7082,34 @@ def sigreg_sample_audit(args: argparse.Namespace) -> int:
             "gradient_groups": gradient_norms,
             "gradient_vs_baseline": cosine_to_baseline,
         }
+        print(
+            json.dumps(
+                {
+                    "sigreg_sample_audit_count": count,
+                    "status": "complete",
+                    "forward_cuda_seconds": records[str(count)][
+                        "forward_cuda_seconds"
+                    ],
+                    "backward_cuda_seconds": records[str(count)][
+                        "backward_cuda_seconds"
+                    ],
+                    "peak_allocated_bytes": records[str(count)][
+                        "peak_allocated_bytes"
+                    ],
+                },
+                sort_keys=True,
+            ),
+            flush=True,
+        )
         del aux, capture, components, objective
+
+    if failed_count is not None:
+        failed_index = counts.index(failed_count)
+        for count in counts[failed_index + 1 :]:
+            records[str(count)] = {
+                "status": "skipped_after_oom",
+                "blocked_by_sample_count": failed_count,
+            }
 
     scalar_dispersion: dict[str, Any] = {}
     if failed_count is None:
@@ -7184,7 +7223,9 @@ def sigreg_sample_audit(args: argparse.Namespace) -> int:
         scalar_peak_reserved = None
 
     completed_counts = [
-        count for count in counts if records[str(count)]["status"] == "complete"
+        count
+        for count in counts
+        if records.get(str(count), {}).get("status") == "complete"
     ]
     gate_checks = {
         "all_requested_counts_complete": completed_counts == list(counts),
