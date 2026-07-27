@@ -1,7 +1,7 @@
 # Experiment: proposal-derived JEPA feedback before the final DFM pass
 
-Status: preregistered and CPU-gated on 2026-07-27; guarded systems smoke is
-next.
+Status: preregistered, CPU-gated, and systems-gated on 2026-07-27; the
+matched 1,024-update run is authorized.
 
 ## Question
 
@@ -121,6 +121,27 @@ the scientific graph.
 
 Write every loss/feedback/system scalar and exactly one terminal model-only
 checkpoint.
+
+### Systems-gate result
+
+The guarded checkpoint-free batch-1,024 smoke completed 20/20 finite updates
+with zero skips and no resource warning. Updates 2--20 averaged
+`251.329` examples/s (`4.07435` seconds/update), versus `256.002`
+examples/s for the selected feedback-off runtime. Peak allocated HBM was
+`21,781,476,864` bytes and guard peak process-group RSS was
+`2,528,571,392` bytes. No checkpoint was written.
+
+The stopped proposal gate averaged `0.61591`; applied feedback RMS was
+nonzero and reached `0.03870` by update 20. Its preliminary-minus-final CE
+effect remained around `-1e-5` during this very early warmup because the DFM
+residual head begins at zero. The smoke gate requires a real, finite bridge,
+not an early strength benefit; the frozen 1,024-update usefulness gate below
+must resolve whether feedback eventually improves the logits.
+
+The compact smoke report is
+`research/runs/torch_autoresearch_feedback_smoke_b1024_v1/report.json`,
+SHA-256
+`8e11fded40a7cab730cc8d1741104ac885a0ca7a88c8d8e399a0141332d3d4e3`.
 
 ## Frozen evaluation and decision
 

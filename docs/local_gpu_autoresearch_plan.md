@@ -2022,4 +2022,7 @@ sweeps, held-out data, and repeated seeds.
   active-feedback frozen validation, and identical 128-pair Arena. Arena,
   feedback-usefulness, latent-health, training-throughput, and inference-time
   gates all apply; a positive screen still requires a repeat and 10%-epoch
-  extension.
+  extension. The 48 focused CPU tests pass. The 20-update systems smoke also
+  passes with zero skips, warm-step throughput `251.329` examples/s,
+  `21,781,476,864` bytes peak allocated HBM, nonzero applied feedback, and no
+  checkpoint; the matched candidate is authorized.
