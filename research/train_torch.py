@@ -245,13 +245,42 @@ class RawLinear(nn.Module):
 
 
 class RawLayerNorm(nn.Module):
-    def __init__(self, width: int, *, dtype: torch.dtype, eps: float = 1e-3):
+    def __init__(
+        self,
+        width: int,
+        *,
+        dtype: torch.dtype,
+        eps: float = 1e-3,
+        implementation: str = "eager",
+    ):
         super().__init__()
+        if implementation not in {"eager", "native-fp32", "native-bf16"}:
+            raise ValueError(
+                f"Unsupported raw LayerNorm implementation: {implementation!r}"
+            )
+        self.width = int(width)
         self.scale = _raw_parameter((width,), dtype)
         self.bias = _raw_parameter((width,), dtype)
         self.eps = float(eps)
+        self.implementation = implementation
 
     def forward(self, x: Tensor, compute_dtype: torch.dtype) -> Tensor:
+        if self.implementation == "native-fp32":
+            return F.layer_norm(
+                x.float(),
+                (self.width,),
+                self.scale.float(),
+                self.bias.float(),
+                self.eps,
+            ).to(compute_dtype)
+        if self.implementation == "native-bf16":
+            return F.layer_norm(
+                x.to(compute_dtype),
+                (self.width,),
+                self.scale.to(compute_dtype),
+                self.bias.to(compute_dtype),
+                self.eps,
+            )
         stats = x.float()
         mean = stats.mean(dim=-1, keepdim=True)
         variance = (stats - mean).square().mean(dim=-1, keepdim=True)
@@ -282,17 +311,25 @@ class RawEmbedding(nn.Module):
 
 
 class BT4InputEmbedding(nn.Module):
-    def __init__(self):
+    def __init__(self, *, norm_impl: str = "eager"):
         super().__init__()
         dtype = torch.bfloat16
         self.preproc = RawLinear(768, 32768, dtype=dtype)
         self.proj = RawLinear(624, 1024, dtype=dtype)
-        self.ln = RawLayerNorm(1024, dtype=dtype)
+        self.ln = RawLayerNorm(
+            1024,
+            dtype=dtype,
+            implementation=norm_impl,
+        )
         self.mul_gate = _raw_parameter((64, 1024), dtype)
         self.add_gate = _raw_parameter((64, 1024), dtype)
         self.ffn1 = RawLinear(1024, 1536, dtype=dtype)
         self.ffn2 = RawLinear(1536, 1024, dtype=dtype)
-        self.ffn_ln = RawLayerNorm(1024, dtype=dtype)
+        self.ffn_ln = RawLayerNorm(
+            1024,
+            dtype=dtype,
+            implementation=norm_impl,
+        )
 
     def forward(
         self,
@@ -317,14 +354,22 @@ class BT4InputEmbedding(nn.Module):
 
 
 class BT4Smolgen(nn.Module):
-    def __init__(self):
+    def __init__(self, *, norm_impl: str = "eager"):
         super().__init__()
         dtype = torch.bfloat16
         self.compress = RawLinear(1024, 32, dtype=dtype, bias=False)
         self.dense1 = RawLinear(2048, 256, dtype=dtype)
-        self.ln1 = RawLayerNorm(256, dtype=dtype)
+        self.ln1 = RawLayerNorm(
+            256,
+            dtype=dtype,
+            implementation=norm_impl,
+        )
         self.dense2 = RawLinear(256, 8192, dtype=dtype)
-        self.ln2 = RawLayerNorm(8192, dtype=dtype)
+        self.ln2 = RawLayerNorm(
+            8192,
+            dtype=dtype,
+            implementation=norm_impl,
+        )
         self.shared_w = _raw_parameter((256, 4096), dtype)
 
     def forward(self, x: Tensor, compute_dtype: torch.dtype) -> Tensor:
@@ -337,7 +382,12 @@ class BT4Smolgen(nn.Module):
 
 
 class BT4EncoderLayer(nn.Module):
-    def __init__(self, *, use_sdpa: bool = False):
+    def __init__(
+        self,
+        *,
+        use_sdpa: bool = False,
+        norm_impl: str = "eager",
+    ):
         super().__init__()
         self.use_sdpa = bool(use_sdpa)
         dtype = torch.bfloat16
@@ -348,11 +398,19 @@ class BT4EncoderLayer(nn.Module):
         self.wv = _raw_parameter((1024, 1024), dtype)
         self.wv_b = _raw_parameter((1024,), dtype)
         self.wo = RawLinear(1024, 1024, dtype=dtype)
-        self.ln_attn = RawLayerNorm(1024, dtype=dtype)
+        self.ln_attn = RawLayerNorm(
+            1024,
+            dtype=dtype,
+            implementation=norm_impl,
+        )
         self.ffn1 = RawLinear(1024, 1536, dtype=dtype)
         self.ffn2 = RawLinear(1536, 1024, dtype=dtype)
-        self.ln_ffn = RawLayerNorm(1024, dtype=dtype)
-        self.smolgen = BT4Smolgen()
+        self.ln_ffn = RawLayerNorm(
+            1024,
+            dtype=dtype,
+            implementation=norm_impl,
+        )
+        self.smolgen = BT4Smolgen(norm_impl=norm_impl)
 
     def forward(self, x: Tensor, alpha: float, compute_dtype: torch.dtype) -> Tensor:
         batch, sequence, _ = x.shape
@@ -431,11 +489,16 @@ class BT4Encoder(nn.Module):
         *,
         include_policy_head: bool = False,
         use_sdpa: bool = False,
+        norm_impl: str = "eager",
     ):
         super().__init__()
-        self.embedding = BT4InputEmbedding()
+        self.embedding = BT4InputEmbedding(norm_impl=norm_impl)
         self.layers = nn.ModuleList(
-            BT4EncoderLayer(use_sdpa=use_sdpa) for _ in range(15)
+            BT4EncoderLayer(
+                use_sdpa=use_sdpa,
+                norm_impl=norm_impl,
+            )
+            for _ in range(15)
         )
         self.policy_head = BT4PolicyHead() if include_policy_head else None
         self.alpha = float((2.0 * len(self.layers)) ** -0.25)
@@ -716,13 +779,20 @@ class ValueWDLHead(nn.Module):
 
 
 class JointModel(nn.Module):
-    def __init__(self, config: Config = CONFIG):
+    def __init__(
+        self,
+        config: Config = CONFIG,
+        *,
+        bt4_norm_impl: str = "eager",
+    ):
         super().__init__()
         self.config = config
+        self.bt4_norm_impl = bt4_norm_impl
         dtype = torch.float32
         self.encoder = BT4Encoder(
             include_policy_head=config.use_bt4_policy_residual,
             use_sdpa=config.use_bt4_sdpa,
+            norm_impl=bt4_norm_impl,
         )
         self.state_projector = StateProjector(config)
         self.dfm_state_projector = RawLinear(1024, config.token_dim, dtype=dtype)
@@ -2862,6 +2932,7 @@ def load_raw_bt4_hero_model(
     device: torch.device,
     raw_bt4_path: Path = _RAW_BT4_PATH,
     config: Config = HERO_CONFIG,
+    bt4_norm_impl: str = "eager",
 ) -> tuple[JointModel, dict[str, Any]]:
     if not config.use_bt4_policy_residual:
         raise ValueError("Hero model config must enable the BT4 policy residual")
@@ -2879,7 +2950,7 @@ def load_raw_bt4_hero_model(
     from chess_dfm_jax.policy import attention_policy_map
     from chess_dfm_jax.weights import load_pb_gz, map_bt4_weights
 
-    model = JointModel(config)
+    model = JointModel(config, bt4_norm_impl=bt4_norm_impl)
     fresh_manifest = initialize_fresh_modules(model, seed=config.init_seed)
     mapped = map_bt4_weights(
         load_pb_gz(str(source_path)),
@@ -2899,6 +2970,7 @@ def load_raw_bt4_hero_model(
         },
         "raw_mapping": raw_mapping,
         "fresh": fresh_manifest,
+        "bt4_norm_impl": bt4_norm_impl,
     }
 
 
@@ -4393,6 +4465,7 @@ def _training_resume_contract(
             "attention_impl": args.attention_impl,
             "compile_regions": args.compile_regions,
             "compiled_regions": list(compiled_regions),
+            "bt4_norm_impl": getattr(args, "bt4_norm_impl", "eager"),
             "prefetch_depth": args.prefetch_depth,
             "hero_milestones": _hero_milestone_contract(
                 args,
@@ -4410,6 +4483,9 @@ def _training_resume_contract(
 
 def train(args: argparse.Namespace) -> int:
     config = HERO_CONFIG if args.recipe == "hero" else CONFIG
+    bt4_norm_impl = getattr(args, "bt4_norm_impl", "eager")
+    if args.recipe != "hero" and bt4_norm_impl != "eager":
+        raise ValueError("Fused BT4 LayerNorm is currently a hero-only runtime")
     hero_milestones_enabled = bool(
         getattr(args, "hero_milestones", False)
     )
@@ -4574,6 +4650,7 @@ def train(args: argparse.Namespace) -> int:
             device=device,
             raw_bt4_path=args.raw_bt4_path,
             config=config,
+            bt4_norm_impl=bt4_norm_impl,
         )
         source_record = source_mapping
     else:
@@ -5494,6 +5571,7 @@ def runtime_parity(args: argparse.Namespace) -> int:
 
     def run_backward(
         compile_regions: str,
+        bt4_norm_impl: str,
     ) -> tuple[
         JointModel,
         dict[str, Any],
@@ -5507,6 +5585,7 @@ def runtime_parity(args: argparse.Namespace) -> int:
             device=device,
             raw_bt4_path=args.raw_bt4_path,
             config=config,
+            bt4_norm_impl=bt4_norm_impl,
         )
         model.train()
         compiled = _apply_compile_regions(model, compile_regions)
@@ -5549,7 +5628,7 @@ def runtime_parity(args: argparse.Namespace) -> int:
         reference_seconds,
         reference_peak_allocated,
         reference_peak_reserved,
-    ) = run_backward("fresh")
+    ) = run_backward("fresh", "eager")
     reference_gradients: dict[str, Tensor] = {}
     reference_missing: set[str] = set()
     for name, parameter in reference_model.named_parameters():
@@ -5569,7 +5648,10 @@ def runtime_parity(args: argparse.Namespace) -> int:
         candidate_seconds,
         candidate_peak_allocated,
         candidate_peak_reserved,
-    ) = run_backward(args.candidate_compile_regions)
+    ) = run_backward(
+        args.candidate_compile_regions,
+        args.candidate_bt4_norm_impl,
+    )
 
     accumulators: dict[str, dict[str, float | int | bool]] = {
         "all": {
@@ -5749,6 +5831,7 @@ def runtime_parity(args: argparse.Namespace) -> int:
         "seed": args.seed,
         "config": dataclasses.asdict(config),
         "reference": {
+            "bt4_norm_impl": "eager",
             "compile_regions": reference_lineage["compiled_regions"],
             "metrics": reference_metrics,
             "forward_backward_seconds_including_compile": reference_seconds,
@@ -5757,6 +5840,7 @@ def runtime_parity(args: argparse.Namespace) -> int:
         },
         "candidate": {
             "requested_compile_regions": args.candidate_compile_regions,
+            "bt4_norm_impl": args.candidate_bt4_norm_impl,
             "compile_regions": candidate_lineage["compiled_regions"],
             "metrics": candidate_metrics,
             "forward_backward_seconds_including_compile": candidate_seconds,
@@ -7618,6 +7702,12 @@ def build_parser() -> argparse.ArgumentParser:
         default="manual",
     )
     train_parser.add_argument(
+        "--bt4-norm-impl",
+        choices=("eager", "native-fp32", "native-bf16"),
+        default="eager",
+        help="BT4 LayerNorm runtime; eager is the frozen numerical reference.",
+    )
+    train_parser.add_argument(
         "--compile-regions",
         choices=(
             "none",
@@ -7898,6 +7988,7 @@ def build_parser() -> argparse.ArgumentParser:
     runtime_parity_parser.add_argument(
         "--candidate-compile-regions",
         choices=(
+            "fresh",
             "fresh-bt4-smolgen",
             "fresh-bt4-smolgen-eager-numerics",
             "fresh-bt4",
@@ -7905,6 +7996,11 @@ def build_parser() -> argparse.ArgumentParser:
             "fresh-bt4-strict-numerics",
         ),
         default="fresh-bt4-strict-numerics",
+    )
+    runtime_parity_parser.add_argument(
+        "--candidate-bt4-norm-impl",
+        choices=("eager", "native-fp32", "native-bf16"),
+        default="eager",
     )
     runtime_parity_parser.add_argument(
         "--output",
