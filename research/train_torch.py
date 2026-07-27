@@ -31,6 +31,7 @@ import zipfile
 from collections import OrderedDict
 from collections.abc import Mapping, Sequence
 from concurrent.futures import Future, ThreadPoolExecutor
+from contextlib import nullcontext
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import IO, Any, NamedTuple
@@ -207,6 +208,14 @@ def _require_workspace(path: str | os.PathLike[str], *, exists: bool = False) ->
     except ValueError as exc:
         raise ValueError(f"Path escapes {_WORKSPACE_ROOT}: {resolved}") from exc
     return resolved
+
+
+def _profile_scope(enabled: bool, name: str) -> Any:
+    """Create a profiler annotation only inside an explicitly profiled step."""
+
+    if not enabled:
+        return nullcontext()
+    return torch.autograd.profiler.record_function(name)
 
 
 def _raw_parameter(shape: tuple[int, ...], dtype: torch.dtype) -> nn.Parameter:
@@ -749,31 +758,39 @@ class JointModel(nn.Module):
         current_planes: Tensor,
         selected_future_planes: Tensor,
         compute_dtype: torch.dtype,
+        *,
+        profile_regions: bool = False,
     ) -> tuple[Tensor, Tensor, Tensor | None]:
-        current = self.encoder.encode_current(
-            current_planes,
-            compute_dtype=compute_dtype,
-            remat=_resolved_remat(
-                self.config.remat_bt4_blocks,
-                self.config.remat_blocks,
-            ),
-        )
-        future = self.encoder.encode_future_tail(
-            selected_future_planes,
-            compute_dtype=compute_dtype,
-            trainable_tail_layers=self.config.future_trainable_tail_layers,
-        )
+        with _profile_scope(profile_regions, "region::bt4_current"):
+            current = self.encoder.encode_current(
+                current_planes,
+                compute_dtype=compute_dtype,
+                remat=_resolved_remat(
+                    self.config.remat_bt4_blocks,
+                    self.config.remat_blocks,
+                ),
+            )
+        with _profile_scope(profile_regions, "region::bt4_future"):
+            future = self.encoder.encode_future_tail(
+                selected_future_planes,
+                compute_dtype=compute_dtype,
+                trainable_tail_layers=self.config.future_trainable_tail_layers,
+            )
         tokens = torch.stack((current, future), dim=1)
         batch = current.shape[0]
-        z_all = self.state_projector(tokens.reshape(batch * 2, 64, 1024), compute_dtype).reshape(
-            batch, 2, self.config.z_dim
-        )
-        z_dfm = self.dfm_state_projector(current, compute_dtype)
-        base_policy_logits = (
-            None
-            if self.encoder.policy_head is None
-            else self.encoder.policy_head(current, compute_dtype)
-        )
+        with _profile_scope(profile_regions, "region::state_projector"):
+            z_all = self.state_projector(
+                tokens.reshape(batch * 2, 64, 1024),
+                compute_dtype,
+            ).reshape(batch, 2, self.config.z_dim)
+        with _profile_scope(profile_regions, "region::dfm_state_projector"):
+            z_dfm = self.dfm_state_projector(current, compute_dtype)
+        with _profile_scope(profile_regions, "region::bt4_policy_head"):
+            base_policy_logits = (
+                None
+                if self.encoder.policy_head is None
+                else self.encoder.policy_head(current, compute_dtype)
+            )
         return z_all, z_dfm, base_policy_logits
 
     def _time_embedding(self, t: Tensor, compute_dtype: torch.dtype) -> Tensor:
@@ -1415,6 +1432,7 @@ def loss_and_aux(
     *,
     compute_dtype: torch.dtype,
     capture: dict[str, Any] | None = None,
+    profile_regions: bool = False,
 ) -> tuple[Tensor, dict[str, Tensor]]:
     """Accepted no-norm, target/pred-SIGReg objective."""
 
@@ -1435,6 +1453,7 @@ def loss_and_aux(
         batch["current_planes"],
         selected_planes,
         compute_dtype,
+        profile_regions=profile_regions,
     )
     z_jepa = z_all[:, 0]
     target_z = z_all[:, 1:]
@@ -1442,13 +1461,14 @@ def loss_and_aux(
     t = choices.training_time
     is_masked = choices.mask_uniform < (1.0 - t).unsqueeze(1)
     noisy_actions = torch.where(is_masked, torch.full_like(actions, _MASK_TOKEN), actions)
-    logits = model.planner(
-        z_dfm,
-        noisy_actions,
-        t,
-        compute_dtype,
-        base_root_logits=base_policy_logits,
-    )
+    with _profile_scope(profile_regions, "region::dfm_noisy_planner"):
+        logits = model.planner(
+            z_dfm,
+            noisy_actions,
+            t,
+            compute_dtype,
+            base_root_logits=base_policy_logits,
+        )
     assert isinstance(logits, Tensor)
     if capture is not None:
         capture["root_logits"] = logits[:, 0].detach()
@@ -1482,17 +1502,24 @@ def loss_and_aux(
     )
 
     clean_t = torch.ones(batch_size, device=actions.device, dtype=torch.float32)
-    clean_result = model.planner(
-        z_dfm,
-        actions,
-        clean_t,
-        compute_dtype,
-        base_root_logits=base_policy_logits,
-        return_hidden=True,
-    )
+    with _profile_scope(profile_regions, "region::dfm_clean_planner"):
+        clean_result = model.planner(
+            z_dfm,
+            actions,
+            clean_t,
+            compute_dtype,
+            base_root_logits=base_policy_logits,
+            return_hidden=True,
+        )
     assert isinstance(clean_result, tuple)
     _, clean_hidden = clean_result
-    pred_z = model.jepa_rollout(z_jepa, actions, clean_hidden, compute_dtype)
+    with _profile_scope(profile_regions, "region::jepa_rollout"):
+        pred_z = model.jepa_rollout(
+            z_jepa,
+            actions,
+            clean_hidden,
+            compute_dtype,
+        )
     pred_for_loss = pred_z[rows, selected].unsqueeze(1)
     sample_raw_mse = (pred_for_loss.float() - target_z.float()).square().mean(dim=-1)
     positive_weight = valid.unsqueeze(1) * selected_valid
@@ -1507,20 +1534,22 @@ def loss_and_aux(
         * float(config.horizon / config.target_sample_count)
     )
     target_weight = torch.cat((sigreg_valid.unsqueeze(1), target_future_weight), dim=1).reshape(-1)
-    target_sigreg, target_sigreg_count = _sigreg_v_stat(
-        target_sigreg_z,
-        target_weight,
-        choices.sigreg_directions,
-        reference_count=config.sigreg_reference_count,
-    )
+    with _profile_scope(profile_regions, "region::target_sigreg"):
+        target_sigreg, target_sigreg_count = _sigreg_v_stat(
+            target_sigreg_z,
+            target_weight,
+            choices.sigreg_directions,
+            reference_count=config.sigreg_reference_count,
+        )
     pred_sigreg_z = pred_z[sigreg_rows].float().reshape(-1, config.z_dim)
     pred_weight = (future_valid[sigreg_rows] * sigreg_valid.unsqueeze(1)).reshape(-1)
-    pred_sigreg, pred_sigreg_count = _sigreg_v_stat(
-        pred_sigreg_z,
-        pred_weight,
-        choices.sigreg_directions,
-        reference_count=config.sigreg_reference_count,
-    )
+    with _profile_scope(profile_regions, "region::prediction_sigreg"):
+        pred_sigreg, pred_sigreg_count = _sigreg_v_stat(
+            pred_sigreg_z,
+            pred_weight,
+            choices.sigreg_directions,
+            reference_count=config.sigreg_reference_count,
+        )
 
     wdl_loss = torch.zeros((), device=actions.device, dtype=torch.float32)
     wdl_accuracy = torch.zeros_like(wdl_loss)
@@ -1529,7 +1558,8 @@ def loss_and_aux(
     if config.wdl_coeff != 0.0:
         if "wdl_targets" not in batch:
             raise ValueError("Nonzero wdl_coeff requires per-horizon wdl_targets")
-        _, wdl_logits = model.value_wdl_head(pred_z, compute_dtype)
+        with _profile_scope(profile_regions, "region::wdl_head"):
+            _, wdl_logits = model.value_wdl_head(pred_z, compute_dtype)
         raw_wdl_targets = batch["wdl_targets"][:, : config.horizon].float()
         if raw_wdl_targets.shape != wdl_logits.shape:
             raise ValueError(
@@ -4259,6 +4289,14 @@ def _write_profiler_artifacts(
         key=lambda row: (row["self_cpu_time_us"], row["cpu_time_us"]),
         reverse=True,
     )[:50]
+    regions = sorted(
+        (
+            row
+            for row in rows
+            if str(row["name"]).startswith("region::")
+        ),
+        key=lambda row: str(row["name"]),
+    )
     table = profiler.key_averages().table(
         sort_by="self_cuda_time_total",
         row_limit=100,
@@ -4288,6 +4326,7 @@ def _write_profiler_artifacts(
         "aggregate_flops": int(sum(row["flops"] for row in rows)),
         "top_ops_by_self_cuda_time": top_cuda,
         "top_ops_by_self_cpu_time": top_cpu,
+        "profile_regions": regions,
         "table": {
             "path": table_path.name,
             "size_bytes": table_path.stat().st_size,
@@ -4954,11 +4993,14 @@ def train(args: argparse.Namespace) -> int:
                 batch,
                 choices,
                 compute_dtype=torch.bfloat16,
+                profile_regions=profile_this_update,
             )
             event_forward.record()
-            loss.backward()
+            with _profile_scope(profile_this_update, "region::backward"):
+                loss.backward()
             event_backward.record()
-            optimizer_metrics = optimizer.step()
+            with _profile_scope(profile_this_update, "region::optimizer"):
+                optimizer_metrics = optimizer.step()
             event_optimizer.record()
             torch.cuda.synchronize()
             step_seconds = time.perf_counter() - step_started
