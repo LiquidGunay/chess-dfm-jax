@@ -451,3 +451,72 @@ above corrects subsequent hero runs to the repository's established
 development-screen cap of 256. Evaluate the retained halfway and terminal
 checkpoints at cap 256 after training so the GPU remains single-purpose and
 the in-flight epoch is not discarded.
+
+## Terminal closeout
+
+The one-epoch run completed all `27,679` updates and `28,343,296` examples on
+2026-07-27. Training time was `153,808.34` seconds, total guarded wall time was
+`156,689.98` seconds, and sustained end-to-end throughput was `184.277`
+examples/second. The resource guard exited normally with no non-finite update,
+OOM, or guard abort.
+
+Commit `3873dd2` adds the symmetric post-epoch latent audit requested above.
+The disjoint 65,536-position terminal primary validation then passed in
+`660.918` seconds:
+
+| Metric | Initialization | Terminal |
+|---|---:|---:|
+| Total weighted loss | `13.472500` | `5.297095` |
+| All-horizon DFM CE | `7.443514` | `4.577527` |
+| H1 DFM CE | not retained in the compact initialization summary | `1.939824` |
+| Root legal top-1 | `20.0485%` | `49.5712%` |
+| Root legal mass | `2.3147%` | `89.8497%` |
+| JEPA raw MSE | `0.786217` | `0.047361` |
+| Target / prediction SIGReg | `0.693541 / 0.668344` | `0.034222 / 0.034616` |
+
+Prediction versus target effective-rank ratios are `1.0023..1.0159`,
+centered-RMS ratios are `0.9928..1.0080`, and absolute-RMS ratios are
+`0.9927..1.0080` over horizons 1--8. There is no prediction-only collapse.
+Both branches nevertheless have low batch-64 effective rank: target
+`9.05..14.87` and prediction `9.18..14.90`. Treat that shared concentration
+as a scientific follow-up rather than declaring the latent representation
+healthy solely from prediction/target agreement.
+
+The primary report is
+`research/runs/torch_hero_epoch_v1_terminal_primary_eval_v1/report.json`,
+SHA-256
+`692971d460d748e2655dc92928a9404ed0bb75e8679aee4d8c67d3e0babca22f`.
+
+The host upgraded its system NVML package while retaining the loaded
+`580.159.03` kernel module. Guarded GPU work continues through the already
+provisioned workspace-local `580.159.03` NVML overlay; a guarded CUDA/JAX
+health check reports the A10G and driver `580.159.03` without changing host
+packages or rebooting.
+
+The generic Arena's older eager-Torch adapter cannot load this checkpoint: it
+is tied to the legacy codec and non-hero config. The closeout therefore adds
+an explicit native-Torch hero descriptor, canonical-codec policy path, and
+`hero_development` tier over the immutable 2,048-opening pool. It preserves
+the existing atomic block/resume protocol and uses fixed physical batch 16.
+First run a 16-pair cap-256 correctness gate; only if it has zero faults and a
+low cap-draw rate, run 1,024 pairs:
+
+```bash
+research/run_gpu.sh .venv/bin/python research/evaluate_arena.py \
+  --candidate-torch-hero research/runs/torch_hero_epoch_v1 \
+  --opponent-raw-bt4 \
+  --tier hero_development \
+  --pair-count 16 \
+  --block-pairs 16 \
+  --policy-batch-size-cap 16 \
+  --output-dir artifacts/arena/hero-epoch-v1-terminal-vs-raw-bt4-pilot
+
+research/run_gpu.sh .venv/bin/python research/evaluate_arena.py \
+  --candidate-torch-hero research/runs/torch_hero_epoch_v1 \
+  --opponent-raw-bt4 \
+  --tier hero_development \
+  --pair-count 1024 \
+  --block-pairs 16 \
+  --policy-batch-size-cap 16 \
+  --output-dir artifacts/arena/hero-epoch-v1-terminal-vs-raw-bt4-1024pairs
+```

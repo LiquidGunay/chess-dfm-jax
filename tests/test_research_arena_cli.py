@@ -32,6 +32,7 @@ from research.evaluate_arena import (
     load_run_state,
     parse_args,
     run_blocks,
+    torch_hero_checkpoint_descriptor,
     torch_research_checkpoint_descriptor,
 )
 from research.local_policy import (
@@ -201,6 +202,108 @@ def test_torch_checkpoint_descriptor_is_strict_and_plot_reproducible(
     assert descriptor.descriptor["research_update"] == 7
     assert descriptor.descriptor["state"]["sha256"] == state_sha256
     assert descriptor.descriptor["torch_run_config"]["git_commit"] == "b" * 40
+
+
+def test_torch_hero_checkpoint_descriptor_pins_canonical_recipe(
+    workspace_tmp: Path,
+):
+    import dataclasses
+
+    from research.train_torch import HERO_CONFIG
+
+    models_dir = workspace_tmp / "models"
+    models_dir.mkdir()
+    model_path = models_dir / "BT4_exported.pb.gz"
+    model_path.write_bytes(b"fixture-bt4")
+    run_root = workspace_tmp / "torch-hero-run"
+    checkpoint_dir = run_root / "checkpoint"
+    checkpoint_dir.mkdir(parents=True)
+    state_path = checkpoint_dir / "model.safetensors"
+    state_path.write_bytes(b"fixture-hero-state")
+    state_sha256 = hashlib.sha256(state_path.read_bytes()).hexdigest()
+    manifest = {
+        "format": "chess-dfm-torch-model-v1",
+        "model_only": True,
+        "optimizer_resume_supported": False,
+        "optimizer_update": 27_679,
+        "source_mapping_sha256": "a" * 64,
+        "state": {
+            "path": "model.safetensors",
+            "size_bytes": state_path.stat().st_size,
+            "sha256": state_sha256,
+            "leaf_count": 462,
+        },
+    }
+    (checkpoint_dir / "manifest.json").write_text(
+        json.dumps(manifest),
+        encoding="utf-8",
+    )
+    run_config = {
+        "framework": "torch",
+        "execution": "regional-compile",
+        "torch_compile": True,
+        "recipe": "hero",
+        "git_commit": "c" * 40,
+        "compile_regions": [
+            "state_projector_blocks",
+            "dfm_blocks",
+            "jepa_transition",
+        ],
+        "config": dataclasses.asdict(
+            dataclasses.replace(
+                HERO_CONFIG,
+                remat_bt4_blocks=True,
+                remat_projector_blocks=True,
+                remat_dfm_blocks=False,
+                use_bt4_sdpa=True,
+                use_head_sdpa=True,
+            )
+        ),
+    }
+    (run_root / "run_config.json").write_text(
+        json.dumps(run_config),
+        encoding="utf-8",
+    )
+
+    descriptor = torch_hero_checkpoint_descriptor(
+        run_root,
+        models_dir=models_dir,
+    )
+
+    assert descriptor.checkpoint_dir == checkpoint_dir
+    assert descriptor.descriptor["kind"] == "torch_hero"
+    assert (
+        descriptor.descriptor["action_codec_id"]
+        == "lc0_canonical_1858"
+    )
+    assert descriptor.descriptor["research_update"] == 27_679
+    assert descriptor.descriptor["state"]["sha256"] == state_sha256
+
+
+def test_hero_development_tier_resolves_large_cap256_run(
+    workspace_tmp: Path,
+):
+    args = parse_args(
+        [
+            "--candidate-torch-hero",
+            str(workspace_tmp / "hero"),
+            "--opponent-raw-bt4",
+            "--tier",
+            "hero_development",
+            "--pair-count",
+            "1024",
+            "--block-pairs",
+            "16",
+            "--output-dir",
+            str(workspace_tmp / "arena"),
+        ]
+    )
+
+    assert args.candidate_torch_hero == workspace_tmp / "hero"
+    assert _resolved_run_options(
+        args,
+        FROZEN_TIERS["hero_development"],
+    ) == (1024, 16, 256)
 
 
 class _Selection:

@@ -133,6 +133,31 @@ FROZEN_TIERS = {
         available=True,
         unavailable_reason=None,
     ),
+    "hero_development": FrozenTier(
+        name="hero_development",
+        pool_path=REPO_ROOT
+        / "research"
+        / "assets"
+        / "arena"
+        / "promotion-ply12-n2048-v3.json",
+        pool_sha256=(
+            "e750e87643c482d28b4201668bd355234fe1fb27f2a690bf784706b1ddd37459"
+        ),
+        histories_path=REPO_ROOT
+        / "research"
+        / "assets"
+        / "arena"
+        / "promotion-ply12-n2048-histories-v3.json",
+        history_manifest_sha256=(
+            "d8781efb5d76066bcf2ce2e9ab2897f3261b20f7c4488c90992a8eadcc918a4b"
+        ),
+        default_pair_count=2048,
+        default_block_pairs=16,
+        default_additional_ply_cap=256,
+        promotion_eligible=False,
+        available=True,
+        unavailable_reason=None,
+    ),
     "correctness": FrozenTier(
         name="correctness",
         pool_path=REPO_ROOT / "artifacts" / "arena" / "development-ply12-n128-v1.json",
@@ -504,6 +529,131 @@ def torch_research_checkpoint_descriptor(
     )
 
 
+def torch_hero_checkpoint_descriptor(
+    path: Path,
+    *,
+    models_dir: Path,
+) -> TorchResearchCheckpointDescriptor:
+    """Describe a canonical-codec checkpoint from the clean hero recipe."""
+
+    from research.train_torch import HERO_CONFIG
+
+    candidate = require_within_workspace(path)
+    if (candidate / "checkpoint" / "manifest.json").is_file():
+        checkpoint_dir = require_within_workspace(candidate / "checkpoint")
+        run_root = candidate
+    elif (candidate / "manifest.json").is_file():
+        checkpoint_dir = candidate
+        run_root = require_within_workspace(candidate.parent)
+    else:
+        raise FileNotFoundError(
+            f"No Torch hero checkpoint manifest under {candidate}"
+        )
+
+    manifest_path = require_within_workspace(checkpoint_dir / "manifest.json")
+    manifest = _load_json_object(
+        manifest_path,
+        label="Torch hero checkpoint manifest",
+    )
+    if manifest.get("format") != "chess-dfm-torch-model-v1":
+        raise ValueError("Unsupported Torch hero checkpoint format.")
+    if manifest.get("model_only") is not True:
+        raise ValueError("Torch hero arena checkpoint must be model-only.")
+    state = manifest.get("state")
+    if not isinstance(state, dict) or state.get("path") != "model.safetensors":
+        raise ValueError("Torch hero checkpoint has an invalid state record.")
+    state_path = require_within_workspace(checkpoint_dir / "model.safetensors")
+    if (
+        not state_path.is_file()
+        or state_path.stat().st_size != int(state.get("size_bytes", -1))
+    ):
+        raise ValueError("Torch hero checkpoint state size mismatch.")
+    if sha256_file(state_path) != str(state.get("sha256", "")):
+        raise ValueError("Torch hero checkpoint state checksum mismatch.")
+
+    run_config_path = require_within_workspace(run_root / "run_config.json")
+    run_config = _load_json_object(
+        run_config_path,
+        label="Torch hero run config",
+    )
+    expected_config = dataclasses.asdict(
+        dataclasses.replace(
+            HERO_CONFIG,
+            remat_bt4_blocks=True,
+            remat_projector_blocks=True,
+            remat_dfm_blocks=False,
+            use_bt4_sdpa=True,
+            use_head_sdpa=True,
+        )
+    )
+    expected_compile_regions = [
+        "state_projector_blocks",
+        "dfm_blocks",
+        "jepa_transition",
+    ]
+    if (
+        run_config.get("framework") != "torch"
+        or run_config.get("execution") != "regional-compile"
+        or run_config.get("torch_compile") is not True
+        or run_config.get("recipe") != "hero"
+        or run_config.get("compile_regions") != expected_compile_regions
+    ):
+        raise ValueError("Torch hero run execution contract mismatch.")
+    if run_config.get("config") != expected_config:
+        raise ValueError(
+            "Torch hero checkpoint config differs from the checked-out hero "
+            "recipe; evaluate it at its recorded git commit."
+        )
+
+    model_path = require_within_workspace(models_dir / "BT4_exported.pb.gz")
+    if not model_path.is_file():
+        raise ValueError(f"Raw BT4 asset does not exist: {model_path}")
+    descriptor = {
+        "kind": "torch_hero",
+        "action_codec_id": ACTION_CODEC_LC0_CANONICAL_1858,
+        "plane_history_mode": PLANE_HISTORY_MODE_CURRENT_ONLY_AS_PREPROCESSED,
+        "checkpoint_dir": str(checkpoint_dir),
+        "manifest_path": str(manifest_path),
+        "manifest_sha256": sha256_file(manifest_path),
+        "research_update": int(manifest["optimizer_update"]),
+        "optimizer_resume_supported": bool(
+            manifest.get("optimizer_resume_supported", False)
+        ),
+        "source_mapping_sha256": manifest.get("source_mapping_sha256"),
+        "state": {
+            "path": str(state_path),
+            "size_bytes": int(state["size_bytes"]),
+            "sha256": str(state["sha256"]),
+            "leaf_count": int(state["leaf_count"]),
+        },
+        "lineage": {
+            "recipe": "hero",
+            "training_git_commit": run_config.get("git_commit"),
+        },
+        "torch_run_config": {
+            "path": str(run_config_path),
+            "sha256": sha256_file(run_config_path),
+            "git_commit": run_config.get("git_commit"),
+            "framework": run_config.get("framework"),
+            "execution": run_config.get("execution"),
+            "torch_compile": run_config.get("torch_compile"),
+            "compile_regions": expected_compile_regions,
+        },
+        "model_config": expected_config,
+        "arena_materialization": "native_torch_exact_safetensors",
+        "bt4_constructor": {
+            "path": str(model_path),
+            "sha256": sha256_file(model_path),
+        },
+    }
+    return TorchResearchCheckpointDescriptor(
+        checkpoint_dir=checkpoint_dir,
+        manifest=manifest,
+        run_config=run_config,
+        descriptor=descriptor,
+    )
+
+
 def source_checkpoint_descriptor(
     *,
     source_run_root: Path,
@@ -759,6 +909,122 @@ def load_source_policy(
             "source_step": imported.source_step,
             "source_sha256": imported.source_sha256,
             "optimizer_restored": imported.optimizer_restored,
+        },
+    )
+
+
+def load_torch_hero_policy(
+    checkpoint: TorchResearchCheckpointDescriptor,
+    *,
+    model_id: str,
+    refinement_passes: int,
+    inference_batch_size: int,
+) -> tuple[BatchedArenaPolicy, dict[str, Any]]:
+    """Load the canonical hero checkpoint as its native Torch policy."""
+
+    import torch
+
+    from research.train_torch import (
+        Config,
+        TorchHeroArenaPolicy,
+        _apply_compile_regions,
+        load_model_checkpoint,
+        load_raw_bt4_hero_model,
+    )
+
+    config = Config(**checkpoint.descriptor["model_config"])
+    if refinement_passes != config.horizon:
+        raise ValueError(
+            "Torch hero Arena requires one refinement pass per horizon"
+        )
+    started = time.perf_counter()
+    device = torch.device("cuda")
+    model_path = require_within_workspace(
+        checkpoint.descriptor["bt4_constructor"]["path"]
+    )
+    model, initialization = load_raw_bt4_hero_model(
+        device=device,
+        raw_bt4_path=model_path,
+        config=config,
+    )
+    restored = load_model_checkpoint(
+        checkpoint_dir=checkpoint.checkpoint_dir,
+        model=model,
+    )
+    if restored != checkpoint.manifest:
+        raise ValueError("Torch hero checkpoint manifest changed during load.")
+    if (
+        restored.get("source_mapping_sha256")
+        != initialization["combined_sha256"]
+    ):
+        raise ValueError("Torch hero checkpoint raw-BT4 mapping drift.")
+    compiled_regions = _apply_compile_regions(model, "fresh")
+    expected_regions = checkpoint.run_config["compile_regions"]
+    if compiled_regions != expected_regions:
+        raise ValueError("Torch hero compile-region contract drift.")
+    model.eval()
+    elapsed = time.perf_counter() - started
+    return (
+        TorchHeroArenaPolicy(
+            model=model,
+            model_id=model_id,
+            policy_mode="dfm",
+            inference_batch_size=inference_batch_size,
+            refinement_passes=refinement_passes,
+        ),
+        {
+            "load_seconds": elapsed,
+            "framework": "torch",
+            "device": torch.cuda.get_device_name(device),
+            "checkpoint_dir": str(checkpoint.checkpoint_dir),
+            "checkpoint_state_sha256": restored["state"]["sha256"],
+            "raw_initialization_sha256": initialization["combined_sha256"],
+            "compile_regions": compiled_regions,
+        },
+    )
+
+
+def load_torch_raw_bt4_hero_policy(
+    *,
+    model_path: Path,
+    model_config: Mapping[str, Any],
+    model_id: str,
+    inference_batch_size: int,
+) -> tuple[BatchedArenaPolicy, dict[str, Any]]:
+    """Load raw BT4 through the same native Torch encoder and canonical codec."""
+
+    import torch
+
+    from research.train_torch import (
+        Config,
+        TorchHeroArenaPolicy,
+        load_raw_bt4_hero_model,
+    )
+
+    started = time.perf_counter()
+    device = torch.device("cuda")
+    config = Config(**dict(model_config))
+    model, initialization = load_raw_bt4_hero_model(
+        device=device,
+        raw_bt4_path=require_within_workspace(model_path),
+        config=config,
+    )
+    model.eval()
+    elapsed = time.perf_counter() - started
+    return (
+        TorchHeroArenaPolicy(
+            model=model,
+            model_id=model_id,
+            policy_mode="raw_bt4",
+            inference_batch_size=inference_batch_size,
+            refinement_passes=config.horizon,
+        ),
+        {
+            "load_seconds": elapsed,
+            "framework": "torch",
+            "device": torch.cuda.get_device_name(device),
+            "policy_head": "original_bt4",
+            "raw_initialization_sha256": initialization["combined_sha256"],
         },
     )
 
@@ -1542,6 +1808,14 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         help="Strict model-only checkpoint from research/train_torch.py.",
     )
     candidate.add_argument(
+        "--candidate-torch-hero",
+        type=Path,
+        help=(
+            "Canonical-codec hero checkpoint from the regional-compiled "
+            "research/train_torch.py recipe."
+        ),
+    )
+    candidate.add_argument(
         "--candidate-raw-bt4",
         action="store_true",
         help=(
@@ -1656,12 +1930,33 @@ def main(argv: Sequence[str] | None = None) -> int:
         expected_manifest_sha256=tier.history_manifest_sha256,
     )
 
+    native_torch_hero = args.candidate_torch_hero is not None
+    if native_torch_hero and not args.opponent_raw_bt4:
+        raise ValueError(
+            "--candidate-torch-hero currently requires --opponent-raw-bt4 "
+            "so both policies use one native Torch runtime and canonical codec."
+        )
+    if native_torch_hero and args.collect_diagnostics:
+        raise ValueError(
+            "Torch hero Arena supports only the lean diagnostics-off path."
+        )
+
     if args.candidate_raw_bt4:
         candidate_descriptor = None
         candidate_record = raw_bt4_descriptor(models_dir=models_dir)
         candidate_id = (
             "candidate-raw-bt4-"
             + candidate_record["bt4_checkpoint"]["sha256"][:12]
+        )
+    elif native_torch_hero:
+        candidate_descriptor = torch_hero_checkpoint_descriptor(
+            args.candidate_torch_hero,
+            models_dir=models_dir,
+        )
+        candidate_record = candidate_descriptor.descriptor
+        candidate_id = (
+            "candidate-torch-hero-"
+            + candidate_record["state"]["sha256"][:12]
         )
     elif args.candidate_torch is None:
         candidate_descriptor = research_checkpoint_descriptor(
@@ -1791,65 +2086,96 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(json.dumps(existing, indent=2, sort_keys=True))
             return 0
 
-    bt4_params = load_mapped_bt4_params(models_dir=models_dir)
-    if args.candidate_raw_bt4:
-        candidate_policy, candidate_load = load_raw_bt4_policy(
-            bt4_params=bt4_params,
-            model_id=candidate_id,
-            inference_batch_size=inference_batch_size,
-        )
-    elif args.candidate_torch is None:
-        assert isinstance(candidate_descriptor, ResearchCheckpointDescriptor)
-        candidate_policy, candidate_load = load_research_policy(
-            candidate_descriptor,
-            bt4_params=bt4_params,
-            model_id=candidate_id,
-            seed=args.seed,
-            refinement_passes=args.refinement_passes,
-            collect_diagnostics=args.collect_diagnostics,
-            inference_batch_size=inference_batch_size,
-        )
-    else:
+    if native_torch_hero:
         assert isinstance(
             candidate_descriptor,
             TorchResearchCheckpointDescriptor,
         )
-        candidate_policy, candidate_load = load_torch_research_policy(
+        candidate_policy, candidate_load = load_torch_hero_policy(
             candidate_descriptor,
-            bt4_params=bt4_params,
             model_id=candidate_id,
-            seed=args.seed,
             refinement_passes=args.refinement_passes,
-            collect_diagnostics=args.collect_diagnostics,
             inference_batch_size=inference_batch_size,
         )
-    if args.opponent_raw_bt4:
-        opponent_policy, opponent_load = load_raw_bt4_policy(
-            bt4_params=bt4_params,
+        opponent_policy, opponent_load = load_torch_raw_bt4_hero_policy(
+            model_path=Path(opponent_descriptor["bt4_checkpoint"]["path"]),
+            model_config=candidate_record["model_config"],
             model_id=opponent_id,
             inference_batch_size=inference_batch_size,
         )
-    elif args.opponent_checkpoint is None:
-        opponent_policy, opponent_load = load_source_policy(
-            config=opponent_config,
-            descriptor=opponent_descriptor,
-            bt4_params=bt4_params,
-            model_id=opponent_id,
-            seed=args.seed + 1,
-            refinement_passes=args.refinement_passes,
-            collect_diagnostics=args.collect_diagnostics,
-            inference_batch_size=inference_batch_size,
-        )
+        accelerator_session = {
+            "framework": "torch",
+            "torch_devices": [candidate_load["device"]],
+        }
     else:
-        opponent_policy, opponent_load = load_research_policy(
-            incumbent_descriptor,
-            bt4_params=bt4_params,
-            model_id=opponent_id,
-            seed=args.seed + 1,
-            refinement_passes=args.refinement_passes,
-            collect_diagnostics=args.collect_diagnostics,
-            inference_batch_size=inference_batch_size,
-        )
+        bt4_params = load_mapped_bt4_params(models_dir=models_dir)
+        if args.candidate_raw_bt4:
+            candidate_policy, candidate_load = load_raw_bt4_policy(
+                bt4_params=bt4_params,
+                model_id=candidate_id,
+                inference_batch_size=inference_batch_size,
+            )
+        elif args.candidate_torch is None:
+            assert isinstance(
+                candidate_descriptor,
+                ResearchCheckpointDescriptor,
+            )
+            candidate_policy, candidate_load = load_research_policy(
+                candidate_descriptor,
+                bt4_params=bt4_params,
+                model_id=candidate_id,
+                seed=args.seed,
+                refinement_passes=args.refinement_passes,
+                collect_diagnostics=args.collect_diagnostics,
+                inference_batch_size=inference_batch_size,
+            )
+        else:
+            assert isinstance(
+                candidate_descriptor,
+                TorchResearchCheckpointDescriptor,
+            )
+            candidate_policy, candidate_load = load_torch_research_policy(
+                candidate_descriptor,
+                bt4_params=bt4_params,
+                model_id=candidate_id,
+                seed=args.seed,
+                refinement_passes=args.refinement_passes,
+                collect_diagnostics=args.collect_diagnostics,
+                inference_batch_size=inference_batch_size,
+            )
+        if args.opponent_raw_bt4:
+            opponent_policy, opponent_load = load_raw_bt4_policy(
+                bt4_params=bt4_params,
+                model_id=opponent_id,
+                inference_batch_size=inference_batch_size,
+            )
+        elif args.opponent_checkpoint is None:
+            opponent_policy, opponent_load = load_source_policy(
+                config=opponent_config,
+                descriptor=opponent_descriptor,
+                bt4_params=bt4_params,
+                model_id=opponent_id,
+                seed=args.seed + 1,
+                refinement_passes=args.refinement_passes,
+                collect_diagnostics=args.collect_diagnostics,
+                inference_batch_size=inference_batch_size,
+            )
+        else:
+            opponent_policy, opponent_load = load_research_policy(
+                incumbent_descriptor,
+                bt4_params=bt4_params,
+                model_id=opponent_id,
+                seed=args.seed + 1,
+                refinement_passes=args.refinement_passes,
+                collect_diagnostics=args.collect_diagnostics,
+                inference_batch_size=inference_batch_size,
+            )
+        accelerator_session = {
+            "framework": "jax",
+            "jax_devices": [
+                f"{device.platform}:{device.id}" for device in jax.devices()
+            ],
+        }
 
     warm_batch = inference_batch_size
     candidate_warm = _warm_policy(
@@ -1866,7 +2192,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     session_setup = {
         "started_at_utc": datetime.now(UTC).isoformat(),
-        "jax_devices": [f"{device.platform}:{device.id}" for device in jax.devices()],
+        **accelerator_session,
         "candidate_load": candidate_load,
         "opponent_load": opponent_load,
         "warmup": {

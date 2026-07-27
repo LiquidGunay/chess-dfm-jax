@@ -1060,6 +1060,14 @@ class TorchHeroArenaPolicy:
         default=ACTION_CODEC_LC0_CANONICAL_1858,
         init=False,
     )
+    inference_batching_schema: str = dataclasses.field(
+        default="chess-dfm-static-inference-batching-v1",
+        init=False,
+    )
+    inference_padding_mode: str = dataclasses.field(
+        default="repeat_first_validated_encoded_row_v1",
+        init=False,
+    )
     history_validation_mode: str = dataclasses.field(
         default=HISTORY_VALIDATION_TRUSTED_ARENA_ENDPOINT,
         init=False,
