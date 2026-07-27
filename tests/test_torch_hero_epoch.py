@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import dataclasses
+import math
 
 import chess
 import numpy as np
@@ -14,10 +15,14 @@ from chess_dfm_jax.policy import (
 )
 from research.train_torch import (
     HERO_CONFIG,
+    JepaFeedbackResult,
+    JointModel,
     MuonAdamW,
+    RawLinear,
     RawLayerNorm,
     StateProjector,
     _analyze_lr_range_records,
+    _apply_hero_feedback_override,
     _apply_hero_wdl_override,
     _apply_sigreg_sample_override,
     _canonicalize_trajectory_batch_reference,
@@ -25,6 +30,8 @@ from research.train_torch import (
     _latent_spectrum_metrics,
     _normalize_frozen_indices,
     _polarized_gradient_cosines,
+    _proposal_from_root_logits,
+    _root_legal_mask_from_indices,
     _shared_sigreg_gradient_projection,
     _sigreg_v_stat,
     _torch_refine_dfm_actions,
@@ -313,6 +320,145 @@ def test_wdl_override_is_explicit_and_hero_only():
             )
 
 
+def test_feedback_override_is_explicit_default_off_and_hero_only():
+    unchanged = _apply_hero_feedback_override(
+        HERO_CONFIG,
+        recipe="hero",
+        jepa_feedback_mode=None,
+    )
+    candidate = _apply_hero_feedback_override(
+        HERO_CONFIG,
+        recipe="hero",
+        jepa_feedback_mode="final_pass_adjoint",
+    )
+    assert unchanged == HERO_CONFIG
+    assert HERO_CONFIG.jepa_feedback_mode == "none"
+    assert candidate.jepa_feedback_mode == "final_pass_adjoint"
+    assert dataclasses.replace(
+        candidate,
+        jepa_feedback_mode="none",
+    ) == HERO_CONFIG
+
+    with pytest.raises(ValueError, match="hero-only"):
+        _apply_hero_feedback_override(
+            HERO_CONFIG,
+            recipe="continuation",
+            jepa_feedback_mode="final_pass_adjoint",
+        )
+    with pytest.raises(ValueError, match="must be"):
+        _apply_hero_feedback_override(
+            HERO_CONFIG,
+            recipe="hero",
+            jepa_feedback_mode="unknown",
+        )
+
+
+def test_root_proposal_is_legal_target_independent_and_fail_closed():
+    legal_idx = torch.tensor(
+        [
+            [3, 5, 65535, 65535],
+            [7, 7, 65535, 65535],
+        ]
+    )
+    legal_count = torch.tensor([2, 2])
+    legal_mask = _root_legal_mask_from_indices(legal_idx, legal_count)
+    assert torch.equal(
+        legal_mask[0].nonzero().flatten(),
+        torch.tensor([3, 5]),
+    )
+    assert torch.equal(
+        legal_mask[1].nonzero().flatten(),
+        torch.tensor([7]),
+    )
+
+    logits = torch.full((2, 1858), -10.0, requires_grad=True)
+    with torch.no_grad():
+        logits[0, 3] = 1.0
+        logits[0, 5] = 2.0
+        logits[1, 7] = 4.0
+    proposal = _proposal_from_root_logits(
+        logits,
+        torch.tensor([1858, 3]),
+        legal_mask,
+        torch.tensor([True, True]),
+    )
+    assert proposal.action.tolist() == [5, 3]
+    assert 0.5 < proposal.feedback_gate[0] < 1.0
+    assert proposal.feedback_gate[1] == 1.0
+    assert not proposal.action.requires_grad
+    assert not proposal.feedback_gate.requires_grad
+
+    invalid = _proposal_from_root_logits(
+        logits,
+        torch.tensor([1858, 1858]),
+        legal_mask,
+        torch.tensor([False, False]),
+    )
+    assert invalid.feedback_gate.tolist() == [0.0, 0.0]
+
+
+class _FeedbackHarness(torch.nn.Module):
+    class _Config:
+        token_dim = 2
+        z_dim = 4
+        jepa_feedback_mode = "final_pass_adjoint"
+
+    def __init__(self):
+        super().__init__()
+        self.config = self._Config()
+        self.jepa_hidden_adapter = RawLinear(2, 4, dtype=torch.float32)
+
+
+def test_adjoint_feedback_math_cap_and_gradients():
+    model = _FeedbackHarness()
+    with torch.no_grad():
+        model.jepa_hidden_adapter.w.copy_(
+            torch.tensor(
+                [
+                    [1.0, 0.0, 0.0, 0.0],
+                    [0.0, 2.0, 0.0, 0.0],
+                ]
+            )
+        )
+    z_dfm = torch.full(
+        (2, 3, 2),
+        4.0,
+        requires_grad=True,
+    )
+    z0 = torch.zeros((2, 4), requires_grad=True)
+    z1 = torch.tensor(
+        [[1.0, 1.0, 0.0, 0.0], [4.0, 4.0, 0.0, 0.0]],
+        requires_grad=True,
+    )
+    result = JointModel.dfm_latents_with_jepa_feedback(
+        model,
+        z_dfm,
+        z0,
+        z1,
+        torch.tensor([1.0, 0.0]),
+        torch.float32,
+    )
+
+    expected_raw_first = torch.tensor(
+        [math.sqrt(0.5), math.sqrt(2.0)]
+    )
+    torch.testing.assert_close(
+        result.latents[0, 0] - z_dfm[0, 0],
+        expected_raw_first,
+    )
+    torch.testing.assert_close(
+        result.latents[1],
+        z_dfm[1],
+    )
+    assert result.cap_fraction == 0.5
+    result.latents.sum().backward()
+    assert z_dfm.grad is not None and torch.count_nonzero(z_dfm.grad)
+    assert z0.grad is not None and torch.count_nonzero(z0.grad)
+    assert z1.grad is not None and torch.count_nonzero(z1.grad)
+    assert model.jepa_hidden_adapter.w.grad is not None
+    assert torch.count_nonzero(model.jepa_hidden_adapter.w.grad)
+
+
 def test_hero_optimizer_hyperparameters_are_frozen_after_lr_range():
     assert HERO_CONFIG.learning_rate == 5e-4
     assert HERO_CONFIG.bt4_learning_rate == pytest.approx(5e-4 / 30.0)
@@ -387,8 +533,10 @@ class _FixedArenaPlanner:
         compute_dtype,
         *,
         base_root_logits,
+        return_hidden=False,
     ):
         del action_tokens, t, compute_dtype, base_root_logits
+        assert not return_hidden
         batch_size = z_dfm.shape[0]
         logits = torch.full(
             (batch_size, 8, 1858),
@@ -417,6 +565,101 @@ def test_torch_dfm_refinement_masks_root_and_unmasks_all_positions():
         compute_dtype=torch.float32,
     )
 
+    torch.testing.assert_close(selected, torch.full((2,), 5))
+
+
+class _FeedbackArenaPlanner:
+    class _Config:
+        horizon = 8
+        token_dim = 256
+        z_dim = 4
+        jepa_feedback_mode = "final_pass_adjoint"
+
+    def __init__(self):
+        self.config = self._Config()
+        self.planner_latents = []
+        self.feedback_calls = 0
+
+    def planner(
+        self,
+        z_dfm,
+        action_tokens,
+        t,
+        compute_dtype,
+        *,
+        base_root_logits,
+        return_hidden=False,
+    ):
+        del action_tokens, t, compute_dtype, base_root_logits
+        self.planner_latents.append(z_dfm.detach().clone())
+        batch_size = z_dfm.shape[0]
+        logits = torch.full(
+            (batch_size, 8, 1858),
+            -8.0,
+            dtype=torch.float32,
+        )
+        logits[:, 0, 5] = 4.0
+        for horizon in range(1, 8):
+            logits[:, horizon, 10 + horizon] = 3.0 + horizon
+        if return_hidden:
+            return logits, torch.zeros((batch_size, 8, 256))
+        return logits
+
+    def jepa_step(
+        self,
+        z0,
+        action,
+        action_hidden,
+        compute_dtype,
+    ):
+        del action, action_hidden, compute_dtype
+        return z0 + 1.0
+
+    def dfm_latents_with_jepa_feedback(
+        self,
+        z_dfm,
+        z0,
+        z1,
+        gate,
+        compute_dtype,
+    ):
+        del z0, z1, gate, compute_dtype
+        self.feedback_calls += 1
+        zeros = torch.zeros((z_dfm.shape[0],))
+        return JepaFeedbackResult(
+            latents=z_dfm + 2.0,
+            delta_rms=zeros,
+            raw_feedback_rms=zeros,
+            applied_feedback_rms=zeros,
+            state_rms=zeros,
+            cap_fraction=torch.tensor(0.0),
+        )
+
+
+def test_torch_dfm_feedback_changes_only_pass_eight():
+    model = _FeedbackArenaPlanner()
+    z_dfm = torch.zeros((2, 64, 256))
+    root_legal_mask = torch.zeros((2, 1858), dtype=torch.bool)
+    root_legal_mask[:, 3] = True
+    root_legal_mask[:, 5] = True
+    selected = _torch_refine_dfm_actions(
+        model,
+        z_dfm,
+        torch.zeros((2, 1858)),
+        root_legal_mask,
+        refinement_passes=8,
+        compute_dtype=torch.float32,
+        z_jepa=torch.zeros((2, 4)),
+    )
+
+    assert model.feedback_calls == 1
+    assert len(model.planner_latents) == 8
+    for latents in model.planner_latents[:7]:
+        torch.testing.assert_close(latents, z_dfm)
+    torch.testing.assert_close(
+        model.planner_latents[7],
+        z_dfm + 2.0,
+    )
     torch.testing.assert_close(selected, torch.full((2,), 5))
 
 
@@ -620,3 +863,5 @@ def test_frozen_evaluation_indices_are_sorted_and_fail_closed():
             total_examples=8,
             batch_size=2,
         )
+    _proposal_from_root_logits,
+    _root_legal_mask_from_indices,

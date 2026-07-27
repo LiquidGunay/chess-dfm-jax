@@ -95,6 +95,8 @@ _EXPECTED_MODEL_BYTES = 705_987_352
 _MASK_TOKEN = 1858
 _VOCAB_SIZE = 1858
 _LEGAL_PAD = np.iinfo(np.uint16).max
+_JEPA_FEEDBACK_MAX_STATE_RMS_RATIO = 0.5
+_JEPA_FEEDBACK_RMS_EPSILON = 1e-6
 _HASH_CHUNK_BYTES = 8 * 1024 * 1024
 _LOSS_SUMMARY_WINDOW_UPDATES = 64
 _LOSS_SUMMARY_METRICS = (
@@ -121,6 +123,14 @@ _LOSS_SUMMARY_METRICS = (
     "bt4_learning_rate",
     "gradient_global_norm",
     "gradient_clip_scale",
+    "jepa_feedback_applied_rms",
+    "jepa_feedback_cap_fraction",
+    "jepa_feedback_delta_rms",
+    "jepa_feedback_dfm_ce_improvement",
+    "jepa_feedback_gate",
+    "jepa_feedback_preliminary_dfm_ce_loss",
+    "jepa_feedback_raw_rms",
+    "jepa_feedback_state_rms",
 )
 
 
@@ -174,6 +184,7 @@ class Config:
     lr_warmup_examples: int = 0
     lr_total_examples: int = 0
     init_seed: int = 0
+    jepa_feedback_mode: str = "none"
 
 
 CONFIG = Config()
@@ -861,6 +872,21 @@ class ValueWDLHead(nn.Module):
         return value.squeeze(-1), wdl
 
 
+class RootProposal(NamedTuple):
+    action: Tensor
+    confidence: Tensor
+    feedback_gate: Tensor
+
+
+class JepaFeedbackResult(NamedTuple):
+    latents: Tensor
+    delta_rms: Tensor
+    raw_feedback_rms: Tensor
+    applied_feedback_rms: Tensor
+    state_rms: Tensor
+    cap_fraction: Tensor
+
+
 class JointModel(nn.Module):
     def __init__(
         self,
@@ -1005,6 +1031,110 @@ class JointModel(nn.Module):
             predictions.append(z)
         return torch.stack(predictions, dim=1)
 
+    def jepa_step(
+        self,
+        z0: Tensor,
+        action: Tensor,
+        action_hidden: Tensor,
+        compute_dtype: torch.dtype,
+    ) -> Tensor:
+        """Run one proposal-conditioned transition with rollout semantics."""
+
+        expected_hidden_shape = (z0.shape[0], self.config.token_dim)
+        if action.shape != (z0.shape[0],):
+            raise ValueError(
+                f"action must have shape {(z0.shape[0],)}, "
+                f"found {tuple(action.shape)}"
+            )
+        if action_hidden.shape != expected_hidden_shape:
+            raise ValueError(
+                f"action_hidden must have shape {expected_hidden_shape}, "
+                f"found {tuple(action_hidden.shape)}"
+            )
+        condition = self.jepa_action_embed(
+            action,
+            compute_dtype,
+        ) + self.jepa_hidden_adapter(action_hidden, compute_dtype)
+        return self.jepa_transition(z0, condition, compute_dtype)
+
+    def dfm_latents_with_jepa_feedback(
+        self,
+        z_dfm: Tensor,
+        z0_jepa: Tensor,
+        z1_jepa: Tensor,
+        feedback_gate: Tensor,
+        compute_dtype: torch.dtype,
+    ) -> JepaFeedbackResult:
+        """Apply the frozen capped adjoint JEPA residual to DFM state tokens."""
+
+        if self.config.jepa_feedback_mode != "final_pass_adjoint":
+            raise ValueError(
+                "JEPA feedback requires "
+                "jepa_feedback_mode='final_pass_adjoint'"
+            )
+        batch_size = z_dfm.shape[0]
+        expected_jepa_shape = (batch_size, self.config.z_dim)
+        if z0_jepa.shape != expected_jepa_shape:
+            raise ValueError(
+                f"z0_jepa must have shape {expected_jepa_shape}, "
+                f"found {tuple(z0_jepa.shape)}"
+            )
+        if z1_jepa.shape != expected_jepa_shape:
+            raise ValueError(
+                f"z1_jepa must have shape {expected_jepa_shape}, "
+                f"found {tuple(z1_jepa.shape)}"
+            )
+        if feedback_gate.shape != (batch_size,):
+            raise ValueError(
+                f"feedback_gate must have shape {(batch_size,)}, "
+                f"found {tuple(feedback_gate.shape)}"
+            )
+
+        adapter_w = self.jepa_hidden_adapter.w.float()
+        if adapter_w.shape != (self.config.token_dim, self.config.z_dim):
+            raise ValueError(
+                "JEPA hidden adapter shape is incompatible with adjoint "
+                f"feedback: {tuple(adapter_w.shape)}"
+            )
+        delta = z1_jepa.float() - z0_jepa.float()
+        variance_correction = math.sqrt(
+            self.config.token_dim / self.config.z_dim
+        )
+        raw_feedback = (delta @ adapter_w.transpose(0, 1)) * variance_correction
+        delta_rms = torch.sqrt(delta.square().mean(dim=-1))
+        raw_feedback_rms = torch.sqrt(
+            raw_feedback.square().mean(dim=-1)
+        )
+        state_rms = torch.sqrt(
+            z_dfm.float().square().mean(dim=(1, 2))
+        )
+        max_feedback_rms = (
+            _JEPA_FEEDBACK_MAX_STATE_RMS_RATIO * state_rms
+        )
+        cap_scale = torch.minimum(
+            torch.ones_like(raw_feedback_rms),
+            max_feedback_rms
+            / raw_feedback_rms.clamp_min(_JEPA_FEEDBACK_RMS_EPSILON),
+        )
+        gate = feedback_gate.float().clamp(0.0, 1.0)
+        applied_feedback = (
+            raw_feedback * cap_scale.unsqueeze(1) * gate.unsqueeze(1)
+        )
+        applied_feedback_rms = torch.sqrt(
+            applied_feedback.square().mean(dim=-1)
+        )
+        latents = (
+            z_dfm.float() + applied_feedback.unsqueeze(1)
+        ).to(compute_dtype)
+        return JepaFeedbackResult(
+            latents=latents,
+            delta_rms=delta_rms,
+            raw_feedback_rms=raw_feedback_rms,
+            applied_feedback_rms=applied_feedback_rms,
+            state_rms=state_rms,
+            cap_fraction=(cap_scale < 1.0).float().mean(),
+        )
+
 
 class TorchArenaSelection(NamedTuple):
     """Minimal host-resident result consumed by the fail-closed arena."""
@@ -1115,6 +1245,84 @@ def _validate_torch_arena_history(
         raise ValueError(f"histories[{row}] does not reproduce boards[{row}]")
 
 
+def _root_legal_mask_from_indices(
+    legal_idx: Tensor,
+    legal_count: Tensor,
+    *,
+    action_vocab_size: int = _VOCAB_SIZE,
+) -> Tensor:
+    """Build a dense legal mask without padded-index overwrite errors."""
+
+    if legal_idx.ndim != 2:
+        raise ValueError("legal_idx must have shape [batch, slots]")
+    if legal_count.shape != (legal_idx.shape[0],):
+        raise ValueError("legal_count must have shape [batch]")
+    safe = legal_idx.long().clamp(0, action_vocab_size - 1)
+    slots = torch.arange(safe.shape[1], device=safe.device)
+    valid_slots = slots.unsqueeze(0) < legal_count.long().unsqueeze(1)
+    counts = torch.zeros(
+        (safe.shape[0], action_vocab_size),
+        dtype=torch.int32,
+        device=safe.device,
+    )
+    counts.scatter_add_(1, safe, valid_slots.to(torch.int32))
+    return counts > 0
+
+
+def _proposal_from_root_logits(
+    root_logits: Tensor,
+    current_root_action: Tensor,
+    root_legal_mask: Tensor,
+    root_legal_valid: Tensor,
+    *,
+    mask_token_id: int = _MASK_TOKEN,
+) -> RootProposal:
+    """Select a target-independent legal proposal and detached gate."""
+
+    logits = root_logits.float()
+    batch_size = logits.shape[0]
+    if logits.shape != (batch_size, _VOCAB_SIZE):
+        raise ValueError("root_logits has the wrong shape")
+    if current_root_action.shape != (batch_size,):
+        raise ValueError("current_root_action has the wrong shape")
+    if root_legal_mask.shape != logits.shape:
+        raise ValueError("root_legal_mask has the wrong shape")
+    if root_legal_mask.dtype != torch.bool:
+        raise TypeError("root_legal_mask must be boolean")
+    if root_legal_valid.shape != (batch_size,):
+        raise ValueError("root_legal_valid has the wrong shape")
+
+    valid = root_legal_valid.bool()
+    safe_mask = root_legal_mask | ~valid.unsqueeze(1)
+    legal_log_probabilities = F.log_softmax(
+        torch.where(
+            safe_mask,
+            logits,
+            torch.full_like(logits, -torch.inf),
+        ),
+        dim=-1,
+    )
+    prediction = legal_log_probabilities.argmax(dim=-1)
+    confidence = legal_log_probabilities.amax(dim=-1).exp().detach()
+    root_is_masked = current_root_action == mask_token_id
+    action = torch.where(
+        root_is_masked,
+        prediction,
+        current_root_action.long(),
+    )
+    gate = torch.where(
+        root_is_masked,
+        confidence,
+        torch.ones_like(confidence),
+    )
+    gate = torch.where(valid, gate, torch.zeros_like(gate))
+    return RootProposal(
+        action=action.detach(),
+        confidence=confidence,
+        feedback_gate=gate.detach(),
+    )
+
+
 def _torch_refine_dfm_actions(
     model: JointModel,
     z_dfm: Tensor,
@@ -1123,8 +1331,9 @@ def _torch_refine_dfm_actions(
     *,
     refinement_passes: int,
     compute_dtype: torch.dtype,
+    z_jepa: Tensor | None = None,
 ) -> Tensor:
-    """Run the frozen stable-rank iterative DFM decoder without JEPA feedback."""
+    """Run stable-rank DFM decoding, with optional pass-eight JEPA feedback."""
 
     batch_size = z_dfm.shape[0]
     horizon = model.config.horizon
@@ -1136,6 +1345,31 @@ def _torch_refine_dfm_actions(
         raise TypeError("root_legal_mask must be boolean")
     if not bool(torch.all(root_legal_mask.any(dim=-1))):
         raise ValueError("root_legal_mask contains an empty row")
+    feedback_mode = getattr(
+        model.config,
+        "jepa_feedback_mode",
+        "none",
+    )
+    feedback_active = feedback_mode == "final_pass_adjoint"
+    if feedback_mode not in {
+        "none",
+        "final_pass_adjoint",
+    }:
+        raise ValueError(
+            f"Unsupported jepa_feedback_mode: "
+            f"{feedback_mode!r}"
+        )
+    if feedback_active and (
+        refinement_passes != 8
+        or horizon != 8
+        or z_jepa is None
+        or z_jepa.shape != (batch_size, model.config.z_dim)
+    ):
+        raise ValueError(
+            "final_pass_adjoint inference requires horizon/pass count 8 "
+            "and current JEPA state"
+        )
+    planner_latents = z_dfm
     action_tokens = torch.full(
         (batch_size, horizon),
         _MASK_TOKEN,
@@ -1149,14 +1383,22 @@ def _torch_refine_dfm_actions(
             dtype=torch.float32,
             device=z_dfm.device,
         )
-        logits = model.planner(
-            z_dfm,
+        capture_hidden = feedback_active and pass_index == 6
+        planner_result = model.planner(
+            planner_latents,
             action_tokens,
             t,
             compute_dtype,
             base_root_logits=base_root_logits,
+            return_hidden=capture_hidden,
         )
-        assert isinstance(logits, Tensor)
+        if capture_hidden:
+            assert isinstance(planner_result, tuple)
+            logits, action_hidden = planner_result
+        else:
+            assert isinstance(planner_result, Tensor)
+            logits = planner_result
+            action_hidden = None
         logits_f32 = logits.float()
         if not bool(torch.all(torch.isfinite(logits_f32))):
             raise FloatingPointError(
@@ -1199,6 +1441,32 @@ def _torch_refine_dfm_actions(
             predictions,
             action_tokens,
         )
+        if capture_hidden:
+            assert action_hidden is not None
+            assert z_jepa is not None
+            proposal = _proposal_from_root_logits(
+                logits_f32[:, 0],
+                action_tokens[:, 0],
+                root_legal_mask,
+                torch.ones(
+                    (batch_size,),
+                    dtype=torch.bool,
+                    device=z_dfm.device,
+                ),
+            )
+            proposal_z = model.jepa_step(
+                z_jepa,
+                proposal.action,
+                action_hidden[:, 0],
+                compute_dtype,
+            )
+            planner_latents = model.dfm_latents_with_jepa_feedback(
+                z_dfm,
+                z_jepa,
+                proposal_z,
+                proposal.feedback_gate,
+                compute_dtype,
+            ).latents
     if bool(torch.any(action_tokens == _MASK_TOKEN)):
         raise RuntimeError(
             "Refinement passes did not unmask every action position"
@@ -1425,6 +1693,12 @@ class TorchHeroArenaPolicy:
                     tokens,
                     torch.bfloat16,
                 )
+                z_jepa = (
+                    self.model.state_projector(tokens, torch.bfloat16)
+                    if self.model.config.jepa_feedback_mode
+                    == "final_pass_adjoint"
+                    else None
+                )
                 selected = _torch_refine_dfm_actions(
                     self.model,
                     z_dfm,
@@ -1432,6 +1706,7 @@ class TorchHeroArenaPolicy:
                     legal_tensor,
                     refinement_passes=self.refinement_passes,
                     compute_dtype=torch.bfloat16,
+                    z_jepa=z_jepa,
                 )
             if device.type == "cuda":
                 torch.cuda.synchronize(device)
@@ -1614,14 +1889,74 @@ def loss_and_aux(
     t = choices.training_time
     is_masked = choices.mask_uniform < (1.0 - t).unsqueeze(1)
     noisy_actions = torch.where(is_masked, torch.full_like(actions, _MASK_TOKEN), actions)
+    feedback_mode = config.jepa_feedback_mode
+    if feedback_mode not in {"none", "final_pass_adjoint"}:
+        raise ValueError(
+            f"Unsupported jepa_feedback_mode: {feedback_mode!r}"
+        )
+    feedback_active = feedback_mode == "final_pass_adjoint"
+    preliminary_logits: Tensor | None = None
+    feedback_result: JepaFeedbackResult | None = None
+    root_proposal: RootProposal | None = None
     with _profile_scope(profile_regions, "region::dfm_noisy_planner"):
-        logits = model.planner(
+        noisy_result = model.planner(
             z_dfm,
             noisy_actions,
             t,
             compute_dtype,
             base_root_logits=base_policy_logits,
+            return_hidden=feedback_active,
         )
+    if feedback_active:
+        assert isinstance(noisy_result, tuple)
+        preliminary_logits, preliminary_hidden = noisy_result
+        with _profile_scope(profile_regions, "region::root_proposal"):
+            root_legal_mask = _root_legal_mask_from_indices(
+                batch["legal_idx"][:, 0],
+                batch["legal_count"][:, 0],
+            )
+            root_legal_valid = (
+                batch["legal_count"][:, 0].long() > 0
+            ) & (valid > 0)
+            if "legal_masks_valid" in batch:
+                root_legal_valid = root_legal_valid & (
+                    batch["legal_masks_valid"][:, 0] > 0
+                )
+            root_proposal = _proposal_from_root_logits(
+                preliminary_logits[:, 0],
+                noisy_actions[:, 0],
+                root_legal_mask,
+                root_legal_valid,
+            )
+        with _profile_scope(profile_regions, "region::proposal_jepa_step"):
+            proposal_z = model.jepa_step(
+                z_jepa,
+                root_proposal.action,
+                preliminary_hidden[:, 0],
+                compute_dtype,
+            )
+        with _profile_scope(profile_regions, "region::jepa_adjoint_feedback"):
+            feedback_result = model.dfm_latents_with_jepa_feedback(
+                z_dfm,
+                z_jepa,
+                proposal_z,
+                root_proposal.feedback_gate,
+                compute_dtype,
+            )
+        with _profile_scope(
+            profile_regions,
+            "region::dfm_feedback_planner",
+        ):
+            logits = model.planner(
+                feedback_result.latents,
+                noisy_actions,
+                t,
+                compute_dtype,
+                base_root_logits=base_policy_logits,
+            )
+    else:
+        assert isinstance(noisy_result, Tensor)
+        logits = noisy_result
     assert isinstance(logits, Tensor)
     if capture is not None:
         capture["root_logits"] = logits[:, 0].detach()
@@ -1632,6 +1967,23 @@ def loss_and_aux(
     ce_by_horizon = (ce * ce_weight).sum(dim=0) / ce_den_horizon.clamp_min(1.0)
     active_horizon = (ce_den_horizon > 0).float()
     dfm_ce = (ce_by_horizon * active_horizon).sum() / active_horizon.sum().clamp_min(1.0)
+    feedback_preliminary_dfm_ce = torch.zeros_like(dfm_ce)
+    if preliminary_logits is not None:
+        preliminary_log_probabilities = F.log_softmax(
+            preliminary_logits.detach(),
+            dim=-1,
+        )
+        preliminary_ce = -torch.gather(
+            preliminary_log_probabilities,
+            -1,
+            actions.unsqueeze(-1),
+        ).squeeze(-1)
+        preliminary_ce_by_horizon = (
+            preliminary_ce * ce_weight
+        ).sum(dim=0) / ce_den_horizon.clamp_min(1.0)
+        feedback_preliminary_dfm_ce = (
+            preliminary_ce_by_horizon * active_horizon
+        ).sum() / active_horizon.sum().clamp_min(1.0)
 
     first_probability = F.softmax(logits[:, 0].float(), dim=-1)
     first_legal_mass = _legal_mass(
@@ -1653,7 +2005,6 @@ def loss_and_aux(
         ),
         legal_gate,
     )
-
     clean_t = torch.ones(batch_size, device=actions.device, dtype=torch.float32)
     with _profile_scope(profile_regions, "region::dfm_clean_planner"):
         clean_result = model.planner(
@@ -1795,6 +2146,12 @@ def loss_and_aux(
         clip_scale = torch.ones_like(unclipped)
     loss = unclipped * clip_scale
     accuracy = _weighted_mean((logits.argmax(dim=-1) == actions).float(), ce_weight)
+    feedback_zero = torch.zeros_like(dfm_ce)
+    feedback_gate_mean = (
+        root_proposal.feedback_gate.float().mean()
+        if root_proposal is not None
+        else feedback_zero
+    )
     aux = {
         "loss": loss.detach(),
         "unclipped_loss": unclipped.detach(),
@@ -1825,6 +2182,52 @@ def loss_and_aux(
         "z_pred_norm": pred_z.float().norm(dim=-1).mean().detach(),
         "z_target_norm": target_z.float().norm(dim=-1).mean().detach(),
         "jepa_target_mean_horizon": (selected.float() + 1.0).mean().detach(),
+        "jepa_feedback_active": torch.as_tensor(
+            float(feedback_active),
+            device=actions.device,
+        ),
+        "jepa_feedback_preliminary_planner_calls": torch.as_tensor(
+            float(feedback_active),
+            device=actions.device,
+        ),
+        "jepa_feedback_conditioned_planner_calls": torch.as_tensor(
+            float(feedback_active),
+            device=actions.device,
+        ),
+        "jepa_feedback_preliminary_dfm_ce_loss": (
+            feedback_preliminary_dfm_ce.detach()
+        ),
+        "jepa_feedback_dfm_ce_improvement": (
+            (feedback_preliminary_dfm_ce - dfm_ce).detach()
+            if feedback_active
+            else feedback_zero
+        ),
+        "jepa_feedback_gate": feedback_gate_mean.detach(),
+        "jepa_feedback_delta_rms": (
+            feedback_result.delta_rms.mean().detach()
+            if feedback_result is not None
+            else feedback_zero
+        ),
+        "jepa_feedback_raw_rms": (
+            feedback_result.raw_feedback_rms.mean().detach()
+            if feedback_result is not None
+            else feedback_zero
+        ),
+        "jepa_feedback_applied_rms": (
+            feedback_result.applied_feedback_rms.mean().detach()
+            if feedback_result is not None
+            else feedback_zero
+        ),
+        "jepa_feedback_state_rms": (
+            feedback_result.state_rms.mean().detach()
+            if feedback_result is not None
+            else feedback_zero
+        ),
+        "jepa_feedback_cap_fraction": (
+            feedback_result.cap_fraction.detach()
+            if feedback_result is not None
+            else feedback_zero
+        ),
     }
     return loss, aux
 
@@ -1959,14 +2362,66 @@ def full_horizon_evaluation_aux(
 
     t = torch.zeros(batch_size, device=actions.device, dtype=torch.float32)
     noisy_actions = torch.full_like(actions, _MASK_TOKEN)
-    logits = model.planner(
+    feedback_mode = config.jepa_feedback_mode
+    if feedback_mode not in {"none", "final_pass_adjoint"}:
+        raise ValueError(
+            f"Unsupported jepa_feedback_mode: {feedback_mode!r}"
+        )
+    feedback_active = feedback_mode == "final_pass_adjoint"
+    planner_result = model.planner(
         z_dfm,
         noisy_actions,
         t,
         compute_dtype,
         base_root_logits=base_policy_logits,
+        return_hidden=feedback_active,
     )
-    assert isinstance(logits, Tensor)
+    preliminary_logits: Tensor | None = None
+    feedback_result: JepaFeedbackResult | None = None
+    root_proposal: RootProposal | None = None
+    if feedback_active:
+        assert isinstance(planner_result, tuple)
+        preliminary_logits, preliminary_hidden = planner_result
+        root_legal_mask = _root_legal_mask_from_indices(
+            batch["legal_idx"][:, 0],
+            batch["legal_count"][:, 0],
+        )
+        root_legal_valid = (
+            batch["legal_count"][:, 0].long() > 0
+        ) & (valid > 0)
+        if "legal_masks_valid" in batch:
+            root_legal_valid = root_legal_valid & (
+                batch["legal_masks_valid"][:, 0] > 0
+            )
+        root_proposal = _proposal_from_root_logits(
+            preliminary_logits[:, 0],
+            noisy_actions[:, 0],
+            root_legal_mask,
+            root_legal_valid,
+        )
+        proposal_z = model.jepa_step(
+            current_z,
+            root_proposal.action,
+            preliminary_hidden[:, 0],
+            compute_dtype,
+        )
+        feedback_result = model.dfm_latents_with_jepa_feedback(
+            z_dfm,
+            current_z,
+            proposal_z,
+            root_proposal.feedback_gate,
+            compute_dtype,
+        )
+        logits = model.planner(
+            feedback_result.latents,
+            noisy_actions,
+            t,
+            compute_dtype,
+            base_root_logits=base_policy_logits,
+        )
+    else:
+        assert isinstance(planner_result, Tensor)
+        logits = planner_result
     log_probabilities = F.log_softmax(logits, dim=-1)
     ce = -torch.gather(
         log_probabilities,
@@ -1978,6 +2433,24 @@ def full_horizon_evaluation_aux(
     ce_by_horizon = (ce * ce_weight).sum(dim=0) / ce_den_horizon.clamp_min(1.0)
     active_horizon = (ce_den_horizon > 0).float()
     dfm_ce = _weighted_mean(ce_by_horizon, active_horizon)
+    feedback_preliminary_dfm_ce = torch.zeros_like(dfm_ce)
+    if preliminary_logits is not None:
+        preliminary_log_probabilities = F.log_softmax(
+            preliminary_logits.detach(),
+            dim=-1,
+        )
+        preliminary_ce = -torch.gather(
+            preliminary_log_probabilities,
+            -1,
+            actions.unsqueeze(-1),
+        ).squeeze(-1)
+        preliminary_ce_by_horizon = (
+            preliminary_ce * ce_weight
+        ).sum(dim=0) / ce_den_horizon.clamp_min(1.0)
+        feedback_preliminary_dfm_ce = _weighted_mean(
+            preliminary_ce_by_horizon,
+            active_horizon,
+        )
 
     first_probability = F.softmax(logits[:, 0].float(), dim=-1)
     first_legal_mass = _legal_mass(
@@ -1999,25 +2472,36 @@ def full_horizon_evaluation_aux(
         ),
         legal_gate,
     )
-    root_legal_positions = (
-        torch.arange(
-            batch["legal_idx"].shape[-1],
-            device=actions.device,
-        ).unsqueeze(0)
-        < batch["legal_count"][:, 0].unsqueeze(1)
-    )
-    root_legal_mask_counts = torch.zeros(
-        (batch_size, _VOCAB_SIZE),
-        device=actions.device,
-        dtype=torch.int32,
-    )
-    root_legal_mask_counts.scatter_add_(
-        1,
-        batch["legal_idx"][:, 0].long().clamp(0, _VOCAB_SIZE - 1),
-        root_legal_positions.to(torch.int32),
+    feedback_preliminary_root_legal_ce = torch.zeros_like(root_legal_ce)
+    feedback_preliminary_legal_mass = torch.zeros_like(root_legal_ce)
+    if preliminary_logits is not None:
+        preliminary_first_probability = F.softmax(
+            preliminary_logits[:, 0].float().detach(),
+            dim=-1,
+        )
+        feedback_preliminary_legal_mass = _weighted_mean(
+            _legal_mass(
+                preliminary_first_probability,
+                batch["legal_idx"][:, 0],
+                batch["legal_count"][:, 0],
+            ),
+            legal_gate,
+        )
+        feedback_preliminary_root_legal_ce = _weighted_mean(
+            _legal_conditional_ce(
+                preliminary_logits[:, 0].detach(),
+                actions[:, 0],
+                batch["legal_idx"][:, 0],
+                batch["legal_count"][:, 0],
+            ),
+            legal_gate,
+        )
+    root_legal_mask_counts = _root_legal_mask_from_indices(
+        batch["legal_idx"][:, 0],
+        batch["legal_count"][:, 0],
     )
     root_legal_action = logits[:, 0].masked_fill(
-        root_legal_mask_counts == 0,
+        ~root_legal_mask_counts,
         -torch.inf,
     ).argmax(dim=-1)
     root_legal_top1_accuracy = _weighted_mean(
@@ -2224,6 +2708,12 @@ def full_horizon_evaluation_aux(
         compute_dtype,
     ).float()
     action_shuffled_mse = (action_shuffled_pred - target_f32).square().mean(dim=-1)
+    feedback_zero = torch.zeros_like(dfm_ce)
+    feedback_gate_mean = (
+        root_proposal.feedback_gate.float().mean()
+        if root_proposal is not None
+        else feedback_zero
+    )
 
     return {
         "loss": loss,
@@ -2233,6 +2723,50 @@ def full_horizon_evaluation_aux(
         "dfm_ce_loss_by_horizon": ce_by_horizon,
         "root_legal_conditional_ce": root_legal_ce,
         "root_legal_top1_accuracy": root_legal_top1_accuracy,
+        "jepa_feedback_active": torch.as_tensor(
+            float(feedback_active),
+            device=actions.device,
+        ),
+        "jepa_feedback_preliminary_dfm_ce_loss": (
+            feedback_preliminary_dfm_ce
+        ),
+        "jepa_feedback_dfm_ce_improvement": (
+            feedback_preliminary_dfm_ce - dfm_ce
+            if feedback_active
+            else feedback_zero
+        ),
+        "jepa_feedback_preliminary_root_legal_conditional_ce": (
+            feedback_preliminary_root_legal_ce
+        ),
+        "jepa_feedback_preliminary_first_legal_mass": (
+            feedback_preliminary_legal_mass
+        ),
+        "jepa_feedback_gate": feedback_gate_mean,
+        "jepa_feedback_delta_rms": (
+            feedback_result.delta_rms.mean()
+            if feedback_result is not None
+            else feedback_zero
+        ),
+        "jepa_feedback_raw_rms": (
+            feedback_result.raw_feedback_rms.mean()
+            if feedback_result is not None
+            else feedback_zero
+        ),
+        "jepa_feedback_applied_rms": (
+            feedback_result.applied_feedback_rms.mean()
+            if feedback_result is not None
+            else feedback_zero
+        ),
+        "jepa_feedback_state_rms": (
+            feedback_result.state_rms.mean()
+            if feedback_result is not None
+            else feedback_zero
+        ),
+        "jepa_feedback_cap_fraction": (
+            feedback_result.cap_fraction
+            if feedback_result is not None
+            else feedback_zero
+        ),
         "weighted_root_legal_conditional_ce": (
             config.root_legal_ce_coeff * root_legal_ce
         ),
@@ -4833,6 +5367,31 @@ def _apply_hero_wdl_override(
     return dataclasses.replace(config, wdl_coeff=float(wdl_coeff))
 
 
+def _apply_hero_feedback_override(
+    config: Config,
+    *,
+    recipe: str,
+    jepa_feedback_mode: str | None,
+) -> Config:
+    """Resolve the default-off hero JEPA-to-DFM coupling experiment."""
+
+    if jepa_feedback_mode is None:
+        return config
+    if recipe != "hero":
+        raise ValueError(
+            "--jepa-feedback-mode is currently a hero-only experiment"
+        )
+    if jepa_feedback_mode not in {"none", "final_pass_adjoint"}:
+        raise ValueError(
+            "--jepa-feedback-mode must be 'none' or "
+            "'final_pass_adjoint'"
+        )
+    return dataclasses.replace(
+        config,
+        jepa_feedback_mode=jepa_feedback_mode,
+    )
+
+
 def train(args: argparse.Namespace) -> int:
     config = HERO_CONFIG if args.recipe == "hero" else CONFIG
     config = _apply_sigreg_sample_override(
@@ -4844,6 +5403,15 @@ def train(args: argparse.Namespace) -> int:
         config,
         recipe=args.recipe,
         wdl_coeff=getattr(args, "wdl_coeff", None),
+    )
+    config = _apply_hero_feedback_override(
+        config,
+        recipe=args.recipe,
+        jepa_feedback_mode=getattr(
+            args,
+            "jepa_feedback_mode",
+            None,
+        ),
     )
     bt4_norm_impl = getattr(args, "bt4_norm_impl", "eager")
     prefetch_launch = getattr(args, "prefetch_launch", "step-start")
@@ -8201,10 +8769,19 @@ def evaluate_hero_pool(args: argparse.Namespace) -> int:
     device = torch.device("cuda")
     torch.set_num_threads(args.threads)
     torch.set_float32_matmul_precision("high")
+    evaluation_config = _apply_hero_feedback_override(
+        HERO_CONFIG,
+        recipe="hero",
+        jepa_feedback_mode=getattr(
+            args,
+            "jepa_feedback_mode",
+            None,
+        ),
+    )
     model, initialization = load_raw_bt4_hero_model(
         device=device,
         raw_bt4_path=args.raw_bt4_path,
-        config=HERO_CONFIG,
+        config=evaluation_config,
     )
     checkpoint_manifest = None
     if args.checkpoint_dir is not None:
@@ -8243,7 +8820,7 @@ def evaluate_hero_pool(args: argparse.Namespace) -> int:
         },
         "compute_dtype": "bfloat16",
         "execution": "eager",
-        "config": dataclasses.asdict(HERO_CONFIG),
+        "config": dataclasses.asdict(evaluation_config),
         "raw_initialization": initialization,
         "checkpoint": checkpoint_manifest,
         "wdl_calibration": (
@@ -8778,6 +9355,14 @@ def build_parser() -> argparse.ArgumentParser:
             "objective ablation and is recorded in the resume contract."
         ),
     )
+    train_parser.add_argument(
+        "--jepa-feedback-mode",
+        choices=("none", "final_pass_adjoint"),
+        help=(
+            "Enable the default-off hero proposal-derived JEPA feedback "
+            "experiment; recorded in the model and resume contracts."
+        ),
+    )
     train_parser.add_argument("--steps", type=int, default=1)
     train_parser.add_argument("--train-seconds", type=float, default=0.0)
     train_parser.add_argument("--data-start", type=int, default=0)
@@ -8928,6 +9513,14 @@ def build_parser() -> argparse.ArgumentParser:
         required=True,
     )
     hero_evaluate_parser.add_argument("--checkpoint-dir", type=Path)
+    hero_evaluate_parser.add_argument(
+        "--jepa-feedback-mode",
+        choices=("none", "final_pass_adjoint"),
+        help=(
+            "Evaluate a checkpoint with the recorded proposal-derived "
+            "feedback graph instead of the default feedback-off graph."
+        ),
+    )
     hero_evaluate_parser.add_argument("--output-dir", type=Path, required=True)
     hero_evaluate_parser.add_argument("--eval-batch-size", type=int, default=64)
     hero_evaluate_parser.add_argument("--threads", type=int, default=2)

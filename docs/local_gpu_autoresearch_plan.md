@@ -2009,3 +2009,17 @@ sweeps, held-out data, and repeated seeds.
   sweep. Seal and delete only the rejected tensor file while retaining the
   accepted count-64 model and all compact evidence. See
   `research/analysis/hero_wdl_ablation_20260727.json` and `.png`.
+- [ ] Run the first post-hero coupling experiment in
+  `research/experiment_hero_closed_loop_feedback.md`. Keep all accepted
+  count-64 model/loss/data/schedule settings and exactly eight DFM planner
+  calls, but use the model's own legal pass-7 root proposal to predict one
+  JEPA state change and condition pass 8 through the fixed capped adjoint of
+  the existing hidden adapter. The proposal and confidence gate are detached
+  and never consume the played target. First require default-off parity,
+  target-safety, adjoint/cap, gradient, pass-count, descriptor, and
+  fail-closed CPU gates, followed by one guarded checkpoint-free
+  batch-1,024 systems smoke. Only then run the matched 1,024-update candidate,
+  active-feedback frozen validation, and identical 128-pair Arena. Arena,
+  feedback-usefulness, latent-health, training-throughput, and inference-time
+  gates all apply; a positive screen still requires a repeat and 10%-epoch
+  extension.

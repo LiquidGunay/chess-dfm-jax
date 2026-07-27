@@ -254,6 +254,7 @@ def test_torch_hero_checkpoint_descriptor_pins_canonical_recipe(
                 HERO_CONFIG,
                 sigreg_example_count=256,
                 wdl_coeff=0.0,
+                jepa_feedback_mode="final_pass_adjoint",
                 remat_bt4_blocks=True,
                 remat_projector_blocks=True,
                 remat_dfm_blocks=False,
@@ -283,6 +284,10 @@ def test_torch_hero_checkpoint_descriptor_pins_canonical_recipe(
     assert descriptor.descriptor["checkpoint_storage_kind"] == "model_only"
     assert descriptor.descriptor["model_config"]["sigreg_example_count"] == 256
     assert descriptor.descriptor["model_config"]["wdl_coeff"] == 0.0
+    assert (
+        descriptor.descriptor["model_config"]["jepa_feedback_mode"]
+        == "final_pass_adjoint"
+    )
 
 
 def test_torch_hero_checkpoint_descriptor_accepts_recovery_state(

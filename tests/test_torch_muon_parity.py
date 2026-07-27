@@ -11,6 +11,7 @@ from chess_dfm_jax.nnx_bt4 import muon_adamw
 from research.train_torch import (
     CONFIG,
     MuonAdamW,
+    _LOSS_SUMMARY_METRICS,
     _prepare_training_step,
     _summarize_training_records,
     load_checkpoint_model_for_evaluation,
@@ -433,25 +434,7 @@ def test_prefetch_preparation_is_schedule_keyed_and_deterministic():
 
 
 def test_training_loss_summary_preserves_terminal_and_fixed_window_metrics():
-    metric_names = (
-        "loss",
-        "unclipped_loss",
-        "dfm_ce_loss",
-        "accuracy",
-        "first_legality_loss",
-        "weighted_legality_loss",
-        "first_legal_mass",
-        "jepa_positive_loss",
-        "jepa_sigreg_loss",
-        "jepa_pred_sigreg_loss",
-        "z_state_norm",
-        "z_pred_norm",
-        "z_target_norm",
-        "learning_rate",
-        "bt4_learning_rate",
-        "gradient_global_norm",
-        "gradient_clip_scale",
-    )
+    metric_names = _LOSS_SUMMARY_METRICS
     records = [
         {
             "update": update,

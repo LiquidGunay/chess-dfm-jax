@@ -617,11 +617,24 @@ def torch_hero_checkpoint_descriptor(
         raise ValueError(
             "Torch hero run has an invalid WDL coefficient."
         )
+    feedback_key_present = "jepa_feedback_mode" in recorded_config
+    recorded_feedback_mode = recorded_config.get(
+        "jepa_feedback_mode",
+        "none",
+    )
+    if recorded_feedback_mode not in {
+        "none",
+        "final_pass_adjoint",
+    }:
+        raise ValueError(
+            "Torch hero run has an invalid JEPA feedback mode."
+        )
     expected_config = dataclasses.asdict(
         dataclasses.replace(
             HERO_CONFIG,
             sigreg_example_count=recorded_sigreg_count,
             wdl_coeff=float(recorded_wdl_coeff),
+            jepa_feedback_mode=recorded_feedback_mode,
             remat_bt4_blocks=True,
             remat_projector_blocks=True,
             remat_dfm_blocks=False,
@@ -629,6 +642,8 @@ def torch_hero_checkpoint_descriptor(
             use_head_sdpa=True,
         )
     )
+    if not feedback_key_present and recorded_feedback_mode == "none":
+        expected_config.pop("jepa_feedback_mode")
     expected_compile_regions = [
         "state_projector_blocks",
         "dfm_blocks",
