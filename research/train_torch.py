@@ -244,6 +244,67 @@ class RawLinear(nn.Module):
         return out
 
 
+class _ExactForwardNativeLayerNorm(torch.autograd.Function):
+    """Keep eager forward rounding while using the native fused backward."""
+
+    @staticmethod
+    def forward(
+        ctx: Any,
+        x: Tensor,
+        scale: Tensor,
+        bias: Tensor,
+        eps: float,
+        compute_dtype: torch.dtype,
+    ) -> Tensor:
+        stats = x.float()
+        mean = stats.mean(dim=-1, keepdim=True)
+        centered = stats - mean
+        variance = centered.square().mean(dim=-1, keepdim=True)
+        rstd = torch.rsqrt(variance + float(eps))
+        scale_f32 = scale.float()
+        bias_f32 = bias.float()
+        ctx.save_for_backward(
+            stats,
+            mean,
+            rstd,
+            scale_f32,
+            bias_f32,
+        )
+        ctx.normalized_shape = (x.shape[-1],)
+        ctx.input_dtype = x.dtype
+        ctx.scale_dtype = scale.dtype
+        ctx.bias_dtype = bias.dtype
+        normalized = centered * rstd
+        output = normalized * scale_f32 + bias_f32
+        return output.to(compute_dtype)
+
+    @staticmethod
+    def backward(
+        ctx: Any,
+        grad_output: Tensor,
+    ) -> tuple[Tensor, Tensor, Tensor, None, None]:
+        stats, mean, rstd, scale_f32, bias_f32 = ctx.saved_tensors
+        grad_input, grad_scale, grad_bias = (
+            torch.ops.aten.native_layer_norm_backward.default(
+                grad_output.float(),
+                stats,
+                ctx.normalized_shape,
+                mean,
+                rstd,
+                scale_f32,
+                bias_f32,
+                (True, True, True),
+            )
+        )
+        return (
+            grad_input.to(ctx.input_dtype),
+            grad_scale.to(ctx.scale_dtype),
+            grad_bias.to(ctx.bias_dtype),
+            None,
+            None,
+        )
+
+
 class RawLayerNorm(nn.Module):
     def __init__(
         self,
@@ -254,7 +315,12 @@ class RawLayerNorm(nn.Module):
         implementation: str = "eager",
     ):
         super().__init__()
-        if implementation not in {"eager", "native-fp32", "native-bf16"}:
+        if implementation not in {
+            "eager",
+            "eager-fused-backward",
+            "native-fp32",
+            "native-bf16",
+        }:
             raise ValueError(
                 f"Unsupported raw LayerNorm implementation: {implementation!r}"
             )
@@ -265,6 +331,17 @@ class RawLayerNorm(nn.Module):
         self.implementation = implementation
 
     def forward(self, x: Tensor, compute_dtype: torch.dtype) -> Tensor:
+        if (
+            self.implementation == "eager-fused-backward"
+            and torch.is_grad_enabled()
+        ):
+            return _ExactForwardNativeLayerNorm.apply(
+                x,
+                self.scale,
+                self.bias,
+                self.eps,
+                compute_dtype,
+            )
         if self.implementation == "native-fp32":
             return F.layer_norm(
                 x.float(),
@@ -7703,7 +7780,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     train_parser.add_argument(
         "--bt4-norm-impl",
-        choices=("eager", "native-fp32", "native-bf16"),
+        choices=(
+            "eager",
+            "eager-fused-backward",
+            "native-fp32",
+            "native-bf16",
+        ),
         default="eager",
         help="BT4 LayerNorm runtime; eager is the frozen numerical reference.",
     )
@@ -7999,7 +8081,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     runtime_parity_parser.add_argument(
         "--candidate-bt4-norm-impl",
-        choices=("eager", "native-fp32", "native-bf16"),
+        choices=(
+            "eager",
+            "eager-fused-backward",
+            "native-fp32",
+            "native-bf16",
+        ),
         default="eager",
     )
     runtime_parity_parser.add_argument(

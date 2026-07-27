@@ -15,6 +15,7 @@ from chess_dfm_jax.policy import (
 from research.train_torch import (
     HERO_CONFIG,
     MuonAdamW,
+    RawLayerNorm,
     StateProjector,
     _analyze_lr_range_records,
     _hero_milestone_update,
@@ -26,6 +27,56 @@ from research.train_torch import (
     _torch_refine_dfm_actions,
     canonicalize_trajectory_batch,
 )
+
+
+def test_eager_fused_backward_layernorm_preserves_forward_bits() -> None:
+    generator = torch.Generator().manual_seed(91)
+    eager = RawLayerNorm(64, dtype=torch.bfloat16)
+    candidate = RawLayerNorm(
+        64,
+        dtype=torch.bfloat16,
+        implementation="eager-fused-backward",
+    )
+    with torch.no_grad():
+        eager.scale.normal_(generator=generator)
+        eager.bias.normal_(generator=generator)
+        candidate.load_state_dict(eager.state_dict())
+    eager_input = torch.randn(
+        (16, 64),
+        generator=generator,
+        dtype=torch.bfloat16,
+        requires_grad=True,
+    )
+    candidate_input = eager_input.detach().clone().requires_grad_()
+    eager_output = eager(eager_input, torch.bfloat16)
+    candidate_output = candidate(candidate_input, torch.bfloat16)
+    torch.testing.assert_close(candidate_output, eager_output, rtol=0.0, atol=0.0)
+
+    cotangent = torch.randn(
+        eager_output.shape,
+        generator=generator,
+        dtype=torch.bfloat16,
+    )
+    eager_output.backward(cotangent)
+    candidate_output.backward(cotangent)
+    torch.testing.assert_close(
+        candidate_input.grad,
+        eager_input.grad,
+        rtol=0.0,
+        atol=2 ** -22,
+    )
+    torch.testing.assert_close(
+        candidate.scale.grad,
+        eager.scale.grad,
+        rtol=0.0,
+        atol=0.0,
+    )
+    torch.testing.assert_close(
+        candidate.bias.grad,
+        eager.bias.grad,
+        rtol=0.0,
+        atol=0.0,
+    )
 
 
 def _canonical_batch(boards_and_moves: list[tuple[chess.Board, chess.Move]]):
