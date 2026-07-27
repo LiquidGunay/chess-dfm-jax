@@ -6931,14 +6931,23 @@ def sigreg_sample_audit(args: argparse.Namespace) -> int:
         capture=baseline_capture,
     )
     warm_components = baseline_capture["loss_components"]
+    warm_target_sigreg = warm_components["target_sigreg"]
+    warm_prediction_sigreg = warm_components["prediction_sigreg"]
     warm_objective = (
-        base_config.target_sigreg_coeff * warm_components["target_sigreg"]
+        base_config.target_sigreg_coeff * warm_target_sigreg
         + base_config.pred_sigreg_coeff
-        * warm_components["prediction_sigreg"]
+        * warm_prediction_sigreg
     )
+    baseline_capture.pop("loss_components")
+    del warm_loss, warm_aux, warm_components
     warm_objective.backward()
     torch.cuda.synchronize()
-    del warm_loss, warm_aux, warm_components, warm_objective, baseline_capture
+    del (
+        warm_target_sigreg,
+        warm_prediction_sigreg,
+        warm_objective,
+        baseline_capture,
+    )
     model.zero_grad(set_to_none=True)
     torch.cuda.empty_cache()
 
@@ -6966,7 +6975,7 @@ def sigreg_sample_audit(args: argparse.Namespace) -> int:
             torch.cuda.synchronize()
             started = time.perf_counter()
             forward_start.record()
-            _, aux = loss_and_aux(
+            full_loss, aux = loss_and_aux(
                 model,
                 batch,
                 choices_by_count[count],
@@ -6974,12 +6983,20 @@ def sigreg_sample_audit(args: argparse.Namespace) -> int:
                 capture=capture,
             )
             components = capture["loss_components"]
+            target_sigreg = components["target_sigreg"]
+            prediction_sigreg = components["prediction_sigreg"]
+            target_valid_count = aux["jepa_sigreg_valid_count"]
+            prediction_valid_count = aux[
+                "jepa_pred_sigreg_valid_count"
+            ]
             objective = (
                 base_config.target_sigreg_coeff
-                * components["target_sigreg"]
+                * target_sigreg
                 + base_config.pred_sigreg_coeff
-                * components["prediction_sigreg"]
+                * prediction_sigreg
             )
+            capture.pop("loss_components")
+            del full_loss, aux, components
             forward_end.record()
             objective.backward()
             backward_end.record()
@@ -7055,19 +7072,19 @@ def sigreg_sample_audit(args: argparse.Namespace) -> int:
         records[str(count)] = {
             "status": "complete",
             "target_sigreg": float(
-                components["target_sigreg"].detach().float().cpu()
+                target_sigreg.detach().float().cpu()
             ),
             "prediction_sigreg": float(
-                components["prediction_sigreg"].detach().float().cpu()
+                prediction_sigreg.detach().float().cpu()
             ),
             "weighted_shared_sigreg": float(
                 objective.detach().float().cpu()
             ),
             "target_valid_count": float(
-                aux["jepa_sigreg_valid_count"].float().cpu()
+                target_valid_count.float().cpu()
             ),
             "prediction_valid_count": float(
-                aux["jepa_pred_sigreg_valid_count"].float().cpu()
+                prediction_valid_count.float().cpu()
             ),
             "forward_cuda_seconds": (
                 forward_start.elapsed_time(forward_end) / 1000.0
@@ -7101,7 +7118,14 @@ def sigreg_sample_audit(args: argparse.Namespace) -> int:
             ),
             flush=True,
         )
-        del aux, capture, components, objective
+        del (
+            capture,
+            target_sigreg,
+            prediction_sigreg,
+            target_valid_count,
+            prediction_valid_count,
+            objective,
+        )
 
     if failed_count is not None:
         failed_index = counts.index(failed_count)
