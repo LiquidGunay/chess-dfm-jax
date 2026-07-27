@@ -1697,6 +1697,24 @@ def loss_and_aux(
             choices.sigreg_directions,
             reference_count=config.sigreg_reference_count,
         )
+    if capture is not None and capture.get("capture_sigreg_inputs") is True:
+        full_target_future_weight = (
+            valid.unsqueeze(1)
+            * selected_valid
+            * float(config.horizon / config.target_sample_count)
+        )
+        capture["sigreg_inputs"] = {
+            "target_z": z_all.detach(),
+            "target_weight": torch.cat(
+                (valid.unsqueeze(1), full_target_future_weight),
+                dim=1,
+            ).detach(),
+            "prediction_z": pred_z.detach(),
+            "prediction_weight": (
+                future_valid * valid.unsqueeze(1)
+            ).detach(),
+            "directions": choices.sigreg_directions.detach(),
+        }
 
     wdl_loss = torch.zeros((), device=actions.device, dtype=torch.float32)
     wdl_accuracy = torch.zeros_like(wdl_loss)
@@ -6692,6 +6710,575 @@ def loss_gradient_audit(args: argparse.Namespace) -> int:
     return 0
 
 
+def _copy_parameter_gradients_to_cpu(
+    model: nn.Module,
+) -> tuple[dict[str, Tensor], int]:
+    gradients: dict[str, Tensor] = {}
+    total_bytes = 0
+    for name, parameter in model.named_parameters():
+        if parameter.grad is None:
+            continue
+        gradient = parameter.grad.detach().to(
+            device="cpu",
+            dtype=torch.float32,
+            copy=True,
+        )
+        gradients[name] = gradient
+        total_bytes += gradient.numel() * gradient.element_size()
+    return gradients, total_bytes
+
+
+def _gradient_cosines_against_cpu_reference(
+    model: nn.Module,
+    reference: Mapping[str, Tensor],
+    *,
+    reference_norms: Mapping[str, Mapping[str, Any]],
+    candidate_norms: Mapping[str, Mapping[str, Any]],
+) -> dict[str, Any]:
+    dot_by_group = {
+        group: 0.0 for group in (*_LOSS_AUDIT_GROUPS, "all")
+    }
+    candidate_names = {
+        name
+        for name, parameter in model.named_parameters()
+        if parameter.grad is not None
+    }
+    reference_names = set(reference)
+    for name, parameter in model.named_parameters():
+        reference_gradient = reference.get(name)
+        candidate_gradient = parameter.grad
+        if reference_gradient is None or candidate_gradient is None:
+            continue
+        candidate_cpu = candidate_gradient.detach().to(
+            device="cpu",
+            dtype=torch.float32,
+        )
+        dot = float(
+            torch.sum(
+                reference_gradient * candidate_cpu,
+                dtype=torch.float64,
+            )
+        )
+        group = _gradient_audit_group(name)
+        dot_by_group[group] += dot
+        dot_by_group["all"] += dot
+
+    groups: dict[str, Any] = {}
+    for group in (*_LOSS_AUDIT_GROUPS, "all"):
+        reference_norm = float(reference_norms[group]["norm"])
+        candidate_norm = float(candidate_norms[group]["norm"])
+        denominator = reference_norm * candidate_norm
+        groups[group] = {
+            "dot": dot_by_group[group],
+            "reference_norm": reference_norm,
+            "candidate_norm": candidate_norm,
+            "cosine": (
+                max(-1.0, min(1.0, dot_by_group[group] / denominator))
+                if denominator > 1e-30
+                else None
+            ),
+            "candidate_to_reference_norm_ratio": (
+                candidate_norm / reference_norm
+                if reference_norm > 1e-30
+                else None
+            ),
+        }
+    return {
+        "groups": groups,
+        "missing_from_candidate": sorted(reference_names - candidate_names),
+        "missing_from_reference": sorted(candidate_names - reference_names),
+    }
+
+
+def sigreg_sample_audit(args: argparse.Namespace) -> int:
+    """Audit normalized SIGReg sample counts without updating model state."""
+
+    if not torch.cuda.is_available():
+        raise RuntimeError("sigreg-sample-audit requires CUDA")
+    counts = tuple(int(value) for value in args.sample_counts)
+    if (
+        not counts
+        or counts != tuple(sorted(set(counts)))
+        or counts[0] < 1
+        or counts[-1] > args.batch_size
+    ):
+        raise ValueError(
+            "--sample-counts must be unique, increasing, positive, and no "
+            "larger than --batch-size"
+        )
+    if args.replicates < 2:
+        raise ValueError("--replicates must be at least 2")
+    if args.threads not in (1, 2):
+        raise ValueError("--threads must be 1 or 2 under the resource guard")
+    output = _require_workspace(args.output)
+    if output.exists():
+        raise FileExistsError(f"SIGReg sample audit output exists: {output}")
+    output.parent.mkdir(parents=True, exist_ok=True)
+
+    device = torch.device("cuda")
+    torch.set_num_threads(args.threads)
+    torch.set_float32_matmul_precision("high")
+    base_config = dataclasses.replace(
+        HERO_CONFIG,
+        remat_bt4_blocks=True,
+        remat_projector_blocks=True,
+        remat_dfm_blocks=False,
+        use_bt4_sdpa=True,
+        use_head_sdpa=True,
+        sigreg_example_count=counts[0],
+    )
+    batches = CanonicalTrajectoryBatches(
+        _require_workspace(args.data_root) / "train",
+        batch_size=args.batch_size,
+        horizon=base_config.horizon,
+        seed=args.seed,
+        shuffle_files=True,
+        batch_schedule="global_permutation",
+    )
+    prepared = _prepare_training_step(
+        batches,
+        seed=args.seed,
+        update=args.update,
+        data_cursor=args.data_step,
+        batch_size=args.batch_size,
+        config=base_config,
+    )
+    batch = _torch_batch(prepared.compact_batch, device)
+    choices_by_count = {
+        count: _choices_to_device(
+            materialize_step_choices(
+                seed=args.seed,
+                update=args.update,
+                batch_size=args.batch_size,
+                config=dataclasses.replace(
+                    base_config,
+                    sigreg_example_count=count,
+                ),
+                device=torch.device("cpu"),
+            ),
+            device,
+        )
+        for count in counts
+    }
+    baseline_choices = choices_by_count[counts[0]]
+    for count in counts[1:]:
+        candidate = choices_by_count[count]
+        for name in (
+            "target_horizon",
+            "training_time",
+            "mask_uniform",
+            "sigreg_directions",
+        ):
+            torch.testing.assert_close(
+                getattr(candidate, name),
+                getattr(baseline_choices, name),
+                rtol=0.0,
+                atol=0.0,
+            )
+        torch.testing.assert_close(
+            candidate.sigreg_indices[: counts[0]],
+            baseline_choices.sigreg_indices,
+            rtol=0.0,
+            atol=0.0,
+        )
+    torch.testing.assert_close(
+        prepared.choices.target_horizon,
+        baseline_choices.target_horizon.cpu(),
+        rtol=0.0,
+        atol=0.0,
+    )
+
+    model, mapping = load_raw_bt4_hero_model(
+        device=device,
+        raw_bt4_path=args.raw_bt4_path,
+        config=base_config,
+        bt4_norm_impl="eager-fused-backward",
+    )
+    checkpoint_manifest = None
+    if args.checkpoint_dir is not None:
+        checkpoint_manifest = load_model_checkpoint(
+            checkpoint_dir=args.checkpoint_dir,
+            model=model,
+        )
+        if (
+            checkpoint_manifest["source_mapping_sha256"]
+            != mapping["combined_sha256"]
+        ):
+            raise ValueError("Checkpoint source mapping differs from raw BT4")
+    model.train()
+    compiled_regions = _apply_compile_regions(model, args.compile_regions)
+
+    baseline_capture: dict[str, Any] = {}
+    baseline_count = counts[0]
+    model.config = dataclasses.replace(
+        base_config,
+        sigreg_example_count=baseline_count,
+    )
+    model.zero_grad(set_to_none=True)
+    warm_forward_loss, warm_forward_aux = loss_and_aux(
+        model,
+        batch,
+        baseline_choices,
+        compute_dtype=torch.bfloat16,
+        capture={},
+    )
+    del warm_forward_loss, warm_forward_aux
+    warm_loss, warm_aux = loss_and_aux(
+        model,
+        batch,
+        baseline_choices,
+        compute_dtype=torch.bfloat16,
+        capture=baseline_capture,
+    )
+    warm_components = baseline_capture["loss_components"]
+    warm_objective = (
+        base_config.target_sigreg_coeff * warm_components["target_sigreg"]
+        + base_config.pred_sigreg_coeff
+        * warm_components["prediction_sigreg"]
+    )
+    warm_objective.backward()
+    torch.cuda.synchronize()
+    del warm_loss, warm_aux, warm_components, warm_objective, baseline_capture
+    model.zero_grad(set_to_none=True)
+    torch.cuda.empty_cache()
+
+    records: dict[str, Any] = {}
+    reference_gradients: dict[str, Tensor] | None = None
+    reference_norms: dict[str, dict[str, Any]] | None = None
+    reference_gradient_bytes = 0
+    sigreg_inputs_cpu: dict[str, Tensor] | None = None
+    failed_count: int | None = None
+    for count in counts:
+        model.config = dataclasses.replace(
+            base_config,
+            sigreg_example_count=count,
+        )
+        model.zero_grad(set_to_none=True)
+        torch.cuda.empty_cache()
+        torch.cuda.reset_peak_memory_stats()
+        capture: dict[str, Any] = {
+            "capture_sigreg_inputs": count == baseline_count,
+        }
+        forward_start = torch.cuda.Event(enable_timing=True)
+        forward_end = torch.cuda.Event(enable_timing=True)
+        backward_end = torch.cuda.Event(enable_timing=True)
+        try:
+            torch.cuda.synchronize()
+            started = time.perf_counter()
+            forward_start.record()
+            _, aux = loss_and_aux(
+                model,
+                batch,
+                choices_by_count[count],
+                compute_dtype=torch.bfloat16,
+                capture=capture,
+            )
+            components = capture["loss_components"]
+            objective = (
+                base_config.target_sigreg_coeff
+                * components["target_sigreg"]
+                + base_config.pred_sigreg_coeff
+                * components["prediction_sigreg"]
+            )
+            forward_end.record()
+            objective.backward()
+            backward_end.record()
+            torch.cuda.synchronize()
+            wall_seconds = time.perf_counter() - started
+        except torch.OutOfMemoryError as exc:
+            failed_count = count
+            records[str(count)] = {
+                "status": "oom",
+                "error": str(exc),
+            }
+            model.zero_grad(set_to_none=True)
+            torch.cuda.empty_cache()
+            break
+
+        gradient_norms = _gradient_norms_by_group(model)
+        cosine_to_baseline: dict[str, Any] | None
+        gradient_copy_started = time.perf_counter()
+        if count == baseline_count:
+            reference_gradients, reference_gradient_bytes = (
+                _copy_parameter_gradients_to_cpu(model)
+            )
+            reference_norms = gradient_norms
+            cosine_to_baseline = {
+                "groups": {
+                    group: {
+                        "dot": float(gradient_norms[group]["squared_norm"]),
+                        "reference_norm": float(gradient_norms[group]["norm"]),
+                        "candidate_norm": float(gradient_norms[group]["norm"]),
+                        "cosine": (
+                            1.0
+                            if float(gradient_norms[group]["norm"]) > 1e-30
+                            else None
+                        ),
+                        "candidate_to_reference_norm_ratio": (
+                            1.0
+                            if float(gradient_norms[group]["norm"]) > 1e-30
+                            else None
+                        ),
+                    }
+                    for group in (*_LOSS_AUDIT_GROUPS, "all")
+                },
+                "missing_from_candidate": [],
+                "missing_from_reference": [],
+            }
+            captured_inputs = capture["sigreg_inputs"]
+            sigreg_inputs_cpu = {
+                name: value.detach().to(device="cpu", copy=True)
+                for name, value in captured_inputs.items()
+            }
+        else:
+            assert reference_gradients is not None
+            assert reference_norms is not None
+            cosine_to_baseline = _gradient_cosines_against_cpu_reference(
+                model,
+                reference_gradients,
+                reference_norms=reference_norms,
+                candidate_norms=gradient_norms,
+            )
+        gradient_copy_seconds = time.perf_counter() - gradient_copy_started
+        records[str(count)] = {
+            "status": "complete",
+            "target_sigreg": float(
+                components["target_sigreg"].detach().float().cpu()
+            ),
+            "prediction_sigreg": float(
+                components["prediction_sigreg"].detach().float().cpu()
+            ),
+            "weighted_shared_sigreg": float(
+                objective.detach().float().cpu()
+            ),
+            "target_valid_count": float(
+                aux["jepa_sigreg_valid_count"].float().cpu()
+            ),
+            "prediction_valid_count": float(
+                aux["jepa_pred_sigreg_valid_count"].float().cpu()
+            ),
+            "forward_cuda_seconds": (
+                forward_start.elapsed_time(forward_end) / 1000.0
+            ),
+            "backward_cuda_seconds": (
+                forward_end.elapsed_time(backward_end) / 1000.0
+            ),
+            "forward_backward_wall_seconds": wall_seconds,
+            "gradient_copy_and_cosine_seconds": gradient_copy_seconds,
+            "peak_allocated_bytes": torch.cuda.max_memory_allocated(),
+            "peak_reserved_bytes": torch.cuda.max_memory_reserved(),
+            "gradient_groups": gradient_norms,
+            "gradient_vs_baseline": cosine_to_baseline,
+        }
+        del aux, capture, components, objective
+
+    scalar_dispersion: dict[str, Any] = {}
+    if failed_count is None:
+        assert sigreg_inputs_cpu is not None
+        del reference_gradients
+        reference_gradients = None
+        model.zero_grad(set_to_none=True)
+        torch.cuda.empty_cache()
+        target_z = sigreg_inputs_cpu["target_z"].to(device)
+        target_weight = sigreg_inputs_cpu["target_weight"].to(device)
+        prediction_z = sigreg_inputs_cpu["prediction_z"].to(device)
+        prediction_weight = sigreg_inputs_cpu["prediction_weight"].to(device)
+        directions = sigreg_inputs_cpu["directions"].to(device)
+        torch.cuda.reset_peak_memory_stats()
+        with torch.inference_mode():
+            for count in counts:
+                target_values: list[float] = []
+                prediction_values: list[float] = []
+                cuda_seconds: list[float] = []
+                subset_sha256: list[str] = []
+                for replicate in range(args.replicates):
+                    if replicate == 0:
+                        indices = (
+                            choices_by_count[count]
+                            .sigreg_indices.detach()
+                            .cpu()
+                            .numpy()
+                        )
+                    else:
+                        sequence = np.random.SeedSequence(
+                            [
+                                int(args.seed),
+                                int(args.update),
+                                int(args.data_step),
+                                int(count),
+                                int(replicate),
+                                0x51_67_52_45_47,
+                            ]
+                        )
+                        rng = np.random.Generator(np.random.PCG64(sequence))
+                        indices = rng.permutation(args.batch_size)[:count]
+                    indices = np.asarray(indices, dtype=np.int64)
+                    subset_sha256.append(
+                        hashlib.sha256(indices.tobytes()).hexdigest()
+                    )
+                    rows = torch.from_numpy(indices).to(device)
+                    start = torch.cuda.Event(enable_timing=True)
+                    end = torch.cuda.Event(enable_timing=True)
+                    start.record()
+                    target_value, _ = _sigreg_v_stat(
+                        target_z[rows].float().reshape(
+                            -1,
+                            base_config.z_dim,
+                        ),
+                        target_weight[rows].reshape(-1),
+                        directions,
+                        reference_count=base_config.sigreg_reference_count,
+                    )
+                    prediction_value, _ = _sigreg_v_stat(
+                        prediction_z[rows].float().reshape(
+                            -1,
+                            base_config.z_dim,
+                        ),
+                        prediction_weight[rows].reshape(-1),
+                        directions,
+                        reference_count=base_config.sigreg_reference_count,
+                    )
+                    end.record()
+                    torch.cuda.synchronize()
+                    target_values.append(float(target_value.cpu()))
+                    prediction_values.append(float(prediction_value.cpu()))
+                    cuda_seconds.append(start.elapsed_time(end) / 1000.0)
+
+                def summarize(values: list[float]) -> dict[str, float]:
+                    array = np.asarray(values, dtype=np.float64)
+                    return {
+                        "mean": float(array.mean()),
+                        "sample_standard_deviation": float(
+                            array.std(ddof=1)
+                        ),
+                        "standard_error": float(
+                            array.std(ddof=1) / math.sqrt(len(array))
+                        ),
+                        "minimum": float(array.min()),
+                        "maximum": float(array.max()),
+                    }
+
+                weighted = [
+                    base_config.target_sigreg_coeff * target
+                    + base_config.pred_sigreg_coeff * prediction
+                    for target, prediction in zip(
+                        target_values,
+                        prediction_values,
+                        strict=True,
+                    )
+                ]
+                scalar_dispersion[str(count)] = {
+                    "replicates": args.replicates,
+                    "target": summarize(target_values),
+                    "prediction": summarize(prediction_values),
+                    "weighted_shared": summarize(weighted),
+                    "mean_statistic_cuda_seconds": float(
+                        np.mean(cuda_seconds)
+                    ),
+                    "subset_sha256": subset_sha256,
+                }
+        scalar_peak_allocated = torch.cuda.max_memory_allocated()
+        scalar_peak_reserved = torch.cuda.max_memory_reserved()
+    else:
+        scalar_peak_allocated = None
+        scalar_peak_reserved = None
+
+    completed_counts = [
+        count for count in counts if records[str(count)]["status"] == "complete"
+    ]
+    gate_checks = {
+        "all_requested_counts_complete": completed_counts == list(counts),
+        "nested_representative_samples": True,
+        "finite_scalars": all(
+            math.isfinite(float(records[str(count)][metric]))
+            for count in completed_counts
+            for metric in (
+                "target_sigreg",
+                "prediction_sigreg",
+                "weighted_shared_sigreg",
+            )
+        ),
+        "finite_gradients": all(
+            group["finite"]
+            for count in completed_counts
+            for group in records[str(count)]["gradient_groups"].values()
+        ),
+        "gradient_support_matches_baseline": all(
+            not records[str(count)]["gradient_vs_baseline"][
+                "missing_from_candidate"
+            ]
+            and not records[str(count)]["gradient_vs_baseline"][
+                "missing_from_reference"
+            ]
+            for count in completed_counts
+        ),
+    }
+    report = {
+        "schema_version": "torch-hero-sigreg-sample-audit-v1",
+        "created_utc": datetime.now(UTC).isoformat(),
+        "git_commit": _git_commit(),
+        "device": torch.cuda.get_device_name(device),
+        "state": (
+            "fresh_initialization"
+            if checkpoint_manifest is None
+            else f"checkpoint_u{checkpoint_manifest['optimizer_update']}"
+        ),
+        "checkpoint": checkpoint_manifest,
+        "source_mapping_sha256": mapping["combined_sha256"],
+        "batch_size": args.batch_size,
+        "sample_counts": list(counts),
+        "replicates": args.replicates,
+        "data_step": args.data_step,
+        "update": args.update,
+        "seed": args.seed,
+        "data_prepare_seconds": prepared.prepare_seconds,
+        "bt4_norm_impl": "eager-fused-backward",
+        "compile_regions": compiled_regions,
+        "shared_sigreg_coefficient": base_config.target_sigreg_coeff,
+        "coefficients_equal": (
+            base_config.target_sigreg_coeff
+            == base_config.pred_sigreg_coeff
+        ),
+        "representative_records": records,
+        "scalar_dispersion": scalar_dispersion,
+        "scalar_phase_peak_allocated_bytes": scalar_peak_allocated,
+        "scalar_phase_peak_reserved_bytes": scalar_peak_reserved,
+        "reference_gradient_cpu_bytes": reference_gradient_bytes,
+        "data": batches.provenance(),
+        "gate_checks": gate_checks,
+        "gate_pass": all(gate_checks.values()),
+    }
+    _write_json(output, report)
+    print(
+        json.dumps(
+            {
+                "output": str(output),
+                "state": report["state"],
+                "completed_counts": completed_counts,
+                "gate_pass": report["gate_pass"],
+                "records": {
+                    key: {
+                        field: value[field]
+                        for field in (
+                            "status",
+                            "forward_cuda_seconds",
+                            "backward_cuda_seconds",
+                            "peak_allocated_bytes",
+                        )
+                        if field in value
+                    }
+                    for key, value in records.items()
+                },
+            },
+            sort_keys=True,
+        ),
+        flush=True,
+    )
+    if not report["gate_pass"]:
+        raise RuntimeError("SIGReg sample-count audit gate failed")
+    return 0
+
+
 def _evaluate_validation_pool(
     model: JointModel,
     batches: Any,
@@ -8287,6 +8874,42 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     loss_audit_parser.set_defaults(handler=loss_gradient_audit)
+
+    sigreg_sample_parser = subparsers.add_parser("sigreg-sample-audit")
+    sigreg_sample_parser.add_argument(
+        "--raw-bt4-path",
+        type=Path,
+        default=_RAW_BT4_PATH,
+    )
+    sigreg_sample_parser.add_argument(
+        "--data-root",
+        type=Path,
+        default=_DATA_ROOT,
+    )
+    sigreg_sample_parser.add_argument("--checkpoint-dir", type=Path)
+    sigreg_sample_parser.add_argument("--batch-size", type=int, default=1024)
+    sigreg_sample_parser.add_argument(
+        "--sample-counts",
+        type=int,
+        nargs="+",
+        default=(64, 128, 256),
+    )
+    sigreg_sample_parser.add_argument("--replicates", type=int, default=8)
+    sigreg_sample_parser.add_argument("--data-step", type=int, default=0)
+    sigreg_sample_parser.add_argument("--update", type=int, default=0)
+    sigreg_sample_parser.add_argument("--seed", type=int, default=0)
+    sigreg_sample_parser.add_argument("--threads", type=int, default=2)
+    sigreg_sample_parser.add_argument(
+        "--compile-regions",
+        choices=("none", "dfm-jepa", "fresh"),
+        default="fresh",
+    )
+    sigreg_sample_parser.add_argument(
+        "--output",
+        type=Path,
+        required=True,
+    )
+    sigreg_sample_parser.set_defaults(handler=sigreg_sample_audit)
 
     runtime_parity_parser = subparsers.add_parser("runtime-parity")
     runtime_parity_parser.add_argument(
