@@ -156,8 +156,11 @@ def audit_storage(
             continue
         if not root.exists():
             continue
-        for state_path in root.rglob("state.npz"):
-            observed_states.add(state_path.relative_to(repo_root).as_posix())
+        for state_filename in ("state.npz", "state.safetensors"):
+            for state_path in root.rglob(state_filename):
+                observed_states.add(
+                    state_path.relative_to(repo_root).as_posix()
+                )
     missing_states = sorted(allowed_states - observed_states)
     extra_states = sorted(observed_states - allowed_states)
     for raw_path in missing_states:

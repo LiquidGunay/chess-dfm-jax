@@ -116,6 +116,11 @@ def test_storage_audit_rejects_extra_state_archive_and_cache(tmp_path: Path) -> 
         repo_root / "research/runs/rejected/checkpoints/update/state.npz",
         b"unselected",
     )
+    _write(
+        repo_root
+        / "research/runs/rejected/checkpoints/update/state.safetensors",
+        b"unselected-recovery",
+    )
     _write(repo_root / "data/source/archive.tar", b"redundant")
     _write(repo_root / ".local/cache/jax/oversized", b"x" * 1025)
 
@@ -126,5 +131,6 @@ def test_storage_audit_rejects_extra_state_archive_and_cache(tmp_path: Path) -> 
 
     assert report["ok"] is False
     assert any("Unselected checkpoint state" in error for error in report["errors"])
+    assert len(report["state_files"]["extra"]) == 2
     assert any("Redundant archive" in error for error in report["errors"])
     assert any("Cache budget exceeded" in error for error in report["errors"])

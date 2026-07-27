@@ -26,7 +26,8 @@
     "checkpoints/source/step0265000_archive",
     "checkpoints/source/step0265000_parts",
     "data/source/trajectory_v3_lc0_test80_h8_sets1_3_20260430.tar",
-    "models/source/models.tar"
+    "models/source/models.tar",
+    "research/runs/torch_hero_epoch_v1/checkpoints/update00013840"
   ],
   "required_files": [
     {
@@ -244,6 +245,48 @@
       "role": "upstream_bt4_source_parity_corpus",
       "sha256": "49821c8a6dfcbcd2ac94e58d5ab5ce68be1bc5ef9a2445ba4143c5b0704da111",
       "size_bytes": 2461
+    },
+    {
+      "path": "research/runs/torch_hero_epoch_v1/checkpoint/model.safetensors",
+      "role": "hero_epoch_v1_selected_terminal_model",
+      "sha256": "665ac91ad37e14a6c8810068700dba021e39e9c0fe145c8bf620882bb5a71692",
+      "size_bytes": 712339616
+    },
+    {
+      "path": "research/runs/torch_hero_epoch_v1/checkpoint/manifest.json",
+      "role": "hero_epoch_v1_selected_terminal_manifest",
+      "sha256": "ac4c00ed6dcee8130655dff665549e1834959cd902522be593e3e3e611062735",
+      "size_bytes": 489
+    },
+    {
+      "path": "research/runs/torch_hero_epoch_v1/run_config.json",
+      "role": "hero_epoch_v1_training_contract",
+      "sha256": "5d6138706269ae4a0f87879aa91ee4298df65b70443d1c5ac663989d9b5e3b43",
+      "size_bytes": 266145
+    },
+    {
+      "path": "research/runs/torch_hero_epoch_v1/report.json",
+      "role": "hero_epoch_v1_training_report",
+      "sha256": "c568642f6b22be9546e759df696bd9385d5ee8b79cae04f1472a312a260789e3",
+      "size_bytes": 126880
+    },
+    {
+      "path": "research/runs/torch_hero_epoch_v1/loss_summary.json",
+      "role": "hero_epoch_v1_compact_loss_summary",
+      "sha256": "0fa50b4cf567840a140063103b6626a6771c69e233ca8ae40b524395175c2b19",
+      "size_bytes": 3530
+    },
+    {
+      "path": "research/runs/torch_hero_epoch_v1/metrics.jsonl",
+      "role": "hero_epoch_v1_full_training_loss_record",
+      "sha256": "c2fe1f5eb834a7f1bf54a5754e4cf5dc4bfa05ffc0baf48fac2ab7f5b0f58e0d",
+      "size_bytes": 61941568
+    },
+    {
+      "path": "research/runs/torch_hero_epoch_v1/hero_validation_metrics.jsonl",
+      "role": "hero_epoch_v1_fast_validation_curve",
+      "sha256": "4f9bcde052ceec09168e0e3ed43de217828378773bbcb49688a9fd0640e873d8",
+      "size_bytes": 86326
     }
   ],
   "schema_version": 1,

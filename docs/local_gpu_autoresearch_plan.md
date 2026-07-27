@@ -468,11 +468,13 @@ interpret later phase transitions and scaling curves.
 
 `research/storage_retention.json` is the exact current allowlist.
 `research/storage_audit.py` checks required sizes, dataset shard counts and
-payload bytes, extra `state.npz` files, redundant staging archives, and a
-4-GiB JAX compilation-cache ceiling. `research/env.sh` configures the same
-cache limit. Run the fast audit before every GPU job and after checkpoint
-selection/pruning, and run its `--verify-hashes` mode after restoring or
-moving an immutable asset. The command is read-only and all declared paths
+payload bytes, extra recovery states in either `state.npz` or
+`state.safetensors` format, redundant staging archives, and a 4-GiB JAX
+compilation-cache ceiling. Selected model-only safetensors are pinned as
+required files. `research/env.sh` configures the same cache limit. Run the
+fast audit before every GPU job and after checkpoint selection/pruning, and
+run its `--verify-hashes` mode after restoring or moving an immutable asset.
+The command is read-only and all declared paths
 resolve below this repository in `/mountpoint/.exp`.
 
 Initial enforcement on 2026-07-20 reduced 28 research states to the two
@@ -1920,7 +1922,7 @@ sweeps, held-out data, and repeated seeds.
   terminal train loss, for cross-experiment quality plots. Consider regional
   `torch.compile` only if measured end-to-end payback occurs within a typical
   run; return selected architectures to JAX for hero runs.
-- [ ] Execute the approved clean one-epoch BT4 + DFM + JEPA hero run under
+- [x] Execute the approved clean one-epoch BT4 + DFM + JEPA hero run under
   `docs/hero_epoch_plan.md`. This replaces continuation-checkpoint
   autoresearch as the immediate priority. Start from raw BT4 plus fresh
   modules, use canonical actions and a zero-initialized DFM policy residual,
@@ -1930,4 +1932,16 @@ sweeps, held-out data, and repeated seeds.
   optimization phase before launch. Physical batch changes do not rescale the
   normalized SIGReg coefficient; keep the SIGReg estimator sample fixed
   during systems comparisons and re-audit gradients after the runtime batch
-  is selected.
+  is selected. The run completed all 27,679 updates / 28,343,296 examples at
+  184.277 examples/s. Halfway and terminal primary DFM CE are `4.752373` and
+  `4.577527`; their frozen 1,024-pair scores against raw BT4 are `0.869141`
+  and `0.891602`. The terminal blind pool reproduces primary DFM CE within
+  `0.014658`, and both retained checkpoints pass exact 462-leaf Torch-to-JAX
+  state materialization. See
+  `research/analysis/hero_epoch_v1_closeout_20260727.json`.
+- [ ] Run a profiler-driven PyTorch/kernel sprint against the completed hero
+  baseline. Measure CUDA-graph/removable synchronization overhead first, then
+  maintained fused linear cross-entropy, chunked or fused SIGReg, and only
+  profiler-identified norm/SwiGLU/residual epilogues. Keep an optimization
+  only if it improves end-to-end throughput by at least 10% or changes the
+  feasible HBM/batch regime without changing numerical results.

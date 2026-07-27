@@ -468,7 +468,7 @@ The disjoint 65,536-position terminal primary validation then passed in
 |---|---:|---:|
 | Total weighted loss | `13.472500` | `5.297095` |
 | All-horizon DFM CE | `7.443514` | `4.577527` |
-| H1 DFM CE | not retained in the compact initialization summary | `1.939824` |
+| H1 DFM CE | `6.829365` | `1.939824` |
 | Root legal top-1 | `20.0485%` | `49.5712%` |
 | Root legal mass | `2.3147%` | `89.8497%` |
 | JEPA raw MSE | `0.786217` | `0.047361` |
@@ -520,3 +520,118 @@ research/run_gpu.sh .venv/bin/python research/evaluate_arena.py \
   --policy-batch-size-cap 16 \
   --output-dir artifacts/arena/hero-epoch-v1-terminal-vs-raw-bt4-1024pairs
 ```
+
+## Frozen halfway-to-terminal trajectory
+
+Commit `247c190` adds a checksum-verified streaming model restore for the
+retained halfway recovery state. It loads only the `model.*` tensors from the
+1.86 GB model-plus-optimizer payload and creates no duplicate model
+checkpoint. Both halfway and terminal checkpoints were then evaluated on the
+same disjoint 65,536-position primary pool:
+
+| Metric | Halfway, update 13,840 | Terminal, update 27,679 | Change |
+|---|---:|---:|---:|
+| Total weighted loss | `5.602847` | `5.297095` | `-0.305752` |
+| All-horizon DFM CE | `4.752373` | `4.577527` | `-0.174846` |
+| H1 DFM CE | `2.088059` | `1.939824` | `-0.148236` |
+| Root legal mass | `85.9598%` | `89.8497%` | `+3.8899 pp` |
+| Root legal top-1 | `48.4436%` | `49.5712%` | `+1.1276 pp` |
+| JEPA raw MSE | `0.067764` | `0.047361` | `-0.020403` |
+| Target SIGReg | `0.039954` | `0.034222` | `-0.005732` |
+| Prediction SIGReg | `0.040584` | `0.034616` | `-0.005968` |
+
+The halfway prediction/target effective-rank ratios are
+`1.0125..1.0286`, while centered-RMS ratios are `0.9963..1.0067`.
+Together with the terminal ratios above, this rules out prediction-only
+collapse at both retained points. It does not remove the shared low-rank
+concentration caveat.
+
+The halfway primary report is
+`research/runs/torch_hero_epoch_v1_halfway_primary_eval_v1/report.json`,
+SHA-256
+`5e3cb429633b727e7a99b16c1e1a0a6cfdca912dfa5589101faef87cb6a1d9dc`.
+
+## Frozen Arena result and latency
+
+The 16-pair terminal pilot passed with zero faults and cap draws. The full
+halfway and terminal runs then completed the same 1,024 color-reversed
+opening pairs, or 2,048 games per checkpoint, at the corrected 256-ply cap:
+
+| Metric | Halfway | Terminal |
+|---|---:|---:|
+| Pentanomial | `[0, 0, 69, 398, 557]` | `[0, 0, 43, 358, 623]` |
+| Pair score | `0.869141` | `0.891602` |
+| Candidate W/D/L | `1512 / 536 / 0` | `1604 / 444 / 0` |
+| Descriptive logistic Elo | `+328.91` | `+366.06` |
+| Pair-aware 95% Elo interval | `+271.42..+405.30` | `+300.19..+460.44` |
+| Normalized Elo diagnostic | `+585.21` | `+670.31` |
+| Candidate amortized latency | `4.913 ms/position` | `4.881 ms/position` |
+| Raw-BT4 amortized latency | `2.802 ms/position` | `2.787 ms/position` |
+| Gameplay wall time | `699.85 s` | `675.95 s` |
+| Faults / cap draws | `0 / 0` | `0 / 0` |
+
+These Elo values are relative to the frozen raw-BT4 implementation and
+opening pool. They are not human, Lichess, or published-BT4 absolute ratings.
+The terminal-minus-halfway pair-score difference is `+0.022461`. Because the
+openings align exactly, a descriptive paired t interval is
+`+0.009284..+0.035637`: terminal is better on 312 pairs, equal on 467, and
+worse on 245. This is positive within-run evidence that the held-out DFM CE
+improvement corresponds to chess strength, but two strength checkpoints in
+one run are not a cross-recipe loss-to-Elo calibration.
+
+The authoritative Arena states are:
+
+- `artifacts/arena/hero-epoch-v1-halfway-vs-raw-bt4-1024pairs/state.json`;
+- `artifacts/arena/hero-epoch-v1-terminal-vs-raw-bt4-1024pairs/state.json`.
+
+## Terminal blind confirmation
+
+The terminal-only 65,536-position blind test passed in `658.299` seconds:
+
+| Metric | Primary validation | Blind test | Blind minus primary |
+|---|---:|---:|---:|
+| Total weighted loss | `5.297095` | `5.315829` | `+0.018734` |
+| All-horizon DFM CE | `4.577527` | `4.592185` | `+0.014658` |
+| H1 DFM CE | `1.939824` | `1.959745` | `+0.019921` |
+| Root legal mass | `89.8497%` | `89.6781%` | `-0.1716 pp` |
+| Root legal top-1 | `49.5712%` | `49.2737%` | `-0.2975 pp` |
+| JEPA raw MSE | `0.047361` | `0.047737` | `+0.000376` |
+
+The blind report is
+`research/runs/torch_hero_epoch_v1_terminal_blind_eval_v1/report.json`,
+SHA-256
+`f7595977c077df00ae7f1d01471128dba3b65afdf59bb45d83158d60f838154c`.
+The close agreement supports the primary pool as a useful generalization
+signal.
+
+## Cross-framework and compact evidence
+
+Commit `3088a9b` extends the migration audit to recovery and model-only hero
+checkpoints. Both states pass an exact Torch-to-JAX materialization check over
+all 462 leaves and 712,293,144 tensor bytes, including the seven trained BT4
+policy-head tensors:
+
+| State | Safetensors SHA-256 | Combined model-tree SHA-256 |
+|---|---|---|
+| Halfway | `d833ddea6d0aa4056f6d6ec2bf88a8704bbc08004b447c0fc24e0181d9620094` | `aadbcb82c21a609510ca386c3ad101a0c0b1a1a9431d92d5087bbf7c26ef8b53` |
+| Terminal | `665ac91ad37e14a6c8810068700dba021e39e9c0fe145c8bf620882bb5a71692` | `b9dd2c2d41412038da0100aa963537a250654306f27a783ead298140df43ed6e` |
+
+This is a state-materialization gate, not JAX hero forward parity. The current
+JAX path still stores those seven policy-head leaves as fixed parameters and
+does not add the trained BT4 root-policy residual. Implement and test those
+semantics before a JAX hero continuation or inference claim.
+
+The reproducible closeout builder is
+`research/analysis/build_hero_epoch_closeout.py`. Its compact machine-readable
+result and plot are:
+
+- `research/analysis/hero_epoch_v1_closeout_20260727.json`;
+- `research/analysis/hero_epoch_v1_closeout_20260727.png`.
+
+After these validation, Arena, and exact JAX materialization gates passed, the
+1,864,398,064-byte halfway model-plus-optimizer recovery directory was
+deleted. The selected 712,339,616-byte terminal model remains, together with
+its manifest, run configuration, complete per-update loss log, compact loss
+summary, validation curve, and evaluation/Arena evidence. A
+`research/storage_audit.py --verify-hashes` pass reports no missing, extra, or
+corrupt retained state.
