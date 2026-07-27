@@ -14,6 +14,7 @@ from research.train_torch import (
     _prepare_training_step,
     _summarize_training_records,
     load_checkpoint_model_for_evaluation,
+    load_checkpoint_numpy_tree_for_evaluation,
     load_model_checkpoint,
     load_model_checkpoint_numpy_tree,
     load_training_checkpoint,
@@ -286,6 +287,23 @@ def test_torch_training_checkpoint_resumes_optimizer_exactly(tmp_path):
         model=evaluation_model,
     )
     assert evaluation_manifest == manifest
+    evaluation_tree, tree_manifest, tree_summary = (
+        load_checkpoint_numpy_tree_for_evaluation(
+            checkpoint_dir=checkpoint_dir,
+            model=evaluation_model,
+        )
+    )
+    assert tree_manifest == manifest
+    assert tree_summary["leaf_count"] == 2
+    assert tree_summary["nbytes"] == matrix.nbytes + bias.nbytes
+    np.testing.assert_array_equal(
+        evaluation_tree["matrix"],
+        staged_model.matrix.detach().numpy(),
+    )
+    np.testing.assert_array_equal(
+        evaluation_tree["bias"],
+        staged_model.bias.detach().numpy(),
+    )
     for (expected_name, expected_parameter), (
         evaluation_name,
         evaluation_parameter,

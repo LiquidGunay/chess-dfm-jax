@@ -6,7 +6,9 @@ materializes stochastic choices once, and compares named intermediates and
 loss components. CPU comparison runs both models in one process. Production
 BF16 comparison uses two sequential guarded GPU processes and a small NPZ
 exchange artifact so the full PyTorch and JAX runtimes never coexist on GPU.
-The harness never creates an optimizer or checkpoint.
+The hero round-trip mode performs an exact CPU-side state materialization
+audit, including the trainable BT4 policy residual. The harness never creates
+an optimizer or checkpoint.
 """
 
 from __future__ import annotations
@@ -37,6 +39,7 @@ def _requested_mode() -> str:
 if __name__ == "__main__" and _requested_mode() in {
     "cpu-compare",
     "torch-export",
+    "hero-checkpoint-roundtrip",
 }:
     os.environ.setdefault("JAX_PLATFORMS", "cpu")
 
@@ -64,12 +67,14 @@ from research.train import (  # noqa: E402
 )
 from research.train_torch import (  # noqa: E402
     CONFIG,
+    HERO_CONFIG,
     JointModel,
     StepChoices,
     _legal_mass,
     _sigreg_v_stat,
     _torch_batch,
     bind_source_model,
+    load_checkpoint_numpy_tree_for_evaluation,
     load_model_checkpoint,
     load_model_checkpoint_numpy_tree,
     load_source_model,
@@ -91,6 +96,11 @@ SOURCE_MAPPING_SHA256 = (
 )
 EXPECTED_MODEL_LEAVES = 455
 EXPECTED_MODEL_BYTES = 705_987_352
+HERO_SOURCE_MAPPING_SHA256 = (
+    "c7a22e25a74e959357f294dfdda4a8f47372d79c96ada49131967bec75b2d93c"
+)
+HERO_EXPECTED_MODEL_LEAVES = 462
+HERO_EXPECTED_MODEL_BYTES = 712_293_144
 ACTION_VOCAB_SIZE = 1858
 _CORE_TENSOR_NAMES = (
     "current_tokens",
@@ -224,6 +234,145 @@ def _checkpoint_tree(
             f"{EXPECTED_MODEL_BYTES}"
         )
     return tree, manifest, summary, ordered_names
+
+
+def _hero_checkpoint_tree(
+    checkpoint_dir: Path,
+) -> tuple[
+    dict[str | int, Any],
+    dict[str, Any],
+    dict[str, Any],
+    tuple[str, ...],
+]:
+    with torch.device("meta"):
+        template = JointModel(HERO_CONFIG)
+    ordered_names = tuple(name for name, _ in template.named_parameters())
+    tree, manifest, summary = load_checkpoint_numpy_tree_for_evaluation(
+        checkpoint_dir=checkpoint_dir,
+        model=template,
+    )
+    del template
+    if manifest["source_mapping_sha256"] != HERO_SOURCE_MAPPING_SHA256:
+        raise ValueError(
+            "Hero checkpoint source mapping drift: "
+            f"{manifest['source_mapping_sha256']} != "
+            f"{HERO_SOURCE_MAPPING_SHA256}"
+        )
+    if summary["leaf_count"] != HERO_EXPECTED_MODEL_LEAVES:
+        raise ValueError(
+            f"Hero checkpoint leaf count drift: {summary['leaf_count']} != "
+            f"{HERO_EXPECTED_MODEL_LEAVES}"
+        )
+    if summary["nbytes"] != HERO_EXPECTED_MODEL_BYTES:
+        raise ValueError(
+            f"Hero checkpoint model bytes drift: {summary['nbytes']} != "
+            f"{HERO_EXPECTED_MODEL_BYTES}"
+        )
+    return tree, manifest, summary, ordered_names
+
+
+def _split_hero_checkpoint_tree(
+    tree: Mapping[str | int, Any],
+) -> tuple[dict[str | int, Any], dict[str | int, Any]]:
+    core_tree = dict(tree)
+    encoder = core_tree.get("encoder")
+    if not isinstance(encoder, dict):
+        raise ValueError("Hero checkpoint tree has no encoder object")
+    core_encoder = dict(encoder)
+    policy_tree = core_encoder.pop("policy_head", None)
+    if not isinstance(policy_tree, dict):
+        raise ValueError("Hero checkpoint tree has no BT4 policy head")
+    core_tree["encoder"] = core_encoder
+    policy_leaf_count = len(_flatten_state_structure(policy_tree))
+    if policy_leaf_count != (
+        HERO_EXPECTED_MODEL_LEAVES - EXPECTED_MODEL_LEAVES
+    ):
+        raise ValueError(
+            "Hero checkpoint policy-head leaf count mismatch: "
+            f"{policy_leaf_count}"
+        )
+    return core_tree, dict(policy_tree)
+
+
+def _apply_and_verify_jax_hero_checkpoint(
+    model: JointLatentSASAModel,
+    tree: Mapping[str | int, Any],
+    *,
+    ordered_names: tuple[str, ...],
+    expected_summary: Mapping[str, Any],
+) -> dict[str, Any]:
+    core_tree, policy_tree = _split_hero_checkpoint_tree(tree)
+    core_state = nnx.state(model, TrainableParam)
+    nnx.replace_by_pure_dict(core_state, core_tree)
+    nnx.update(model, core_state)
+
+    policy_state = nnx.state(model.encoder.policy_head, nnx.Param)
+    nnx.replace_by_pure_dict(policy_state, policy_tree)
+    nnx.update(model.encoder.policy_head, policy_state)
+
+    expected_flat = _flatten_state_structure(tree)
+    observed_flat = _flatten_state_structure(
+        dict(nnx.to_pure_dict(nnx.state(model, TrainableParam)))
+    )
+    policy_flat = _flatten_state_structure(
+        dict(nnx.to_pure_dict(nnx.state(model.encoder.policy_head, nnx.Param)))
+    )
+    policy_prefix = ("encoder", "policy_head")
+    for path, value in policy_flat.items():
+        full_path = (*policy_prefix, *path)
+        if full_path in expected_flat:
+            observed_flat[full_path] = value
+    if set(observed_flat) != set(expected_flat):
+        raise ValueError(
+            "JAX hero checkpoint state leaf mismatch after update: "
+            f"missing={list(set(expected_flat) - set(observed_flat))[:10]}, "
+            f"extra={list(set(observed_flat) - set(expected_flat))[:10]}"
+        )
+
+    combined = hashlib.sha256()
+    total_bytes = 0
+    for name in ordered_names:
+        parts: tuple[str | int, ...] = tuple(
+            int(part) if part.isdigit() else part for part in name.split(".")
+        )
+        expected = np.asarray(expected_flat[parts])
+        observed = np.asarray(jax.device_get(observed_flat[parts]))
+        if observed.shape != expected.shape or observed.dtype != expected.dtype:
+            raise ValueError(
+                f"JAX hero checkpoint ABI mismatch at {name}: "
+                f"{observed.shape}/{observed.dtype} != "
+                f"{expected.shape}/{expected.dtype}"
+            )
+        expected_bytes = expected.tobytes(order="C")
+        observed_bytes = observed.tobytes(order="C")
+        if observed_bytes != expected_bytes:
+            raise ValueError(f"JAX hero checkpoint value mismatch at {name}")
+        leaf_digest = hashlib.sha256(observed_bytes).hexdigest()
+        combined.update(name.encode("utf-8"))
+        combined.update(b"\0")
+        combined.update(leaf_digest.encode("ascii"))
+        total_bytes += int(observed.nbytes)
+    observed_summary = {
+        "schema_version": "torch-hero-to-jax-model-roundtrip-v1",
+        "leaf_count": len(ordered_names),
+        "core_trainable_leaf_count": EXPECTED_MODEL_LEAVES,
+        "bt4_policy_head_leaf_count": (
+            HERO_EXPECTED_MODEL_LEAVES - EXPECTED_MODEL_LEAVES
+        ),
+        "nbytes": total_bytes,
+        "combined_state_sha256": combined.hexdigest(),
+        "exact_shape_dtype_and_value_match": True,
+    }
+    if (
+        observed_summary["combined_state_sha256"]
+        != expected_summary["combined_state_sha256"]
+    ):
+        raise ValueError(
+            "JAX hero checkpoint combined state checksum mismatch: "
+            f"{observed_summary['combined_state_sha256']} != "
+            f"{expected_summary['combined_state_sha256']}"
+        )
+    return observed_summary
 
 
 def _apply_and_verify_jax_checkpoint(
@@ -1449,6 +1598,63 @@ def _run_jax_checkpoint_eval(args: argparse.Namespace) -> int:
     return _write_result(args, result)
 
 
+def _run_hero_checkpoint_roundtrip(args: argparse.Namespace) -> int:
+    if jax.default_backend() != "cpu":
+        raise RuntimeError(
+            "Hero checkpoint round-trip requires the JAX CPU backend"
+        )
+    if args.checkpoint_dir is None:
+        raise ValueError(
+            "--mode hero-checkpoint-roundtrip requires --checkpoint-dir"
+        )
+    tree, manifest, tree_summary, ordered_names = _hero_checkpoint_tree(
+        args.checkpoint_dir
+    )
+    core_tree, _ = _split_hero_checkpoint_tree(tree)
+    model = _build_jax_model(
+        core_tree,
+        models_dir=args.models_dir,
+        compute_dtype="float32",
+    )
+    roundtrip = _apply_and_verify_jax_hero_checkpoint(
+        model,
+        tree,
+        ordered_names=ordered_names,
+        expected_summary=tree_summary,
+    )
+    result = {
+        "schema_version": "torch-hero-checkpoint-jax-roundtrip-audit-v1",
+        "gate_pass": bool(roundtrip["exact_shape_dtype_and_value_match"]),
+        "jax_backend": jax.default_backend(),
+        "checkpoint_dir": str(require_within_workspace(args.checkpoint_dir)),
+        "checkpoint_format": manifest["format"],
+        "checkpoint_optimizer_update": manifest["optimizer_update"],
+        "checkpoint_state_sha256": manifest["state"]["sha256"],
+        "checkpoint_tree": tree_summary,
+        "jax_roundtrip": roundtrip,
+        "compatibility": {
+            "jax_inference_state_materialization_supported": True,
+            "jax_hero_forward_parity_evaluated": False,
+            "jax_hero_training_resume_supported": False,
+            "limitations": [
+                (
+                    "The current JAX model stores the seven BT4 policy-head "
+                    "leaves as fixed Param variables."
+                ),
+                (
+                    "The current JAX planner does not add the trained BT4 "
+                    "policy logits to the canonical root logits."
+                ),
+                (
+                    "Optimizer state is intentionally not materialized by "
+                    "this model-only audit."
+                ),
+            ],
+        },
+    }
+    return _write_result(args, result)
+
+
 def run(args: argparse.Namespace) -> int:
     if args.torch_final_bt4_fp32 and not args.encoder_trace:
         raise ValueError("--torch-final-bt4-fp32 requires --encoder-trace")
@@ -1460,6 +1666,8 @@ def run(args: argparse.Namespace) -> int:
         return _run_jax_compare(args)
     if args.mode == "jax-checkpoint-eval":
         return _run_jax_checkpoint_eval(args)
+    if args.mode == "hero-checkpoint-roundtrip":
+        return _run_hero_checkpoint_roundtrip(args)
     raise ValueError(f"Unsupported mode: {args.mode}")
 
 
@@ -1472,6 +1680,7 @@ def build_parser() -> argparse.ArgumentParser:
             "torch-export",
             "jax-compare",
             "jax-checkpoint-eval",
+            "hero-checkpoint-roundtrip",
         ),
         default="cpu-compare",
     )

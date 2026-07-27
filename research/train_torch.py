@@ -3908,6 +3908,107 @@ def load_model_checkpoint_numpy_tree(
     return tree, manifest, summary
 
 
+def load_checkpoint_numpy_tree_for_evaluation(
+    *,
+    checkpoint_dir: Path,
+    model: nn.Module,
+) -> tuple[dict[str | int, Any], dict[str, Any], dict[str, Any]]:
+    """Read a model tree from either model-only or recovery state."""
+
+    root = _require_workspace(checkpoint_dir, exists=True)
+    manifest_path = _require_workspace(root / "manifest.json", exists=True)
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    checkpoint_format = manifest.get("format")
+    if checkpoint_format == "chess-dfm-torch-model-v1":
+        return load_model_checkpoint_numpy_tree(
+            checkpoint_dir=root,
+            model=model,
+        )
+    if checkpoint_format != "chess-dfm-torch-training-v1":
+        raise ValueError(
+            "Unsupported evaluation checkpoint format: "
+            f"{checkpoint_format!r}"
+        )
+
+    from safetensors import safe_open
+
+    state_path, verified_manifest = _verified_training_checkpoint(root)
+    named = dict(model.named_parameters())
+    tree: dict[str | int, Any] = {}
+    combined = hashlib.sha256()
+    total_bytes = 0
+    model_prefix = "model."
+    with safe_open(state_path, framework="pt", device="cpu") as payload:
+        loaded_keys = set(payload.keys())
+        loaded_model_names = {
+            key[len(model_prefix) :]
+            for key in loaded_keys
+            if key.startswith(model_prefix)
+        }
+        if loaded_model_names != set(named):
+            raise ValueError(
+                "Training checkpoint model tensor mismatch: "
+                f"missing={sorted(set(named) - loaded_model_names)[:10]}, "
+                f"extra={sorted(loaded_model_names - set(named))[:10]}"
+            )
+        if (
+            int(verified_manifest["state"]["model_leaf_count"])
+            != len(loaded_model_names)
+        ):
+            raise ValueError(
+                "Training checkpoint model leaf count does not match"
+            )
+        for name, parameter in named.items():
+            value = payload.get_tensor(f"{model_prefix}{name}").contiguous()
+            if value.shape != parameter.shape or value.dtype != parameter.dtype:
+                raise ValueError(
+                    f"Training checkpoint model ABI mismatch at {name}: "
+                    f"{value.shape}/{value.dtype} != "
+                    f"{parameter.shape}/{parameter.dtype}"
+                )
+            if value.dtype == torch.bfloat16:
+                array = value.view(torch.uint16).numpy().view(
+                    ml_dtypes.bfloat16
+                )
+            elif value.dtype == torch.float32:
+                array = value.numpy()
+            else:
+                raise TypeError(
+                    f"Unsupported checkpoint dtype at {name}: {value.dtype}"
+                )
+            leaf_digest = hashlib.sha256(
+                array.tobytes(order="C")
+            ).hexdigest()
+            combined.update(name.encode("utf-8"))
+            combined.update(b"\0")
+            combined.update(leaf_digest.encode("ascii"))
+            total_bytes += int(array.nbytes)
+
+            parts: tuple[str | int, ...] = tuple(
+                int(part) if part.isdigit() else part
+                for part in name.split(".")
+            )
+            cursor = tree
+            for part in parts[:-1]:
+                child = cursor.setdefault(part, {})
+                if not isinstance(child, dict):
+                    raise ValueError(
+                        f"Checkpoint tree path collision at {name}"
+                    )
+                cursor = child
+            if parts[-1] in cursor:
+                raise ValueError(f"Duplicate checkpoint tree leaf: {name}")
+            cursor[parts[-1]] = array
+    summary = {
+        "schema_version": "torch-checkpoint-pure-tree-v1",
+        "leaf_count": len(named),
+        "nbytes": total_bytes,
+        "combined_state_sha256": combined.hexdigest(),
+        "safetensors_sha256": verified_manifest["state"]["sha256"],
+    }
+    return tree, verified_manifest, summary
+
+
 def _start_gpu_monitor(
     output_dir: Path,
     *,
