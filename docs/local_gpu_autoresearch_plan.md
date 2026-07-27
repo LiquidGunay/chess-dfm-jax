@@ -1979,4 +1979,13 @@ sweeps, held-out data, and repeated seeds.
   for 1,024 updates each under
   `research/experiment_sigreg_sample_count_256.md`; the longer budget crosses
   the fixed 566,866-example LR warmup and makes the comparison more useful
-  than a purely warmup-bound 30-minute screen.
+  than a purely warmup-bound 30-minute screen. That test is complete: count
+  256 improves fixed validation DFM CE by only `0.003330` and JEPA MSE by
+  `12.02%`, while modestly reducing rank/WDL diagnostics and lowering the
+  same-opening 128-pair Arena score from `0.908203` to `0.812500`. The paired
+  score delta is `-0.095703`, with descriptive paired-t 95% interval
+  `[-0.133370,-0.058036]`. Reject count 256, delete its terminal weights,
+  retain count 64 and coefficients `2.0/2.0`, and do not spend a 10%-epoch
+  extension on this direction. The complete scalar record and loss plot are
+  `research/analysis/sigreg_sample_count_256_experiment_20260727.json` and
+  `.png`.

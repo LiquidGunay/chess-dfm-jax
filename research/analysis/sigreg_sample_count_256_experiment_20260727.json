@@ -1,0 +1,637 @@
+{
+  "checkpoints": {
+    "candidate_256": {
+      "expected_sha256": "c5bd59891b14b9edd2a6b221d06efe792901c6486b03ce2f99ab76fdee22a495",
+      "expected_size_bytes": 712339608,
+      "leaf_count": 462,
+      "manifest": {
+        "path": "research/runs/torch_autoresearch_sigreg256_u1024_v1/checkpoint/manifest.json",
+        "sha256": "de106e346c6d25143b375b4e5ffe24bdb0fbe31fb2b17a88a187c7d4dd6dc1d2",
+        "size_bytes": 487
+      },
+      "model_present": false,
+      "observed_sha256": null,
+      "observed_size_bytes": null
+    },
+    "control_64": {
+      "expected_sha256": "05068c96b2bac8f10a3f3b853363bdb2ce49f935b026566705b3bdcd4d9060c9",
+      "expected_size_bytes": 712339608,
+      "leaf_count": 462,
+      "manifest": {
+        "path": "research/runs/torch_autoresearch_sigreg64_u1024_v1/checkpoint/manifest.json",
+        "sha256": "6dbd0bd4c2f6e07e2e780c1d64a1e85c0eac59eaba91f92bb6b2ecaab75dbd95",
+        "size_bytes": 487
+      },
+      "model_present": true,
+      "observed_sha256": "05068c96b2bac8f10a3f3b853363bdb2ce49f935b026566705b3bdcd4d9060c9",
+      "observed_size_bytes": 712339608
+    }
+  },
+  "comparison": {
+    "candidate": "candidate_256",
+    "control": "control_64",
+    "fixed_validation_sigreg_example_count": 64,
+    "only_normalized_command_difference": {
+      "sigreg_example_count": {
+        "candidate_256": 256,
+        "control_64": 64
+      }
+    },
+    "only_scientific_config_difference": {
+      "sigreg_example_count": {
+        "candidate_256": 256,
+        "control_64": 64
+      }
+    },
+    "same_data_contract": true,
+    "same_git_commit": true,
+    "same_initialization_seed": true
+  },
+  "decision": {
+    "advance_candidate_to_10_percent_epoch": false,
+    "candidate_passes_arena_non_worse": false,
+    "candidate_passes_no_rank_regression": false,
+    "candidate_passes_validation_ce_direction": true,
+    "causal_scope": "One matched short-run screen. The result rejects count 256 for this recipe; it does not establish that estimator noise is generally beneficial.",
+    "reason": "Count 256 slightly improves fixed validation DFM CE and materially improves JEPA MSE, but modestly reduces several rank diagnostics and regresses the same-opening Arena score by 0.095703. It therefore fails the preregistered non-worse Arena and no-rank-regression gates.",
+    "retain_sigreg_coefficients": {
+      "prediction": 2.0,
+      "target": 2.0
+    },
+    "retain_sigreg_example_count": 64,
+    "status": "reject_candidate_256"
+  },
+  "frozen_fast_validation": {
+    "candidate_256": {
+      "examples": 8192,
+      "metrics": {
+        "accuracy": 0.0748748779296875,
+        "dfm_ce_loss": 5.70296847820282,
+        "first_legal_mass": 0.5542659508064389,
+        "jepa_positive_loss": 0.11717881303047761,
+        "jepa_pred_sigreg_loss": 0.06248420232441276,
+        "jepa_sigreg_loss": 0.0613671817118302,
+        "loss": 7.340199060738087,
+        "root_legal_conditional_ce": 2.1103645218536258,
+        "root_legal_top1_accuracy": 0.44970703125,
+        "wdl_accuracy": 0.6320037841796875,
+        "wdl_ece_15": 0.10458498145453632,
+        "wdl_expected_value_mse": 0.34188131312839687,
+        "wdl_loss": 0.7884611156769097,
+        "z_pred_norm": 28.74193185567856,
+        "z_state_norm": 28.394178614020348,
+        "z_target_norm": 28.126092925667763
+      },
+      "pool_indices_sha256": "c20102b49358dda5c9d6828e703cf133b196b3bf3b018cb143290aa8c1dc3e96",
+      "pool_manifest_sha256": "0efbd1780f53ad57dde17c8b000e0b56a459a839ba09a0d9a7d1863dbf3f63f5",
+      "rank_diagnostics": {
+        "pred": {
+          "h1": {
+            "effective_rank": 8.04955979064107,
+            "feature_std_mean": 0.9530905191786587,
+            "feature_std_p05": 0.5474523135926574,
+            "stable_rank": 2.793861740268767
+          },
+          "h8": {
+            "effective_rank": 10.92654650658369,
+            "feature_std_mean": 0.8349208235740662,
+            "feature_std_p05": 0.5140840667299926,
+            "stable_rank": 4.608544137328863
+          }
+        },
+        "pred_target_cosine": {
+          "h1": 0.9564749994315207,
+          "h8": 0.8692568414844573
+        },
+        "target": {
+          "h1": {
+            "effective_rank": 8.022856019437313,
+            "feature_std_mean": 0.9399045677855611,
+            "feature_std_p05": 0.5385857636574656,
+            "stable_rank": 2.829476815648377
+          },
+          "h8": {
+            "effective_rank": 10.486714094877243,
+            "feature_std_mean": 0.8198520774021745,
+            "feature_std_p05": 0.503633834887296,
+            "stable_rank": 4.497749583795667
+          }
+        }
+      },
+      "seconds": 257.3403083719895,
+      "sigreg_example_count": 64
+    },
+    "control_64": {
+      "examples": 8192,
+      "metrics": {
+        "accuracy": 0.0724334716796875,
+        "dfm_ce_loss": 5.7062988094985485,
+        "first_legal_mass": 0.5542044038884342,
+        "jepa_positive_loss": 0.13318975461879745,
+        "jepa_pred_sigreg_loss": 0.0642470897291787,
+        "jepa_sigreg_loss": 0.06351672718301415,
+        "loss": 7.36417305842042,
+        "root_legal_conditional_ce": 2.1195805370807648,
+        "root_legal_top1_accuracy": 0.4503173828125,
+        "wdl_accuracy": 0.6320953369140625,
+        "wdl_ece_15": 0.1005402056616731,
+        "wdl_expected_value_mse": 0.3411840741755441,
+        "wdl_loss": 0.771990055218339,
+        "z_pred_norm": 27.81945252418518,
+        "z_state_norm": 27.981129989027977,
+        "z_target_norm": 27.725415527820587
+      },
+      "pool_indices_sha256": "c20102b49358dda5c9d6828e703cf133b196b3bf3b018cb143290aa8c1dc3e96",
+      "pool_manifest_sha256": "0efbd1780f53ad57dde17c8b000e0b56a459a839ba09a0d9a7d1863dbf3f63f5",
+      "rank_diagnostics": {
+        "pred": {
+          "h1": {
+            "effective_rank": 8.055023197084665,
+            "feature_std_mean": 0.9307335750199854,
+            "feature_std_p05": 0.5349866410251707,
+            "stable_rank": 2.8217282593250275
+          },
+          "h8": {
+            "effective_rank": 11.16523652523756,
+            "feature_std_mean": 0.7997949747368693,
+            "feature_std_p05": 0.5044123951811343,
+            "stable_rank": 4.684468189254403
+          }
+        },
+        "pred_target_cosine": {
+          "h1": 0.9432175918482244,
+          "h8": 0.8458565520122647
+        },
+        "target": {
+          "h1": {
+            "effective_rank": 7.899782229214907,
+            "feature_std_mean": 0.9261981337331235,
+            "feature_std_p05": 0.5279447890352458,
+            "stable_rank": 2.7959322668612003
+          },
+          "h8": {
+            "effective_rank": 10.685896754264832,
+            "feature_std_mean": 0.8032591580413282,
+            "feature_std_p05": 0.49833251908421516,
+            "stable_rank": 4.753440335392952
+          }
+        }
+      },
+      "seconds": 296.16343943198444,
+      "sigreg_example_count": 64
+    }
+  },
+  "frozen_fast_validation_delta": {
+    "accuracy": {
+      "candidate_256": 0.0748748779296875,
+      "candidate_minus_control": 0.00244140625,
+      "control_64": 0.0724334716796875,
+      "relative_change": 0.03370549820939539
+    },
+    "dfm_ce_loss": {
+      "candidate_256": 5.70296847820282,
+      "candidate_minus_control": -0.0033303312957286835,
+      "control_64": 5.7062988094985485,
+      "relative_change": -0.0005836237124815513
+    },
+    "first_legal_mass": {
+      "candidate_256": 0.5542659508064389,
+      "candidate_minus_control": 6.15469180047512e-05,
+      "control_64": 0.5542044038884342,
+      "relative_change": 0.00011105454516946445
+    },
+    "jepa_positive_loss": {
+      "candidate_256": 0.11717881303047761,
+      "candidate_minus_control": -0.016010941588319838,
+      "control_64": 0.13318975461879745,
+      "relative_change": -0.12021151051854384
+    },
+    "jepa_pred_sigreg_loss": {
+      "candidate_256": 0.06248420232441276,
+      "candidate_minus_control": -0.0017628874047659338,
+      "control_64": 0.0642470897291787,
+      "relative_change": -0.027439179147211945
+    },
+    "jepa_sigreg_loss": {
+      "candidate_256": 0.0613671817118302,
+      "candidate_minus_control": -0.0021495454711839557,
+      "control_64": 0.06351672718301415,
+      "relative_change": -0.03384219506446473
+    },
+    "loss": {
+      "candidate_256": 7.340199060738087,
+      "candidate_minus_control": -0.023973997682332993,
+      "control_64": 7.36417305842042,
+      "relative_change": -0.003255490805572636
+    },
+    "root_legal_conditional_ce": {
+      "candidate_256": 2.1103645218536258,
+      "candidate_minus_control": -0.009216015227138996,
+      "control_64": 2.1195805370807648,
+      "relative_change": -0.004348037296017071
+    },
+    "root_legal_top1_accuracy": {
+      "candidate_256": 0.44970703125,
+      "candidate_minus_control": -0.0006103515625,
+      "control_64": 0.4503173828125,
+      "relative_change": -0.0013553808620222485
+    },
+    "wdl_accuracy": {
+      "candidate_256": 0.6320037841796875,
+      "candidate_minus_control": -9.1552734375e-05,
+      "control_64": 0.6320953369140625,
+      "relative_change": -0.00014484007241999386
+    },
+    "wdl_ece_15": {
+      "candidate_256": 0.10458498145453632,
+      "candidate_minus_control": 0.00404477579286322,
+      "control_64": 0.1005402056616731,
+      "relative_change": 0.04023043086339273
+    },
+    "wdl_expected_value_mse": {
+      "candidate_256": 0.34188131312839687,
+      "candidate_minus_control": 0.0006972389528527856,
+      "control_64": 0.3411840741755441,
+      "relative_change": 0.00204358586940967
+    },
+    "wdl_loss": {
+      "candidate_256": 0.7884611156769097,
+      "candidate_minus_control": 0.01647106045857072,
+      "control_64": 0.771990055218339,
+      "relative_change": 0.02133584538716926
+    },
+    "z_pred_norm": {
+      "candidate_256": 28.74193185567856,
+      "candidate_minus_control": 0.9224793314933777,
+      "control_64": 27.81945252418518,
+      "relative_change": 0.03315950702809145
+    },
+    "z_state_norm": {
+      "candidate_256": 28.394178614020348,
+      "candidate_minus_control": 0.4130486249923706,
+      "control_64": 27.981129989027977,
+      "relative_change": 0.014761684933894292
+    },
+    "z_target_norm": {
+      "candidate_256": 28.126092925667763,
+      "candidate_minus_control": 0.4006773978471756,
+      "control_64": 27.725415527820587,
+      "relative_change": 0.014451628234214198
+    }
+  },
+  "paired_arena": {
+    "candidate_256": {
+      "candidate_model_id": "candidate-torch-hero-c5bd59891b14",
+      "cap_draw_count": 0,
+      "contract_sha256": "294a4b52635c7a165a41d6d7aef28f1d1d1d515f979aa4f94c1925970322de1e",
+      "draws": 96,
+      "elo_lower": 140.9969479312804,
+      "elo_upper": 456.24941649153953,
+      "fault_counts": {},
+      "game_count": 256,
+      "gameplay_seconds": 91.5839198740432,
+      "logistic_elo": 254.72883903486974,
+      "losses": 0,
+      "mean_physical_call_ms": 44.68458774817918,
+      "pair_count": 128,
+      "payload_sha256": "7bd4654cd1154a7cb8c3ac166423946d3ec0c465c124c1c7c628c894e167a992",
+      "pentanomial": [
+        0,
+        0,
+        18,
+        60,
+        50
+      ],
+      "points": 208.0,
+      "reference_model_id": "raw-bt4-61e43e98d2c4",
+      "run_contract": {
+        "additional_ply_cap": 256,
+        "block_pairs": 16,
+        "collect_diagnostics": false,
+        "deterministic_greedy_policy": true,
+        "jepa_used_at_inference": false,
+        "opening_start_index": 0,
+        "pair_count": 128,
+        "policy_batch_size_cap": 16,
+        "policy_timeout_seconds": 30.0,
+        "refinement_passes": 8,
+        "seed": 0
+      },
+      "score": 0.8125,
+      "score_lower": 0.69245965108501,
+      "score_upper": 0.93254034891499,
+      "termination_counts": {
+        "normal": 256
+      },
+      "tier_contract": {
+        "histories_path": "/mountpoint/.exp/chess-dfm-jax/research/assets/arena/promotion-ply12-n2048-histories-v3.json",
+        "history_file_sha256": "bac58cc7380d9a4173e7618a765917aa0990355e1f8e460196affbe28580ed37",
+        "history_manifest_sha256": "d8781efb5d76066bcf2ce2e9ab2897f3261b20f7c4488c90992a8eadcc918a4b",
+        "name": "hero_development",
+        "ordered_fens_sha256": "013778d027d919da9e6a25957e1439c8351081b9cbadf28e29df1c5c7b06b0f2",
+        "pool_file_sha256": "5632cc726112c2ab700e0f4d935fa83d58418b406fc100262f3aa19ce3befe2e",
+        "pool_path": "/mountpoint/.exp/chess-dfm-jax/research/assets/arena/promotion-ply12-n2048-v3.json",
+        "pool_sha256": "e750e87643c482d28b4201668bd355234fe1fb27f2a690bf784706b1ddd37459",
+        "promotion_eligible": false
+      },
+      "wins": 160
+    },
+    "control_64": {
+      "candidate_model_id": "candidate-torch-hero-05068c96b2ba",
+      "cap_draw_count": 0,
+      "contract_sha256": "7ab56a8169526555e372e2d032c993c7e492a025937e575425530200e6011456",
+      "draws": 45,
+      "elo_lower": 228.24545735610508,
+      "elo_upper": 3999.999985609154,
+      "fault_counts": {},
+      "game_count": 256,
+      "gameplay_seconds": 91.97287655394757,
+      "logistic_elo": 398.14203798169456,
+      "losses": 1,
+      "mean_physical_call_ms": 44.585867599515176,
+      "pair_count": 128,
+      "payload_sha256": "daa1f8234e65e3601b03c5f678e4a4326df36050a590e6a857047ed28c38cafc",
+      "pentanomial": [
+        0,
+        0,
+        2,
+        43,
+        83
+      ],
+      "points": 232.5,
+      "reference_model_id": "raw-bt4-61e43e98d2c4",
+      "run_contract": {
+        "additional_ply_cap": 256,
+        "block_pairs": 16,
+        "collect_diagnostics": false,
+        "deterministic_greedy_policy": true,
+        "jepa_used_at_inference": false,
+        "opening_start_index": 0,
+        "pair_count": 128,
+        "policy_batch_size_cap": 16,
+        "policy_timeout_seconds": 30.0,
+        "refinement_passes": 8,
+        "seed": 0
+      },
+      "score": 0.908203125,
+      "score_lower": 0.78816277608501,
+      "score_upper": 1.0,
+      "termination_counts": {
+        "normal": 256
+      },
+      "tier_contract": {
+        "histories_path": "/mountpoint/.exp/chess-dfm-jax/research/assets/arena/promotion-ply12-n2048-histories-v3.json",
+        "history_file_sha256": "bac58cc7380d9a4173e7618a765917aa0990355e1f8e460196affbe28580ed37",
+        "history_manifest_sha256": "d8781efb5d76066bcf2ce2e9ab2897f3261b20f7c4488c90992a8eadcc918a4b",
+        "name": "hero_development",
+        "ordered_fens_sha256": "013778d027d919da9e6a25957e1439c8351081b9cbadf28e29df1c5c7b06b0f2",
+        "pool_file_sha256": "5632cc726112c2ab700e0f4d935fa83d58418b406fc100262f3aa19ce3befe2e",
+        "pool_path": "/mountpoint/.exp/chess-dfm-jax/research/assets/arena/promotion-ply12-n2048-v3.json",
+        "pool_sha256": "e750e87643c482d28b4201668bd355234fe1fb27f2a690bf784706b1ddd37459",
+        "promotion_eligible": false
+      },
+      "wins": 210
+    }
+  },
+  "paired_arena_delta": {
+    "candidate_better_pairs": 19,
+    "candidate_minus_control_score": -0.095703125,
+    "candidate_worse_pairs": 58,
+    "delta_counts": {
+      "-0.25": 47,
+      "-0.5": 11,
+      "0.0": 51,
+      "0.25": 18,
+      "0.5": 1
+    },
+    "descriptive_logistic_elo_delta": -143.41319894682482,
+    "equal_pairs": 51,
+    "method_note": "Descriptive paired t interval over the same frozen opening-pair scores. The preregistered non-worse Arena gate, not this post-hoc p-value, determines the screening decision.",
+    "pair_count": 128,
+    "paired_standard_deviation": 0.2153579097258702,
+    "paired_standard_error": 0.019035129793665395,
+    "paired_t_95_lower": -0.1333702116813094,
+    "paired_t_95_upper": -0.058036038318690614,
+    "paired_t_statistic": -5.027710661150762,
+    "paired_t_two_sided_p_value": 1.6507937051796039e-06
+  },
+  "plot": {
+    "path": "research/analysis/sigreg_sample_count_256_experiment_20260727.png",
+    "sha256": "4e7e830ee50c30af7cfd72ce605487922e79f2d792785927d5b961d0abda2b8a",
+    "training_smoothing": "trailing 64-update arithmetic mean"
+  },
+  "question": "Does count 256 improve fresh BT4+DFM+JEPA learning relative to the matched count-64 finite-sample SIGReg estimator?",
+  "schema_version": "sigreg-sample-count-experiment-v1",
+  "sources": {
+    "candidate_256": {
+      "arena": {
+        "path": "artifacts/arena/autoresearch-sigreg256-u1024-vs-raw-bt4-128pairs-v1/state.json",
+        "sha256": "7bc9b93b5f23ed8c113de39693d480961f6c81c95972cd6f092b661ce05f5155",
+        "size_bytes": 17850
+      },
+      "checkpoint_manifest": {
+        "path": "research/runs/torch_autoresearch_sigreg256_u1024_v1/checkpoint/manifest.json",
+        "sha256": "de106e346c6d25143b375b4e5ffe24bdb0fbe31fb2b17a88a187c7d4dd6dc1d2",
+        "size_bytes": 487
+      },
+      "loss_summary": {
+        "path": "research/runs/torch_autoresearch_sigreg256_u1024_v1/loss_summary.json",
+        "sha256": "f07dc6b4f1ec8e2ffebc8a3a72f10602331b9947dd8a4edec5c210ed84cca71e",
+        "size_bytes": 3543
+      },
+      "metrics": {
+        "path": "research/runs/torch_autoresearch_sigreg256_u1024_v1/metrics.jsonl",
+        "sha256": "8bdf1ce3841986b184a2c04c3068eae72731d35e3d7a3424396ad7e074677518",
+        "size_bytes": 2282690
+      },
+      "run_config": {
+        "path": "research/runs/torch_autoresearch_sigreg256_u1024_v1/run_config.json",
+        "sha256": "f256e31a812ed373aebb41a597835b7959c27c1b8a11b8fd97fa2746e53001cf",
+        "size_bytes": 261350
+      },
+      "training_report": {
+        "path": "research/runs/torch_autoresearch_sigreg256_u1024_v1/report.json",
+        "sha256": "d9982204691d35a9520fed866c7a9f9c726240f7140f44329d102bcf1e5a1355",
+        "size_bytes": 9589
+      },
+      "validation": {
+        "path": "research/runs/torch_autoresearch_sigreg256_u1024_v1_fast_eval_v1/report.json",
+        "sha256": "42f7bcc8f0af4f4fa43572fb7286e7cc7924ccd4064adc950508b785f33890d3",
+        "size_bytes": 146577
+      }
+    },
+    "control_64": {
+      "arena": {
+        "path": "artifacts/arena/autoresearch-sigreg64-u1024-vs-raw-bt4-128pairs-v1/state.json",
+        "sha256": "3b7f241fb8b185745bba4d48527569e064db524208d69ccf113c36dfca247b9b",
+        "size_bytes": 17831
+      },
+      "checkpoint_manifest": {
+        "path": "research/runs/torch_autoresearch_sigreg64_u1024_v1/checkpoint/manifest.json",
+        "sha256": "6dbd0bd4c2f6e07e2e780c1d64a1e85c0eac59eaba91f92bb6b2ecaab75dbd95",
+        "size_bytes": 487
+      },
+      "loss_summary": {
+        "path": "research/runs/torch_autoresearch_sigreg64_u1024_v1/loss_summary.json",
+        "sha256": "41a5b003d6163cf038f3ff2d0179a94330a3269dad8dd4802557e58a187c8d6c",
+        "size_bytes": 3542
+      },
+      "metrics": {
+        "path": "research/runs/torch_autoresearch_sigreg64_u1024_v1/metrics.jsonl",
+        "sha256": "7971ca6e2e68b978d002efaba320cd3f498ab09837b9751a3e56979a69a4e483",
+        "size_bytes": 2280193
+      },
+      "run_config": {
+        "path": "research/runs/torch_autoresearch_sigreg64_u1024_v1/run_config.json",
+        "sha256": "6608fa867afddc7861f0bc73c6dc0bce72ee42e3d1ca9080e0ab0cc9ba23179c",
+        "size_bytes": 261347
+      },
+      "training_report": {
+        "path": "research/runs/torch_autoresearch_sigreg64_u1024_v1/report.json",
+        "sha256": "6f06277edbc9a1ad8d8eed1148825fb1d27cb1a8e4afb83eb3066c01850ca309",
+        "size_bytes": 9597
+      },
+      "validation": {
+        "path": "research/runs/torch_autoresearch_sigreg64_u1024_v1_fast_eval_v1/report.json",
+        "sha256": "b7fe2e893a083fdb68bf22f8f75696a0e4b6b64f2676c746002707dc35d6bc13",
+        "size_bytes": 146592
+      }
+    }
+  },
+  "systems_delta": {
+    "candidate_peak_hbm_allocated_delta_bytes": 130064896,
+    "candidate_throughput_relative_change": -0.0009394265549000913
+  },
+  "training": {
+    "candidate_256": {
+      "examples": 1048576,
+      "examples_per_second_end_to_end": 254.33049436305566,
+      "gpu_peak_memory_allocated_bytes": 18610393600,
+      "gpu_peak_memory_reserved_bytes": 23397924864,
+      "last_64_update_mean": {
+        "accuracy": 0.0744030584464781,
+        "dfm_ce_loss": 5.708470493555069,
+        "first_legal_mass": 0.5476046102121472,
+        "jepa_positive_loss": 0.12363245512824506,
+        "jepa_pred_sigreg_loss": 0.06382692948682234,
+        "jepa_sigreg_loss": 0.0638221888220869,
+        "loss": 7.365442737936974,
+        "z_pred_norm": 29.31449556350708,
+        "z_state_norm": 30.317995011806488,
+        "z_target_norm": 28.961788326501846
+      },
+      "optimizer_skipped_nonfinite_count": 0,
+      "terminal": {
+        "accuracy": 0.06972571462392807,
+        "dfm_ce_loss": 5.781999588012695,
+        "first_legal_mass": 0.526520848274231,
+        "jepa_positive_loss": 0.13449230790138245,
+        "jepa_pred_sigreg_loss": 0.05422960966825485,
+        "jepa_sigreg_loss": 0.052409060299396515,
+        "loss": 7.486122131347656,
+        "z_pred_norm": 29.255996704101562,
+        "z_state_norm": 29.704591751098633,
+        "z_target_norm": 28.617801666259766
+      },
+      "train_seconds": 4122.88743678201,
+      "train_wall_seconds": 4122.88743678201,
+      "updates": 1024
+    },
+    "control_64": {
+      "examples": 1048576,
+      "examples_per_second_end_to_end": 254.56964384655657,
+      "gpu_peak_memory_allocated_bytes": 18480328704,
+      "gpu_peak_memory_reserved_bytes": 23446159360,
+      "last_64_update_mean": {
+        "accuracy": 0.07349827699363232,
+        "dfm_ce_loss": 5.7025133818387985,
+        "first_legal_mass": 0.5477326875552535,
+        "jepa_positive_loss": 0.1343500257935375,
+        "jepa_pred_sigreg_loss": 0.0825953270541504,
+        "jepa_sigreg_loss": 0.08294411934912205,
+        "loss": 7.449589028954506,
+        "z_pred_norm": 28.349887549877167,
+        "z_state_norm": 28.94873085618019,
+        "z_target_norm": 27.882286936044693
+      },
+      "optimizer_skipped_nonfinite_count": 0,
+      "terminal": {
+        "accuracy": 0.06921302527189255,
+        "dfm_ce_loss": 5.761429786682129,
+        "first_legal_mass": 0.5253944993019104,
+        "jepa_positive_loss": 0.1343560367822647,
+        "jepa_pred_sigreg_loss": 0.06904622912406921,
+        "jepa_sigreg_loss": 0.060200564563274384,
+        "loss": 7.503368854522705,
+        "z_pred_norm": 27.733444213867188,
+        "z_state_norm": 28.570972442626953,
+        "z_target_norm": 27.56757354736328
+      },
+      "train_seconds": 4119.014286841033,
+      "train_wall_seconds": 4119.014286841033,
+      "updates": 1024
+    }
+  },
+  "training_last_64_update_delta": {
+    "accuracy": {
+      "candidate_256": 0.0744030584464781,
+      "candidate_minus_control": 0.000904781452845782,
+      "control_64": 0.07349827699363232,
+      "relative_change": 0.01231024031929584
+    },
+    "dfm_ce_loss": {
+      "candidate_256": 5.708470493555069,
+      "candidate_minus_control": 0.005957111716270447,
+      "control_64": 5.7025133818387985,
+      "relative_change": 0.0010446466877644944
+    },
+    "first_legal_mass": {
+      "candidate_256": 0.5476046102121472,
+      "candidate_minus_control": -0.00012807734310626984,
+      "control_64": 0.5477326875552535,
+      "relative_change": -0.000233831841729093
+    },
+    "jepa_positive_loss": {
+      "candidate_256": 0.12363245512824506,
+      "candidate_minus_control": -0.010717570665292442,
+      "control_64": 0.1343500257935375,
+      "relative_change": -0.07977349168330405
+    },
+    "jepa_pred_sigreg_loss": {
+      "candidate_256": 0.06382692948682234,
+      "candidate_minus_control": -0.018768397567328066,
+      "control_64": 0.0825953270541504,
+      "relative_change": -0.22723316483780365
+    },
+    "jepa_sigreg_loss": {
+      "candidate_256": 0.0638221888220869,
+      "candidate_minus_control": -0.019121930527035147,
+      "control_64": 0.08294411934912205,
+      "relative_change": -0.23053991864750023
+    },
+    "loss": {
+      "candidate_256": 7.365442737936974,
+      "candidate_minus_control": -0.08414629101753235,
+      "control_64": 7.449589028954506,
+      "relative_change": -0.011295427263232738
+    },
+    "z_pred_norm": {
+      "candidate_256": 29.31449556350708,
+      "candidate_minus_control": 0.9646080136299133,
+      "control_64": 28.349887549877167,
+      "relative_change": 0.034025108986158736
+    },
+    "z_state_norm": {
+      "candidate_256": 30.317995011806488,
+      "candidate_minus_control": 1.369264155626297,
+      "control_64": 28.94873085618019,
+      "relative_change": 0.04729962644749164
+    },
+    "z_target_norm": {
+      "candidate_256": 28.961788326501846,
+      "candidate_minus_control": 1.0795013904571533,
+      "control_64": 27.882286936044693,
+      "relative_change": 0.03871638624669749
+    }
+  }
+}

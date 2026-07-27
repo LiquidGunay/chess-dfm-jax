@@ -54,3 +54,45 @@ experiment.
 After evaluation, retain the winner's model checkpoint. Delete the loser's
 712 MB model only after the comparison report records its checksum and all
 scalar/evaluation evidence is complete.
+
+## Result
+
+Complete and rejected on 2026-07-27. Both guarded runs processed exactly
+1,048,576 matched examples in 1,024 updates with no non-finite skips. Count
+256 is systems-neutral: it changes end-to-end throughput from `254.570` to
+`254.330` examples/s (`-0.094%`) and adds 124 MiB peak allocated HBM.
+
+On the identical 8,192-example frozen validation pool, evaluated with the
+fixed count-64 estimator, count 256 changes:
+
+- DFM CE from `5.706299` to `5.702968` (`-0.003330`, or `-0.058%`);
+- action accuracy from `7.2433%` to `7.4875%` (`+0.2441` percentage points);
+- JEPA MSE from `0.133190` to `0.117179` (`-12.02%`);
+- WDL CE from `0.771990` to `0.788461` (`+2.13%`); and
+- horizon-8 prediction/target effective rank from
+  `11.1652/10.6859` to `10.9265/10.4867`.
+
+There is no latent collapse: feature standard deviations remain healthy and
+prediction-target cosine increases. The candidate nevertheless has a modest
+rank and WDL regression.
+
+The preregistered same-opening Arena screen is decisive in the opposite
+direction. Count 64 scores `0.908203` against raw BT4, while count 256 scores
+`0.812500`; the paired candidate-minus-control delta is `-0.095703`.
+Count 256 is worse on 58 opening pairs, equal on 51, and better on 19. The
+descriptive paired-t 95% interval is `[-0.133370, -0.058036]`, with zero
+faults and zero cap draws in either run. The corresponding descriptive
+logistic-Elo estimates differ by `-143.41`, but remain relative to this raw
+BT4 implementation and frozen pool.
+
+Reject count 256 and do not extend it to 10% of an epoch. Retain count 64 and
+coefficients `2.0/2.0` as the fresh-research baseline. The result does not
+prove finite-sample noise is generally beneficial; it shows that reducing it
+is not a useful change for this exact short-run recipe. The rejected model
+weights were deleted after checksum
+`c5bd59891b14b9edd2a6b221d06efe792901c6486b03ce2f99ab76fdee22a495`
+and all evidence were sealed. The compact machine-readable comparison and
+loss plot are:
+
+- `research/analysis/sigreg_sample_count_256_experiment_20260727.json`
+- `research/analysis/sigreg_sample_count_256_experiment_20260727.png`
