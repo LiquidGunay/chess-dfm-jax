@@ -1620,6 +1620,78 @@ def loss_and_aux(
     return loss, aux
 
 
+def _latent_spectrum_metrics(
+    values: Tensor,
+    sample_weight: Tensor,
+) -> dict[str, Tensor]:
+    """Per-horizon centered spectrum diagnostics in the sample Gram space."""
+
+    if values.ndim != 3:
+        raise ValueError(
+            "Latent spectrum values must have shape [batch, horizon, dim]"
+        )
+    if sample_weight.shape != values.shape[:2]:
+        raise ValueError(
+            "Latent spectrum weights must match the batch and horizon dimensions"
+        )
+    weights = sample_weight.float()
+    denominator = weights.sum(dim=0)
+    safe_denominator = denominator.clamp_min(1.0)
+    mean = (
+        values.float() * weights.unsqueeze(-1)
+    ).sum(dim=0) / safe_denominator.unsqueeze(-1)
+    centered = values.float() - mean.unsqueeze(0)
+    variance = (
+        centered.square() * weights.unsqueeze(-1)
+    ).sum(dim=0) / safe_denominator.unsqueeze(-1)
+    feature_std = torch.sqrt(variance.clamp_min(0.0) + 1e-12)
+    centered_rms = torch.sqrt(variance.mean(dim=-1).clamp_min(0.0))
+
+    weighted_centered = centered.permute(1, 0, 2)
+    weighted_centered = (
+        weighted_centered
+        * weights.transpose(0, 1).sqrt().unsqueeze(-1)
+    )
+    covariance_denominator = (denominator - 1.0).clamp_min(1.0)
+    gram = weighted_centered @ weighted_centered.transpose(-2, -1)
+    gram = gram / covariance_denominator[:, None, None]
+    eigenvalues = torch.linalg.eigvalsh(gram).clamp_min(0.0)
+    eigenvalue_sum = eigenvalues.sum(dim=-1)
+    spectrum = eigenvalues / eigenvalue_sum.unsqueeze(-1).clamp_min(1e-12)
+    entropy = -torch.where(
+        spectrum > 0.0,
+        spectrum * torch.log(spectrum),
+        torch.zeros_like(spectrum),
+    ).sum(dim=-1)
+    effective_rank = torch.where(
+        eigenvalue_sum > 1e-12,
+        torch.exp(entropy),
+        torch.zeros_like(entropy),
+    )
+    largest_eigenvalue = eigenvalues[..., -1]
+    stable_rank = torch.where(
+        largest_eigenvalue > 1e-12,
+        eigenvalue_sum / largest_eigenvalue.clamp_min(1e-12),
+        torch.zeros_like(eigenvalue_sum),
+    )
+
+    result = {
+        "feature_std": feature_std,
+        "centered_rms": centered_rms,
+        "effective_rank": effective_rank,
+        "stable_rank": stable_rank,
+    }
+    for count in (1, 8, 16, 32):
+        bounded_count = min(count, eigenvalues.shape[-1])
+        explained = eigenvalues[..., -bounded_count:].sum(dim=-1)
+        result[f"explained_variance_top{count}"] = torch.where(
+            eigenvalue_sum > 1e-12,
+            explained / eigenvalue_sum.clamp_min(1e-12),
+            torch.zeros_like(eigenvalue_sum),
+        )
+    return result
+
+
 def full_horizon_evaluation_aux(
     model: JointModel,
     batch: Mapping[str, Tensor],
@@ -1909,34 +1981,31 @@ def full_horizon_evaluation_aux(
     def horizon_mean(values: Tensor) -> Tensor:
         return (values * latent_weight).sum(dim=0) / latent_denom
 
-    pred_mean = (pred_f32 * latent_weight.unsqueeze(-1)).sum(dim=0) / latent_denom.unsqueeze(-1)
-    target_mean = (target_f32 * latent_weight.unsqueeze(-1)).sum(dim=0) / latent_denom.unsqueeze(-1)
-    pred_variance = (
-        (pred_f32 - pred_mean.unsqueeze(0)).square() * latent_weight.unsqueeze(-1)
-    ).sum(dim=0) / latent_denom.unsqueeze(-1)
-    target_variance = (
-        (target_f32 - target_mean.unsqueeze(0)).square() * latent_weight.unsqueeze(-1)
-    ).sum(dim=0) / latent_denom.unsqueeze(-1)
-    pred_feature_std = torch.sqrt(pred_variance.clamp_min(0.0) + 1e-12)
-    target_feature_std = torch.sqrt(target_variance.clamp_min(0.0) + 1e-12)
-
-    centered = (pred_f32 - pred_mean.unsqueeze(0)).permute(1, 0, 2)
-    centered = centered * latent_weight.transpose(0, 1).sqrt().unsqueeze(-1)
-    covariance_denom = (latent_denom - 1.0).clamp_min(1.0)
-    gram = centered @ centered.transpose(-2, -1)
-    gram = gram / covariance_denom[:, None, None]
-    eigenvalues = torch.linalg.eigvalsh(gram).clamp_min(0.0)
-    eigenvalue_sum = eigenvalues.sum(dim=-1, keepdim=True)
-    spectrum = eigenvalues / eigenvalue_sum.clamp_min(1e-12)
-    entropy = -torch.where(
-        spectrum > 0.0,
-        spectrum * torch.log(spectrum),
-        torch.zeros_like(spectrum),
-    ).sum(dim=-1)
-    effective_rank = torch.where(
-        eigenvalue_sum[:, 0] > 1e-12,
-        torch.exp(entropy),
-        torch.zeros_like(entropy),
+    pred_spectrum = _latent_spectrum_metrics(
+        pred_f32,
+        latent_weight,
+    )
+    target_spectrum = _latent_spectrum_metrics(
+        target_f32,
+        latent_weight,
+    )
+    pred_rms_by_horizon = torch.sqrt(
+        horizon_mean(pred_f32.square().mean(dim=-1))
+    )
+    target_rms_by_horizon = torch.sqrt(
+        horizon_mean(target_f32.square().mean(dim=-1))
+    )
+    pred_target_rank_ratio = torch.where(
+        target_spectrum["effective_rank"] > 1e-12,
+        pred_spectrum["effective_rank"]
+        / target_spectrum["effective_rank"].clamp_min(1e-12),
+        torch.zeros_like(target_spectrum["effective_rank"]),
+    )
+    pred_target_centered_rms_ratio = torch.where(
+        target_spectrum["centered_rms"] > 1e-12,
+        pred_spectrum["centered_rms"]
+        / target_spectrum["centered_rms"].clamp_min(1e-12),
+        torch.zeros_like(target_spectrum["centered_rms"]),
     )
 
     action_shuffled_pred = model.jepa_rollout(
@@ -1989,16 +2058,61 @@ def full_horizon_evaluation_aux(
         "shuffled_mse_by_horizon": horizon_mean(shuffled_mse),
         "action_shuffled_mse_by_horizon": horizon_mean(action_shuffled_mse),
         "pred_target_cosine_by_horizon": horizon_mean(cosine),
-        "pred_rms_by_horizon": torch.sqrt(horizon_mean(pred_f32.square().mean(dim=-1))),
-        "target_rms_by_horizon": torch.sqrt(horizon_mean(target_f32.square().mean(dim=-1))),
-        "pred_feature_std_mean_by_horizon": pred_feature_std.mean(dim=-1),
+        "pred_rms_by_horizon": pred_rms_by_horizon,
+        "target_rms_by_horizon": target_rms_by_horizon,
+        "pred_target_rms_ratio_by_horizon": (
+            pred_rms_by_horizon / target_rms_by_horizon.clamp_min(1e-12)
+        ),
+        "pred_centered_rms_by_horizon": pred_spectrum["centered_rms"],
+        "target_centered_rms_by_horizon": target_spectrum["centered_rms"],
+        "pred_target_centered_rms_ratio_by_horizon": (
+            pred_target_centered_rms_ratio
+        ),
+        "pred_feature_std_mean_by_horizon": pred_spectrum[
+            "feature_std"
+        ].mean(dim=-1),
         "pred_feature_std_p05_by_horizon": torch.quantile(
-            pred_feature_std,
+            pred_spectrum["feature_std"],
             0.05,
             dim=-1,
         ),
-        "target_feature_std_mean_by_horizon": target_feature_std.mean(dim=-1),
-        "pred_effective_rank_by_horizon": effective_rank,
+        "target_feature_std_mean_by_horizon": target_spectrum[
+            "feature_std"
+        ].mean(dim=-1),
+        "target_feature_std_p05_by_horizon": torch.quantile(
+            target_spectrum["feature_std"],
+            0.05,
+            dim=-1,
+        ),
+        "pred_effective_rank_by_horizon": pred_spectrum["effective_rank"],
+        "target_effective_rank_by_horizon": target_spectrum["effective_rank"],
+        "pred_target_effective_rank_ratio_by_horizon": pred_target_rank_ratio,
+        "pred_stable_rank_by_horizon": pred_spectrum["stable_rank"],
+        "target_stable_rank_by_horizon": target_spectrum["stable_rank"],
+        "pred_explained_variance_top1_by_horizon": pred_spectrum[
+            "explained_variance_top1"
+        ],
+        "pred_explained_variance_top8_by_horizon": pred_spectrum[
+            "explained_variance_top8"
+        ],
+        "pred_explained_variance_top16_by_horizon": pred_spectrum[
+            "explained_variance_top16"
+        ],
+        "pred_explained_variance_top32_by_horizon": pred_spectrum[
+            "explained_variance_top32"
+        ],
+        "target_explained_variance_top1_by_horizon": target_spectrum[
+            "explained_variance_top1"
+        ],
+        "target_explained_variance_top8_by_horizon": target_spectrum[
+            "explained_variance_top8"
+        ],
+        "target_explained_variance_top16_by_horizon": target_spectrum[
+            "explained_variance_top16"
+        ],
+        "target_explained_variance_top32_by_horizon": target_spectrum[
+            "explained_variance_top32"
+        ],
         "valid_count_by_horizon": latent_denom,
     }
 

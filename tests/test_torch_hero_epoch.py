@@ -18,6 +18,7 @@ from research.train_torch import (
     StateProjector,
     _analyze_lr_range_records,
     _hero_milestone_update,
+    _latent_spectrum_metrics,
     _normalize_frozen_indices,
     _polarized_gradient_cosines,
     _shared_sigreg_gradient_projection,
@@ -204,6 +205,41 @@ def test_hero_milestones_round_up_by_examples():
         )
         for percentage in expected
     } == expected
+
+
+def test_latent_spectrum_metrics_expose_rank_and_centered_scale():
+    generator = torch.Generator().manual_seed(20260727)
+    diverse = torch.randn(32, 12, generator=generator)
+    collapsed = torch.full((32, 12), 3.0)
+    values = torch.stack((diverse, collapsed), dim=1)
+    weights = torch.ones((32, 2))
+
+    metrics = _latent_spectrum_metrics(values, weights)
+
+    assert metrics["effective_rank"][0] > 5.0
+    assert metrics["stable_rank"][0] > 2.0
+    assert metrics["centered_rms"][0] > 0.5
+    assert metrics["explained_variance_top1"][0] < 1.0
+    torch.testing.assert_close(
+        metrics["explained_variance_top32"][0],
+        torch.tensor(1.0),
+    )
+    torch.testing.assert_close(
+        metrics["effective_rank"][1],
+        torch.tensor(0.0),
+    )
+    torch.testing.assert_close(
+        metrics["stable_rank"][1],
+        torch.tensor(0.0),
+    )
+    torch.testing.assert_close(
+        metrics["centered_rms"][1],
+        torch.tensor(0.0),
+    )
+    torch.testing.assert_close(
+        metrics["explained_variance_top32"][1],
+        torch.tensor(0.0),
+    )
 
 
 class _FixedArenaPlanner:
