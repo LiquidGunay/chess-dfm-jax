@@ -6965,9 +6965,7 @@ def sigreg_sample_audit(args: argparse.Namespace) -> int:
         model.zero_grad(set_to_none=True)
         torch.cuda.empty_cache()
         torch.cuda.reset_peak_memory_stats()
-        capture: dict[str, Any] = {
-            "capture_sigreg_inputs": count == baseline_count,
-        }
+        capture: dict[str, Any] = {}
         forward_start = torch.cuda.Event(enable_timing=True)
         forward_end = torch.cuda.Event(enable_timing=True)
         backward_end = torch.cuda.Event(enable_timing=True)
@@ -7053,12 +7051,6 @@ def sigreg_sample_audit(args: argparse.Namespace) -> int:
                 "missing_from_candidate": [],
                 "missing_from_reference": [],
             }
-            captured_inputs = capture["sigreg_inputs"]
-            sigreg_inputs_cpu = {
-                name: value.detach().to(device="cpu", copy=True)
-                for name, value in captured_inputs.items()
-            }
-            del captured_inputs
         else:
             assert reference_gradients is not None
             assert reference_norms is not None
@@ -7134,6 +7126,35 @@ def sigreg_sample_audit(args: argparse.Namespace) -> int:
                 "status": "skipped_after_oom",
                 "blocked_by_sample_count": failed_count,
             }
+    else:
+        model.config = dataclasses.replace(
+            base_config,
+            sigreg_example_count=baseline_count,
+        )
+        model.zero_grad(set_to_none=True)
+        torch.cuda.empty_cache()
+        input_capture: dict[str, Any] = {
+            "capture_sigreg_inputs": True,
+        }
+        with torch.inference_mode():
+            capture_loss, capture_aux = loss_and_aux(
+                model,
+                batch,
+                baseline_choices,
+                compute_dtype=torch.bfloat16,
+                capture=input_capture,
+            )
+        captured_inputs = input_capture["sigreg_inputs"]
+        sigreg_inputs_cpu = {
+            name: value.detach().to(device="cpu", copy=True)
+            for name, value in captured_inputs.items()
+        }
+        del (
+            capture_loss,
+            capture_aux,
+            captured_inputs,
+            input_capture,
+        )
 
     scalar_dispersion: dict[str, Any] = {}
     if failed_count is None:
