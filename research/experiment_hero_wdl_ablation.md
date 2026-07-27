@@ -96,3 +96,54 @@ better intermediate coefficient or open a sweep.
 After all evidence and checkpoint hashes are sealed, retain only the model
 needed for the active recipe. Never overlap its training, validation, Arena,
 or any SAE workload on the single A10G.
+
+## Result
+
+Reject WDL-off and keep `wdl_coeff=0.25`.
+
+The candidate completed all 1,024 updates / 1,048,576 examples with zero
+non-finite skips at `254.881` examples/s. This is only `0.12%` faster than
+the matched control, with 9.8 MB less peak allocated HBM, so systems variance
+does not explain the scientific result. The only model/loss configuration
+difference is the preregistered WDL coefficient.
+
+Frozen 8,192-example validation was mixed but failed four model-health gates:
+
+| Metric | WDL `0.25` | WDL off | Candidate change |
+|---|---:|---:|---:|
+| DFM CE | `5.706299` | `5.716290` | `+0.009991` |
+| Action accuracy | `0.072433` | `0.072754` | `+0.000320` |
+| First-action legal mass | `0.554204` | `0.551965` | `-0.002239` |
+| Root legal-conditional CE | `2.119581` | `2.148177` | `+0.028596` |
+| JEPA MSE | `0.133190` | `0.127578` | `-0.005612` |
+| Diagnostic WDL CE | `0.771990` | `1.167484` | `+0.395494` |
+
+The JEPA MSE improvement did not preserve latent diversity. At horizon 8,
+WDL-off retained only `84.90% / 86.51%` of control prediction
+effective/stable rank and `89.19% / 89.28%` of control target
+effective/stable rank. Feature-tail statistics did not collapse, but the
+rank-retention gate failed.
+
+Arena is decisive. On the identical 128 color-reversed opening pairs,
+WDL-off scored `0.626953` against raw BT4 versus `0.908203` for WDL `0.25`.
+The paired score delta is `-0.281250`; WDL-off was worse/equal/better on
+`97 / 27 / 4` pairs. The descriptive paired-t 95% interval is
+`[-0.318466, -0.244034]`. Both runs had zero policy faults and zero cap
+draws.
+
+This screen shows that the training-only final-outcome auxiliary is doing
+substantial useful representation shaping or regularization by 3.70% of an
+epoch, despite not being queried at inference. It does not establish that
+`0.25` is the optimal coefficient. Per preregistration, do not open a
+coefficient sweep from this negative zero-versus-`0.25` result.
+
+The rejected candidate model was sealed as SHA-256
+`12d54ce16b3997d3dad722a15c69011406065456af17f67b7e1cd95db8fdff8a`
+and then its 712,339,608-byte tensor file was deleted. Its manifest, complete
+training trace, frozen validation, Arena state, and scalar comparison remain;
+the active WDL-on checkpoint
+`05068c96b2bac8f10a3f3b853363bdb2ce49f935b026566705b3bdcd4d9060c9`
+is retained.
+
+The immutable comparison and plot are
+`research/analysis/hero_wdl_ablation_20260727.json` and `.png`.

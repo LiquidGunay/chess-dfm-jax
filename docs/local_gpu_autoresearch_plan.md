@@ -1989,7 +1989,7 @@ sweeps, held-out data, and repeated seeds.
   extension on this direction. The complete scalar record and loss plot are
   `research/analysis/sigreg_sample_count_256_experiment_20260727.json` and
   `.png`.
-- [ ] Run the first post-hero loss ablation in
+- [x] Run the first post-hero loss ablation in
   `research/experiment_hero_wdl_ablation.md`: reuse the accepted count-64
   run as control and train one matched fresh candidate with only
   `wdl_coeff: 0.25 -> 0.0`. Keep DFM CE, JEPA MSE, both coefficient-2 SIGReg
@@ -1998,4 +1998,14 @@ sweeps, held-out data, and repeated seeds.
   select primarily by the identical 128-pair Arena screen with frozen policy
   and latent-health guardrails. A positive result still requires a fresh
   repeat and at least 10% of an epoch; a negative result restores coefficient
-  `0.25` without opening a sweep.
+  `0.25` without opening a sweep. The candidate completed all 1,024 updates
+  at `254.881` examples/s with zero skips, but failed the screen: frozen DFM
+  CE worsened by `0.009991`, root legal CE by `0.028596`, legal mass by
+  `0.002239`, and horizon-8 prediction/target ranks retained only
+  `84.90%..89.28%` of control. Its same-opening Arena score fell from
+  `0.908203` to `0.626953`; the paired delta is `-0.281250` with descriptive
+  95% interval `[-0.318466,-0.244034]`, zero faults, and zero cap draws.
+  Reject WDL-off, keep coefficient `0.25`, and do not open a coefficient
+  sweep. Seal and delete only the rejected tensor file while retaining the
+  accepted count-64 model and all compact evidence. See
+  `research/analysis/hero_wdl_ablation_20260727.json` and `.png`.
