@@ -1,0 +1,165 @@
+{
+  "canonicalization_parity": {
+    "audited_example_count": 8192,
+    "audited_shard_count": 8,
+    "audited_valid_action_count": 65536,
+    "conversion_speedup": 2.456479070926737,
+    "gate_pass": true,
+    "recovered_promotion_slot_count": 1714,
+    "selection_sha256": "c75ee1b859126c0adb140e460f51e06ca333c09a4906f466a608ee8ec441dd34"
+  },
+  "created_utc": "2026-07-27T18:35:55.339283+00:00",
+  "inputs": {
+    "accepted_fused_backward": {
+      "path": "artifacts/profiles/hero_eager_fused_backward_layernorm_runtime_parity_b512.json",
+      "sha256": "b7b34b698884af8d043ffa3aa41d68527de6ef4197be28ad3bbfa89d4d021ade"
+    },
+    "annotated_profile": {
+      "path": "research/runs/torch_kernel_sprint_b1024_profile_v1/report.json",
+      "sha256": "5729a0987c7264aceec73469577be0a682b3154bdd4cf65412a1a3bf76729277"
+    },
+    "canonicalization_parity": {
+      "path": "artifacts/profiles/hero_canonicalization_parity_v1.json",
+      "sha256": "5a3d10e1e7823f52a89c28b0f60612d5894a61aa90d7c648ac97692e9cf93a9a"
+    },
+    "rejected_native_layernorm": {
+      "path": "artifacts/profiles/hero_native_fp32_layernorm_runtime_parity_b512.json",
+      "sha256": "3f785dc3fed2cb01c4258793a2a57534bbdac57afc18891980bad7e1f34d7585"
+    }
+  },
+  "profiler": {
+    "aggregate_flops_per_profiled_step": 118789083630365,
+    "bt4_current_cuda_span_ms": 719.875815,
+    "bt4_future_cuda_span_ms": 717.101029,
+    "dfm_clean_cuda_span_ms": 20.969234,
+    "dfm_noisy_cuda_span_ms": 20.971602,
+    "interpretation": "The two eager BT4 encodes dominate forward time; SIGReg and cross-entropy are too small to meet the 10% adoption gate.",
+    "jepa_rollout_cuda_span_ms": 22.319443,
+    "prediction_sigreg_cuda_span_ms": 3.329154,
+    "state_projector_cuda_span_ms": 144.581404,
+    "target_sigreg_cuda_span_ms": 1.274753,
+    "trace": {
+      "compression": "gzip",
+      "path": "profile_trace.json.gz",
+      "sha256": "c0300964cd788a0a22687dc286dc06f43f94c421307d1dff7597fea410386cbc",
+      "size_bytes": 4165895
+    }
+  },
+  "result": {
+    "adopt": true,
+    "adoption_gate": {
+      "minimum_end_to_end_gain": 0.1,
+      "numerical_gate_pass": true,
+      "systems_gate_pass": true
+    },
+    "projected_epoch_training_hours": 30.754167459225012,
+    "projected_epoch_training_seconds": 110715.00285321004,
+    "scientific_metrics_exact_update_by_update": true,
+    "scientific_mismatches": [],
+    "throughput_gain_vs_eager_reference": 0.38718480796632826,
+    "throughput_gain_vs_previous_best": 0.16962964420015725
+  },
+  "runs": {
+    "eager_reference": {
+      "batch_size": 1024,
+      "examples_per_second": 184.54808917716036,
+      "git_commit": "c16edd82f94b3204b83721b326f6f69ad0da42f9",
+      "mean_backward_cuda_seconds": 2.70741162109375,
+      "mean_data_prepare_seconds": 2.385152728875659,
+      "mean_data_wait_seconds": 1.0450108675286174e-05,
+      "mean_forward_cuda_seconds": 2.642418768988715,
+      "mean_optimizer_cuda_seconds": 0.19876834530300563,
+      "mean_step_seconds": 5.548689257990595,
+      "metrics_sha256": "e92c934e56f934fb09888236939cd371fabe9d039e91204aa7d0f2b1f0d477fc",
+      "peak_allocated_bytes": 20696324096,
+      "peak_reserved_bytes": 23072866304,
+      "report_sha256": "d74ad4f0ec769a16433d2c3115ef791e67d9a939cc03d55c10daf3eca31c7fc4",
+      "steady_update_count": 18,
+      "steady_update_range": [
+        2,
+        19
+      ],
+      "terminal_dfm_ce_loss": 7.407018661499023
+    },
+    "fused_backward": {
+      "batch_size": 1024,
+      "examples_per_second": 207.42597052726822,
+      "git_commit": "a63ce3d5161c4ad0f819112851f0409585dcf021",
+      "mean_backward_cuda_seconds": 2.1702816433376735,
+      "mean_data_prepare_seconds": 2.0109570137865376,
+      "mean_data_wait_seconds": 1.0075771974192725e-05,
+      "mean_forward_cuda_seconds": 2.5638036159939235,
+      "mean_optimizer_cuda_seconds": 0.202517333984375,
+      "mean_step_seconds": 4.936701018667211,
+      "metrics_sha256": "8e2dd2f4d5aea794092d424f7e5537b0aff084f0e08f880870057fc20911aa7b",
+      "peak_allocated_bytes": 18480328704,
+      "peak_reserved_bytes": 23446159360,
+      "report_sha256": "abc8af639fd6309178cbe2a47c95e16565f0db02c1c331891cad45da57a9e6b2",
+      "steady_update_count": 18,
+      "steady_update_range": [
+        2,
+        19
+      ],
+      "terminal_dfm_ce_loss": 7.4070329666137695
+    },
+    "fused_backward_delayed_prefetch": {
+      "batch_size": 1024,
+      "examples_per_second": 218.874672778012,
+      "git_commit": "eaadf32db78a01e1885681c1d577b99e1400c8ef",
+      "mean_backward_cuda_seconds": 2.8588021240234376,
+      "mean_data_prepare_seconds": 2.0643192162226316,
+      "mean_data_wait_seconds": 1.0153000605189138e-05,
+      "mean_forward_cuda_seconds": 1.6175248684353298,
+      "mean_optimizer_cuda_seconds": 0.2020578842163086,
+      "mean_step_seconds": 4.6784764404356896,
+      "metrics_sha256": "fc00ff52318f0eae3ce9d8c2bf70c2f863302cd2764e86aa3d19aca628fe0b51",
+      "peak_allocated_bytes": 18480328704,
+      "peak_reserved_bytes": 23446159360,
+      "report_sha256": "3d57ef00ba50b0c38c5c8c2e0ebad0cf69cebb7435ad38602b25fe2f40944bd6",
+      "steady_update_count": 18,
+      "steady_update_range": [
+        2,
+        19
+      ],
+      "terminal_dfm_ce_loss": 7.4070329666137695
+    },
+    "selected": {
+      "batch_size": 1024,
+      "examples_per_second": 256.002305645772,
+      "git_commit": "dd87283ee7fc36dc3c72234084dbeed68e96c2b6",
+      "mean_backward_cuda_seconds": 2.1722319607204863,
+      "mean_data_prepare_seconds": 1.8451297280003525,
+      "mean_data_wait_seconds": 1.2734115848110781e-05,
+      "mean_forward_cuda_seconds": 1.6178092719184027,
+      "mean_optimizer_cuda_seconds": 0.20982495964898004,
+      "mean_step_seconds": 3.9999639746092726,
+      "metrics_sha256": "e594fe1df777708b58a5bac062f8dbdc8c3899326f4e663ccbbe15f3aef3e16e",
+      "peak_allocated_bytes": 18480328704,
+      "peak_reserved_bytes": 23446159360,
+      "report_sha256": "e90069556515ab08e6587bb5a0188daf20aee93b3347204702d5f7672bd740e7",
+      "steady_update_count": 18,
+      "steady_update_range": [
+        2,
+        19
+      ],
+      "terminal_dfm_ce_loss": 7.4070329666137695
+    }
+  },
+  "runtime_parity": {
+    "fused_backward_gate_pass": true,
+    "fused_backward_global_gradient_cosine": 0.9999904744791939,
+    "fused_backward_loss_relative_difference": 0.0,
+    "fused_backward_raw_bt4_gradient_cosine": 0.9999820864152216,
+    "native_fp32_layernorm_gate_pass": false,
+    "native_fp32_legal_action_agreement": 0.97265625,
+    "native_fp32_raw_bt4_gradient_cosine": 0.8527298824501485
+  },
+  "schema_version": "torch-hero-kernel-sprint-v1",
+  "selection": {
+    "bt4_norm_impl": "eager-fused-backward",
+    "physical_batch_size": 1024,
+    "prefetch_launch": "after-forward",
+    "sigreg_example_count": 64,
+    "trajectory_canonicalization": "fixed-index-map-with-promotion-recovery"
+  }
+}

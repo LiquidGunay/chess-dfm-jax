@@ -1,7 +1,8 @@
 # Hero Epoch Systems and Loss Freeze
 
-Status: systems runtime, loss coefficients, learning rates, and weight decay
-frozen on 2026-07-25.
+Status: initial systems runtime, loss coefficients, learning rates, and weight
+decay frozen on 2026-07-25; post-epoch Torch runtime optimized and frozen on
+2026-07-27.
 
 This is the execution record for steps 7 and the loss-coefficient portion of
 step 8 in `docs/hero_epoch_plan.md`. All measurements used the A10G through
@@ -635,3 +636,77 @@ its manifest, run configuration, complete per-update loss log, compact loss
 summary, validation curve, and evaluation/Arena evidence. A
 `research/storage_audit.py --verify-hashes` pass reports no missing, extra, or
 corrupt retained state.
+
+## Post-epoch profiler and kernel sprint
+
+The completed hero graph was re-profiled at batch 1024 before attempting
+custom kernels. The annotated profile counts about `118.789 TFLOP` per step
+and attributes the forward CUDA spans as follows:
+
+| Region | CUDA span |
+|---|---:|
+| Current-state eager BT4 | `719.876 ms` |
+| Future-state eager BT4 | `717.101 ms` |
+| State projector | `144.581 ms` |
+| Noisy / clean DFM | `20.972 / 20.969 ms` |
+| JEPA rollout | `22.319 ms` |
+| Target / prediction SIGReg | `1.275 / 3.329 ms` |
+
+The two BT4 encodes dominate forward time. SIGReg, CE, and the fresh
+DFM/JEPA regions are individually too small to clear the fixed 10%
+end-to-end adoption gate, so no bespoke Triton kernel was written for them.
+The terminal profiled step is already device-busy outside the optimizer;
+CUDA graphs cannot plausibly remove 10% from this graph.
+
+Native FP32 LayerNorm forward was fast but rejected: legal top-1 agreement was
+only `97.2656%`, global gradient cosine was `0.92559`, and the raw-BT4
+gradient cosine was `0.85273`. The accepted
+`eager-fused-backward` implementation preserves the exact eager BF16 forward
+and uses maintained native LayerNorm backward. It has bit-exact loss and root
+logits, `100%` legal-action agreement, global gradient cosine `0.9999905`,
+and raw-BT4 gradient cosine `0.9999821`. It also lowers peak allocated HBM at
+batch 1024 from `20.696 GB` to `18.480 GB`.
+
+The input profile exposed a second bottleneck: batch preparation enumerated
+Python-chess legal moves twice for every valid horizon. The stored legacy
+legal slots and canonical slots differ by a fixed side-to-move permutation.
+The selected converter applies that permutation directly, incrementally
+maintains the board only for action validation, and explicitly recovers the
+black/knight promotion slots absent from the legacy codec. Its reproducible
+audit is exact over 8 deterministic shards, 8,192 examples, and 65,536 valid
+actions, including 1,714 recovered promotion slots. Conversion is `2.456x`
+faster than the board-enumerating oracle in that guarded audit.
+
+Launching that shorter preparation after forward lets it overlap backward
+without delaying the next batch. Matched steady updates 2--19 are:
+
+| Runtime | Step | Examples/s | Forward | Backward | Data prepare |
+|---|---:|---:|---:|---:|---:|
+| Eager reference | `5.5487 s` | `184.548` | `2.6424 s` | `2.7074 s` | `2.3852 s` |
+| Fused backward | `4.9367 s` | `207.426` | `2.5638 s` | `2.1703 s` | `2.0110 s` |
+| Fused + delayed prefetch | `4.6785 s` | `218.875` | `1.6175 s` | `2.8588 s` | `2.0643 s` |
+| Selected + fast canonicalization | `4.0000 s` | `256.002` | `1.6178 s` | `2.1722 s` | `1.8451 s` |
+
+The selected result is `+16.96%` over the previous best and `+38.72%` over
+the matched eager reference. All recorded scientific metrics are exactly
+identical update by update to the prior fused/delayed-prefetch run. At this
+rate, the 28,343,296-example training portion projects to `30.75` hours,
+before validation/Arena/checkpoint overhead, rather than the completed
+epoch's `42.72` training hours.
+
+The host kernel module is `580.159.03`. The guarded launcher uses the exact
+workspace-local `580.159.03` userspace overlay, and a no-reboot CUDA/JAX
+health check reports the A10G and matching driver version. The newer host
+package remains untouched.
+
+The compact systems record is
+`research/analysis/torch_kernel_sprint_20260727.json`, SHA-256
+`eff2e050a745a6407a22409895274e0ac874f157fcfdc6f3b85bb412828279a8`.
+The canonicalization audit is
+`artifacts/profiles/hero_canonicalization_parity_v1.json`, SHA-256
+`5a3d10e1e7823f52a89c28b0f60612d5894a61aa90d7c648ac97692e9cf93a9a`.
+
+Before the next model run, complete the separately scoped SIGReg sample-count
+audit at 64, 128, and 256. A selected sample-count change is an objective
+change and must not be conflated with this semantics-preserving runtime
+freeze.

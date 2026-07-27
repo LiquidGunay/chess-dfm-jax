@@ -1,21 +1,14 @@
 # Local GPU Autoresearch Plan
 
 Status: implementation in progress. The plan was approved on 2026-07-18 and
-revised through 2026-07-23. The JAX scientific loop and its historical results
-remain valid, but exact new JAX graphs cannot cold-compile within the server
-guard. The current execution gate is therefore
-`PYTORCH_AUTORESEARCH_READY = False`: migrate the unchanged control to eager
-PyTorch, pass cross-framework parity and guarded baseline gates, then reopen
-short-run research. Compatibility v2/update 300 remains the repeat-qualified
-control. The no-norm target-SIGReg-5.76,
-prediction-SIGReg-1.0 v2/update-400 checkpoint is now the repeat-qualified
-corrected baseline. Its 128-pair searchless strength anchors are complete: it
-is indistinguishable from the recovered DFM/JEPA source at this resolution,
-but substantially weaker in point estimate than the original raw BT4 policy.
-It is not Elo-promoted. The current offline incumbent is the one-block
-future-gradient-tail primary/update 2,072; two exact runs beat balanced K=1 on
-the frozen offline metric, while its direct 128-pair arena against balanced K=1
-is indistinguishable from a tie and does not constitute Elo promotion.
+revised through 2026-07-27. The historical JAX results remain valid, but exact
+new JAX graphs cannot cold-compile within the server guard. The one-file Torch
+hero path has now completed a clean epoch, frozen validation, full-length
+paired Arena, exact state materialization, and a post-epoch systems sprint.
+Set `PYTORCH_AUTORESEARCH_READY = True` for fresh-initialization short-run
+research. JAX remains the eventual hero-run target, but JAX hero
+inference/continuation is not ready until its forward path applies the trained
+BT4 policy residual.
 
 The original scientific critical path, now completed, was:
 
@@ -30,17 +23,17 @@ The original scientific critical path, now completed, was:
    anchor under identical searchless inference budgets; and
 6. begin the SAE/representation study only after those strength anchors exist.
 
-The current systems critical path is to implement the one-file eager PyTorch
-path, prove it against the frozen JAX oracle, profile and select physical batch
-size under the resource guard, repeat the fixed-time control, and only then
-resume one-change 30-minute architecture research. The implementation,
-source/FP32 parity, guarded smoke, and batch sweep are complete; batch 512 is
-the selected PyTorch training batch. Production BF16 is now explicitly a
-runtime-specific numerical trajectory after the recorded tight-intermediate
-gate failed in both CPU and GPU comparisons. Representative FP32 gradients
-and deterministic depth-1 prefetch are complete. Checkpoint/JAX round trip
-and the matched fixed-time control remain. JAX remains the target for long
-hero runs once autoresearch selects a promising model.
+The current systems critical path is complete for the Torch hero graph.
+Batch 1024, regional compilation of fresh repeated regions, native SDPA,
+exact-forward fused LayerNorm backward, after-forward input prefetch, and
+fixed-index trajectory canonicalization sustain `256.002` examples/s over
+matched steady updates. That is `+38.72%` over the post-epoch eager-reference
+measurement and projects the training portion of an epoch to `30.75` hours.
+Production BF16 remains a runtime-specific numerical trajectory; every
+scientific metric is nevertheless exactly identical update by update before
+and after the canonicalization/prefetch change, and the accepted fused
+backward passed the frozen gradient gate. JAX remains the target for later
+hero runs once the missing hero-forward policy-residual semantics are added.
 
 The A10G is single-tenant throughout this sequence. Training, profiling,
 arena evaluation, and SAE work do not run concurrently.
@@ -57,6 +50,19 @@ forbidden; future runs may write at most one sparse intermediate plus terminal
 and must prune to one accepted state or zero rejected states before another
 model run. Safety thresholds may only be made stricter through environment
 configuration.
+
+Hero/systems update, 2026-07-27: the clean raw-BT4 plus fresh
+DFM/JEPA/residual/WDL epoch completed and its terminal checkpoint beats raw
+BT4 in the frozen 1,024-pair searchless Arena. The subsequent profiler-driven
+Torch sprint found that the two eager BT4 encodes dominate forward time,
+while SIGReg and cross-entropy are too small to justify custom kernels.
+Exact-forward fused LayerNorm backward reduces backward time, and replacing
+per-horizon Python legal-move enumeration with the codec's fixed index map
+removes enough input-thread contention to restore the uncontended GPU
+forward/backward path. The selected 20-step run is `4.0000` seconds/update at
+batch 1024, versus `5.5487` seconds for the matched eager reference. The
+machine-readable record is
+`research/analysis/torch_kernel_sprint_20260727.json`.
 
 Execution update, 2026-07-20: critical-path steps 1--5 are complete. The norm
 coefficient is explicit, normalized SIGReg uses a fixed random example count,
@@ -1939,9 +1945,28 @@ sweeps, held-out data, and repeated seeds.
   `0.014658`, and both retained checkpoints pass exact 462-leaf Torch-to-JAX
   state materialization. See
   `research/analysis/hero_epoch_v1_closeout_20260727.json`.
-- [ ] Run a profiler-driven PyTorch/kernel sprint against the completed hero
+- [x] Run a profiler-driven PyTorch/kernel sprint against the completed hero
   baseline. Measure CUDA-graph/removable synchronization overhead first, then
   maintained fused linear cross-entropy, chunked or fused SIGReg, and only
   profiler-identified norm/SwiGLU/residual epilogues. Keep an optimization
   only if it improves end-to-end throughput by at least 10% or changes the
-  feasible HBM/batch regime without changing numerical results.
+  feasible HBM/batch regime without changing numerical results. The selected
+  exact-forward fused LayerNorm backward, after-forward prefetch, and exact
+  fixed-map canonicalization reach `256.002` examples/s, `+38.72%` over the
+  matched `184.548` examples/s reference. The canonicalizer matches its
+  board-enumerating oracle over 8,192 sampled trajectories / 65,536 valid
+  actions, and all training metrics match the previous selected runtime
+  exactly update by update.
+- [ ] Before changing the objective, benchmark normalized SIGReg sample counts
+  64, 128, and 256 on one identical batch. Record target/prediction statistic
+  dispersion across deterministic subsets, component and parameter-group
+  gradient norms/cosines, forward/backward time, and peak HBM. Do not change
+  the shared coefficient automatically; recalibrate it only if a sample-count
+  change is scientifically selected.
+- [ ] Resume fresh-initialization one-change Torch research from raw BT4 plus
+  fresh DFM/JEPA modules. Use 30-minute runs only as a cheap discovery gate;
+  rank them on the frozen validation metrics and record a paired Arena screen,
+  but treat its Elo as low-power. Repeat promising changes and extend them to
+  at least 10% of the training examples before promotion. Keep the eight-pass
+  inference budget, validation pools, opening pairs, loss logging, and
+  checkpoint cap fixed.
