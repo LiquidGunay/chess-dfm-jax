@@ -3061,10 +3061,10 @@ def _metadata_text(value: Any) -> str:
     return scalar.decode("utf-8") if isinstance(scalar, bytes) else str(scalar)
 
 
-def canonicalize_trajectory_batch(
+def _canonicalize_trajectory_batch_reference(
     batch: Mapping[str, Any],
 ) -> dict[str, Any]:
-    """Re-encode actions and legal sets in the complete side-to-move LC0 frame."""
+    """Board-enumerating oracle for canonical trajectory conversion."""
 
     import chess
 
@@ -3158,6 +3158,206 @@ def canonicalize_trajectory_batch(
                         input_format=input_format,
                     )
                 ).astype(np.int32, copy=False)
+                if not np.any(legal == action):
+                    records = []
+                    break
+                records.append((action, legal))
+                board.push(move)
+            expected_records = int(np.count_nonzero(future_valid[row] > 0.0))
+            if len(records) == expected_records:
+                candidate_records = records
+                break
+        if candidate_records is None:
+            raise RuntimeError(
+                f"Neither standard nor Chess960 semantics reproduce the stored "
+                f"legal/action trajectory at row {row}"
+            )
+        record_index = 0
+        for offset in range(horizon):
+            if future_valid[row, offset] <= 0.0:
+                continue
+            action, legal = candidate_records[record_index]
+            record_index += 1
+            if legal.size > legal_capacity:
+                raise ValueError(
+                    f"Canonical legal set at row {row}, horizon {offset + 1} "
+                    f"needs {legal.size} slots; shard capacity is {legal_capacity}"
+                )
+            canonical_actions[row, offset] = action
+            canonical_legal[row, offset, : legal.size] = legal
+            canonical_count[row, offset] = legal.size
+            canonical_valid[row, offset] = 1.0
+
+    result["action_indices"] = canonical_actions
+    result["action_idx"] = canonical_actions[:, 0]
+    result["legal_idx"] = canonical_legal
+    result["legal_count"] = canonical_count
+    result["legal_masks_valid"] = canonical_valid
+    return result
+
+
+def canonicalize_trajectory_batch(
+    batch: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Re-encode stored legacy slots in the side-to-move LC0 frame.
+
+    The legacy and canonical 1,858-way codecs differ by a fixed vertical
+    rank mirror when black is to move.  Applying that permutation to the
+    already stored legal indices is exact and avoids enumerating every legal
+    move twice at every horizon.  The legacy codec cannot represent black
+    promotions or knight promotions, so those rare legal moves are recovered
+    from the incrementally maintained board.
+
+    ``_canonicalize_trajectory_batch_reference`` remains the deliberately
+    slow board-enumerating oracle used by parity tests and sampled data audits.
+    """
+
+    import chess
+
+    from chess_dfm_jax.policy import (
+        LC0_CANONICAL_1858_INPUT_FORMAT,
+        encode_lc0_canonical_1858,
+        legacy_to_lc0_canonical_1858_index_map,
+    )
+
+    required = {
+        "fen_t",
+        "input_format",
+        "actions_uci",
+        "future_valid",
+        "legal_idx",
+        "legal_count",
+    }
+    missing = sorted(required - set(batch))
+    if missing:
+        raise KeyError(f"Canonical trajectory conversion requires metadata: {missing}")
+    result = {
+        key: value for key, value in batch.items() if key not in _TRAJECTORY_METADATA_KEYS
+    }
+    future_valid = np.asarray(batch["future_valid"], dtype=np.float32)
+    actions_uci = np.asarray(batch["actions_uci"])
+    if actions_uci.shape != future_valid.shape:
+        raise ValueError(
+            f"actions_uci/future_valid shape drift: "
+            f"{actions_uci.shape} != {future_valid.shape}"
+        )
+    batch_size, horizon = future_valid.shape
+    source_legal = np.asarray(batch["legal_idx"])
+    source_legal_count = np.asarray(batch["legal_count"])
+    if source_legal.ndim != 3 or source_legal.shape[:2] != future_valid.shape:
+        raise ValueError(
+            "legal_idx must have shape "
+            f"[{batch_size}, {horizon}, capacity], got {source_legal.shape}"
+        )
+    if source_legal_count.shape != future_valid.shape:
+        raise ValueError(
+            f"legal_count shape drift: "
+            f"{source_legal_count.shape} != {future_valid.shape}"
+        )
+    legal_capacity = int(source_legal.shape[-1])
+    canonical_actions = np.zeros((batch_size, horizon), dtype=np.int32)
+    canonical_legal = np.full(
+        (batch_size, horizon, legal_capacity),
+        _LEGAL_PAD,
+        dtype=np.int32,
+    )
+    canonical_count = np.zeros((batch_size, horizon), dtype=np.int32)
+    canonical_valid = np.zeros((batch_size, horizon), dtype=np.float32)
+    fens = np.asarray(batch["fen_t"])
+    input_formats = np.asarray(batch["input_format"])
+    index_maps = {
+        chess.WHITE: legacy_to_lc0_canonical_1858_index_map(
+            black_to_move=False
+        ),
+        chess.BLACK: legacy_to_lc0_canonical_1858_index_map(
+            black_to_move=True
+        ),
+    }
+
+    for row in range(batch_size):
+        input_format = _metadata_text(
+            input_formats if input_formats.ndim == 0 else input_formats[row]
+        )
+        if input_format != LC0_CANONICAL_1858_INPUT_FORMAT:
+            raise ValueError(
+                f"Unsupported canonical input format at row {row}: {input_format!r}"
+            )
+        fen = _metadata_text(fens if fens.ndim == 0 else fens[row])
+        candidate_records: list[tuple[int, np.ndarray]] | None = None
+        for chess960 in (False, True):
+            board = chess.Board(fen, chess960=chess960)
+            if not board.is_valid():
+                continue
+            records: list[tuple[int, np.ndarray]] = []
+            for offset in range(horizon):
+                if future_valid[row, offset] <= 0.0:
+                    continue
+                stored_count = int(source_legal_count[row, offset])
+                if not 0 <= stored_count <= legal_capacity:
+                    raise ValueError(
+                        f"Invalid legal_count at row {row}, horizon "
+                        f"{offset + 1}: {stored_count}"
+                    )
+                stored_source_legal = source_legal[
+                    row,
+                    offset,
+                    :stored_count,
+                ].astype(np.int32, copy=False)
+                if (
+                    np.any(stored_source_legal < 0)
+                    or np.any(stored_source_legal >= _VOCAB_SIZE)
+                ):
+                    raise ValueError(
+                        f"Out-of-range legacy legal index at row {row}, "
+                        f"horizon {offset + 1}"
+                    )
+                if np.unique(stored_source_legal).size != stored_source_legal.size:
+                    raise ValueError(
+                        f"Duplicate legacy legal index at row {row}, "
+                        f"horizon {offset + 1}"
+                    )
+                legal = index_maps[board.turn][stored_source_legal]
+                if np.any(legal < 0):
+                    raise ValueError(
+                        f"Unmappable legacy legal index at row {row}, "
+                        f"horizon {offset + 1}"
+                    )
+                legal = np.sort(legal.astype(np.int32, copy=False))
+
+                promotion_rank = (
+                    chess.BB_RANK_7
+                    if board.turn == chess.WHITE
+                    else chess.BB_RANK_2
+                )
+                if board.pieces_mask(chess.PAWN, board.turn) & promotion_rank:
+                    promotion_indices = np.asarray(
+                        [
+                            encode_lc0_canonical_1858(
+                                board,
+                                move,
+                                input_format=input_format,
+                            )
+                            for move in board.legal_moves
+                            if move.promotion is not None
+                        ],
+                        dtype=np.int32,
+                    )
+                    if promotion_indices.size:
+                        legal = np.unique(
+                            np.concatenate((legal, promotion_indices))
+                        ).astype(np.int32, copy=False)
+
+                move_text = _metadata_text(actions_uci[row, offset])
+                try:
+                    move = chess.Move.from_uci(move_text)
+                    action = encode_lc0_canonical_1858(
+                        board,
+                        move,
+                        input_format=input_format,
+                    )
+                except (ActionCodecError, ValueError):
+                    records = []
+                    break
                 if not np.any(legal == action):
                     records = []
                     break

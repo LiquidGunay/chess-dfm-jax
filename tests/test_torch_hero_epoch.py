@@ -18,6 +18,7 @@ from research.train_torch import (
     RawLayerNorm,
     StateProjector,
     _analyze_lr_range_records,
+    _canonicalize_trajectory_batch_reference,
     _hero_milestone_update,
     _latent_spectrum_metrics,
     _normalize_frozen_indices,
@@ -103,18 +104,24 @@ def _canonical_batch(boards_and_moves: list[tuple[chess.Board, chess.Move]]):
     }
 
 
+def _assert_fast_canonical_conversion_matches_reference(batch):
+    converted = canonicalize_trajectory_batch(batch)
+    reference = _canonicalize_trajectory_batch_reference(batch)
+    assert converted.keys() == reference.keys()
+    for key in converted:
+        np.testing.assert_array_equal(converted[key], reference[key])
+    return converted
+
+
 def test_canonical_batch_conversion_covers_black_moves_and_knight_promotions():
     black = chess.Board()
     black.push_uci("e2e4")
     black_move = chess.Move.from_uci("e7e5")
     promotion = chess.Board("7k/P7/8/8/8/8/8/7K w - - 0 1")
     promotion_move = chess.Move.from_uci("a7a8n")
-    converted = canonicalize_trajectory_batch(
+    converted = _assert_fast_canonical_conversion_matches_reference(
         _canonical_batch(
-            [
-                (black, black_move),
-                (promotion, promotion_move),
-            ]
+            [(black, black_move), (promotion, promotion_move)]
         )
     )
 
@@ -139,7 +146,7 @@ def test_canonical_batch_conversion_recovers_chess960_castling_semantics():
     castle = chess.Move.from_uci("c1b1")
     assert board.is_valid()
     assert board.is_castling(castle)
-    converted = canonicalize_trajectory_batch(
+    converted = _assert_fast_canonical_conversion_matches_reference(
         _canonical_batch([(board, castle)])
     )
 
@@ -176,7 +183,7 @@ def test_canonical_conversion_uses_stored_legality_for_ambiguous_chess960_fen():
         expected_actions.append(encode_lc0_canonical_1858(board, move))
         board.push(move)
 
-    converted = canonicalize_trajectory_batch(
+    converted = _assert_fast_canonical_conversion_matches_reference(
         {
             "fen_t": np.asarray([fen]),
             "input_format": np.asarray([LC0_CANONICAL_1858_INPUT_FORMAT]),
@@ -198,6 +205,21 @@ def test_canonical_conversion_uses_stored_legality_for_ambiguous_chess960_fen():
         7,
         : converted["legal_count"][0, 7],
     ]
+
+
+def test_canonical_batch_conversion_recovers_all_black_promotions():
+    board = chess.Board("7k/8/8/8/8/8/p7/7K b - - 0 1")
+    promotion = chess.Move.from_uci("a2a1n")
+    assert board.is_legal(promotion)
+    converted = _assert_fast_canonical_conversion_matches_reference(
+        _canonical_batch([(board, promotion)])
+    )
+
+    expected = encode_lc0_canonical_1858(board, promotion)
+    count = int(converted["legal_count"][0, 0])
+    legal = converted["legal_idx"][0, 0, :count]
+    assert expected in legal
+    assert count == board.legal_moves.count()
 
 
 def test_normalized_sigreg_does_not_change_when_samples_are_duplicated():
