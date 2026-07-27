@@ -4544,6 +4544,11 @@ def _training_resume_contract(
             "compiled_regions": list(compiled_regions),
             "bt4_norm_impl": getattr(args, "bt4_norm_impl", "eager"),
             "prefetch_depth": args.prefetch_depth,
+            "prefetch_launch": getattr(
+                args,
+                "prefetch_launch",
+                "step-start",
+            ),
             "hero_milestones": _hero_milestone_contract(
                 args,
                 enabled=bool(
@@ -4561,6 +4566,7 @@ def _training_resume_contract(
 def train(args: argparse.Namespace) -> int:
     config = HERO_CONFIG if args.recipe == "hero" else CONFIG
     bt4_norm_impl = getattr(args, "bt4_norm_impl", "eager")
+    prefetch_launch = getattr(args, "prefetch_launch", "step-start")
     if args.recipe != "hero" and bt4_norm_impl != "eager":
         raise ValueError("Fused BT4 LayerNorm is currently a hero-only runtime")
     hero_milestones_enabled = bool(
@@ -4870,6 +4876,7 @@ def train(args: argparse.Namespace) -> int:
         "prefetch": {
             "depth": args.prefetch_depth,
             "workers": 1 if args.prefetch_depth == 1 else 0,
+            "launch": prefetch_launch,
             "deterministic_update_and_cursor_keys": True,
         },
         "hero_milestones": (
@@ -5085,7 +5092,12 @@ def train(args: argparse.Namespace) -> int:
 
             more_steps = args.steps == 0 or update + 1 < args.steps
             before_deadline = deadline is None or time.perf_counter() < deadline
-            if prefetch_executor is not None and more_steps and before_deadline:
+            launch_next_prefetch = (
+                prefetch_executor is not None
+                and more_steps
+                and before_deadline
+            )
+            if launch_next_prefetch and prefetch_launch == "step-start":
                 prepared_future = prefetch_executor.submit(
                     _prepare_training_step,
                     batches,
@@ -5150,6 +5162,17 @@ def train(args: argparse.Namespace) -> int:
                 profile_regions=profile_this_update,
             )
             event_forward.record()
+            if launch_next_prefetch and prefetch_launch == "after-forward":
+                assert prefetch_executor is not None
+                prepared_future = prefetch_executor.submit(
+                    _prepare_training_step,
+                    batches,
+                    seed=args.seed,
+                    update=update + 1,
+                    data_cursor=data_cursor + 1,
+                    batch_size=args.batch_size,
+                    config=config,
+                )
             with _profile_scope(profile_this_update, "region::backward"):
                 loss.backward()
             event_backward.record()
@@ -7811,6 +7834,15 @@ def build_parser() -> argparse.ArgumentParser:
     train_parser.add_argument("--threads", type=int, default=2)
     train_parser.add_argument("--log-every", type=int, default=1)
     train_parser.add_argument("--prefetch-depth", type=int, default=1)
+    train_parser.add_argument(
+        "--prefetch-launch",
+        choices=("step-start", "after-forward"),
+        default="step-start",
+        help=(
+            "Schedule CPU preparation before the step or after forward so it "
+            "overlaps the GPU-heavy backward pass."
+        ),
+    )
     train_parser.add_argument("--gpu-monitor-interval-ms", type=int, default=0)
     train_parser.add_argument(
         "--profile-update",
