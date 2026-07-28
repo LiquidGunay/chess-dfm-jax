@@ -2063,12 +2063,14 @@ sweeps, held-out data, and repeated seeds.
   continuity, and leave the eight-action training horizon unchanged. See
   `research/analysis/hero_refinement_pass_sweep_20260728.json` and `.png`.
 - [ ] Add a native Torch-hero opponent path to the Arena before the next
-  model-side candidate. Future one-pass candidates should play the retained
-  count-64 hero checkpoint directly, producing a centered paired score with
-  useful resolution; one-pass score versus raw BT4 is already `0.958984` and
-  is too close to the ceiling to be the sole autoresearch ranker. Require
-  independent candidate/reference descriptors and checksums, role-correct
-  batching, strict legality, zero-fault CPU contract tests, and a guarded
-  same-checkpoint parity smoke before opening candidate training. Keep raw
-  BT4 as a periodic absolute anchor and eight-pass evaluation as a continuity
-  diagnostic rather than running either for every rejected candidate.
+  model-side candidate, following
+  `research/experiment_torch_hero_incumbent_arena.md`. Future one-pass
+  candidates should play the retained count-64 hero checkpoint directly,
+  producing a centered paired score with useful resolution; one-pass score
+  versus raw BT4 is already `0.958984` and is too close to the ceiling to be
+  the sole autoresearch ranker. Require independent candidate/reference
+  descriptors and checksums, role-correct batching, strict legality,
+  zero-fault CPU contract tests, and a guarded same-checkpoint parity smoke
+  before opening candidate training. Keep raw BT4 as a periodic absolute
+  anchor and eight-pass evaluation as a continuity diagnostic rather than
+  running either for every rejected candidate.
