@@ -2062,7 +2062,7 @@ sweeps, held-out data, and repeated seeds.
   fixed budget for the next model-search loop, retain eight passes only for
   continuity, and leave the eight-action training horizon unchanged. See
   `research/analysis/hero_refinement_pass_sweep_20260728.json` and `.png`.
-- [ ] Add a native Torch-hero opponent path to the Arena before the next
+- [x] Add a native Torch-hero opponent path to the Arena before the next
   model-side candidate, following
   `research/experiment_torch_hero_incumbent_arena.md`. Future one-pass
   candidates should play the retained count-64 hero checkpoint directly,
@@ -2073,4 +2073,11 @@ sweeps, held-out data, and repeated seeds.
   zero-fault CPU contract tests, and a guarded same-checkpoint parity smoke
   before opening candidate training. Keep raw BT4 as a periodic absolute
   anchor and eight-pass evaluation as a continuity diagnostic rather than
-  running either for every rejected candidate.
+  running either for every rejected candidate. The independently loaded
+  same-checkpoint smoke passes: all 16 pair scores are exactly `1.0`, the
+  aggregate score is `0.5`, pentanomial counts are `[0,0,16,0,0]`, all 32
+  games terminate normally, and both roles have zero faults, cap draws, and
+  incomplete action coverage. Mean calls are `28.085/28.903 ms`, peak guarded
+  host RSS is `3.063 GB`, and no model state is written. Open one-pass
+  candidate-versus-retained-incumbent evaluation. See
+  `research/analysis/torch_hero_incumbent_arena_20260728.json`.

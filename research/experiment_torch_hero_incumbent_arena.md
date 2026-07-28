@@ -1,7 +1,7 @@
 # Experiment: native Torch hero incumbent Arena
 
-Status: preregistered on 2026-07-28. This is an evaluator-enablement and
-same-checkpoint parity test, not a model experiment.
+Status: completed and accepted on 2026-07-28. This is an
+evaluator-enablement and same-checkpoint parity test, not a model experiment.
 
 ## Motivation
 
@@ -91,3 +91,34 @@ the evaluator before training another model. If it passes, freeze the
 retained checkpoint as the one-pass development reference for the next
 model-side candidate. Raw BT4 remains a periodic absolute anchor, and
 eight-pass evaluation remains a continuity diagnostic.
+
+## Outcome
+
+The guarded smoke completed in `107.37` seconds including two independent
+model restores, lazy compilation, warmup, and gameplay. The Arena itself used
+`14.97` seconds. The guard held the process to two CPUs, observed
+`3,063,353,344` bytes peak process-group RSS, and never let host available
+memory fall below `8,115,777,536` bytes. It planned and wrote zero
+checkpoints.
+
+Every preregistered gate passes:
+
+- both contract roles are `torch_hero`, independently restore checkpoint
+  SHA-256
+  `05068c96b2bac8f10a3f3b853363bdb2ce49f935b026566705b3bdcd4d9060c9`,
+  and have distinct role-prefixed IDs;
+- every one of the 16 pair scores is exactly `1.0` point out of `2.0`, giving
+  score `0.5` and pentanomial counts `[0, 0, 16, 0, 0]`;
+- all 32 games terminate normally, with zero faults and zero cap draws;
+- both roles have symmetric `7/18/7` W/D/L, evaluate exactly 1,646 positions
+  in 173 physical calls, and cover every legal action;
+- candidate/opponent mean physical calls are `28.085/28.903 ms`; and
+- the Arena directory contains only its 20-KiB state and 104-KiB immutable
+  block, with no model state.
+
+Open one-pass candidate-versus-retained-incumbent Arena evaluation for the
+next model-side experiment. The reproducible sealed summary is
+`research/analysis/torch_hero_incumbent_arena_20260728.json`; its source Arena
+state is
+`artifacts/arena/torch-hero-selfmatch-p1-16pairs-v1/state.json`, SHA-256
+`b793698a5d3b614b6963b8e7abd9f25e59e8658740b153d73d1fa89ef85308e0`.

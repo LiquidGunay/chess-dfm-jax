@@ -738,7 +738,11 @@ score against that fixed reference and report its monotonic logistic-Elo
 transform; do not optimize the numerically less stable Elo transform
 directly. Record held-out DFM CE as a secondary explanatory metric, not the
 final ranker. Native Torch-hero-versus-Torch-hero Arena support and a guarded
-same-checkpoint parity smoke are prerequisites for the next candidate.
+same-checkpoint parity smoke now pass: every one of 16 pair scores is exactly
+centered, all 32 games terminate normally, and neither role has a fault, cap
+draw, or incomplete legal-action coverage. The retained count-64 checkpoint
+is therefore the fixed one-pass development reference for the next
+candidate.
 Periodically rerun raw BT4 as an absolute anchor; its one-pass score is already
 near the ceiling and must not be the sole autoresearch ranker. Report
 eight-pass results only for continuity or a predeclared pass-sensitivity
