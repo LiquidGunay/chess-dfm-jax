@@ -11,6 +11,13 @@ default-neutral guard that permits arbitrary positive counts only when
 feedback is off and continues to require exactly eight passes for
 `final_pass_adjoint`; pass loader-level CPU tests before retrying.
 
+The retry then stopped safely after model restoration but before policy
+adapter construction or gameplay because the native Torch adapter duplicated
+the same obsolete invariant. Centralize the feedback-aware pass validation in
+the Torch refiner/adapter, test adapter construction for all five counts and
+feedback-mode rejection away from eight, and rerun only after the complete
+CPU suite passes.
+
 ## Question
 
 How much searchless chess strength does iterative DFM refinement gain from

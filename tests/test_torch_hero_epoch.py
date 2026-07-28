@@ -21,6 +21,7 @@ from research.train_torch import (
     RawLinear,
     RawLayerNorm,
     StateProjector,
+    TorchHeroArenaPolicy,
     _analyze_lr_range_records,
     _apply_hero_feedback_override,
     _apply_hero_wdl_override,
@@ -522,6 +523,8 @@ def test_latent_spectrum_metrics_expose_rank_and_centered_scale():
 class _FixedArenaPlanner:
     class _Config:
         horizon = 8
+        action_codec = "lc0_canonical_1858"
+        jepa_feedback_mode = "none"
 
     config = _Config()
 
@@ -576,11 +579,40 @@ def test_torch_dfm_refinement_masks_root_and_unmasks_all_positions(
     torch.testing.assert_close(selected, torch.full((2,), 5))
 
 
+@pytest.mark.parametrize("refinement_passes", [1, 2, 4, 8, 16])
+def test_torch_hero_arena_policy_accepts_feedback_off_pass_sweep(
+    refinement_passes,
+):
+    policy = TorchHeroArenaPolicy(
+        model=_FixedArenaPlanner(),
+        model_id=f"pass-{refinement_passes}",
+        policy_mode="dfm",
+        inference_batch_size=16,
+        refinement_passes=refinement_passes,
+    )
+    assert policy.refinement_passes == refinement_passes
+
+
+@pytest.mark.parametrize("refinement_passes", [1, 2, 4, 16])
+def test_torch_hero_arena_policy_keeps_feedback_at_eight(
+    refinement_passes,
+):
+    with pytest.raises(ValueError, match="horizon/pass count 8"):
+        TorchHeroArenaPolicy(
+            model=_FeedbackArenaPlanner(),
+            model_id=f"feedback-pass-{refinement_passes}",
+            policy_mode="dfm",
+            inference_batch_size=16,
+            refinement_passes=refinement_passes,
+        )
+
+
 class _FeedbackArenaPlanner:
     class _Config:
         horizon = 8
         token_dim = 256
         z_dim = 4
+        action_codec = "lc0_canonical_1858"
         jepa_feedback_mode = "final_pass_adjoint"
 
     def __init__(self):

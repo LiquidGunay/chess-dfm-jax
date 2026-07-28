@@ -1323,6 +1323,33 @@ def _proposal_from_root_logits(
     )
 
 
+def _validate_torch_refinement_passes(
+    config: Any,
+    refinement_passes: int,
+) -> None:
+    if refinement_passes < 1:
+        raise ValueError("refinement_passes must be positive")
+    feedback_mode = getattr(
+        config,
+        "jepa_feedback_mode",
+        "none",
+    )
+    if feedback_mode not in {
+        "none",
+        "final_pass_adjoint",
+    }:
+        raise ValueError(
+            f"Unsupported jepa_feedback_mode: {feedback_mode!r}"
+        )
+    if feedback_mode == "final_pass_adjoint" and (
+        refinement_passes != 8
+        or config.horizon != 8
+    ):
+        raise ValueError(
+            "final_pass_adjoint inference requires horizon/pass count 8"
+        )
+
+
 def _torch_refine_dfm_actions(
     model: JointModel,
     z_dfm: Tensor,
@@ -1337,8 +1364,10 @@ def _torch_refine_dfm_actions(
 
     batch_size = z_dfm.shape[0]
     horizon = model.config.horizon
-    if refinement_passes < 1:
-        raise ValueError("refinement_passes must be positive")
+    _validate_torch_refinement_passes(
+        model.config,
+        refinement_passes,
+    )
     if root_legal_mask.shape != (batch_size, _VOCAB_SIZE):
         raise ValueError("root_legal_mask has the wrong physical shape")
     if root_legal_mask.dtype != torch.bool:
@@ -1351,23 +1380,12 @@ def _torch_refine_dfm_actions(
         "none",
     )
     feedback_active = feedback_mode == "final_pass_adjoint"
-    if feedback_mode not in {
-        "none",
-        "final_pass_adjoint",
-    }:
-        raise ValueError(
-            f"Unsupported jepa_feedback_mode: "
-            f"{feedback_mode!r}"
-        )
     if feedback_active and (
-        refinement_passes != 8
-        or horizon != 8
-        or z_jepa is None
+        z_jepa is None
         or z_jepa.shape != (batch_size, model.config.z_dim)
     ):
         raise ValueError(
-            "final_pass_adjoint inference requires horizon/pass count 8 "
-            "and current JEPA state"
+            "final_pass_adjoint inference requires current JEPA state"
         )
     planner_latents = z_dfm
     action_tokens = torch.full(
@@ -1527,11 +1545,10 @@ class TorchHeroArenaPolicy:
             raise ValueError("inference_batch_size must be positive")
         if self.model.config.action_codec != ACTION_CODEC_LC0_CANONICAL_1858:
             raise ValueError("Torch arena policy requires the canonical codec")
-        if self.policy_mode == "dfm" and (
-            self.refinement_passes != self.model.config.horizon
-        ):
-            raise ValueError(
-                "The frozen hero arena requires one refinement pass per horizon"
+        if self.policy_mode == "dfm":
+            _validate_torch_refinement_passes(
+                self.model.config,
+                self.refinement_passes,
             )
 
     def select_actions(
