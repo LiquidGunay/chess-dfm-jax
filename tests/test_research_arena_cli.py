@@ -98,6 +98,14 @@ def test_descriptor_jepa_inference_usage_tracks_feedback_mode():
             }
         }
     )
+    assert _descriptor_uses_jepa_at_inference(
+        {
+            "model_config": {
+                "jepa_feedback_mode": "none",
+                "dfm_condition_on_current_jepa_state": True,
+            }
+        }
+    )
 
 
 @pytest.mark.parametrize("refinement_passes", [1, 2, 4, 8, 16])
@@ -553,6 +561,29 @@ def test_torch_hero_model_config_rejects_unrecognized_keys():
 
     with pytest.raises(ValueError, match="unrecognized model config"):
         _validated_torch_hero_model_config(config)
+
+
+def test_torch_hero_model_config_supplies_only_legacy_conditioning_default():
+    import dataclasses
+
+    from research.train_torch import HERO_CONFIG
+
+    config = dataclasses.asdict(
+        dataclasses.replace(
+            HERO_CONFIG,
+            remat_bt4_blocks=True,
+            remat_projector_blocks=True,
+            remat_dfm_blocks=False,
+            use_bt4_sdpa=True,
+            use_head_sdpa=True,
+        )
+    )
+    config.pop("dfm_condition_on_current_jepa_state")
+
+    validated = _validated_torch_hero_model_config(config)
+
+    assert validated == config
+    assert "dfm_condition_on_current_jepa_state" not in validated
 
 
 def test_torch_hero_checkpoint_descriptor_accepts_recovery_state(

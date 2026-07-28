@@ -99,9 +99,13 @@ def _descriptor_uses_jepa_at_inference(
     model_config = descriptor.get("model_config")
     if not isinstance(model_config, Mapping):
         return False
-    return (
+    return bool(
         model_config.get("jepa_feedback_mode", "none")
         == "final_pass_adjoint"
+        or model_config.get(
+            "dfm_condition_on_current_jepa_state",
+            False,
+        )
     )
 
 
@@ -372,7 +376,10 @@ def _validated_torch_hero_model_config(
     recorded_names = set(recorded_config)
     unknown = recorded_names - field_names
     missing = field_names - recorded_names
-    legacy_missing = {"jepa_feedback_mode"}
+    legacy_missing = {
+        "jepa_feedback_mode",
+        "dfm_condition_on_current_jepa_state",
+    }
     if unknown:
         raise ValueError(
             "Torch hero run has unrecognized model config keys: "
@@ -459,8 +466,8 @@ def _validated_torch_hero_model_config(
     ):
         raise ValueError("Torch hero runtime config mismatch.")
 
-    if "jepa_feedback_mode" not in recorded_config:
-        normalized.pop("jepa_feedback_mode")
+    for name in legacy_missing - recorded_names:
+        normalized.pop(name)
     if normalized != dict(recorded_config):
         raise ValueError("Torch hero model config is not canonically typed.")
     return normalized

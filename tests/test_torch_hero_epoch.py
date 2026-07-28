@@ -23,6 +23,7 @@ from research.train_torch import (
     StateProjector,
     TorchHeroArenaPolicy,
     _analyze_lr_range_records,
+    _apply_hero_dfm_jepa_conditioning_override,
     _apply_hero_feedback_override,
     _apply_hero_wdl_override,
     _apply_sigreg_sample_override,
@@ -36,7 +37,9 @@ from research.train_torch import (
     _shared_sigreg_gradient_projection,
     _sigreg_v_stat,
     _torch_refine_dfm_actions,
+    build_parser,
     canonicalize_trajectory_batch,
+    initialize_fresh_modules,
 )
 
 
@@ -263,6 +266,7 @@ def test_hero_loss_contract_is_frozen_after_gradient_audit():
     assert HERO_CONFIG.target_sigreg_coeff == HERO_CONFIG.pred_sigreg_coeff == 2.0
     assert HERO_CONFIG.sigreg_example_count == 64
     assert HERO_CONFIG.loss_clip_value == 0.0
+    assert HERO_CONFIG.dfm_condition_on_current_jepa_state is False
 
 
 def test_sigreg_sample_override_is_explicit_and_hero_only():
@@ -352,6 +356,167 @@ def test_feedback_override_is_explicit_default_off_and_hero_only():
             recipe="hero",
             jepa_feedback_mode="unknown",
         )
+
+
+def test_dfm_jepa_conditioning_override_is_default_off_and_hero_only():
+    unchanged = _apply_hero_dfm_jepa_conditioning_override(
+        HERO_CONFIG,
+        recipe="hero",
+        enabled=None,
+    )
+    candidate = _apply_hero_dfm_jepa_conditioning_override(
+        HERO_CONFIG,
+        recipe="hero",
+        enabled=True,
+    )
+
+    assert unchanged == HERO_CONFIG
+    assert candidate.dfm_condition_on_current_jepa_state is True
+    assert dataclasses.replace(
+        candidate,
+        dfm_condition_on_current_jepa_state=False,
+    ) == HERO_CONFIG
+    with pytest.raises(ValueError, match="hero-only"):
+        _apply_hero_dfm_jepa_conditioning_override(
+            HERO_CONFIG,
+            recipe="continuation",
+            enabled=True,
+        )
+    with pytest.raises(ValueError, match="must be boolean"):
+        _apply_hero_dfm_jepa_conditioning_override(
+            HERO_CONFIG,
+            recipe="hero",
+            enabled=1,
+        )
+
+
+def test_dfm_jepa_conditioning_cli_is_explicit_for_train_and_evaluation():
+    parser = build_parser()
+    train_args = parser.parse_args(
+        [
+            "train",
+            "--output-dir",
+            "candidate",
+            "--dfm-condition-on-current-jepa-state",
+        ]
+    )
+    eval_args = parser.parse_args(
+        [
+            "hero-evaluate",
+            "--pool",
+            "fast",
+            "--output-dir",
+            "evaluation",
+            "--dfm-condition-on-current-jepa-state",
+        ]
+    )
+
+    assert train_args.dfm_condition_on_current_jepa_state is True
+    assert eval_args.dfm_condition_on_current_jepa_state is True
+
+
+class _DFMJepaConditioningHarness(torch.nn.Module):
+    class _Config:
+        token_dim = 2
+        z_dim = 4
+
+    def __init__(self, *, enabled: bool):
+        super().__init__()
+        self.config = self._Config()
+        self.config.dfm_condition_on_current_jepa_state = enabled
+        self.dfm_jepa_state_adapter = (
+            RawLinear(4, 2, dtype=torch.float32, bias=False)
+            if enabled
+            else None
+        )
+        if self.dfm_jepa_state_adapter is not None:
+            with torch.no_grad():
+                self.dfm_jepa_state_adapter.w.zero_()
+
+
+def test_current_jepa_conditioning_is_zero_residual_then_learns():
+    disabled = _DFMJepaConditioningHarness(enabled=False)
+    original = torch.randn(3, 64, 2)
+    disabled_result = JointModel.condition_dfm_latents(
+        disabled,
+        original,
+        None,
+        torch.float32,
+    )
+    assert disabled_result.latents is original
+    torch.testing.assert_close(
+        disabled_result.residual_rms,
+        torch.zeros(3),
+    )
+
+    active = _DFMJepaConditioningHarness(enabled=True)
+    z_dfm = original.detach().clone().requires_grad_()
+    z_jepa = torch.randn(3, 4, requires_grad=True)
+    zero_result = JointModel.condition_dfm_latents(
+        active,
+        z_dfm,
+        z_jepa,
+        torch.float32,
+    )
+    torch.testing.assert_close(
+        zero_result.latents,
+        z_dfm,
+        rtol=0.0,
+        atol=0.0,
+    )
+    assert float(zero_result.weight_rms.detach()) == 0.0
+    zero_result.latents.sum().backward()
+    assert active.dfm_jepa_state_adapter is not None
+    assert active.dfm_jepa_state_adapter.w.grad is not None
+    assert torch.count_nonzero(
+        active.dfm_jepa_state_adapter.w.grad
+    )
+    assert z_jepa.grad is not None
+    assert torch.count_nonzero(z_jepa.grad) == 0
+
+    active.zero_grad(set_to_none=True)
+    with torch.no_grad():
+        active.dfm_jepa_state_adapter.w.fill_(0.25)
+    z_jepa = z_jepa.detach().clone().requires_grad_()
+    learned_result = JointModel.condition_dfm_latents(
+        active,
+        z_dfm.detach(),
+        z_jepa,
+        torch.float32,
+    )
+    assert torch.all(learned_result.residual_rms > 0.0)
+    assert float(learned_result.weight_rms.detach()) == pytest.approx(
+        0.25
+    )
+    learned_result.latents.sum().backward()
+    assert z_jepa.grad is not None
+    assert torch.count_nonzero(z_jepa.grad)
+
+
+class _ConditioningInitializationHarness(torch.nn.Module):
+    def __init__(self, *, enabled: bool):
+        super().__init__()
+        self.encoder = torch.nn.Module()
+        self.pre = RawLinear(3, 3, dtype=torch.float32, bias=False)
+        self.dfm_jepa_state_adapter = (
+            RawLinear(4, 2, dtype=torch.float32, bias=False)
+            if enabled
+            else None
+        )
+        self.post = RawLinear(3, 3, dtype=torch.float32, bias=False)
+
+
+def test_zero_bridge_does_not_perturb_shared_initialization_rng():
+    control = _ConditioningInitializationHarness(enabled=False)
+    candidate = _ConditioningInitializationHarness(enabled=True)
+
+    initialize_fresh_modules(control, seed=17)
+    initialize_fresh_modules(candidate, seed=17)
+
+    torch.testing.assert_close(candidate.pre.w, control.pre.w)
+    torch.testing.assert_close(candidate.post.w, control.post.w)
+    assert candidate.dfm_jepa_state_adapter is not None
+    assert torch.count_nonzero(candidate.dfm_jepa_state_adapter.w) == 0
 
 
 def test_root_proposal_is_legal_target_independent_and_fail_closed():

@@ -131,6 +131,10 @@ _LOSS_SUMMARY_METRICS = (
     "jepa_feedback_preliminary_dfm_ce_loss",
     "jepa_feedback_raw_rms",
     "jepa_feedback_state_rms",
+    "dfm_jepa_conditioning_rms",
+    "dfm_jepa_conditioning_state_rms",
+    "dfm_jepa_conditioning_ratio",
+    "dfm_jepa_conditioning_weight_rms",
 )
 
 
@@ -185,6 +189,7 @@ class Config:
     lr_total_examples: int = 0
     init_seed: int = 0
     jepa_feedback_mode: str = "none"
+    dfm_condition_on_current_jepa_state: bool = False
 
 
 CONFIG = Config()
@@ -887,6 +892,13 @@ class JepaFeedbackResult(NamedTuple):
     cap_fraction: Tensor
 
 
+class DFMJepaConditioningResult(NamedTuple):
+    latents: Tensor
+    residual_rms: Tensor
+    state_rms: Tensor
+    weight_rms: Tensor
+
+
 class JointModel(nn.Module):
     def __init__(
         self,
@@ -905,6 +917,16 @@ class JointModel(nn.Module):
         )
         self.state_projector = StateProjector(config)
         self.dfm_state_projector = RawLinear(1024, config.token_dim, dtype=dtype)
+        self.dfm_jepa_state_adapter = (
+            RawLinear(
+                config.z_dim,
+                config.token_dim,
+                dtype=dtype,
+                bias=False,
+            )
+            if config.dfm_condition_on_current_jepa_state
+            else None
+        )
         self.jepa_action_embed = RawEmbedding(_VOCAB_SIZE + 1, config.z_dim, dtype=dtype)
         self.jepa_hidden_adapter = RawLinear(config.token_dim, config.z_dim, dtype=dtype)
         self.jepa_transition = ConditionedTransition(config)
@@ -939,7 +961,7 @@ class JointModel(nn.Module):
         compute_dtype: torch.dtype,
         *,
         profile_regions: bool = False,
-    ) -> tuple[Tensor, Tensor, Tensor | None]:
+    ) -> tuple[Tensor, DFMJepaConditioningResult, Tensor | None]:
         with _profile_scope(profile_regions, "region::bt4_current"):
             current = self.encoder.encode_current(
                 current_planes,
@@ -964,13 +986,22 @@ class JointModel(nn.Module):
             ).reshape(batch, 2, self.config.z_dim)
         with _profile_scope(profile_regions, "region::dfm_state_projector"):
             z_dfm = self.dfm_state_projector(current, compute_dtype)
+        with _profile_scope(
+            profile_regions,
+            "region::dfm_jepa_state_conditioning",
+        ):
+            conditioning = self.condition_dfm_latents(
+                z_dfm,
+                z_all[:, 0],
+                compute_dtype,
+            )
         with _profile_scope(profile_regions, "region::bt4_policy_head"):
             base_policy_logits = (
                 None
                 if self.encoder.policy_head is None
                 else self.encoder.policy_head(current, compute_dtype)
             )
-        return z_all, z_dfm, base_policy_logits
+        return z_all, conditioning, base_policy_logits
 
     def _time_embedding(self, t: Tensor, compute_dtype: torch.dtype) -> Tensor:
         hidden = F.relu(t.to(compute_dtype).unsqueeze(-1) @ self.time_embed1.to(compute_dtype))
@@ -1056,6 +1087,85 @@ class JointModel(nn.Module):
             compute_dtype,
         ) + self.jepa_hidden_adapter(action_hidden, compute_dtype)
         return self.jepa_transition(z0, condition, compute_dtype)
+
+    def condition_dfm_latents(
+        self,
+        z_dfm: Tensor,
+        z_jepa: Tensor | None,
+        compute_dtype: torch.dtype,
+    ) -> DFMJepaConditioningResult:
+        """Optionally inject the current JEPA state into every DFM token."""
+
+        batch_size = z_dfm.shape[0]
+        expected_dfm_shape = (
+            batch_size,
+            64,
+            self.config.token_dim,
+        )
+        expected_jepa_shape = (batch_size, self.config.z_dim)
+        if z_dfm.shape != expected_dfm_shape:
+            raise ValueError(
+                f"z_dfm must have shape {expected_dfm_shape}, "
+                f"found {tuple(z_dfm.shape)}"
+            )
+        if z_jepa is not None and z_jepa.shape != expected_jepa_shape:
+            raise ValueError(
+                f"z_jepa must have shape {expected_jepa_shape}, "
+                f"found {tuple(z_jepa.shape)}"
+            )
+        adapter = self.dfm_jepa_state_adapter
+        if not self.config.dfm_condition_on_current_jepa_state:
+            if adapter is not None:
+                raise ValueError(
+                    "Disabled DFM/JEPA conditioning unexpectedly has an "
+                    "adapter"
+                )
+            zeros = torch.zeros(
+                (batch_size,),
+                device=z_dfm.device,
+                dtype=torch.float32,
+            )
+            return DFMJepaConditioningResult(
+                latents=z_dfm,
+                residual_rms=zeros,
+                state_rms=zeros,
+                weight_rms=torch.zeros(
+                    (),
+                    device=z_dfm.device,
+                    dtype=torch.float32,
+                ),
+            )
+        if adapter is None:
+            raise ValueError(
+                "Active DFM/JEPA conditioning has no adapter"
+            )
+        if z_jepa is None:
+            raise ValueError(
+                "Active DFM/JEPA conditioning requires z_jepa"
+            )
+        state_rms = torch.sqrt(
+            z_dfm.float().square().mean(dim=(1, 2))
+        )
+        residual = adapter(z_jepa, compute_dtype).float()
+        if residual.shape != (batch_size, self.config.token_dim):
+            raise RuntimeError(
+                "DFM/JEPA conditioning adapter returned the wrong shape"
+            )
+        residual_rms = torch.sqrt(
+            residual.square().mean(dim=-1)
+        )
+        latents = (
+            z_dfm.float() + residual.unsqueeze(1)
+        ).to(compute_dtype)
+        weight_rms = torch.sqrt(
+            adapter.w.float().square().mean()
+        )
+        return DFMJepaConditioningResult(
+            latents=latents,
+            residual_rms=residual_rms,
+            state_rms=state_rms,
+            weight_rms=weight_rms,
+        )
 
     def dfm_latents_with_jepa_feedback(
         self,
@@ -1712,10 +1822,19 @@ class TorchHeroArenaPolicy:
                 )
                 z_jepa = (
                     self.model.state_projector(tokens, torch.bfloat16)
-                    if self.model.config.jepa_feedback_mode
-                    == "final_pass_adjoint"
+                    if (
+                        self.model.config.jepa_feedback_mode
+                        == "final_pass_adjoint"
+                        or self.model.config
+                        .dfm_condition_on_current_jepa_state
+                    )
                     else None
                 )
+                z_dfm = self.model.condition_dfm_latents(
+                    z_dfm,
+                    z_jepa,
+                    torch.bfloat16,
+                ).latents
                 selected = _torch_refine_dfm_actions(
                     self.model,
                     z_dfm,
@@ -1894,12 +2013,13 @@ def loss_and_aux(
         else batch["future_planes"][rows, selected]
     )
     selected_valid = future_valid[rows, selected].unsqueeze(1)
-    z_all, z_dfm, base_policy_logits = model.encode_selected(
+    z_all, dfm_conditioning, base_policy_logits = model.encode_selected(
         batch["current_planes"],
         selected_planes,
         compute_dtype,
         profile_regions=profile_regions,
     )
+    z_dfm = dfm_conditioning.latents
     z_jepa = z_all[:, 0]
     target_z = z_all[:, 1:]
 
@@ -2245,6 +2365,19 @@ def loss_and_aux(
             if feedback_result is not None
             else feedback_zero
         ),
+        "dfm_jepa_conditioning_rms": (
+            dfm_conditioning.residual_rms.mean().detach()
+        ),
+        "dfm_jepa_conditioning_state_rms": (
+            dfm_conditioning.state_rms.mean().detach()
+        ),
+        "dfm_jepa_conditioning_ratio": (
+            dfm_conditioning.residual_rms.mean()
+            / dfm_conditioning.state_rms.mean().clamp_min(1e-6)
+        ).detach(),
+        "dfm_jepa_conditioning_weight_rms": (
+            dfm_conditioning.weight_rms.detach()
+        ),
     }
     return loss, aux
 
@@ -2376,6 +2509,12 @@ def full_horizon_evaluation_aux(
     z_dfm = model.dfm_state_projector(current_tokens, compute_dtype)
     current_z = z_all[:, 0]
     target_z = z_all[:, 1:]
+    dfm_conditioning = model.condition_dfm_latents(
+        z_dfm,
+        current_z,
+        compute_dtype,
+    )
+    z_dfm = dfm_conditioning.latents
 
     t = torch.zeros(batch_size, device=actions.device, dtype=torch.float32)
     noisy_actions = torch.full_like(actions, _MASK_TOKEN)
@@ -2783,6 +2922,19 @@ def full_horizon_evaluation_aux(
             feedback_result.cap_fraction
             if feedback_result is not None
             else feedback_zero
+        ),
+        "dfm_jepa_conditioning_rms": (
+            dfm_conditioning.residual_rms.mean()
+        ),
+        "dfm_jepa_conditioning_state_rms": (
+            dfm_conditioning.state_rms.mean()
+        ),
+        "dfm_jepa_conditioning_ratio": (
+            dfm_conditioning.residual_rms.mean()
+            / dfm_conditioning.state_rms.mean().clamp_min(1e-6)
+        ),
+        "dfm_jepa_conditioning_weight_rms": (
+            dfm_conditioning.weight_rms
         ),
         "weighted_root_legal_conditional_ce": (
             config.root_legal_ce_coeff * root_legal_ce
@@ -3532,7 +3684,12 @@ def initialize_fresh_modules(model: JointModel, *, seed: int) -> dict[str, Any]:
             if name.startswith("encoder."):
                 continue
             leaf = name.rsplit(".", 1)[-1]
-            if name in {"out_proj", "out_bias", "state_projector.cls"}:
+            if name in {
+                "out_proj",
+                "out_bias",
+                "state_projector.cls",
+                "dfm_jepa_state_adapter.w",
+            }:
                 parameter.zero_()
             elif name.startswith("jepa_transition.cond_"):
                 parameter.zero_()
@@ -5409,6 +5566,31 @@ def _apply_hero_feedback_override(
     )
 
 
+def _apply_hero_dfm_jepa_conditioning_override(
+    config: Config,
+    *,
+    recipe: str,
+    enabled: bool | None,
+) -> Config:
+    """Resolve the default-off current-JEPA-state DFM experiment."""
+
+    if enabled is None:
+        return config
+    if recipe != "hero":
+        raise ValueError(
+            "--dfm-condition-on-current-jepa-state is currently a "
+            "hero-only experiment"
+        )
+    if type(enabled) is not bool:
+        raise ValueError(
+            "--dfm-condition-on-current-jepa-state must be boolean"
+        )
+    return dataclasses.replace(
+        config,
+        dfm_condition_on_current_jepa_state=enabled,
+    )
+
+
 def train(args: argparse.Namespace) -> int:
     config = HERO_CONFIG if args.recipe == "hero" else CONFIG
     config = _apply_sigreg_sample_override(
@@ -5427,6 +5609,15 @@ def train(args: argparse.Namespace) -> int:
         jepa_feedback_mode=getattr(
             args,
             "jepa_feedback_mode",
+            None,
+        ),
+    )
+    config = _apply_hero_dfm_jepa_conditioning_override(
+        config,
+        recipe=args.recipe,
+        enabled=getattr(
+            args,
+            "dfm_condition_on_current_jepa_state",
             None,
         ),
     )
@@ -8795,6 +8986,15 @@ def evaluate_hero_pool(args: argparse.Namespace) -> int:
             None,
         ),
     )
+    evaluation_config = _apply_hero_dfm_jepa_conditioning_override(
+        evaluation_config,
+        recipe="hero",
+        enabled=getattr(
+            args,
+            "dfm_condition_on_current_jepa_state",
+            None,
+        ),
+    )
     model, initialization = load_raw_bt4_hero_model(
         device=device,
         raw_bt4_path=args.raw_bt4_path,
@@ -9380,6 +9580,15 @@ def build_parser() -> argparse.ArgumentParser:
             "experiment; recorded in the model and resume contracts."
         ),
     )
+    train_parser.add_argument(
+        "--dfm-condition-on-current-jepa-state",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help=(
+            "Enable the default-off zero-initialized current-JEPA-state "
+            "conditioning bridge in the DFM policy."
+        ),
+    )
     train_parser.add_argument("--steps", type=int, default=1)
     train_parser.add_argument("--train-seconds", type=float, default=0.0)
     train_parser.add_argument("--data-start", type=int, default=0)
@@ -9536,6 +9745,15 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Evaluate a checkpoint with the recorded proposal-derived "
             "feedback graph instead of the default feedback-off graph."
+        ),
+    )
+    hero_evaluate_parser.add_argument(
+        "--dfm-condition-on-current-jepa-state",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help=(
+            "Evaluate a checkpoint with its active current-JEPA-state DFM "
+            "conditioning bridge."
         ),
     )
     hero_evaluate_parser.add_argument("--output-dir", type=Path, required=True)
