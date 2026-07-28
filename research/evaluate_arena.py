@@ -361,6 +361,111 @@ class TorchResearchCheckpointDescriptor:
     descriptor: dict[str, Any]
 
 
+def _validated_torch_hero_model_config(
+    recorded_config: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Validate a recorded hero config without forcing incumbent equality."""
+
+    from research.train_torch import Config
+
+    field_names = {field.name for field in dataclasses.fields(Config)}
+    recorded_names = set(recorded_config)
+    unknown = recorded_names - field_names
+    missing = field_names - recorded_names
+    legacy_missing = {"jepa_feedback_mode"}
+    if unknown:
+        raise ValueError(
+            "Torch hero run has unrecognized model config keys: "
+            f"{sorted(unknown)}"
+        )
+    if missing - legacy_missing:
+        raise ValueError(
+            "Torch hero run is missing model config keys: "
+            f"{sorted(missing - legacy_missing)}"
+        )
+    try:
+        config = Config(**dict(recorded_config))
+    except TypeError as exc:
+        raise ValueError("Torch hero run has an invalid model config.") from exc
+
+    defaults = dataclasses.asdict(Config())
+    normalized = dataclasses.asdict(config)
+    for name, default in defaults.items():
+        value = normalized[name]
+        if type(default) is bool:
+            valid_type = type(value) is bool
+        elif type(default) is int:
+            valid_type = type(value) is int
+        elif type(default) is float:
+            valid_type = (
+                not isinstance(value, bool)
+                and isinstance(value, (int, float))
+                and math.isfinite(float(value))
+            )
+        elif isinstance(default, str):
+            valid_type = isinstance(value, str)
+        else:
+            valid_type = value is None or type(value) is bool
+        if not valid_type:
+            raise ValueError(
+                f"Torch hero run has an invalid {name!r} value."
+            )
+
+    positive_dimensions = (
+        "horizon",
+        "token_dim",
+        "z_dim",
+        "projector_layers",
+        "projector_heads",
+        "projector_mlp_dim",
+        "dfm_layers",
+        "dfm_heads",
+        "dfm_mlp_dim",
+        "jepa_layers",
+        "jepa_mlp_dim",
+    )
+    if any(normalized[name] < 1 for name in positive_dimensions):
+        raise ValueError(
+            "Torch hero run has a non-positive model dimension or depth."
+        )
+    if (
+        normalized["token_dim"] % normalized["projector_heads"] != 0
+        or normalized["token_dim"] % normalized["dfm_heads"] != 0
+    ):
+        raise ValueError(
+            "Torch hero attention heads must divide the token dimension."
+        )
+    if normalized["horizon"] != 8:
+        raise ValueError("Torch hero Arena requires horizon eight.")
+    if normalized["action_codec"] != ACTION_CODEC_LC0_CANONICAL_1858:
+        raise ValueError("Torch hero Arena requires the canonical codec.")
+    if normalized["use_bt4_policy_residual"] is not True:
+        raise ValueError("Torch hero Arena requires the BT4 policy residual.")
+    if normalized["jepa_feedback_mode"] not in {
+        "none",
+        "final_pass_adjoint",
+    }:
+        raise ValueError("Torch hero run has an invalid JEPA feedback mode.")
+    required_runtime = {
+        "remat_bt4_blocks": True,
+        "remat_projector_blocks": True,
+        "remat_dfm_blocks": False,
+        "use_bt4_sdpa": True,
+        "use_head_sdpa": True,
+    }
+    if any(
+        normalized[name] is not expected
+        for name, expected in required_runtime.items()
+    ):
+        raise ValueError("Torch hero runtime config mismatch.")
+
+    if "jepa_feedback_mode" not in recorded_config:
+        normalized.pop("jepa_feedback_mode")
+    if normalized != dict(recorded_config):
+        raise ValueError("Torch hero model config is not canonically typed.")
+    return normalized
+
+
 def research_checkpoint_descriptor(
     path: Path,
     *,
@@ -549,8 +654,6 @@ def torch_hero_checkpoint_descriptor(
 ) -> TorchResearchCheckpointDescriptor:
     """Describe a canonical-codec checkpoint from the clean hero recipe."""
 
-    from research.train_torch import HERO_CONFIG
-
     candidate = require_within_workspace(path)
     if (candidate / "checkpoint" / "manifest.json").is_file():
         checkpoint_dir = require_within_workspace(candidate / "checkpoint")
@@ -612,6 +715,7 @@ def torch_hero_checkpoint_descriptor(
     recorded_config = run_config.get("config")
     if not isinstance(recorded_config, dict):
         raise ValueError("Torch hero run has no recorded model config.")
+    expected_config = _validated_torch_hero_model_config(recorded_config)
     recorded_sigreg_count = recorded_config.get("sigreg_example_count")
     if (
         type(recorded_sigreg_count) is not int
@@ -630,7 +734,6 @@ def torch_hero_checkpoint_descriptor(
         raise ValueError(
             "Torch hero run has an invalid WDL coefficient."
         )
-    feedback_key_present = "jepa_feedback_mode" in recorded_config
     recorded_feedback_mode = recorded_config.get(
         "jepa_feedback_mode",
         "none",
@@ -642,21 +745,6 @@ def torch_hero_checkpoint_descriptor(
         raise ValueError(
             "Torch hero run has an invalid JEPA feedback mode."
         )
-    expected_config = dataclasses.asdict(
-        dataclasses.replace(
-            HERO_CONFIG,
-            sigreg_example_count=recorded_sigreg_count,
-            wdl_coeff=float(recorded_wdl_coeff),
-            jepa_feedback_mode=recorded_feedback_mode,
-            remat_bt4_blocks=True,
-            remat_projector_blocks=True,
-            remat_dfm_blocks=False,
-            use_bt4_sdpa=True,
-            use_head_sdpa=True,
-        )
-    )
-    if not feedback_key_present and recorded_feedback_mode == "none":
-        expected_config.pop("jepa_feedback_mode")
     expected_compile_regions = [
         "state_projector_blocks",
         "dfm_blocks",
@@ -670,11 +758,6 @@ def torch_hero_checkpoint_descriptor(
         or run_config.get("compile_regions") != expected_compile_regions
     ):
         raise ValueError("Torch hero run execution contract mismatch.")
-    if recorded_config != expected_config:
-        raise ValueError(
-            "Torch hero checkpoint config differs from the checked-out hero "
-            "recipe; evaluate it at its recorded git commit."
-        )
     if checkpoint_storage_kind == "training_recovery":
         resume_contract = manifest.get("resume_contract")
         if not isinstance(resume_contract, dict):
@@ -812,6 +895,25 @@ def raw_bt4_descriptor(
             "sha256": sha256_file(model_path),
         },
     }
+
+
+def _torch_hero_model_id(
+    *,
+    role: str,
+    descriptor: Mapping[str, Any],
+) -> str:
+    prefixes = {
+        "candidate": "candidate-torch-hero",
+        "opponent": "incumbent-torch-hero",
+    }
+    try:
+        prefix = prefixes[role]
+        state_sha256 = str(descriptor["state"]["sha256"])
+    except (KeyError, TypeError) as exc:
+        raise ValueError("Torch hero descriptor has no state SHA-256.") from exc
+    if len(state_sha256) != 64:
+        raise ValueError("Torch hero descriptor state SHA-256 is invalid.")
+    return f"{prefix}-{state_sha256[:12]}"
 
 
 def _dtype(name: str) -> Any:
@@ -1139,6 +1241,77 @@ def load_torch_raw_bt4_hero_policy(
             "policy_head": "original_bt4",
             "raw_initialization_sha256": initialization["combined_sha256"],
         },
+    )
+
+
+def load_native_torch_hero_pair(
+    *,
+    candidate_checkpoint: TorchResearchCheckpointDescriptor,
+    opponent_checkpoint: TorchResearchCheckpointDescriptor | None,
+    candidate_record: Mapping[str, Any],
+    opponent_record: Mapping[str, Any],
+    candidate_id: str,
+    opponent_id: str,
+    refinement_passes: int,
+    inference_batch_size: int,
+) -> tuple[
+    BatchedArenaPolicy,
+    dict[str, Any],
+    BatchedArenaPolicy,
+    dict[str, Any],
+    dict[str, Any],
+]:
+    """Load a candidate and either a hero incumbent or raw BT4 in Torch."""
+
+    candidate_policy, candidate_load = load_torch_hero_policy(
+        candidate_checkpoint,
+        model_id=candidate_id,
+        refinement_passes=refinement_passes,
+        inference_batch_size=inference_batch_size,
+    )
+    if opponent_checkpoint is None:
+        if opponent_record.get("kind") != "raw_bt4":
+            raise ValueError("Native Torch opponent descriptor is not raw BT4.")
+        opponent_policy, opponent_load = load_torch_raw_bt4_hero_policy(
+            model_path=Path(
+                opponent_record["bt4_checkpoint"]["path"]
+            ),
+            model_config=candidate_record["model_config"],
+            model_id=opponent_id,
+            inference_batch_size=inference_batch_size,
+        )
+    else:
+        if opponent_record.get("kind") != "torch_hero":
+            raise ValueError(
+                "Native Torch incumbent descriptor is not a Torch hero."
+            )
+        opponent_policy, opponent_load = load_torch_hero_policy(
+            opponent_checkpoint,
+            model_id=opponent_id,
+            refinement_passes=refinement_passes,
+            inference_batch_size=inference_batch_size,
+        )
+    candidate_device = candidate_load.get("device")
+    opponent_device = opponent_load.get("device")
+    if (
+        candidate_load.get("framework") != "torch"
+        or opponent_load.get("framework") != "torch"
+        or not isinstance(candidate_device, str)
+        or opponent_device != candidate_device
+    ):
+        raise ValueError(
+            "Native Torch Arena policies did not load on one shared device."
+        )
+    accelerator_session = {
+        "framework": "torch",
+        "torch_devices": [candidate_device],
+    }
+    return (
+        candidate_policy,
+        candidate_load,
+        opponent_policy,
+        opponent_load,
+        accelerator_session,
     )
 
 
@@ -1952,6 +2125,14 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Use the original board-aware canonical BT4 policy head.",
     )
+    opponent.add_argument(
+        "--opponent-torch-hero",
+        type=Path,
+        help=(
+            "Use an independently loaded canonical-codec Torch hero "
+            "checkpoint as the incumbent."
+        ),
+    )
     parser.add_argument(
         "--tier",
         choices=tuple(FROZEN_TIERS),
@@ -2013,6 +2194,30 @@ def _resolved_run_options(
     return pair_count, block_pairs, additional_ply_cap
 
 
+def _validate_native_torch_hero_mode(
+    args: argparse.Namespace,
+) -> bool:
+    candidate_is_hero = args.candidate_torch_hero is not None
+    opponent_is_hero = args.opponent_torch_hero is not None
+    if opponent_is_hero and not candidate_is_hero:
+        raise ValueError(
+            "--opponent-torch-hero requires --candidate-torch-hero so both "
+            "policies use one native Torch runtime and canonical codec."
+        )
+    if candidate_is_hero and not (
+        opponent_is_hero or args.opponent_raw_bt4
+    ):
+        raise ValueError(
+            "--candidate-torch-hero requires --opponent-torch-hero or "
+            "--opponent-raw-bt4."
+        )
+    if candidate_is_hero and args.collect_diagnostics:
+        raise ValueError(
+            "Torch hero Arena supports only the lean diagnostics-off path."
+        )
+    return candidate_is_hero
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
     tier = FROZEN_TIERS[args.tier]
@@ -2043,16 +2248,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         expected_manifest_sha256=tier.history_manifest_sha256,
     )
 
-    native_torch_hero = args.candidate_torch_hero is not None
-    if native_torch_hero and not args.opponent_raw_bt4:
-        raise ValueError(
-            "--candidate-torch-hero currently requires --opponent-raw-bt4 "
-            "so both policies use one native Torch runtime and canonical codec."
-        )
-    if native_torch_hero and args.collect_diagnostics:
-        raise ValueError(
-            "Torch hero Arena supports only the lean diagnostics-off path."
-        )
+    native_torch_hero = _validate_native_torch_hero_mode(args)
 
     if args.candidate_raw_bt4:
         candidate_descriptor = None
@@ -2067,9 +2263,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             models_dir=models_dir,
         )
         candidate_record = candidate_descriptor.descriptor
-        candidate_id = (
-            "candidate-torch-hero-"
-            + candidate_record["state"]["sha256"][:12]
+        candidate_id = _torch_hero_model_id(
+            role="candidate",
+            descriptor=candidate_record,
         )
     elif args.candidate_torch is None:
         candidate_descriptor = research_checkpoint_descriptor(
@@ -2091,7 +2287,19 @@ def main(argv: Sequence[str] | None = None) -> int:
             "candidate-torch-"
             + candidate_record["state"]["sha256"][:12]
         )
-    if args.opponent_raw_bt4:
+    opponent_hero_descriptor = None
+    if args.opponent_torch_hero is not None:
+        opponent_hero_descriptor = torch_hero_checkpoint_descriptor(
+            args.opponent_torch_hero,
+            models_dir=models_dir,
+        )
+        opponent_descriptor = opponent_hero_descriptor.descriptor
+        opponent_config = None
+        opponent_id = _torch_hero_model_id(
+            role="opponent",
+            descriptor=opponent_descriptor,
+        )
+    elif args.opponent_raw_bt4:
         opponent_descriptor = raw_bt4_descriptor(models_dir=models_dir)
         opponent_config = None
         opponent_id = (
@@ -2207,22 +2415,22 @@ def main(argv: Sequence[str] | None = None) -> int:
             candidate_descriptor,
             TorchResearchCheckpointDescriptor,
         )
-        candidate_policy, candidate_load = load_torch_hero_policy(
-            candidate_descriptor,
-            model_id=candidate_id,
+        (
+            candidate_policy,
+            candidate_load,
+            opponent_policy,
+            opponent_load,
+            accelerator_session,
+        ) = load_native_torch_hero_pair(
+            candidate_checkpoint=candidate_descriptor,
+            opponent_checkpoint=opponent_hero_descriptor,
+            candidate_record=candidate_record,
+            opponent_record=opponent_descriptor,
+            candidate_id=candidate_id,
+            opponent_id=opponent_id,
             refinement_passes=args.refinement_passes,
             inference_batch_size=inference_batch_size,
         )
-        opponent_policy, opponent_load = load_torch_raw_bt4_hero_policy(
-            model_path=Path(opponent_descriptor["bt4_checkpoint"]["path"]),
-            model_config=candidate_record["model_config"],
-            model_id=opponent_id,
-            inference_batch_size=inference_batch_size,
-        )
-        accelerator_session = {
-            "framework": "torch",
-            "torch_devices": [candidate_load["device"]],
-        }
     else:
         bt4_params = load_mapped_bt4_params(models_dir=models_dir)
         if args.candidate_raw_bt4:

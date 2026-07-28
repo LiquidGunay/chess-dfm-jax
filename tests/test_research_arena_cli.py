@@ -10,6 +10,7 @@ import chess
 import numpy as np
 import pytest
 
+import research.evaluate_arena as evaluate_arena
 import research.local_policy as local_policy
 from chess_dfm_jax.policy import (
     ACTION_CODEC_LEGACY_ABSOLUTE_1858,
@@ -26,11 +27,16 @@ from research.evaluate_arena import (
     ARENA_RUN_SCHEMA,
     FROZEN_TIERS,
     PolicyTracker,
+    TorchResearchCheckpointDescriptor,
     TrackingPolicy,
     _descriptor_uses_jepa_at_inference,
+    _torch_hero_model_id,
+    _validate_native_torch_hero_mode,
     _resolved_run_options,
     _static_inference_batch_size,
     _validate_torch_hero_refinement_passes,
+    _validated_torch_hero_model_config,
+    load_native_torch_hero_pair,
     load_run_state,
     parse_args,
     run_blocks,
@@ -139,6 +145,195 @@ def test_arena_cli_accepts_raw_bt4_update_zero_self_match(workspace_tmp: Path):
     assert args.candidate is None
     assert args.candidate_torch is None
     assert args.opponent_raw_bt4 is True
+
+
+def test_arena_cli_accepts_native_torch_hero_incumbent(
+    workspace_tmp: Path,
+):
+    checkpoint = workspace_tmp / "hero"
+    args = parse_args(
+        [
+            "--candidate-torch-hero",
+            str(checkpoint),
+            "--opponent-torch-hero",
+            str(checkpoint),
+            "--refinement-passes",
+            "1",
+            "--output-dir",
+            str(workspace_tmp / "hero-self-match"),
+        ]
+    )
+
+    assert _validate_native_torch_hero_mode(args) is True
+    assert args.candidate_torch_hero == checkpoint
+    assert args.opponent_torch_hero == checkpoint
+    assert args.opponent_raw_bt4 is False
+
+
+def test_native_torch_hero_mode_rejects_mixed_runtimes(
+    workspace_tmp: Path,
+):
+    opponent_only = parse_args(
+        [
+            "--candidate-raw-bt4",
+            "--opponent-torch-hero",
+            str(workspace_tmp / "opponent"),
+            "--output-dir",
+            str(workspace_tmp / "mixed"),
+        ]
+    )
+    with pytest.raises(
+        ValueError,
+        match="requires --candidate-torch-hero",
+    ):
+        _validate_native_torch_hero_mode(opponent_only)
+
+    candidate_only = parse_args(
+        [
+            "--candidate-torch-hero",
+            str(workspace_tmp / "candidate"),
+            "--output-dir",
+            str(workspace_tmp / "missing-opponent"),
+        ]
+    )
+    with pytest.raises(ValueError, match="requires --opponent-torch-hero"):
+        _validate_native_torch_hero_mode(candidate_only)
+
+
+def test_torch_hero_role_ids_remain_distinct_for_same_state():
+    descriptor = {"state": {"sha256": "a" * 64}}
+
+    candidate_id = _torch_hero_model_id(
+        role="candidate",
+        descriptor=descriptor,
+    )
+    opponent_id = _torch_hero_model_id(
+        role="opponent",
+        descriptor=descriptor,
+    )
+
+    assert candidate_id == "candidate-torch-hero-" + "a" * 12
+    assert opponent_id == "incumbent-torch-hero-" + "a" * 12
+    assert candidate_id != opponent_id
+
+
+def test_native_torch_hero_pair_loads_checkpoints_independently(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    candidate = TorchResearchCheckpointDescriptor(
+        checkpoint_dir=Path("candidate"),
+        manifest={},
+        run_config={},
+        descriptor={},
+    )
+    opponent = TorchResearchCheckpointDescriptor(
+        checkpoint_dir=Path("opponent"),
+        manifest={},
+        run_config={},
+        descriptor={},
+    )
+    calls: list[tuple[Path, str, int, int]] = []
+
+    def fake_load(checkpoint, **kwargs):
+        calls.append(
+            (
+                checkpoint.checkpoint_dir,
+                kwargs["model_id"],
+                kwargs["refinement_passes"],
+                kwargs["inference_batch_size"],
+            )
+        )
+        return (
+            f"policy-{checkpoint.checkpoint_dir}",
+            {"framework": "torch", "device": "fixture-gpu"},
+        )
+
+    monkeypatch.setattr(
+        evaluate_arena,
+        "load_torch_hero_policy",
+        fake_load,
+    )
+    result = load_native_torch_hero_pair(
+        candidate_checkpoint=candidate,
+        opponent_checkpoint=opponent,
+        candidate_record={"kind": "torch_hero"},
+        opponent_record={"kind": "torch_hero"},
+        candidate_id="candidate-id",
+        opponent_id="opponent-id",
+        refinement_passes=1,
+        inference_batch_size=16,
+    )
+
+    assert calls == [
+        (Path("candidate"), "candidate-id", 1, 16),
+        (Path("opponent"), "opponent-id", 1, 16),
+    ]
+    assert result[0] == "policy-candidate"
+    assert result[2] == "policy-opponent"
+    assert result[4] == {
+        "framework": "torch",
+        "torch_devices": ["fixture-gpu"],
+    }
+
+
+def test_native_torch_hero_pair_preserves_raw_bt4_opponent_dispatch(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    candidate = TorchResearchCheckpointDescriptor(
+        checkpoint_dir=Path("candidate"),
+        manifest={},
+        run_config={},
+        descriptor={},
+    )
+    calls: list[tuple[str, object]] = []
+
+    def fake_candidate_load(checkpoint, **kwargs):
+        calls.append(("candidate", checkpoint.checkpoint_dir))
+        return "candidate-policy", {
+            "framework": "torch",
+            "device": "fixture-gpu",
+        }
+
+    def fake_raw_load(**kwargs):
+        calls.append(("raw", kwargs))
+        return "raw-policy", {
+            "framework": "torch",
+            "device": "fixture-gpu",
+        }
+
+    monkeypatch.setattr(
+        evaluate_arena,
+        "load_torch_hero_policy",
+        fake_candidate_load,
+    )
+    monkeypatch.setattr(
+        evaluate_arena,
+        "load_torch_raw_bt4_hero_policy",
+        fake_raw_load,
+    )
+    result = load_native_torch_hero_pair(
+        candidate_checkpoint=candidate,
+        opponent_checkpoint=None,
+        candidate_record={"model_config": {"horizon": 8}},
+        opponent_record={
+            "kind": "raw_bt4",
+            "bt4_checkpoint": {"path": "raw.pb.gz"},
+        },
+        candidate_id="candidate-id",
+        opponent_id="raw-id",
+        refinement_passes=1,
+        inference_batch_size=16,
+    )
+
+    assert calls[0] == ("candidate", Path("candidate"))
+    assert calls[1][0] == "raw"
+    raw_kwargs = calls[1][1]
+    assert isinstance(raw_kwargs, dict)
+    assert raw_kwargs["model_path"] == Path("raw.pb.gz")
+    assert raw_kwargs["model_config"] == {"horizon": 8}
+    assert raw_kwargs["model_id"] == "raw-id"
+    assert result[0] == "candidate-policy"
+    assert result[2] == "raw-policy"
 
 
 def _fixture_assets(root: Path):
@@ -251,7 +446,7 @@ def test_torch_checkpoint_descriptor_is_strict_and_plot_reproducible(
     assert descriptor.descriptor["torch_run_config"]["git_commit"] == "b" * 40
 
 
-def test_torch_hero_checkpoint_descriptor_pins_canonical_recipe(
+def test_torch_hero_checkpoint_descriptor_validates_recorded_recipe(
     workspace_tmp: Path,
 ):
     import dataclasses
@@ -299,6 +494,7 @@ def test_torch_hero_checkpoint_descriptor_pins_canonical_recipe(
         "config": dataclasses.asdict(
             dataclasses.replace(
                 HERO_CONFIG,
+                dfm_layers=3,
                 sigreg_example_count=256,
                 wdl_coeff=0.0,
                 jepa_feedback_mode="final_pass_adjoint",
@@ -329,12 +525,34 @@ def test_torch_hero_checkpoint_descriptor_pins_canonical_recipe(
     assert descriptor.descriptor["research_update"] == 27_679
     assert descriptor.descriptor["state"]["sha256"] == state_sha256
     assert descriptor.descriptor["checkpoint_storage_kind"] == "model_only"
+    assert descriptor.descriptor["model_config"]["dfm_layers"] == 3
     assert descriptor.descriptor["model_config"]["sigreg_example_count"] == 256
     assert descriptor.descriptor["model_config"]["wdl_coeff"] == 0.0
     assert (
         descriptor.descriptor["model_config"]["jepa_feedback_mode"]
         == "final_pass_adjoint"
     )
+
+
+def test_torch_hero_model_config_rejects_unrecognized_keys():
+    import dataclasses
+
+    from research.train_torch import HERO_CONFIG
+
+    config = dataclasses.asdict(
+        dataclasses.replace(
+            HERO_CONFIG,
+            remat_bt4_blocks=True,
+            remat_projector_blocks=True,
+            remat_dfm_blocks=False,
+            use_bt4_sdpa=True,
+            use_head_sdpa=True,
+        )
+    )
+    config["unknown_architecture"] = 1
+
+    with pytest.raises(ValueError, match="unrecognized model config"):
+        _validated_torch_hero_model_config(config)
 
 
 def test_torch_hero_checkpoint_descriptor_accepts_recovery_state(
