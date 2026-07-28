@@ -744,13 +744,20 @@ draw, or incomplete legal-action coverage. The retained count-64 checkpoint
 is therefore the fixed one-pass development reference for the next
 candidate. The first direct-incumbent candidate, a zero-initialized
 current-JEPA-state broadcast residual into the DFM, completed and was
-rejected. It is systems-neutral and scores a directionally positive but
-inconclusive `0.509766` directly against the incumbent, while frozen DFM CE
-regresses by `0.033734`, legal mass by `0.016813`, accuracy by `0.002502`,
-and horizon-8 prediction effective/stable rank retains only
-`94.16% / 94.03%`. The bridge grows to roughly `0.48` of DFM-state RMS.
-Close the unrestricted shared-broadcast design and retain checkpoint
-`05068c96...d9060c9`. A future direct-coupling candidate should preserve
+not promoted. It is systems-neutral and scores a directionally positive but
+inconclusive `0.509766` directly against the matched 1,024-update control,
+while frozen DFM CE regresses by `0.033734`, legal mass by `0.016813`,
+accuracy by `0.002502`, and horizon-8 prediction effective/stable rank
+retains only `94.16% / 94.03%`. The bridge grows to roughly `0.48` of
+DFM-state RMS. A deterministic replay reproduces the original checkpoint hash
+and all scientific scalars exactly. On the reused raw-BT4 development pool,
+it beats the control descriptively at all `1/2/4/8/16` pass counts by
+`0.025391/0.005859/0.033203/0.037109/0.023438`, but both short models still
+degrade overall as passes increase. The one-epoch Hero instead improves
+monotonically from `0.664062` at one pass to `0.935547` at sixteen. Keep the
+control as incumbent and retain the broadcast checkpoint pending disjoint
+centered confirmation; call the architecture inconclusive rather than
+chess-rejected. A future direct-coupling candidate should still preserve
 token structure or use a controlled gate/cross-attention path, and must be
 separately preregistered.
 Periodically rerun raw BT4 as an absolute anchor; its one-pass score is already

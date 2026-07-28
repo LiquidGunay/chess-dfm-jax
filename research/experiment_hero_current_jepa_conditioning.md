@@ -1,7 +1,9 @@
 # Experiment: current-JEPA-state conditioning of DFM
 
-Status: completed and rejected on 2026-07-28. Keep the retained Hero
-checkpoint and close this zero-initialized shared-broadcast design.
+Status: completed and not promoted on 2026-07-28. The preregistered offline
+gates failed, while centered chess was inconclusive and the post-hoc
+pass-scaling audit was favorable against raw BT4. Keep both matched
+checkpoints until a disjoint confirmation closes the decision.
 
 ## Question and hypothesis
 
@@ -213,7 +215,7 @@ bytes. The bridge is systems-neutral for training.
 
 The last-64 training window was already negative:
 
-| Metric | Retained Hero | JEPA-conditioned | Candidate change |
+| Metric | Matched 1,024 control | JEPA-conditioned | Candidate change |
 |---|---:|---:|---:|
 | Total loss | `7.449589` | `7.539384` | `+0.089795` |
 | DFM CE | `5.702513` | `5.751280` | `+0.048767` |
@@ -229,7 +231,7 @@ matched, so this is not numerical collapse.
 
 Frozen 8,192-example validation confirms the policy regression:
 
-| Metric | Retained Hero | JEPA-conditioned | Candidate change |
+| Metric | Matched 1,024 control | JEPA-conditioned | Candidate change |
 |---|---:|---:|---:|
 | DFM CE | `5.706299` | `5.740033` | `+0.033734` |
 | Accuracy | `0.072433` | `0.069931` | `-0.002502` |
@@ -263,25 +265,53 @@ The centered direct Arena is directionally positive but inconclusive:
 
 The candidate passes the strict point-score direction and latency gates, but
 the Arena uncertainty includes a material loss and gain. It fails the
-preregistered DFM-CE, accuracy, legal-mass, and rank gates, so do not repeat
-or extend it. The retained checkpoint
+preregistered DFM-CE, accuracy, legal-mass, and rank gates, so it is not
+promoted from this screen. The matched control checkpoint
 `05068c96b2bac8f10a3f3b853363bdb2ce49f935b026566705b3bdcd4d9060c9`
 remains the incumbent.
 
-This result is evidence that a shared additive current-state residual is too
-blunt: it grows to roughly half of the per-token state scale, slightly helps
-JEPA MSE/root ranking, and harms held-out action prediction and latent rank.
-It does not show that direct state/action coupling is generally harmful.
-Future coupling should preserve token structure or use a controlled
-gate/cross-attention mechanism rather than broadcasting one unrestricted
-global offset to all 64 state tokens.
+The offline result warns that the shared additive residual is blunt: it grows
+to roughly half of the per-token state scale, slightly helps JEPA MSE/root
+ranking, and harms held-out action prediction and latent rank. It does not
+establish that this candidate is weaker at chess, nor that direct
+state/action coupling is generally harmful. A future variant should still
+consider preserving token structure or using a controlled
+gate/cross-attention mechanism.
 
-The candidate checkpoint was independently restored and checksum-verified as
+The candidate checkpoint was deterministically replayed and checksum-verified
+as
 `eb20c698fea1eabd4ebf71c13a1c195204736183f7b173079bd34f2a6e9a995f`
-for frozen validation and Arena. After sealing that hash, its
-`713,388,280`-byte model tensor was deleted because the candidate failed the
-preregistered gates; its manifest, traces, validation output, and Arena
-evidence remain. Compact evidence and the comparison plot are:
+with all 52 scientific scalars matching at all 1,024 updates. Its
+`713,388,280`-byte tensor is retained pending the follow-up decision.
+Compact evidence and the comparison plot are:
 
 - `research/analysis/current_jepa_conditioning_20260728.json`
 - `research/analysis/current_jepa_conditioning_20260728.png`
+
+## Post-hoc inference-pass audit
+
+The original `0.509766` Arena opponent was the matched 1,024-update control,
+not the one-epoch Hero. Its W/D/L `66/129/61` and descriptive interval
+`[0.467119,0.552412]` are a centered near tie, not a rejection of chess
+strength.
+
+On the same first 128 development pairs against raw BT4:
+
+| Passes | Matched control | JEPA-conditioned | Candidate minus control |
+|---:|---:|---:|---:|
+| 1 | `0.960938` | `0.986328` | `+0.025391` |
+| 2 | `0.937500` | `0.943359` | `+0.005859` |
+| 4 | `0.925781` | `0.958984` | `+0.033203` |
+| 8 | `0.908203` | `0.945312` | `+0.037109` |
+| 16 | `0.910156` | `0.933594` | `+0.023438` |
+
+The candidate is descriptively better at every count, with paired intervals
+excluding zero at passes 1, 4, and 8. It nevertheless falls from one to
+sixteen passes by `-0.052734`, so it has not learned beneficial iterative
+refinement after only 1,024 updates. Because this is a reused, ceiling-prone
+raw-BT4 pool and direct head-to-head play is tied, reclassify the architecture
+as **not promoted / scientifically inconclusive**. Require disjoint centered
+confirmation before either a longer extension or closure.
+
+Full replay, pass, and initialization evidence is in
+`research/analysis/posthero_pass_bootstrap_audit_20260728.json`.

@@ -1,6 +1,6 @@
 # Experiment: post-Hero inference-pass and horizon-bootstrap audit
 
-Status: running on 2026-07-28. This is a measurement and design audit. It
+Status: completed on 2026-07-28. This is a measurement and design audit. It
 does not promote a checkpoint or authorize a new training loss.
 
 ## Questions
@@ -86,8 +86,8 @@ distillation, not inference leakage:
 ```text
 actual sampled future board
     -> stopped-gradient BT4 policy head
-    -> legal teacher distribution for sampled horizon h
-    -> KL target for DFM slot h
+    -> legal teacher distribution for its next action
+    -> KL target for the aligned future DFM slot
 ```
 
 The sampled future BT4 tokens already exist for the K=1 JEPA target, so this
@@ -95,6 +95,12 @@ requires a policy-head call but no additional encoder call. The teacher must
 not be added as a future residual at inference because the actual future board
 is unavailable. If pursued, preregister a warm-start coefficient and decay it
 to zero so the stronger LC0-MCTS action labels remain the terminal objective.
+
+The index alignment is exact: `future_planes[s]` is the board after action
+`s + 1`, so for sampled indices `s = 0..6` its policy supervises DFM slot
+`s + 1`, namely H2--H8. The sampled board after H8 has no next-action slot
+inside the stored chunk and is ineligible for this auxiliary. Do not
+accidentally teach slot H1 from the board after its action.
 
 For the JEPA dynamics themselves, separately consider a sampled
 teacher-forced adjacent-state auxiliary:
@@ -111,3 +117,91 @@ systems gate before scientific training.
 Do not combine policy distillation and teacher-forced JEPA in one first
 experiment. The pass curves and the one-epoch horizon audit determine which
 failure is actually limiting before choosing either intervention.
+
+## Deterministic replay result
+
+The candidate replay completed all `1,024` updates with zero optimizer skips
+under the guarded `2 CPU / 7 GiB RSS` contract. Its terminal checkpoint is
+bit-exact to the deleted original:
+
+```text
+eb20c698fea1eabd4ebf71c13a1c195204736183f7b173079bd34f2a6e9a995f
+```
+
+All `52` retained scientific scalars match exactly at every update
+(`53,248/53,248` comparisons); timing and resource counters were deliberately
+excluded. This is a restored deterministic replay, not an approximate
+replicate. Keep its `713,388,280`-byte tensor while the follow-up decision
+remains open.
+
+## Pass-scaling result
+
+Every run completed 128 pairs / 256 games with zero faults, zero cap draws,
+complete action coverage, and normal termination:
+
+| Passes | Matched 1,024 control | 1,024 JEPA broadcast | One-epoch Hero |
+|---:|---:|---:|---:|
+| 1 | `0.960938` | `0.986328` | `0.664062` |
+| 2 | `0.937500` | `0.943359` | `0.707031` |
+| 4 | `0.925781` | `0.958984` | `0.824219` |
+| 8 | `0.908203` | `0.945312` | `0.904297` |
+| 16 | `0.910156` | `0.933594` | `0.935547` |
+
+The first 128 pairs of the existing 1,024-pair one-epoch eight-pass Arena were
+reused only after its frozen contract and pair-score prefix matched.
+
+The early control and broadcast candidate both remain best at one pass. Their
+16-pass minus one-pass paired deltas are respectively `-0.050781` and
+`-0.052734`, with descriptive 95% intervals
+`[-0.079483,-0.022080]` and `[-0.075126,-0.030342]`. The broadcast therefore
+does not solve early refinement exposure by update 1,024.
+
+The one-epoch model has undergone the desired qualitative transition. Its
+score rises at every measured count; 16 passes beats one by `+0.271484`, with
+descriptive interval `[0.233855,0.309114]`. The finished artifact does not
+inherit the early model's pass-degradation behavior.
+
+Against raw BT4, the broadcast candidate exceeds the matched control at every
+count by `+0.025391/+0.005859/+0.033203/+0.037109/+0.023438`. The paired
+descriptive intervals exclude zero at passes 1, 4, and 8. This is favorable,
+but it is a post-hoc comparison on a reused, ceiling-prone development pool.
+The more direct candidate-versus-control Arena remains a near tie:
+`0.509766`, W/D/L `66/129/61`, interval `[0.467119,0.552412]`. These results
+can reflect style or non-transitivity and do not authorize promotion.
+
+## Horizon and initialization result
+
+At initialization, JEPA MSE is numerically equal to the identity baseline at
+every horizon, while DFM H1 CE is `6.829365` and H2--H8 are the uniform
+`7.53125`. The initialization asymmetry is therefore real.
+
+After one epoch:
+
+| Horizon | JEPA MSE | Identity MSE | MSE / identity | DFM CE |
+|---:|---:|---:|---:|---:|
+| H1 | `0.034062` | `0.462440` | `0.0737` | `1.959745` |
+| H2 | `0.027633` | `0.499418` | `0.0553` | `3.860296` |
+| H4 | `0.040566` | `1.284965` | `0.0316` | `4.910862` |
+| H8 | `0.066352` | `2.447475` | `0.0271` | `5.611434` |
+
+H8 raw MSE remains about twice H1, but the future target has moved about
+`5.3x` farther from the current-state identity. Relative to that required
+change, H8 prediction is better than H1. The remaining large horizon gap is
+clearer in action CE than in JEPA dynamics, so future-policy distillation is
+the better first bootstrap. Teacher-forced JEPA remains a separate second
+candidate if a later causal audit points to recurrent dynamics.
+
+## Revised decision
+
+Do not describe the broadcast architecture as chess-rejected. It failed the
+preregistered held-out DFM-CE, accuracy, legal-mass, and rank promotion gates,
+so it was correctly **not promoted**. Its centered chess result is
+inconclusive and its post-hoc raw-BT4 pass curve is favorable. Retain the
+checkpoint and, before a longer training extension, require a disjoint
+centered confirmation that can distinguish strength from development-pool
+style effects.
+
+The immutable audit record and portable technical report are:
+
+- `research/analysis/posthero_pass_bootstrap_audit_20260728.json`
+- `research/analysis/posthero_pass_bootstrap_20260728/report.html`

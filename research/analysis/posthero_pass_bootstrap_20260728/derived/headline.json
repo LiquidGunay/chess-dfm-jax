@@ -1,0 +1,12 @@
+[
+  {
+    "direct_candidate_score": 0.509765625,
+    "direct_interval_lower": 0.467119,
+    "direct_interval_upper": 0.552412,
+    "hero_one_pass_score": 0.6640625,
+    "hero_sixteen_minus_one": 0.271484375,
+    "hero_sixteen_pass_score": 0.935546875,
+    "replay_comparisons": 53248,
+    "replay_mismatches": 0
+  }
+]

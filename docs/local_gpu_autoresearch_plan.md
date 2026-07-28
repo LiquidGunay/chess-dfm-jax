@@ -2081,7 +2081,7 @@ sweeps, held-out data, and repeated seeds.
   host RSS is `3.063 GB`, and no model state is written. Open one-pass
   candidate-versus-retained-incumbent evaluation. See
   `research/analysis/torch_hero_incumbent_arena_20260728.json`.
-- [ ] Run the first centered-Arena model experiment in
+- [x] Run the first centered-Arena model experiment in
   `research/experiment_hero_current_jepa_conditioning.md`. Add a
   zero-initialized no-bias `z_jepa -> token_dim` residual and broadcast it
   over the current 64 DFM state tokens, directly coupling the learned current
@@ -2090,4 +2090,25 @@ sweeps, held-out data, and repeated seeds.
   default-off parity, a checkpoint-free 20-update systems smoke, then one
   matched 1,024-update candidate. Rank it primarily by direct one-pass score
   against the retained Torch hero incumbent, with frozen validation, latent
-  health, latency, legality, and resource guardrails.
+  health, latency, legality, and resource guardrails. The candidate completes
+  at matched throughput and scores `0.509766` directly against the matched
+  short control, W/D/L `66/129/61`, descriptive interval
+  `[0.467119,0.552412]`. It fails the preregistered held-out DFM-CE,
+  legal-mass, accuracy, and latent-rank gates, so it is not promoted. A
+  deterministic replay later reproduces the original checkpoint SHA-256 and
+  all 52 scientific scalars over all 1,024 updates exactly.
+- [x] Complete the post-Hero pass-scaling and horizon-initialization audit in
+  `research/experiment_posthero_pass_and_bootstrap_audit.md`. The broadcast
+  candidate beats its matched control descriptively against raw BT4 at every
+  `1/2/4/8/16` pass count, but both 1,024-update models become worse overall
+  with more passes. The one-epoch Hero shows the desired opposite behavior,
+  improving monotonically from `0.664062` at one pass to `0.935547` at
+  sixteen. Reclassify the broadcast design as not promoted / inconclusive
+  rather than chess-rejected, retain its replay tensor pending a disjoint
+  centered confirmation, and keep the short control as incumbent. The
+  initialization audit confirms that H1 starts from the current-board BT4
+  policy while H2--H8 start uniform and JEPA starts at the identity. If a
+  bootstrap experiment is opened, first profile training-only future-policy
+  distillation from the already encoded sampled future state into the aligned
+  H2--H8 DFM slot, with no inference teacher and a coefficient that decays to
+  zero. Do not combine it initially with teacher-forced JEPA.
