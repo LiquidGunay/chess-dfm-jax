@@ -1009,6 +1009,26 @@ def load_source_policy(
     )
 
 
+def _validate_torch_hero_refinement_passes(
+    config: Any,
+    refinement_passes: int,
+) -> None:
+    if refinement_passes < 1:
+        raise ValueError("Torch hero refinement passes must be positive")
+    feedback_mode = getattr(config, "jepa_feedback_mode", "none")
+    if feedback_mode not in {"none", "final_pass_adjoint"}:
+        raise ValueError(
+            f"Unsupported Torch hero JEPA feedback mode: {feedback_mode!r}"
+        )
+    if feedback_mode == "final_pass_adjoint" and (
+        refinement_passes != 8 or config.horizon != 8
+    ):
+        raise ValueError(
+            "Torch hero final-pass JEPA feedback requires exactly eight "
+            "refinement passes and horizon eight"
+        )
+
+
 def load_torch_hero_policy(
     checkpoint: TorchResearchCheckpointDescriptor,
     *,
@@ -1029,10 +1049,7 @@ def load_torch_hero_policy(
     )
 
     config = Config(**checkpoint.descriptor["model_config"])
-    if refinement_passes != config.horizon:
-        raise ValueError(
-            "Torch hero Arena requires one refinement pass per horizon"
-        )
+    _validate_torch_hero_refinement_passes(config, refinement_passes)
     started = time.perf_counter()
     device = torch.device("cuda")
     model_path = require_within_workspace(

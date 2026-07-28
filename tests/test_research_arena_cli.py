@@ -30,6 +30,7 @@ from research.evaluate_arena import (
     _descriptor_uses_jepa_at_inference,
     _resolved_run_options,
     _static_inference_batch_size,
+    _validate_torch_hero_refinement_passes,
     load_run_state,
     parse_args,
     run_blocks,
@@ -91,6 +92,37 @@ def test_descriptor_jepa_inference_usage_tracks_feedback_mode():
             }
         }
     )
+
+
+@pytest.mark.parametrize("refinement_passes", [1, 2, 4, 8, 16])
+def test_torch_hero_refinement_pass_guard_allows_feedback_off_sweep(
+    refinement_passes,
+):
+    config = type(
+        "Config",
+        (),
+        {"horizon": 8, "jepa_feedback_mode": "none"},
+    )()
+    _validate_torch_hero_refinement_passes(config, refinement_passes)
+
+
+@pytest.mark.parametrize("refinement_passes", [1, 2, 4, 16])
+def test_torch_hero_refinement_pass_guard_keeps_feedback_at_eight(
+    refinement_passes,
+):
+    config = type(
+        "Config",
+        (),
+        {
+            "horizon": 8,
+            "jepa_feedback_mode": "final_pass_adjoint",
+        },
+    )()
+    with pytest.raises(ValueError, match="requires exactly eight"):
+        _validate_torch_hero_refinement_passes(
+            config,
+            refinement_passes,
+        )
 
 
 def test_arena_cli_accepts_raw_bt4_update_zero_self_match(workspace_tmp: Path):

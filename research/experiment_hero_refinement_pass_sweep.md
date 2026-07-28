@@ -3,6 +3,14 @@
 Status: preregistered on 2026-07-28. This is a no-training diagnostic on the
 retained feedback-off hero/count-64 checkpoint.
 
+Execution note: the first guarded one-pass launch stopped safely before
+model materialization or gameplay because the Torch Arena loader retained an
+obsolete `refinement_passes == horizon` check. The underlying refiner already
+supports every positive count. Replace that loader check with a
+default-neutral guard that permits arbitrary positive counts only when
+feedback is off and continues to require exactly eight passes for
+`final_pass_adjoint`; pass loader-level CPU tests before retrying.
+
 ## Question
 
 How much searchless chess strength does iterative DFM refinement gain from
