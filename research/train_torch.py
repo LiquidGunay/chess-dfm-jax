@@ -135,6 +135,11 @@ _LOSS_SUMMARY_METRICS = (
     "dfm_jepa_conditioning_state_rms",
     "dfm_jepa_conditioning_ratio",
     "dfm_jepa_conditioning_weight_rms",
+    "dfm_closed_loop_active",
+    "dfm_closed_loop_context_rms",
+    "dfm_closed_loop_dfm_ce_improvement",
+    "wdl_current_loss",
+    "wdl_current_accuracy",
 )
 
 
@@ -190,6 +195,11 @@ class Config:
     init_seed: int = 0
     jepa_feedback_mode: str = "none"
     dfm_condition_on_current_jepa_state: bool = False
+    dfm_jepa_fusion_mode: str = "none"
+    policy_passthrough_mode: str = "root_only"
+    dfm_state_source: str = "trunk"
+    wdl_include_current_state: bool = False
+    dfm_closed_loop_mode: str = "none"
 
 
 CONFIG = Config()
@@ -561,9 +571,24 @@ class BT4PolicyHead(nn.Module):
             persistent=False,
         )
 
-    def forward(self, x: Tensor, compute_dtype: torch.dtype) -> Tensor:
-        batch = x.shape[0]
-        policy = F.mish(self.dense1(x, compute_dtype))
+    def features(
+        self,
+        x: Tensor,
+        compute_dtype: torch.dtype,
+    ) -> Tensor:
+        return F.mish(self.dense1(x, compute_dtype))
+
+    def logits_from_features(
+        self,
+        policy: Tensor,
+        compute_dtype: torch.dtype,
+    ) -> Tensor:
+        batch = policy.shape[0]
+        if policy.shape != (batch, 64, 1024):
+            raise ValueError(
+                "BT4 policy features must have shape "
+                f"{(batch, 64, 1024)}, found {tuple(policy.shape)}"
+            )
         q = self.q(policy, compute_dtype).reshape(batch, 64, -1)
         k = self.k(policy, compute_dtype).reshape(batch, 64, -1)
         attention = (q @ k.transpose(1, 2)) * (1.0 / math.sqrt(k.shape[-1]))
@@ -581,12 +606,25 @@ class BT4PolicyHead(nn.Module):
         policy = torch.cat((attention, promotion), dim=1).reshape(batch, 67 * 64)
         return policy.index_select(1, self.mapping_table)
 
+    def forward_with_features(
+        self,
+        x: Tensor,
+        compute_dtype: torch.dtype,
+    ) -> tuple[Tensor, Tensor]:
+        policy = self.features(x, compute_dtype)
+        return self.logits_from_features(policy, compute_dtype), policy
+
+    def forward(self, x: Tensor, compute_dtype: torch.dtype) -> Tensor:
+        logits, _ = self.forward_with_features(x, compute_dtype)
+        return logits
+
 
 class BT4Encoder(nn.Module):
     def __init__(
         self,
         *,
         include_policy_head: bool = False,
+        future_policy_head_count: int = 0,
         use_sdpa: bool = False,
         norm_impl: str = "eager",
     ):
@@ -600,6 +638,15 @@ class BT4Encoder(nn.Module):
             for _ in range(15)
         )
         self.policy_head = BT4PolicyHead() if include_policy_head else None
+        if future_policy_head_count < 0:
+            raise ValueError("future_policy_head_count must be non-negative")
+        if future_policy_head_count and not include_policy_head:
+            raise ValueError(
+                "Future policy heads require the native root policy head"
+            )
+        self.future_policy_heads = nn.ModuleList(
+            BT4PolicyHead() for _ in range(future_policy_head_count)
+        )
         self.alpha = float((2.0 * len(self.layers)) ** -0.25)
 
     def encode_current(
@@ -899,6 +946,51 @@ class DFMJepaConditioningResult(NamedTuple):
     weight_rms: Tensor
 
 
+def _validate_hero_architecture_config(config: Config) -> None:
+    if config.policy_passthrough_mode not in {
+        "root_only",
+        "all_horizon_heads",
+    }:
+        raise ValueError(
+            "policy_passthrough_mode must be 'root_only' or "
+            "'all_horizon_heads'"
+        )
+    if config.dfm_state_source not in {"trunk", "policy_prelogit"}:
+        raise ValueError(
+            "dfm_state_source must be 'trunk' or 'policy_prelogit'"
+        )
+    if config.dfm_jepa_fusion_mode not in {"none", "normalized_add"}:
+        raise ValueError(
+            "dfm_jepa_fusion_mode must be 'none' or 'normalized_add'"
+        )
+    if config.dfm_closed_loop_mode not in {
+        "none",
+        "predicted_jepa_tokens",
+    }:
+        raise ValueError(
+            "dfm_closed_loop_mode must be 'none' or "
+            "'predicted_jepa_tokens'"
+        )
+    if type(config.wdl_include_current_state) is not bool:
+        raise TypeError("wdl_include_current_state must be boolean")
+    if (
+        config.dfm_condition_on_current_jepa_state
+        and config.dfm_jepa_fusion_mode != "none"
+    ):
+        raise ValueError(
+            "Legacy DFM/JEPA conditioning and normalized fusion are "
+            "mutually exclusive"
+        )
+    if (
+        config.jepa_feedback_mode != "none"
+        and config.dfm_closed_loop_mode != "none"
+    ):
+        raise ValueError(
+            "Legacy final-pass feedback and DFM closed loop are "
+            "mutually exclusive"
+        )
+
+
 class JointModel(nn.Module):
     def __init__(
         self,
@@ -907,11 +999,18 @@ class JointModel(nn.Module):
         bt4_norm_impl: str = "eager",
     ):
         super().__init__()
+        _validate_hero_architecture_config(config)
         self.config = config
         self.bt4_norm_impl = bt4_norm_impl
         dtype = torch.float32
         self.encoder = BT4Encoder(
             include_policy_head=config.use_bt4_policy_residual,
+            future_policy_head_count=(
+                config.horizon - 1
+                if config.policy_passthrough_mode
+                == "all_horizon_heads"
+                else 0
+            ),
             use_sdpa=config.use_bt4_sdpa,
             norm_impl=bt4_norm_impl,
         )
@@ -924,7 +1023,20 @@ class JointModel(nn.Module):
                 dtype=dtype,
                 bias=False,
             )
-            if config.dfm_condition_on_current_jepa_state
+            if (
+                config.dfm_condition_on_current_jepa_state
+                or config.dfm_jepa_fusion_mode != "none"
+            )
+            else None
+        )
+        self.dfm_jepa_rollout_adapter = (
+            RawLinear(
+                config.z_dim,
+                config.token_dim,
+                dtype=dtype,
+                bias=False,
+            )
+            if config.dfm_closed_loop_mode != "none"
             else None
         )
         self.jepa_action_embed = RawEmbedding(_VOCAB_SIZE + 1, config.z_dim, dtype=dtype)
@@ -953,6 +1065,50 @@ class JointModel(nn.Module):
         self.dfm_out_norm = RawRMSNorm(config.token_dim, dtype=dtype)
         self.out_proj = _raw_parameter((config.token_dim, _VOCAB_SIZE), dtype)
         self.out_bias = _raw_parameter((_VOCAB_SIZE,), dtype)
+
+    def policy_outputs(
+        self,
+        current: Tensor,
+        compute_dtype: torch.dtype,
+    ) -> tuple[Tensor | None, Tensor | None]:
+        policy_head = self.encoder.policy_head
+        if policy_head is None:
+            if self.encoder.future_policy_heads:
+                raise ValueError(
+                    "Future policy heads exist without a root policy head"
+                )
+            return None, None
+        root_logits, policy_features = policy_head.forward_with_features(
+            current,
+            compute_dtype,
+        )
+        if self.config.policy_passthrough_mode == "root_only":
+            if self.encoder.future_policy_heads:
+                raise ValueError(
+                    "Root-only passthrough unexpectedly has future heads"
+                )
+            return root_logits, policy_features
+        if (
+            len(self.encoder.future_policy_heads)
+            != self.config.horizon - 1
+        ):
+            raise ValueError(
+                "All-horizon passthrough has the wrong number of policy heads"
+            )
+        future_logits = torch.stack(
+            tuple(
+                head(current, compute_dtype)
+                for head in self.encoder.future_policy_heads
+            ),
+            dim=1,
+        )
+        return (
+            torch.cat(
+                (root_logits.unsqueeze(1), future_logits),
+                dim=1,
+            ),
+            policy_features,
+        )
 
     def encode_selected(
         self,
@@ -984,8 +1140,20 @@ class JointModel(nn.Module):
                 tokens.reshape(batch * 2, 64, 1024),
                 compute_dtype,
             ).reshape(batch, 2, self.config.z_dim)
+        with _profile_scope(profile_regions, "region::bt4_policy_head"):
+            base_policy_logits, policy_features = self.policy_outputs(
+                current,
+                compute_dtype,
+            )
+        dfm_source = current
+        if self.config.dfm_state_source == "policy_prelogit":
+            if policy_features is None:
+                raise ValueError(
+                    "Policy-prelogit DFM state requires a BT4 policy head"
+                )
+            dfm_source = policy_features
         with _profile_scope(profile_regions, "region::dfm_state_projector"):
-            z_dfm = self.dfm_state_projector(current, compute_dtype)
+            z_dfm = self.dfm_state_projector(dfm_source, compute_dtype)
         with _profile_scope(
             profile_regions,
             "region::dfm_jepa_state_conditioning",
@@ -994,12 +1162,6 @@ class JointModel(nn.Module):
                 z_dfm,
                 z_all[:, 0],
                 compute_dtype,
-            )
-        with _profile_scope(profile_regions, "region::bt4_policy_head"):
-            base_policy_logits = (
-                None
-                if self.encoder.policy_head is None
-                else self.encoder.policy_head(current, compute_dtype)
             )
         return z_all, conditioning, base_policy_logits
 
@@ -1015,12 +1177,37 @@ class JointModel(nn.Module):
         compute_dtype: torch.dtype,
         *,
         base_root_logits: Tensor | None = None,
+        jepa_action_context: Tensor | None = None,
         return_hidden: bool = False,
     ) -> Tensor | tuple[Tensor, Tensor]:
         horizon = action_tokens.shape[1]
         action = self.action_embed(action_tokens, compute_dtype)
         action = action + self.pos_embed[:horizon].to(compute_dtype).unsqueeze(0)
         action = action + self._time_embedding(t, compute_dtype).unsqueeze(1)
+        if jepa_action_context is not None:
+            expected_context_shape = (
+                action_tokens.shape[0],
+                horizon,
+                self.config.token_dim,
+            )
+            if jepa_action_context.shape != expected_context_shape:
+                raise ValueError(
+                    "JEPA action context shape mismatch: "
+                    f"{tuple(jepa_action_context.shape)} != "
+                    f"{expected_context_shape}"
+                )
+            action_f32 = action.float()
+            context_f32 = jepa_action_context.float()
+            normalized_action = action_f32 * torch.rsqrt(
+                action_f32.square().mean(dim=-1, keepdim=True) + 1e-6
+            )
+            normalized_context = context_f32 * torch.rsqrt(
+                context_f32.square().mean(dim=-1, keepdim=True) + 1e-6
+            )
+            action = (
+                (normalized_action + normalized_context)
+                * (1.0 / math.sqrt(2.0))
+            ).to(compute_dtype)
         sequence = torch.cat((z_dfm.to(compute_dtype), action), dim=1)
         sequence = self.dfm_blocks(sequence, compute_dtype)
         action_hidden = sequence[:, 64:, :]
@@ -1029,18 +1216,30 @@ class JointModel(nn.Module):
         if base_root_logits is not None:
             if not self.config.use_bt4_policy_residual:
                 raise ValueError("Base root logits require the BT4 residual-policy recipe")
-            if logits.shape[1] < 1 or base_root_logits.shape != logits[:, 0].shape:
-                raise ValueError(
-                    "Base root logits shape mismatch: "
-                    f"{tuple(base_root_logits.shape)} versus {tuple(logits[:, 0].shape)}"
+            if (
+                base_root_logits.ndim == 2
+                and base_root_logits.shape == logits[:, 0].shape
+            ):
+                logits = torch.cat(
+                    (
+                        logits[:, :1]
+                        + base_root_logits.to(logits.dtype).unsqueeze(1),
+                        logits[:, 1:],
+                    ),
+                    dim=1,
                 )
-            logits = torch.cat(
-                (
-                    logits[:, :1] + base_root_logits.to(logits.dtype).unsqueeze(1),
-                    logits[:, 1:],
-                ),
-                dim=1,
-            )
+            elif (
+                base_root_logits.ndim == 3
+                and base_root_logits.shape == logits.shape
+            ):
+                logits = logits + base_root_logits.to(logits.dtype)
+            else:
+                raise ValueError(
+                    "Base policy logits shape mismatch: "
+                    f"{tuple(base_root_logits.shape)} versus root "
+                    f"{tuple(logits[:, 0].shape)} or full "
+                    f"{tuple(logits.shape)}"
+                )
         if return_hidden:
             return logits, action_hidden
         return logits
@@ -1088,6 +1287,31 @@ class JointModel(nn.Module):
         ) + self.jepa_hidden_adapter(action_hidden, compute_dtype)
         return self.jepa_transition(z0, condition, compute_dtype)
 
+    def jepa_rollout_action_context(
+        self,
+        predicted_states: Tensor,
+        compute_dtype: torch.dtype,
+    ) -> Tensor:
+        adapter = self.dfm_jepa_rollout_adapter
+        expected_shape = (
+            predicted_states.shape[0],
+            self.config.horizon,
+            self.config.z_dim,
+        )
+        if self.config.dfm_closed_loop_mode != "predicted_jepa_tokens":
+            raise ValueError(
+                "JEPA rollout action context requires the active "
+                "predicted-state closed loop"
+            )
+        if adapter is None:
+            raise ValueError("Active DFM closed loop has no rollout adapter")
+        if predicted_states.shape != expected_shape:
+            raise ValueError(
+                "Predicted JEPA rollout shape mismatch: "
+                f"{tuple(predicted_states.shape)} != {expected_shape}"
+            )
+        return adapter(predicted_states, compute_dtype)
+
     def condition_dfm_latents(
         self,
         z_dfm: Tensor,
@@ -1114,7 +1338,16 @@ class JointModel(nn.Module):
                 f"found {tuple(z_jepa.shape)}"
             )
         adapter = self.dfm_jepa_state_adapter
-        if not self.config.dfm_condition_on_current_jepa_state:
+        fusion_mode = getattr(
+            self.config,
+            "dfm_jepa_fusion_mode",
+            "none",
+        )
+        conditioning_active = (
+            self.config.dfm_condition_on_current_jepa_state
+            or fusion_mode != "none"
+        )
+        if not conditioning_active:
             if adapter is not None:
                 raise ValueError(
                     "Disabled DFM/JEPA conditioning unexpectedly has an "
@@ -1154,9 +1387,25 @@ class JointModel(nn.Module):
         residual_rms = torch.sqrt(
             residual.square().mean(dim=-1)
         )
-        latents = (
-            z_dfm.float() + residual.unsqueeze(1)
-        ).to(compute_dtype)
+        if fusion_mode == "normalized_add":
+            state_f32 = z_dfm.float()
+            normalized_state = state_f32 * torch.rsqrt(
+                state_f32.square().mean(dim=-1, keepdim=True) + 1e-6
+            )
+            normalized_residual = residual * torch.rsqrt(
+                residual.square().mean(dim=-1, keepdim=True) + 1e-6
+            )
+            latents = (
+                (
+                    normalized_state
+                    + normalized_residual.unsqueeze(1)
+                )
+                * (1.0 / math.sqrt(2.0))
+            ).to(compute_dtype)
+        else:
+            latents = (
+                z_dfm.float() + residual.unsqueeze(1)
+            ).to(compute_dtype)
         weight_rms = torch.sqrt(
             adapter.w.float().square().mean()
         )
@@ -1433,6 +1682,43 @@ def _proposal_from_root_logits(
     )
 
 
+def _closed_loop_proposal_actions(
+    logits: Tensor,
+    noisy_actions: Tensor,
+    is_masked: Tensor,
+    root_legal_mask: Tensor,
+) -> Tensor:
+    """Build a target-safe full-horizon proposal for JEPA feedback."""
+
+    if logits.ndim != 3:
+        raise ValueError("Closed-loop logits must have shape [batch, horizon, vocab]")
+    batch_size, horizon, vocab = logits.shape
+    if vocab != _VOCAB_SIZE:
+        raise ValueError("Closed-loop logits have the wrong vocabulary")
+    expected = (batch_size, horizon)
+    if noisy_actions.shape != expected or is_masked.shape != expected:
+        raise ValueError("Closed-loop action/mask shape mismatch")
+    if root_legal_mask.shape != (batch_size, vocab):
+        raise ValueError("Closed-loop root legality mask shape mismatch")
+    root_logits = torch.where(
+        root_legal_mask,
+        logits[:, 0].float(),
+        torch.full_like(logits[:, 0].float(), -torch.inf),
+    )
+    predictions = torch.cat(
+        (
+            root_logits.argmax(dim=-1, keepdim=True),
+            logits[:, 1:].float().argmax(dim=-1),
+        ),
+        dim=1,
+    )
+    return torch.where(
+        is_masked,
+        predictions,
+        noisy_actions.long(),
+    ).detach()
+
+
 def _validate_torch_refinement_passes(
     config: Any,
     refinement_passes: int,
@@ -1490,14 +1776,19 @@ def _torch_refine_dfm_actions(
         "none",
     )
     feedback_active = feedback_mode == "final_pass_adjoint"
-    if feedback_active and (
+    closed_loop_active = (
+        getattr(model.config, "dfm_closed_loop_mode", "none")
+        == "predicted_jepa_tokens"
+    )
+    if (feedback_active or closed_loop_active) and (
         z_jepa is None
         or z_jepa.shape != (batch_size, model.config.z_dim)
     ):
         raise ValueError(
-            "final_pass_adjoint inference requires current JEPA state"
+            "JEPA-coupled DFM inference requires current JEPA state"
         )
     planner_latents = z_dfm
+    jepa_action_context: Tensor | None = None
     action_tokens = torch.full(
         (batch_size, horizon),
         _MASK_TOKEN,
@@ -1511,14 +1802,26 @@ def _torch_refine_dfm_actions(
             dtype=torch.float32,
             device=z_dfm.device,
         )
-        capture_hidden = feedback_active and pass_index == 6
+        capture_legacy_hidden = feedback_active and pass_index == 6
+        capture_closed_loop_hidden = (
+            closed_loop_active
+            and pass_index + 1 < refinement_passes
+        )
+        capture_hidden = (
+            capture_legacy_hidden or capture_closed_loop_hidden
+        )
+        planner_kwargs: dict[str, Any] = {
+            "base_root_logits": base_root_logits,
+            "return_hidden": capture_hidden,
+        }
+        if jepa_action_context is not None:
+            planner_kwargs["jepa_action_context"] = jepa_action_context
         planner_result = model.planner(
             planner_latents,
             action_tokens,
             t,
             compute_dtype,
-            base_root_logits=base_root_logits,
-            return_hidden=capture_hidden,
+            **planner_kwargs,
         )
         if capture_hidden:
             assert isinstance(planner_result, tuple)
@@ -1569,7 +1872,7 @@ def _torch_refine_dfm_actions(
             predictions,
             action_tokens,
         )
-        if capture_hidden:
+        if capture_legacy_hidden:
             assert action_hidden is not None
             assert z_jepa is not None
             proposal = _proposal_from_root_logits(
@@ -1595,6 +1898,24 @@ def _torch_refine_dfm_actions(
                 proposal.feedback_gate,
                 compute_dtype,
             ).latents
+        elif capture_closed_loop_hidden:
+            assert action_hidden is not None
+            assert z_jepa is not None
+            proposal_actions = torch.where(
+                action_tokens == _MASK_TOKEN,
+                predictions,
+                action_tokens,
+            ).detach()
+            predicted_states = model.jepa_rollout(
+                z_jepa,
+                proposal_actions,
+                action_hidden,
+                compute_dtype,
+            )
+            jepa_action_context = model.jepa_rollout_action_context(
+                predicted_states,
+                compute_dtype,
+            )
     if bool(torch.any(action_tokens == _MASK_TOKEN)):
         raise RuntimeError(
             "Refinement passes did not unmask every action position"
@@ -1805,23 +2126,36 @@ class TorchHeroArenaPolicy:
             )
             if self.model.encoder.policy_head is None:
                 raise RuntimeError("Torch hero arena model has no policy head")
-            base_root_logits = self.model.encoder.policy_head(
+            base_policy_logits, policy_features = self.model.policy_outputs(
                 tokens,
                 torch.bfloat16,
             )
+            assert base_policy_logits is not None
+            root_policy_logits = (
+                base_policy_logits
+                if base_policy_logits.ndim == 2
+                else base_policy_logits[:, 0]
+            )
             if self.policy_mode in {"policy_only", "raw_bt4"}:
-                if not bool(torch.all(torch.isfinite(base_root_logits.float()))):
+                if not bool(torch.all(torch.isfinite(root_policy_logits.float()))):
                     raise FloatingPointError(
                         f"{self.policy_mode} arena logits are non-finite"
                     )
                 selected = torch.where(
                     legal_tensor,
-                    base_root_logits.float(),
-                    torch.full_like(base_root_logits.float(), -torch.inf),
+                    root_policy_logits.float(),
+                    torch.full_like(root_policy_logits.float(), -torch.inf),
                 ).argmax(dim=-1)
             else:
+                dfm_source = tokens
+                if self.model.config.dfm_state_source == "policy_prelogit":
+                    if policy_features is None:
+                        raise RuntimeError(
+                            "Policy-prelogit Arena path has no features"
+                        )
+                    dfm_source = policy_features
                 z_dfm = self.model.dfm_state_projector(
-                    tokens,
+                    dfm_source,
                     torch.bfloat16,
                 )
                 z_jepa = (
@@ -1831,6 +2165,10 @@ class TorchHeroArenaPolicy:
                         == "final_pass_adjoint"
                         or self.model.config
                         .dfm_condition_on_current_jepa_state
+                        or self.model.config.dfm_jepa_fusion_mode
+                        != "none"
+                        or self.model.config.dfm_closed_loop_mode
+                        != "none"
                     )
                     else None
                 )
@@ -1842,7 +2180,7 @@ class TorchHeroArenaPolicy:
                 selected = _torch_refine_dfm_actions(
                     self.model,
                     z_dfm,
-                    base_root_logits,
+                    base_policy_logits,
                     legal_tensor,
                     refinement_passes=self.refinement_passes,
                     compute_dtype=torch.bfloat16,
@@ -1963,6 +2301,55 @@ def _uniform_horizon_mean(values: Tensor, weight: Tensor) -> Tensor:
     return (means * active).sum() / active.sum().clamp_min(1.0)
 
 
+def _prepare_wdl_supervision(
+    predicted_states: Tensor,
+    current_state: Tensor,
+    raw_future_targets: Tensor,
+    valid: Tensor,
+    future_valid: Tensor,
+    *,
+    include_current_state: bool,
+) -> tuple[Tensor, Tensor, Tensor]:
+    """Build parity-correct shared WDL-head inputs, targets, and weights."""
+
+    if predicted_states.ndim != 3:
+        raise ValueError(
+            "Predicted WDL states must have shape [batch, horizon, dim]"
+        )
+    batch_size, horizon, state_dim = predicted_states.shape
+    if current_state.shape != (batch_size, state_dim):
+        raise ValueError("Current WDL state has the wrong shape")
+    if raw_future_targets.shape != (batch_size, horizon, 3):
+        raise ValueError("Future WDL targets have the wrong shape")
+    if valid.shape != (batch_size,):
+        raise ValueError("WDL example validity has the wrong shape")
+    if future_valid.shape != (batch_size, horizon):
+        raise ValueError("WDL future validity has the wrong shape")
+
+    states = predicted_states
+    raw_targets = raw_future_targets.float()
+    state_valid = future_valid.float()
+    if include_current_state:
+        # Stored labels use the side to move *after* each played action.
+        # Moving back across H1 swaps win and loss while preserving draw.
+        current_targets = torch.flip(raw_targets[:, :1], dims=(-1,))
+        states = torch.cat((current_state.unsqueeze(1), states), dim=1)
+        raw_targets = torch.cat((current_targets, raw_targets), dim=1)
+        state_valid = torch.cat(
+            (future_valid[:, :1].float(), state_valid),
+            dim=1,
+        )
+
+    target_sum = raw_targets.sum(dim=-1, keepdim=True)
+    targets = raw_targets / target_sum.clamp_min(1e-12)
+    weight = (
+        valid.float().unsqueeze(1)
+        * state_valid
+        * (target_sum[..., 0] > 0).float()
+    )
+    return states, targets, weight
+
+
 def _sigreg_v_stat(
     z: Tensor,
     sample_weight: Tensor,
@@ -2036,9 +2423,13 @@ def loss_and_aux(
             f"Unsupported jepa_feedback_mode: {feedback_mode!r}"
         )
     feedback_active = feedback_mode == "final_pass_adjoint"
+    closed_loop_active = (
+        config.dfm_closed_loop_mode == "predicted_jepa_tokens"
+    )
     preliminary_logits: Tensor | None = None
     feedback_result: JepaFeedbackResult | None = None
     root_proposal: RootProposal | None = None
+    closed_loop_context: Tensor | None = None
     with _profile_scope(profile_regions, "region::dfm_noisy_planner"):
         noisy_result = model.planner(
             z_dfm,
@@ -2046,7 +2437,7 @@ def loss_and_aux(
             t,
             compute_dtype,
             base_root_logits=base_policy_logits,
-            return_hidden=feedback_active,
+            return_hidden=(feedback_active or closed_loop_active),
         )
     if feedback_active:
         assert isinstance(noisy_result, tuple)
@@ -2094,6 +2485,49 @@ def loss_and_aux(
                 t,
                 compute_dtype,
                 base_root_logits=base_policy_logits,
+            )
+    elif closed_loop_active:
+        assert isinstance(noisy_result, tuple)
+        preliminary_logits, preliminary_hidden = noisy_result
+        with _profile_scope(
+            profile_regions,
+            "region::closed_loop_proposal",
+        ):
+            root_legal_mask = _root_legal_mask_from_indices(
+                batch["legal_idx"][:, 0],
+                batch["legal_count"][:, 0],
+            )
+            proposal_actions = _closed_loop_proposal_actions(
+                preliminary_logits,
+                noisy_actions,
+                is_masked,
+                root_legal_mask,
+            )
+        with _profile_scope(
+            profile_regions,
+            "region::closed_loop_jepa_rollout",
+        ):
+            proposal_pred_z = model.jepa_rollout(
+                z_jepa,
+                proposal_actions,
+                preliminary_hidden,
+                compute_dtype,
+            )
+            closed_loop_context = model.jepa_rollout_action_context(
+                proposal_pred_z,
+                compute_dtype,
+            )
+        with _profile_scope(
+            profile_regions,
+            "region::dfm_closed_loop_planner",
+        ):
+            logits = model.planner(
+                z_dfm,
+                noisy_actions,
+                t,
+                compute_dtype,
+                base_root_logits=base_policy_logits,
+                jepa_action_context=closed_loop_context,
             )
     else:
         assert isinstance(noisy_result, Tensor)
@@ -2218,24 +2652,34 @@ def loss_and_aux(
     wdl_accuracy = torch.zeros_like(wdl_loss)
     wdl_expected_value_mse = torch.zeros_like(wdl_loss)
     wdl_valid_count = torch.zeros_like(wdl_loss)
+    wdl_current_loss = torch.zeros_like(wdl_loss)
+    wdl_current_accuracy = torch.zeros_like(wdl_loss)
     if config.wdl_coeff != 0.0:
         if "wdl_targets" not in batch:
             raise ValueError("Nonzero wdl_coeff requires per-horizon wdl_targets")
+        raw_wdl_targets = batch[
+            "wdl_targets"
+        ][:, : config.horizon].float()
+        wdl_states, wdl_targets, wdl_weight = (
+            _prepare_wdl_supervision(
+                pred_z,
+                z_jepa,
+                raw_wdl_targets,
+                valid,
+                future_valid,
+                include_current_state=config.wdl_include_current_state,
+            )
+        )
         with _profile_scope(profile_regions, "region::wdl_head"):
-            _, wdl_logits = model.value_wdl_head(pred_z, compute_dtype)
-        raw_wdl_targets = batch["wdl_targets"][:, : config.horizon].float()
-        if raw_wdl_targets.shape != wdl_logits.shape:
+            _, wdl_logits = model.value_wdl_head(
+                wdl_states,
+                compute_dtype,
+            )
+        if wdl_targets.shape != wdl_logits.shape:
             raise ValueError(
                 "wdl_targets must match predicted WDL logits: "
-                f"{tuple(raw_wdl_targets.shape)} != {tuple(wdl_logits.shape)}"
+                f"{tuple(wdl_targets.shape)} != {tuple(wdl_logits.shape)}"
             )
-        wdl_sum = raw_wdl_targets.sum(dim=-1, keepdim=True)
-        wdl_targets = raw_wdl_targets / wdl_sum.clamp_min(1e-12)
-        wdl_weight = (
-            valid.unsqueeze(1)
-            * future_valid
-            * (wdl_sum[..., 0] > 0).float()
-        )
         wdl_valid_count = wdl_weight.sum()
         wdl_log_probabilities = F.log_softmax(wdl_logits.float(), dim=-1)
         wdl_probabilities = wdl_log_probabilities.exp()
@@ -2251,6 +2695,18 @@ def loss_and_aux(
             (expected_value - target_value).square(),
             wdl_weight,
         )
+        if config.wdl_include_current_state:
+            wdl_current_loss = _weighted_mean(
+                sample_wdl_ce[:, 0],
+                wdl_weight[:, 0],
+            )
+            wdl_current_accuracy = _weighted_mean(
+                (
+                    wdl_logits[:, 0].argmax(dim=-1)
+                    == wdl_targets[:, 0].argmax(dim=-1)
+                ).float(),
+                wdl_weight[:, 0],
+            )
 
     if capture is not None:
         capture["loss_components"] = {
@@ -2317,6 +2773,8 @@ def loss_and_aux(
         "wdl_accuracy": wdl_accuracy.detach(),
         "wdl_expected_value_mse": wdl_expected_value_mse.detach(),
         "wdl_valid_count": wdl_valid_count.detach(),
+        "wdl_current_loss": wdl_current_loss.detach(),
+        "wdl_current_accuracy": wdl_current_accuracy.detach(),
         "accuracy": accuracy.detach(),
         "mask_prob": (1.0 - t).mean().detach(),
         "z_state_norm": z_all.float().norm(dim=-1).mean().detach(),
@@ -2367,6 +2825,22 @@ def loss_and_aux(
         "jepa_feedback_cap_fraction": (
             feedback_result.cap_fraction.detach()
             if feedback_result is not None
+            else feedback_zero
+        ),
+        "dfm_closed_loop_active": torch.as_tensor(
+            float(closed_loop_active),
+            device=actions.device,
+        ),
+        "dfm_closed_loop_context_rms": (
+            torch.sqrt(
+                closed_loop_context.float().square().mean()
+            ).detach()
+            if closed_loop_context is not None
+            else feedback_zero
+        ),
+        "dfm_closed_loop_dfm_ce_improvement": (
+            (feedback_preliminary_dfm_ce - dfm_ce).detach()
+            if closed_loop_active
             else feedback_zero
         ),
         "dfm_jepa_conditioning_rms": (
@@ -2491,10 +2965,9 @@ def full_horizon_evaluation_aux(
         compute_dtype=compute_dtype,
         remat=False,
     )
-    base_policy_logits = (
-        None
-        if model.encoder.policy_head is None
-        else model.encoder.policy_head(current_tokens, compute_dtype)
+    base_policy_logits, policy_features = model.policy_outputs(
+        current_tokens,
+        compute_dtype,
     )
     flat_future = future_planes.reshape(
         batch_size * horizon,
@@ -2510,7 +2983,14 @@ def full_horizon_evaluation_aux(
         all_tokens.reshape(batch_size * (horizon + 1), 64, 1024),
         compute_dtype,
     ).reshape(batch_size, horizon + 1, config.z_dim)
-    z_dfm = model.dfm_state_projector(current_tokens, compute_dtype)
+    dfm_source = current_tokens
+    if config.dfm_state_source == "policy_prelogit":
+        if policy_features is None:
+            raise ValueError(
+                "Policy-prelogit validation requires policy features"
+            )
+        dfm_source = policy_features
+    z_dfm = model.dfm_state_projector(dfm_source, compute_dtype)
     current_z = z_all[:, 0]
     target_z = z_all[:, 1:]
     dfm_conditioning = model.condition_dfm_latents(
@@ -2528,17 +3008,21 @@ def full_horizon_evaluation_aux(
             f"Unsupported jepa_feedback_mode: {feedback_mode!r}"
         )
     feedback_active = feedback_mode == "final_pass_adjoint"
+    closed_loop_active = (
+        config.dfm_closed_loop_mode == "predicted_jepa_tokens"
+    )
     planner_result = model.planner(
         z_dfm,
         noisy_actions,
         t,
         compute_dtype,
         base_root_logits=base_policy_logits,
-        return_hidden=feedback_active,
+        return_hidden=(feedback_active or closed_loop_active),
     )
     preliminary_logits: Tensor | None = None
     feedback_result: JepaFeedbackResult | None = None
     root_proposal: RootProposal | None = None
+    closed_loop_context: Tensor | None = None
     if feedback_active:
         assert isinstance(planner_result, tuple)
         preliminary_logits, preliminary_hidden = planner_result
@@ -2578,6 +3062,37 @@ def full_horizon_evaluation_aux(
             t,
             compute_dtype,
             base_root_logits=base_policy_logits,
+        )
+    elif closed_loop_active:
+        assert isinstance(planner_result, tuple)
+        preliminary_logits, preliminary_hidden = planner_result
+        root_legal_mask = _root_legal_mask_from_indices(
+            batch["legal_idx"][:, 0],
+            batch["legal_count"][:, 0],
+        )
+        proposal_actions = _closed_loop_proposal_actions(
+            preliminary_logits,
+            noisy_actions,
+            torch.ones_like(noisy_actions, dtype=torch.bool),
+            root_legal_mask,
+        )
+        proposal_pred_z = model.jepa_rollout(
+            current_z,
+            proposal_actions,
+            preliminary_hidden,
+            compute_dtype,
+        )
+        closed_loop_context = model.jepa_rollout_action_context(
+            proposal_pred_z,
+            compute_dtype,
+        )
+        logits = model.planner(
+            z_dfm,
+            noisy_actions,
+            t,
+            compute_dtype,
+            base_root_logits=base_policy_logits,
+            jepa_action_context=closed_loop_context,
         )
     else:
         assert isinstance(planner_result, Tensor)
@@ -2729,23 +3244,31 @@ def full_horizon_evaluation_aux(
     wdl_entropy = torch.zeros_like(wdl_loss)
     wdl_ece_15 = torch.zeros_like(wdl_loss)
     wdl_valid_count = torch.zeros_like(wdl_loss)
+    wdl_current_loss = torch.zeros_like(wdl_loss)
+    wdl_current_accuracy = torch.zeros_like(wdl_loss)
     if config.wdl_coeff != 0.0:
         if "wdl_targets" not in batch:
             raise ValueError("Nonzero wdl_coeff requires per-horizon wdl_targets")
-        _, wdl_logits = model.value_wdl_head(pred_z, compute_dtype)
         raw_wdl_targets = batch["wdl_targets"][:, : config.horizon].float()
-        if raw_wdl_targets.shape != wdl_logits.shape:
+        wdl_states, wdl_targets, wdl_weight = (
+            _prepare_wdl_supervision(
+                pred_z,
+                current_z,
+                raw_wdl_targets,
+                valid,
+                future_valid,
+                include_current_state=config.wdl_include_current_state,
+            )
+        )
+        _, wdl_logits = model.value_wdl_head(
+            wdl_states,
+            compute_dtype,
+        )
+        if wdl_targets.shape != wdl_logits.shape:
             raise ValueError(
                 "wdl_targets must match predicted WDL logits: "
-                f"{tuple(raw_wdl_targets.shape)} != {tuple(wdl_logits.shape)}"
+                f"{tuple(wdl_targets.shape)} != {tuple(wdl_logits.shape)}"
             )
-        wdl_sum = raw_wdl_targets.sum(dim=-1, keepdim=True)
-        wdl_targets = raw_wdl_targets / wdl_sum.clamp_min(1e-12)
-        wdl_weight = (
-            valid.unsqueeze(1)
-            * future_valid
-            * (wdl_sum[..., 0] > 0).float()
-        )
         wdl_valid_count = wdl_weight.sum()
         wdl_log_probabilities = F.log_softmax(wdl_logits.float(), dim=-1)
         wdl_probabilities = wdl_log_probabilities.exp()
@@ -2796,6 +3319,18 @@ def full_horizon_evaluation_aux(
                 bin_accuracy - bin_confidence
             )
         wdl_ece_15 = calibration_error_sum / wdl_valid_count.clamp_min(1.0)
+        if config.wdl_include_current_state:
+            wdl_current_loss = _weighted_mean(
+                sample_wdl_ce[:, 0],
+                wdl_weight[:, 0],
+            )
+            wdl_current_accuracy = _weighted_mean(
+                (
+                    wdl_logits[:, 0].argmax(dim=-1)
+                    == wdl_targets[:, 0].argmax(dim=-1)
+                ).float(),
+                wdl_weight[:, 0],
+            )
 
     unclipped = (
         config.dfm_ce_coeff * dfm_ce
@@ -2927,6 +3462,22 @@ def full_horizon_evaluation_aux(
             if feedback_result is not None
             else feedback_zero
         ),
+        "dfm_closed_loop_active": torch.as_tensor(
+            float(closed_loop_active),
+            device=actions.device,
+        ),
+        "dfm_closed_loop_context_rms": (
+            torch.sqrt(
+                closed_loop_context.float().square().mean()
+            )
+            if closed_loop_context is not None
+            else feedback_zero
+        ),
+        "dfm_closed_loop_dfm_ce_improvement": (
+            feedback_preliminary_dfm_ce - dfm_ce
+            if closed_loop_active
+            else feedback_zero
+        ),
         "dfm_jepa_conditioning_rms": (
             dfm_conditioning.residual_rms.mean()
         ),
@@ -2962,6 +3513,8 @@ def full_horizon_evaluation_aux(
         "wdl_entropy": wdl_entropy,
         "wdl_ece_15": wdl_ece_15,
         "wdl_valid_count": wdl_valid_count,
+        "wdl_current_loss": wdl_current_loss,
+        "wdl_current_accuracy": wdl_current_accuracy,
         "accuracy": accuracy,
         "mask_prob": torch.ones((), device=actions.device),
         "z_state_norm": z_all.float().norm(dim=-1).mean(),
@@ -3639,19 +4192,39 @@ def bind_raw_bt4(
         copy(layer.smolgen.ln2.bias, smolgen["ln2_bias"], f"{prefix}.smolgen.ln2.bias")
         copy(layer.smolgen.shared_w, mapped["smolgen_w"], f"{prefix}.smolgen.shared_w")
 
-    policy = model.encoder.policy_head
     source_policy = mapped["policy"]
-    copy(policy.dense1.w, source_policy["dense1_w"], "encoder.policy_head.dense1.w")
-    copy(policy.dense1.b, source_policy["dense1_b"], "encoder.policy_head.dense1.b")
-    copy(policy.q.w, source_policy["q_w"], "encoder.policy_head.q.w")
-    copy(policy.q.b, source_policy["q_b"], "encoder.policy_head.q.b")
-    copy(policy.k.w, source_policy["k_w"], "encoder.policy_head.k.w")
-    copy(policy.k.b, source_policy["k_b"], "encoder.policy_head.k.b")
-    copy(policy.prom_w, source_policy["prom_w"], "encoder.policy_head.prom_w")
-    np.testing.assert_array_equal(
-        policy.mapping_table.cpu().numpy(),
-        np.asarray(mapped["mapping_table"], dtype=np.int64),
-    )
+
+    def bind_policy(policy: BT4PolicyHead, prefix: str) -> None:
+        copy(
+            policy.dense1.w,
+            source_policy["dense1_w"],
+            f"{prefix}.dense1.w",
+        )
+        copy(
+            policy.dense1.b,
+            source_policy["dense1_b"],
+            f"{prefix}.dense1.b",
+        )
+        copy(policy.q.w, source_policy["q_w"], f"{prefix}.q.w")
+        copy(policy.q.b, source_policy["q_b"], f"{prefix}.q.b")
+        copy(policy.k.w, source_policy["k_w"], f"{prefix}.k.w")
+        copy(policy.k.b, source_policy["k_b"], f"{prefix}.k.b")
+        copy(policy.prom_w, source_policy["prom_w"], f"{prefix}.prom_w")
+        np.testing.assert_array_equal(
+            policy.mapping_table.cpu().numpy(),
+            np.asarray(mapped["mapping_table"], dtype=np.int64),
+        )
+
+    policy = model.encoder.policy_head
+    assert policy is not None
+    bind_policy(policy, "encoder.policy_head")
+    for index, future_policy in enumerate(
+        model.encoder.future_policy_heads
+    ):
+        bind_policy(
+            future_policy,
+            f"encoder.future_policy_heads.{index}",
+        )
 
     combined = hashlib.sha256()
     for record in records:
@@ -3673,27 +4246,66 @@ def initialize_fresh_modules(model: JointModel, *, seed: int) -> dict[str, Any]:
     generator.manual_seed(int(seed))
     initialized: list[str] = []
 
-    def fill_normal(parameter: nn.Parameter, standard_deviation: float) -> None:
+    def fill_normal(
+        parameter: nn.Parameter,
+        standard_deviation: float,
+        *,
+        rng: torch.Generator = generator,
+    ) -> None:
         value = torch.randn(
             tuple(parameter.shape),
-            generator=generator,
+            generator=rng,
             device="cpu",
             dtype=torch.float32,
         )
         value.mul_(float(standard_deviation))
         parameter.copy_(value.to(parameter.dtype))
 
+    def fill_optional_parameter(
+        name: str,
+        parameter: nn.Parameter,
+        standard_deviation: float,
+    ) -> None:
+        # Optional experiment-only leaves must not advance the accepted
+        # Hero initializer stream for parameters shared with the control.
+        digest = hashlib.sha256(
+            f"{int(seed)}:{name}".encode("utf-8")
+        ).digest()
+        optional_generator = torch.Generator(device="cpu")
+        optional_generator.manual_seed(
+            int.from_bytes(digest[:8], "little") % (2**63 - 1)
+        )
+        fill_normal(
+            parameter,
+            standard_deviation,
+            rng=optional_generator,
+        )
+
     with torch.no_grad():
         for name, parameter in model.named_parameters():
             if name.startswith("encoder."):
                 continue
             leaf = name.rsplit(".", 1)[-1]
-            if name in {
+            model_config = getattr(model, "config", None)
+            legacy_zero_bridge = (
+                model_config is None
+                or bool(
+                    getattr(
+                        model_config,
+                        "dfm_condition_on_current_jepa_state",
+                        False,
+                    )
+                )
+            )
+            zero_initialized = name in {
                 "out_proj",
                 "out_bias",
                 "state_projector.cls",
-                "dfm_jepa_state_adapter.w",
-            }:
+            } or (
+                name == "dfm_jepa_state_adapter.w"
+                and legacy_zero_bridge
+            )
+            if zero_initialized:
                 parameter.zero_()
             elif name.startswith("jepa_transition.cond_"):
                 parameter.zero_()
@@ -3721,6 +4333,15 @@ def initialize_fresh_modules(model: JointModel, *, seed: int) -> dict[str, Any]:
                 fill_normal(parameter, 1.0 / math.sqrt(parameter.shape[-1]))
             elif name == "jepa_transition.w_down":
                 fill_normal(parameter, 1e-3 / math.sqrt(parameter.shape[-2]))
+            elif name in {
+                "dfm_jepa_state_adapter.w",
+                "dfm_jepa_rollout_adapter.w",
+            }:
+                fill_optional_parameter(
+                    name,
+                    parameter,
+                    1.0 / math.sqrt(parameter.shape[-2]),
+                )
             elif parameter.ndim >= 2:
                 fill_normal(parameter, 1.0 / math.sqrt(parameter.shape[-2]))
             else:
@@ -5595,6 +6216,41 @@ def _apply_hero_dfm_jepa_conditioning_override(
     )
 
 
+def _apply_hero_architecture_overrides(
+    config: Config,
+    *,
+    recipe: str,
+    policy_passthrough_mode: str | None,
+    dfm_state_source: str | None,
+    dfm_jepa_fusion_mode: str | None,
+    wdl_include_current_state: bool | None,
+    dfm_closed_loop_mode: str | None,
+) -> Config:
+    """Resolve the matched post-Hero architecture-suite overrides."""
+
+    requested = {
+        "policy_passthrough_mode": policy_passthrough_mode,
+        "dfm_state_source": dfm_state_source,
+        "dfm_jepa_fusion_mode": dfm_jepa_fusion_mode,
+        "wdl_include_current_state": wdl_include_current_state,
+        "dfm_closed_loop_mode": dfm_closed_loop_mode,
+    }
+    if all(value is None for value in requested.values()):
+        return config
+    if recipe != "hero":
+        raise ValueError(
+            "Post-Hero architecture overrides require recipe='hero'"
+        )
+    replacements = {
+        name: value
+        for name, value in requested.items()
+        if value is not None
+    }
+    resolved = dataclasses.replace(config, **replacements)
+    _validate_hero_architecture_config(resolved)
+    return resolved
+
+
 def train(args: argparse.Namespace) -> int:
     config = HERO_CONFIG if args.recipe == "hero" else CONFIG
     config = _apply_sigreg_sample_override(
@@ -5622,6 +6278,31 @@ def train(args: argparse.Namespace) -> int:
         enabled=getattr(
             args,
             "dfm_condition_on_current_jepa_state",
+            None,
+        ),
+    )
+    config = _apply_hero_architecture_overrides(
+        config,
+        recipe=args.recipe,
+        policy_passthrough_mode=getattr(
+            args,
+            "policy_passthrough_mode",
+            None,
+        ),
+        dfm_state_source=getattr(args, "dfm_state_source", None),
+        dfm_jepa_fusion_mode=getattr(
+            args,
+            "dfm_jepa_fusion_mode",
+            None,
+        ),
+        wdl_include_current_state=getattr(
+            args,
+            "wdl_include_current_state",
+            None,
+        ),
+        dfm_closed_loop_mode=getattr(
+            args,
+            "dfm_closed_loop_mode",
             None,
         ),
     )
@@ -8999,6 +9680,31 @@ def evaluate_hero_pool(args: argparse.Namespace) -> int:
             None,
         ),
     )
+    evaluation_config = _apply_hero_architecture_overrides(
+        evaluation_config,
+        recipe="hero",
+        policy_passthrough_mode=getattr(
+            args,
+            "policy_passthrough_mode",
+            None,
+        ),
+        dfm_state_source=getattr(args, "dfm_state_source", None),
+        dfm_jepa_fusion_mode=getattr(
+            args,
+            "dfm_jepa_fusion_mode",
+            None,
+        ),
+        wdl_include_current_state=getattr(
+            args,
+            "wdl_include_current_state",
+            None,
+        ),
+        dfm_closed_loop_mode=getattr(
+            args,
+            "dfm_closed_loop_mode",
+            None,
+        ),
+    )
     model, initialization = load_raw_bt4_hero_model(
         device=device,
         raw_bt4_path=args.raw_bt4_path,
@@ -9593,6 +10299,32 @@ def build_parser() -> argparse.ArgumentParser:
             "conditioning bridge in the DFM policy."
         ),
     )
+    train_parser.add_argument(
+        "--dfm-jepa-fusion-mode",
+        choices=("none", "normalized_add"),
+        help="Select the fresh equal-scale current-JEPA/DFM fusion arm.",
+    )
+    train_parser.add_argument(
+        "--policy-passthrough-mode",
+        choices=("root_only", "all_horizon_heads"),
+        help="Select root-only or cloned all-horizon BT4 policy passthrough.",
+    )
+    train_parser.add_argument(
+        "--dfm-state-source",
+        choices=("trunk", "policy_prelogit"),
+        help="Feed trunk tokens or pretrained policy-prelogit features to DFM.",
+    )
+    train_parser.add_argument(
+        "--wdl-include-current-state",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Include parity-correct current JEPA state in the shared WDL loss.",
+    )
+    train_parser.add_argument(
+        "--dfm-closed-loop-mode",
+        choices=("none", "predicted_jepa_tokens"),
+        help="Feed proposal-conditioned predicted JEPA states back to DFM slots.",
+    )
     train_parser.add_argument("--steps", type=int, default=1)
     train_parser.add_argument("--train-seconds", type=float, default=0.0)
     train_parser.add_argument("--data-start", type=int, default=0)
@@ -9759,6 +10491,27 @@ def build_parser() -> argparse.ArgumentParser:
             "Evaluate a checkpoint with its active current-JEPA-state DFM "
             "conditioning bridge."
         ),
+    )
+    hero_evaluate_parser.add_argument(
+        "--dfm-jepa-fusion-mode",
+        choices=("none", "normalized_add"),
+    )
+    hero_evaluate_parser.add_argument(
+        "--policy-passthrough-mode",
+        choices=("root_only", "all_horizon_heads"),
+    )
+    hero_evaluate_parser.add_argument(
+        "--dfm-state-source",
+        choices=("trunk", "policy_prelogit"),
+    )
+    hero_evaluate_parser.add_argument(
+        "--wdl-include-current-state",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+    )
+    hero_evaluate_parser.add_argument(
+        "--dfm-closed-loop-mode",
+        choices=("none", "predicted_jepa_tokens"),
     )
     hero_evaluate_parser.add_argument("--output-dir", type=Path, required=True)
     hero_evaluate_parser.add_argument("--eval-batch-size", type=int, default=64)

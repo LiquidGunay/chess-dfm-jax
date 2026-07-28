@@ -816,3 +816,24 @@ Reject a run if:
 
 Prefer simple changes whose effects can be explained. Record surprises and
 negative results; they are part of the research output.
+
+## Active post-Hero suite (2026-07-28)
+
+The next bounded campaign is the five-arm fresh-initialization architecture
+suite preregistered in
+`research/experiment_post_hero_architecture_suite.md`: all-horizon cloned
+policy-logit passthrough, equal-scale current-JEPA fusion, current-state WDL,
+predicted-JEPA closed-loop feedback, and BT4 policy-prelogit feature
+passthrough. Each arm receives exactly 1,048,576 examples under the Hero loss
+and schedule, retains one terminal checkpoint, and is compared in a frozen
+Arena containing the retained Hero-1024 checkpoint. GPU smokes select a
+common feasible physical batch before any candidate training starts; fixed
+count-64 SIGReg and its coefficients do not change with that batch.
+
+The primary comparison is a one-pass six-model round robin. Because the
+retained Hero is strongest at one pass but the closed-loop arm needs at least
+two calls to consume a predicted state, every candidate also receives a
+predeclared eight-pass-versus-own-one-pass refinement diagnostic. This suite
+temporarily supersedes the ordinary single-candidate 30-minute loop; do not
+delete its terminal checkpoints until the complete validation and Arena
+analysis is sealed.

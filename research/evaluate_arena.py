@@ -106,6 +106,8 @@ def _descriptor_uses_jepa_at_inference(
             "dfm_condition_on_current_jepa_state",
             False,
         )
+        or model_config.get("dfm_jepa_fusion_mode", "none") != "none"
+        or model_config.get("dfm_closed_loop_mode", "none") != "none"
     )
 
 

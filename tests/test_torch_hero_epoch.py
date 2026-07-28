@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import dataclasses
 import math
+from types import SimpleNamespace
 
 import chess
 import numpy as np
@@ -23,20 +24,24 @@ from research.train_torch import (
     StateProjector,
     TorchHeroArenaPolicy,
     _analyze_lr_range_records,
+    _apply_hero_architecture_overrides,
     _apply_hero_dfm_jepa_conditioning_override,
     _apply_hero_feedback_override,
     _apply_hero_wdl_override,
     _apply_sigreg_sample_override,
     _canonicalize_trajectory_batch_reference,
+    _closed_loop_proposal_actions,
     _hero_milestone_update,
     _latent_spectrum_metrics,
     _normalize_frozen_indices,
     _polarized_gradient_cosines,
+    _prepare_wdl_supervision,
     _proposal_from_root_logits,
     _root_legal_mask_from_indices,
     _shared_sigreg_gradient_projection,
     _sigreg_v_stat,
     _torch_refine_dfm_actions,
+    _validate_hero_architecture_config,
     build_parser,
     canonicalize_trajectory_batch,
     initialize_fresh_modules,
@@ -415,6 +420,162 @@ def test_dfm_jepa_conditioning_cli_is_explicit_for_train_and_evaluation():
     assert eval_args.dfm_condition_on_current_jepa_state is True
 
 
+def test_post_hero_architecture_overrides_are_explicit_and_validated():
+    candidate = _apply_hero_architecture_overrides(
+        HERO_CONFIG,
+        recipe="hero",
+        policy_passthrough_mode="all_horizon_heads",
+        dfm_state_source="policy_prelogit",
+        dfm_jepa_fusion_mode=None,
+        wdl_include_current_state=True,
+        dfm_closed_loop_mode=None,
+    )
+    assert candidate.policy_passthrough_mode == "all_horizon_heads"
+    assert candidate.dfm_state_source == "policy_prelogit"
+    assert candidate.wdl_include_current_state is True
+    assert HERO_CONFIG.policy_passthrough_mode == "root_only"
+
+    with pytest.raises(ValueError, match="recipe='hero'"):
+        _apply_hero_architecture_overrides(
+            HERO_CONFIG,
+            recipe="continuation",
+            policy_passthrough_mode="all_horizon_heads",
+            dfm_state_source=None,
+            dfm_jepa_fusion_mode=None,
+            wdl_include_current_state=None,
+            dfm_closed_loop_mode=None,
+        )
+    with pytest.raises(ValueError, match="mutually exclusive"):
+        _validate_hero_architecture_config(
+            dataclasses.replace(
+                HERO_CONFIG,
+                jepa_feedback_mode="final_pass_adjoint",
+                dfm_closed_loop_mode="predicted_jepa_tokens",
+            )
+        )
+
+
+class _ConstantPolicyHead(torch.nn.Module):
+    def __init__(self, value: float):
+        super().__init__()
+        self.value = value
+
+    def forward_with_features(self, current, compute_dtype):
+        batch_size = current.shape[0]
+        logits = torch.full(
+            (batch_size, 1858),
+            self.value,
+            dtype=compute_dtype,
+        )
+        return logits, current + 7.0
+
+    def forward(self, current, compute_dtype):
+        return torch.full(
+            (current.shape[0], 1858),
+            self.value,
+            dtype=compute_dtype,
+        )
+
+
+def test_all_horizon_policy_passthrough_materializes_independent_slots():
+    harness = SimpleNamespace(
+        config=SimpleNamespace(
+            horizon=3,
+            policy_passthrough_mode="all_horizon_heads",
+        ),
+        encoder=SimpleNamespace(
+            policy_head=_ConstantPolicyHead(1.0),
+            future_policy_heads=torch.nn.ModuleList(
+                (_ConstantPolicyHead(2.0), _ConstantPolicyHead(3.0))
+            ),
+        ),
+    )
+    current = torch.zeros((2, 64, 1024))
+    logits, features = JointModel.policy_outputs(
+        harness,
+        current,
+        torch.float32,
+    )
+
+    assert logits is not None
+    assert logits.shape == (2, 3, 1858)
+    torch.testing.assert_close(logits[:, :, 0], torch.tensor([[1.0, 2.0, 3.0]]).expand(2, -1))
+    torch.testing.assert_close(features, current + 7.0)
+
+
+class _EncodeSelectedEncoder:
+    def __init__(self, current: torch.Tensor, future: torch.Tensor):
+        self.current = current
+        self.future = future
+
+    def encode_current(self, planes, *, compute_dtype, remat):
+        del planes, compute_dtype, remat
+        return self.current
+
+    def encode_future_tail(
+        self,
+        planes,
+        *,
+        compute_dtype,
+        trainable_tail_layers,
+    ):
+        del planes, compute_dtype, trainable_tail_layers
+        return self.future
+
+
+class _ZeroStateProjector(torch.nn.Module):
+    def forward(self, tokens, compute_dtype):
+        del compute_dtype
+        return torch.zeros((tokens.shape[0], 4))
+
+
+class _CaptureDFMProjector(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.source = None
+
+    def forward(self, source, compute_dtype):
+        del compute_dtype
+        self.source = source
+        return torch.zeros((source.shape[0], 64, 2))
+
+
+def test_policy_prelogit_precursor_is_the_dfm_passthrough_source():
+    current = torch.zeros((2, 64, 1024))
+    future = torch.ones_like(current)
+    policy_features = torch.full_like(current, 11.0)
+    dfm_projector = _CaptureDFMProjector()
+    harness = SimpleNamespace(
+        config=SimpleNamespace(
+            remat_bt4_blocks=False,
+            remat_blocks=False,
+            future_trainable_tail_layers=1,
+            z_dim=4,
+            dfm_state_source="policy_prelogit",
+        ),
+        encoder=_EncodeSelectedEncoder(current, future),
+        state_projector=_ZeroStateProjector(),
+        dfm_state_projector=dfm_projector,
+        policy_outputs=lambda tokens, dtype: (
+            torch.zeros((tokens.shape[0], 1858), dtype=dtype),
+            policy_features,
+        ),
+        condition_dfm_latents=lambda z_dfm, z_jepa, dtype: SimpleNamespace(
+            latents=z_dfm,
+            residual_rms=torch.zeros(z_dfm.shape[0]),
+            state_rms=torch.zeros(z_dfm.shape[0]),
+            weight_rms=torch.tensor(0.0),
+        ),
+    )
+    JointModel.encode_selected(
+        harness,
+        torch.zeros((2, 112, 8, 8)),
+        torch.zeros((2, 112, 8, 8)),
+        torch.float32,
+    )
+    assert dfm_projector.source is policy_features
+
+
 class _DFMJepaConditioningHarness(torch.nn.Module):
     class _Config:
         token_dim = 2
@@ -493,6 +654,59 @@ def test_current_jepa_conditioning_is_zero_residual_then_learns():
     assert torch.count_nonzero(z_jepa.grad)
 
 
+class _NormalizedDFMJepaHarness(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.config = SimpleNamespace(
+            token_dim=2,
+            z_dim=4,
+            dfm_condition_on_current_jepa_state=False,
+            dfm_jepa_fusion_mode="normalized_add",
+        )
+        self.dfm_jepa_state_adapter = RawLinear(
+            4,
+            2,
+            dtype=torch.float32,
+            bias=False,
+        )
+
+
+def test_normalized_dfm_jepa_fusion_has_equal_scale_branches():
+    model = _NormalizedDFMJepaHarness()
+    with torch.no_grad():
+        model.dfm_jepa_state_adapter.w.copy_(
+            torch.tensor(
+                [
+                    [1.0, 0.0],
+                    [0.0, 1.0],
+                    [1.0, 1.0],
+                    [-1.0, 1.0],
+                ]
+            )
+        )
+    z_dfm = torch.randn(3, 64, 2, requires_grad=True)
+    z_jepa = torch.randn(3, 4, requires_grad=True)
+    result = JointModel.condition_dfm_latents(
+        model,
+        z_dfm,
+        z_jepa,
+        torch.float32,
+    )
+    residual = model.dfm_jepa_state_adapter(z_jepa, torch.float32)
+    normalized_residual = residual * torch.rsqrt(
+        residual.square().mean(dim=-1, keepdim=True) + 1e-6
+    )
+    expected = (
+        z_dfm
+        * torch.rsqrt(z_dfm.square().mean(dim=-1, keepdim=True) + 1e-6)
+        + normalized_residual.unsqueeze(1)
+    ) / math.sqrt(2.0)
+    torch.testing.assert_close(result.latents, expected)
+    result.latents.square().mean().backward()
+    assert z_dfm.grad is not None and torch.count_nonzero(z_dfm.grad)
+    assert z_jepa.grad is not None and torch.count_nonzero(z_jepa.grad)
+
+
 class _ConditioningInitializationHarness(torch.nn.Module):
     def __init__(self, *, enabled: bool):
         super().__init__()
@@ -517,6 +731,74 @@ def test_zero_bridge_does_not_perturb_shared_initialization_rng():
     torch.testing.assert_close(candidate.post.w, control.post.w)
     assert candidate.dfm_jepa_state_adapter is not None
     assert torch.count_nonzero(candidate.dfm_jepa_state_adapter.w) == 0
+
+
+class _OptionalAdapterInitializationHarness(torch.nn.Module):
+    def __init__(self, *, adapters: bool):
+        super().__init__()
+        self.encoder = torch.nn.Module()
+        self.config = SimpleNamespace(
+            dfm_condition_on_current_jepa_state=False,
+        )
+        self.pre = RawLinear(3, 3, dtype=torch.float32, bias=False)
+        self.dfm_jepa_state_adapter = (
+            RawLinear(4, 2, dtype=torch.float32, bias=False)
+            if adapters
+            else None
+        )
+        self.dfm_jepa_rollout_adapter = (
+            RawLinear(4, 2, dtype=torch.float32, bias=False)
+            if adapters
+            else None
+        )
+        self.post = RawLinear(3, 3, dtype=torch.float32, bias=False)
+
+
+def test_optional_adapters_preserve_shared_hero_initialization_stream():
+    control = _OptionalAdapterInitializationHarness(adapters=False)
+    candidate = _OptionalAdapterInitializationHarness(adapters=True)
+
+    initialize_fresh_modules(control, seed=23)
+    initialize_fresh_modules(candidate, seed=23)
+
+    torch.testing.assert_close(candidate.pre.w, control.pre.w)
+    torch.testing.assert_close(candidate.post.w, control.post.w)
+    assert candidate.dfm_jepa_state_adapter is not None
+    assert candidate.dfm_jepa_rollout_adapter is not None
+    assert torch.count_nonzero(candidate.dfm_jepa_state_adapter.w)
+    assert torch.count_nonzero(candidate.dfm_jepa_rollout_adapter.w)
+
+
+def test_current_wdl_supervision_swaps_win_loss_and_keeps_scale():
+    predicted = torch.randn(2, 2, 4)
+    current = torch.randn(2, 4)
+    raw = torch.tensor(
+        [
+            [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]],
+            [[0.0, 0.0, 1.0], [1.0, 0.0, 0.0]],
+        ]
+    )
+    valid = torch.ones(2)
+    future_valid = torch.tensor([[1.0, 1.0], [1.0, 0.0]])
+
+    states, targets, weight = _prepare_wdl_supervision(
+        predicted,
+        current,
+        raw,
+        valid,
+        future_valid,
+        include_current_state=True,
+    )
+    assert states.shape == (2, 3, 4)
+    torch.testing.assert_close(states[:, 0], current)
+    torch.testing.assert_close(
+        targets[:, 0],
+        torch.tensor([[0.0, 0.0, 1.0], [1.0, 0.0, 0.0]]),
+    )
+    torch.testing.assert_close(
+        weight,
+        torch.tensor([[1.0, 1.0, 1.0], [1.0, 1.0, 0.0]]),
+    )
 
 
 def test_root_proposal_is_legal_target_independent_and_fail_closed():
@@ -561,6 +843,29 @@ def test_root_proposal_is_legal_target_independent_and_fail_closed():
         torch.tensor([False, False]),
     )
     assert invalid.feedback_gate.tolist() == [0.0, 0.0]
+
+
+def test_closed_loop_proposal_is_legal_and_preserves_visible_targets():
+    logits = torch.full((1, 3, 1858), -10.0)
+    logits[0, 0, 100] = 50.0
+    logits[0, 0, 3] = 2.0
+    logits[0, 0, 5] = 3.0
+    logits[0, 1, 99] = 9.0
+    logits[0, 2, 77] = 8.0
+    legal = torch.zeros((1, 1858), dtype=torch.bool)
+    legal[:, 3] = True
+    legal[:, 5] = True
+    proposal = _closed_loop_proposal_actions(
+        logits,
+        torch.tensor([[1858, 42, 1858]]),
+        torch.tensor([[True, False, True]]),
+        legal,
+    )
+    torch.testing.assert_close(
+        proposal,
+        torch.tensor([[5, 42, 77]]),
+    )
+    assert not proposal.requires_grad
 
 
 class _FeedbackHarness(torch.nn.Module):
@@ -876,6 +1181,92 @@ def test_torch_dfm_feedback_changes_only_pass_eight():
     torch.testing.assert_close(
         model.planner_latents[7],
         z_dfm + 2.0,
+    )
+    torch.testing.assert_close(selected, torch.full((2,), 5))
+
+
+class _ClosedLoopArenaPlanner:
+    class _Config:
+        horizon = 8
+        token_dim = 256
+        z_dim = 4
+        action_codec = "lc0_canonical_1858"
+        jepa_feedback_mode = "none"
+        dfm_closed_loop_mode = "predicted_jepa_tokens"
+
+    def __init__(self):
+        self.config = self._Config()
+        self.contexts = []
+        self.rollout_calls = 0
+
+    def planner(
+        self,
+        z_dfm,
+        action_tokens,
+        t,
+        compute_dtype,
+        *,
+        base_root_logits,
+        jepa_action_context=None,
+        return_hidden=False,
+    ):
+        del action_tokens, t, compute_dtype, base_root_logits
+        self.contexts.append(
+            None
+            if jepa_action_context is None
+            else jepa_action_context.detach().clone()
+        )
+        batch_size = z_dfm.shape[0]
+        logits = torch.full((batch_size, 8, 1858), -8.0)
+        logits[:, 0, 5] = 4.0
+        for horizon in range(1, 8):
+            logits[:, horizon, 10 + horizon] = 3.0 + horizon
+        if return_hidden:
+            hidden = torch.ones((batch_size, 8, 256))
+            return logits, hidden
+        return logits
+
+    def jepa_rollout(
+        self,
+        z0,
+        actions,
+        action_hidden,
+        compute_dtype,
+    ):
+        del actions, action_hidden, compute_dtype
+        self.rollout_calls += 1
+        return z0.unsqueeze(1).expand(-1, 8, -1) + 2.0
+
+    def jepa_rollout_action_context(
+        self,
+        predicted_states,
+        compute_dtype,
+    ):
+        del compute_dtype
+        return predicted_states[..., :1].expand(-1, -1, 256)
+
+
+def test_torch_dfm_closed_loop_feeds_predicted_states_into_next_pass():
+    model = _ClosedLoopArenaPlanner()
+    root_legal_mask = torch.zeros((2, 1858), dtype=torch.bool)
+    root_legal_mask[:, 3] = True
+    root_legal_mask[:, 5] = True
+    selected = _torch_refine_dfm_actions(
+        model,
+        torch.zeros((2, 64, 256)),
+        torch.zeros((2, 1858)),
+        root_legal_mask,
+        refinement_passes=2,
+        compute_dtype=torch.float32,
+        z_jepa=torch.zeros((2, 4)),
+    )
+
+    assert model.rollout_calls == 1
+    assert model.contexts[0] is None
+    assert model.contexts[1] is not None
+    torch.testing.assert_close(
+        model.contexts[1],
+        torch.full((2, 8, 256), 2.0),
     )
     torch.testing.assert_close(selected, torch.full((2,), 5))
 
