@@ -525,6 +525,9 @@ class _FixedArenaPlanner:
 
     config = _Config()
 
+    def __init__(self):
+        self.planner_calls = 0
+
     def planner(
         self,
         z_dfm,
@@ -537,6 +540,7 @@ class _FixedArenaPlanner:
     ):
         del action_tokens, t, compute_dtype, base_root_logits
         assert not return_hidden
+        self.planner_calls += 1
         batch_size = z_dfm.shape[0]
         logits = torch.full(
             (batch_size, 8, 1858),
@@ -551,7 +555,10 @@ class _FixedArenaPlanner:
         return logits
 
 
-def test_torch_dfm_refinement_masks_root_and_unmasks_all_positions():
+@pytest.mark.parametrize("refinement_passes", [1, 2, 4, 8, 16])
+def test_torch_dfm_refinement_masks_root_and_unmasks_all_positions(
+    refinement_passes,
+):
     model = _FixedArenaPlanner()
     root_legal_mask = torch.zeros((2, 1858), dtype=torch.bool)
     root_legal_mask[:, 3] = True
@@ -561,10 +568,11 @@ def test_torch_dfm_refinement_masks_root_and_unmasks_all_positions():
         torch.zeros((2, 64, 256)),
         torch.zeros((2, 1858)),
         root_legal_mask,
-        refinement_passes=8,
+        refinement_passes=refinement_passes,
         compute_dtype=torch.float32,
     )
 
+    assert model.planner_calls == refinement_passes
     torch.testing.assert_close(selected, torch.full((2,), 5))
 
 

@@ -2038,3 +2038,12 @@ sweeps, held-out data, and repeated seeds.
   fix now records model-internal JEPA inference accurately; the corrected
   deterministic Arena rerun reproduces the exact outcomes. Full evidence is
   in `research/analysis/hero_closed_loop_feedback_20260728.json` and `.png`.
+- [ ] Run the no-training refinement-pass compute/strength sweep in
+  `research/experiment_hero_refinement_pass_sweep.md`. The earlier deferral
+  condition is now met because the retained count-64/WDL-0.25/feedback-off
+  checkpoint scores `0.908203` against raw BT4 at eight passes. Hold that
+  exact checkpoint, opening pairs, seed, cap, batching, codec, legality mask,
+  and opponent fixed; compare `1/2/4/8/16` passes sequentially, report paired
+  score deltas and physical-call latency, and build a Pareto curve. This is a
+  descriptive inference-compute study, not permission to change the frozen
+  eight-pass model-search anchor without a separate confirmation.
