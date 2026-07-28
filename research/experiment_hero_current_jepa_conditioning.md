@@ -1,7 +1,7 @@
 # Experiment: current-JEPA-state conditioning of DFM
 
-Status: preregistered on 2026-07-28. No candidate measurements have been
-made.
+Status: implementation and systems gate passed on 2026-07-28; the matched
+1,024-update candidate is authorized but has not yet started.
 
 ## Question and hypothesis
 
@@ -119,6 +119,29 @@ It must:
 
 A systems failure ends this candidate rather than changing batch size,
 compilation, rematerialization, or the scientific graph.
+
+### Systems-gate result
+
+Commit `9740c58` passed 71 focused tests plus Ruff and bytecode compilation.
+The guarded run
+`research/runs/torch_autoresearch_jepa_condition_smoke_b1024_v1` completed
+20/20 finite updates with no optimizer skips and no checkpoint:
+
+| Measurement | Result | Gate |
+|---|---:|---:|
+| Mean warm step throughput, updates 2--20 | `256.509` examples/s | `>=241.84` |
+| Minimum warm step throughput, updates 2--20 | `256.199` examples/s | descriptive |
+| Peak allocated HBM | `18,482,722,304` bytes | fits A10G |
+| Peak guarded process-group RSS | `2,499,313,664` bytes | `<7 GiB` |
+| Minimum host available memory | `8,653,017,088` bytes | `>3 GiB` |
+| Terminal bridge-weight RMS | `0.0001171450` | nonzero |
+| Terminal conditioning RMS | `0.0386254` | nonzero |
+| Terminal conditioning/state RMS ratio | `0.0236672` | diagnostic |
+| Checkpoint writes | `0` | `0` |
+
+GPU utilization reached 100%; the guard completed normally after `111.78`
+seconds. The architecture therefore clears the frozen systems gate without a
+batch-size, compiler, rematerialization, or objective change.
 
 ## Matched training and frozen evaluation
 
