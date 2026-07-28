@@ -2081,3 +2081,13 @@ sweeps, held-out data, and repeated seeds.
   host RSS is `3.063 GB`, and no model state is written. Open one-pass
   candidate-versus-retained-incumbent evaluation. See
   `research/analysis/torch_hero_incumbent_arena_20260728.json`.
+- [ ] Run the first centered-Arena model experiment in
+  `research/experiment_hero_current_jepa_conditioning.md`. Add a
+  zero-initialized no-bias `z_jepa -> token_dim` residual and broadcast it
+  over the current 64 DFM state tokens, directly coupling the learned current
+  state representation into one-pass action prediction. Keep every loss,
+  coefficient, example, schedule, and systems setting fixed. Require exact
+  default-off parity, a checkpoint-free 20-update systems smoke, then one
+  matched 1,024-update candidate. Rank it primarily by direct one-pass score
+  against the retained Torch hero incumbent, with frozen validation, latent
+  health, latency, legality, and resource guardrails.
