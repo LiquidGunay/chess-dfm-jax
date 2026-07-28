@@ -742,14 +742,17 @@ same-checkpoint parity smoke now pass: every one of 16 pair scores is exactly
 centered, all 32 games terminate normally, and neither role has a fault, cap
 draw, or incomplete legal-action coverage. The retained count-64 checkpoint
 is therefore the fixed one-pass development reference for the next
-candidate. The next candidate is the preregistered zero-initialized
-current-JEPA-state conditioning bridge into the DFM. Its implementation at
-commit `9740c58` passes 71 focused tests, and its guarded 20-update
-batch-1,024 smoke sustains `256.509` warm examples/s with unchanged peak
-allocated HBM, no checkpoint, and a nonzero learned bridge by update 20. It
-is authorized for the matched 1,024-update run under
-`research/experiment_hero_current_jepa_conditioning.md`; no scientific or
-systems setting may change between the smoke and candidate.
+candidate. The first direct-incumbent candidate, a zero-initialized
+current-JEPA-state broadcast residual into the DFM, completed and was
+rejected. It is systems-neutral and scores a directionally positive but
+inconclusive `0.509766` directly against the incumbent, while frozen DFM CE
+regresses by `0.033734`, legal mass by `0.016813`, accuracy by `0.002502`,
+and horizon-8 prediction effective/stable rank retains only
+`94.16% / 94.03%`. The bridge grows to roughly `0.48` of DFM-state RMS.
+Close the unrestricted shared-broadcast design and retain checkpoint
+`05068c96...d9060c9`. A future direct-coupling candidate should preserve
+token structure or use a controlled gate/cross-attention path, and must be
+separately preregistered.
 Periodically rerun raw BT4 as an absolute anchor; its one-pass score is already
 near the ceiling and must not be the sole autoresearch ranker. Report
 eight-pass results only for continuity or a predeclared pass-sensitivity

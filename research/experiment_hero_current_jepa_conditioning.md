@@ -1,7 +1,7 @@
 # Experiment: current-JEPA-state conditioning of DFM
 
-Status: implementation and systems gate passed on 2026-07-28; the matched
-1,024-update candidate is authorized but has not yet started.
+Status: completed and rejected on 2026-07-28. Keep the retained Hero
+checkpoint and close this zero-initialized shared-broadcast design.
 
 ## Question and hypothesis
 
@@ -202,3 +202,83 @@ other learned state/action coupling mechanisms.
 After sealing all hashes and compact evidence, retain only the model needed
 for the active recipe. Never overlap training, validation, Arena, or SAE work
 on the single A10G.
+
+## Result
+
+The candidate completed all 1,024 updates / 1,048,576 matched examples from
+raw BT4 plus fresh modules with zero optimizer skips. It took `4,123.12`
+seconds at `254.316` examples/s versus `4,119.01` seconds and `254.570`
+examples/s for the control. Peak allocated HBM increased by only `2,393,600`
+bytes. The bridge is systems-neutral for training.
+
+The last-64 training window was already negative:
+
+| Metric | Retained Hero | JEPA-conditioned | Candidate change |
+|---|---:|---:|---:|
+| Total loss | `7.449589` | `7.539384` | `+0.089795` |
+| DFM CE | `5.702513` | `5.751280` | `+0.048767` |
+| Accuracy | `0.073498` | `0.070585` | `-0.002913` |
+| Legal mass | `0.547733` | `0.529534` | `-0.018199` |
+| Root legal CE | `2.119340` | `2.107607` | `-0.011732` |
+| JEPA MSE | `0.134350` | `0.135860` | `+0.001510` |
+
+The learned residual did not stay small. Over the final 64 updates, its mean
+RMS was `0.774432` against unconditioned DFM-state RMS `1.616753`, a ratio of
+`0.480475`; bridge-weight RMS was `0.009474`. Norms remained finite and
+matched, so this is not numerical collapse.
+
+Frozen 8,192-example validation confirms the policy regression:
+
+| Metric | Retained Hero | JEPA-conditioned | Candidate change |
+|---|---:|---:|---:|
+| DFM CE | `5.706299` | `5.740033` | `+0.033734` |
+| Accuracy | `0.072433` | `0.069931` | `-0.002502` |
+| Legal mass | `0.554204` | `0.537391` | `-0.016813` |
+| Root legal CE | `2.119581` | `2.109003` | `-0.010577` |
+| JEPA MSE | `0.133190` | `0.132550` | `-0.000640` |
+| Target / prediction SIGReg | `0.063517 / 0.064247` | `0.069144 / 0.066891` | worse |
+| WDL CE | `0.771990` | `0.791962` | `+0.019972` |
+
+The tiny JEPA-MSE and root-ranking improvements do not compensate for worse
+policy quality. At horizon 8, prediction effective/stable rank retains only
+`94.16% / 94.03%`; target effective/stable rank retains
+`95.29% / 94.59%`. Prediction and target feature-standard-deviation p05
+retain `95.56% / 90.81%`, so feature tails remain present but representation
+rank fails the 95% gate.
+
+The centered direct Arena is directionally positive but inconclusive:
+
+| Metric | Result |
+|---|---:|
+| Score / points | `0.509766` / `130.5 of 256` |
+| W/D/L | `66 / 129 / 61` |
+| Pentanomial | `[5, 33, 52, 28, 10]` |
+| Better / equal / worse pairs | `38 / 52 / 38` |
+| Descriptive paired-t 95% interval | `[0.467119, 0.552412]` |
+| Two-sided paired-t p-value | `0.651227` |
+| Descriptive logistic Elo | `+6.79` |
+| Candidate / incumbent call | `31.552 / 29.495 ms` |
+| Candidate latency ratio | `1.06977` |
+| Faults / cap draws / abnormal terminations | `0 / 0 / 0` |
+
+The candidate passes the strict point-score direction and latency gates, but
+the Arena uncertainty includes a material loss and gain. It fails the
+preregistered DFM-CE, accuracy, legal-mass, and rank gates, so do not repeat
+or extend it. The retained checkpoint
+`05068c96b2bac8f10a3f3b853363bdb2ce49f935b026566705b3bdcd4d9060c9`
+remains the incumbent.
+
+This result is evidence that a shared additive current-state residual is too
+blunt: it grows to roughly half of the per-token state scale, slightly helps
+JEPA MSE/root ranking, and harms held-out action prediction and latent rank.
+It does not show that direct state/action coupling is generally harmful.
+Future coupling should preserve token structure or use a controlled
+gate/cross-attention mechanism rather than broadcasting one unrestricted
+global offset to all 64 state tokens.
+
+The candidate checkpoint was independently restored and checksum-verified as
+`eb20c698fea1eabd4ebf71c13a1c195204736183f7b173079bd34f2a6e9a995f`
+for frozen validation and Arena. Compact evidence and the comparison plot are:
+
+- `research/analysis/current_jepa_conditioning_20260728.json`
+- `research/analysis/current_jepa_conditioning_20260728.png`
