@@ -1615,7 +1615,7 @@ def _torch_refine_dfm_actions(
 
 @dataclasses.dataclass(frozen=True)
 class TorchHeroArenaPolicy:
-    """Native Torch adapter for live hero milestones and raw-BT4 controls."""
+    """Native Torch adapter for DFM, policy-only, and raw-BT4 controls."""
 
     model: JointModel
     model_id: str
@@ -1646,8 +1646,10 @@ class TorchHeroArenaPolicy:
     def __post_init__(self) -> None:
         if not isinstance(self.model_id, str) or not self.model_id.strip():
             raise ValueError("model_id must be non-empty")
-        if self.policy_mode not in {"dfm", "raw_bt4"}:
-            raise ValueError("policy_mode must be 'dfm' or 'raw_bt4'")
+        if self.policy_mode not in {"dfm", "policy_only", "raw_bt4"}:
+            raise ValueError(
+                "policy_mode must be 'dfm', 'policy_only', or 'raw_bt4'"
+            )
         if (
             isinstance(self.inference_batch_size, bool)
             or self.inference_batch_size < 1
@@ -1807,9 +1809,11 @@ class TorchHeroArenaPolicy:
                 tokens,
                 torch.bfloat16,
             )
-            if self.policy_mode == "raw_bt4":
+            if self.policy_mode in {"policy_only", "raw_bt4"}:
                 if not bool(torch.all(torch.isfinite(base_root_logits.float()))):
-                    raise FloatingPointError("Raw BT4 arena logits are non-finite")
+                    raise FloatingPointError(
+                        f"{self.policy_mode} arena logits are non-finite"
+                    )
                 selected = torch.where(
                     legal_tensor,
                     base_root_logits.float(),

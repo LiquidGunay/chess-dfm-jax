@@ -1142,6 +1142,7 @@ def load_torch_hero_policy(
     checkpoint: TorchResearchCheckpointDescriptor,
     *,
     model_id: str,
+    policy_mode: str,
     refinement_passes: int,
     inference_batch_size: int,
 ) -> tuple[BatchedArenaPolicy, dict[str, Any]]:
@@ -1157,8 +1158,13 @@ def load_torch_hero_policy(
         load_raw_bt4_hero_model,
     )
 
+    if policy_mode not in {"dfm", "policy_only"}:
+        raise ValueError(
+            "Torch hero checkpoint policy mode must be 'dfm' or 'policy_only'."
+        )
     config = Config(**checkpoint.descriptor["model_config"])
-    _validate_torch_hero_refinement_passes(config, refinement_passes)
+    if policy_mode == "dfm":
+        _validate_torch_hero_refinement_passes(config, refinement_passes)
     started = time.perf_counter()
     device = torch.device("cuda")
     model_path = require_within_workspace(
@@ -1190,7 +1196,7 @@ def load_torch_hero_policy(
         TorchHeroArenaPolicy(
             model=model,
             model_id=model_id,
-            policy_mode="dfm",
+            policy_mode=policy_mode,
             inference_batch_size=inference_batch_size,
             refinement_passes=refinement_passes,
         ),
@@ -1202,6 +1208,12 @@ def load_torch_hero_policy(
             "checkpoint_state_sha256": restored["state"]["sha256"],
             "raw_initialization_sha256": initialization["combined_sha256"],
             "compile_regions": compiled_regions,
+            "policy_mode": policy_mode,
+            "policy_head": (
+                "hero_checkpoint_bt4_policy_only"
+                if policy_mode == "policy_only"
+                else "hero_checkpoint_bt4_plus_dfm"
+            ),
         },
     )
 
@@ -1259,6 +1271,8 @@ def load_native_torch_hero_pair(
     opponent_record: Mapping[str, Any],
     candidate_id: str,
     opponent_id: str,
+    candidate_policy_mode: str,
+    opponent_policy_mode: str,
     refinement_passes: int,
     inference_batch_size: int,
 ) -> tuple[
@@ -1273,6 +1287,7 @@ def load_native_torch_hero_pair(
     candidate_policy, candidate_load = load_torch_hero_policy(
         candidate_checkpoint,
         model_id=candidate_id,
+        policy_mode=candidate_policy_mode,
         refinement_passes=refinement_passes,
         inference_batch_size=inference_batch_size,
     )
@@ -1295,6 +1310,7 @@ def load_native_torch_hero_pair(
         opponent_policy, opponent_load = load_torch_hero_policy(
             opponent_checkpoint,
             model_id=opponent_id,
+            policy_mode=opponent_policy_mode,
             refinement_passes=refinement_passes,
             inference_batch_size=inference_batch_size,
         )
@@ -2149,6 +2165,24 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--block-pairs", type=int)
     parser.add_argument("--additional-ply-cap", type=int)
     parser.add_argument("--refinement-passes", type=int, default=8)
+    parser.add_argument(
+        "--candidate-torch-hero-policy-mode",
+        choices=("dfm", "policy_only"),
+        default="dfm",
+        help=(
+            "Use the full DFM policy or only the BT4 policy head stored in "
+            "the candidate Hero checkpoint."
+        ),
+    )
+    parser.add_argument(
+        "--opponent-torch-hero-policy-mode",
+        choices=("dfm", "policy_only"),
+        default="dfm",
+        help=(
+            "Use the full DFM policy or only the BT4 policy head stored in "
+            "the opponent Hero checkpoint."
+        ),
+    )
     parser.add_argument("--policy-batch-size-cap", type=int, default=64)
     parser.add_argument("--policy-timeout-seconds", type=float, default=30.0)
     parser.add_argument(
@@ -2206,6 +2240,22 @@ def _validate_native_torch_hero_mode(
 ) -> bool:
     candidate_is_hero = args.candidate_torch_hero is not None
     opponent_is_hero = args.opponent_torch_hero is not None
+    if (
+        args.candidate_torch_hero_policy_mode != "dfm"
+        and not candidate_is_hero
+    ):
+        raise ValueError(
+            "--candidate-torch-hero-policy-mode requires "
+            "--candidate-torch-hero."
+        )
+    if (
+        args.opponent_torch_hero_policy_mode != "dfm"
+        and not opponent_is_hero
+    ):
+        raise ValueError(
+            "--opponent-torch-hero-policy-mode requires "
+            "--opponent-torch-hero."
+        )
     if opponent_is_hero and not candidate_is_hero:
         raise ValueError(
             "--opponent-torch-hero requires --candidate-torch-hero so both "
@@ -2347,10 +2397,20 @@ def main(argv: Sequence[str] | None = None) -> int:
             "candidate": {
                 "model_id": candidate_id,
                 **candidate_record,
+                "arena_policy_mode": (
+                    args.candidate_torch_hero_policy_mode
+                    if native_torch_hero
+                    else "default"
+                ),
             },
             "opponent": {
                 "model_id": opponent_id,
                 **opponent_descriptor,
+                "arena_policy_mode": (
+                    args.opponent_torch_hero_policy_mode
+                    if args.opponent_torch_hero is not None
+                    else "default"
+                ),
             },
         },
         "run": {
@@ -2358,6 +2418,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             "block_pairs": block_pairs,
             "additional_ply_cap": additional_ply_cap,
             "refinement_passes": int(args.refinement_passes),
+            "candidate_torch_hero_policy_mode": (
+                args.candidate_torch_hero_policy_mode
+            ),
+            "opponent_torch_hero_policy_mode": (
+                args.opponent_torch_hero_policy_mode
+            ),
             "policy_batch_size_cap": int(args.policy_batch_size_cap),
             "policy_timeout_seconds": float(args.policy_timeout_seconds),
             "collect_diagnostics": bool(args.collect_diagnostics),
@@ -2365,8 +2431,16 @@ def main(argv: Sequence[str] | None = None) -> int:
             "opening_start_index": 0,
             "deterministic_greedy_policy": True,
             "jepa_used_at_inference": (
-                _descriptor_uses_jepa_at_inference(candidate_record)
-                or _descriptor_uses_jepa_at_inference(opponent_descriptor)
+                (
+                    args.candidate_torch_hero_policy_mode != "policy_only"
+                    and _descriptor_uses_jepa_at_inference(candidate_record)
+                )
+                or (
+                    args.opponent_torch_hero_policy_mode != "policy_only"
+                    and _descriptor_uses_jepa_at_inference(
+                        opponent_descriptor
+                    )
+                )
             ),
         },
         "inference_batching": {
@@ -2435,6 +2509,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             opponent_record=opponent_descriptor,
             candidate_id=candidate_id,
             opponent_id=opponent_id,
+            candidate_policy_mode=args.candidate_torch_hero_policy_mode,
+            opponent_policy_mode=args.opponent_torch_hero_policy_mode,
             refinement_passes=args.refinement_passes,
             inference_batch_size=inference_batch_size,
         )

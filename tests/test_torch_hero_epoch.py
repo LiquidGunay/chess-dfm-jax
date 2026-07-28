@@ -758,6 +758,18 @@ def test_torch_hero_arena_policy_accepts_feedback_off_pass_sweep(
     assert policy.refinement_passes == refinement_passes
 
 
+def test_torch_hero_arena_policy_accepts_checkpoint_policy_only_mode():
+    policy = TorchHeroArenaPolicy(
+        model=_FixedArenaPlanner(),
+        model_id="hero-policy-only",
+        policy_mode="policy_only",
+        inference_batch_size=16,
+        refinement_passes=16,
+    )
+
+    assert policy.policy_mode == "policy_only"
+
+
 @pytest.mark.parametrize("refinement_passes", [1, 2, 4, 16])
 def test_torch_hero_arena_policy_keeps_feedback_at_eight(
     refinement_passes,

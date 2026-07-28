@@ -191,6 +191,48 @@ clearer in action CE than in JEPA dynamics, so future-policy distillation is
 the better first bootstrap. Teacher-forced JEPA remains a separate second
 candidate if a later causal audit points to recurrent dynamics.
 
+## Policy-only isolation result
+
+The direct bypass test uses the same terminal one-epoch Hero state on both
+sides. The candidate selects the legal argmax of the checkpoint-updated BT4
+policy logits `B(s)`. The opponent uses 16-pass DFM root logits
+`B(s) + R_16(s, a_1..a_8)`. Everything else is matched: 1,024 color-reversed
+`hero_development` opening pairs, deterministic greedy play, canonical codec,
+batch cap 16, additional-ply cap 256, and seed 0.
+
+The policy-only path won decisively:
+
+| Candidate | Score | W/D/L | Pair-aware logistic Elo | Conservative 95% interval |
+|---|---:|---:|---:|---:|
+| Hero BT4 policy-only vs Hero DFM-16 | `0.726318` | `1077/821/150` | `+169.55` | `[+134.05,+208.69]` |
+
+All 2,048 games terminated normally with zero faults, zero cap draws, and
+complete legal-action coverage. Mean physical batch-call latency was
+`26.17 ms` for policy-only and `64.46 ms` for DFM-16.
+
+This resolves two superficially conflicting observations. Additional passes
+are useful *inside the DFM path*: against raw BT4, the one-epoch Hero rose
+from `0.664062` at one pass to `0.935547` at 16 passes. But the best current
+DFM path is still substantially weaker than bypassing DFM and using its own
+jointly trained BT4 policy path. Thus iterative refinement has learned useful
+behavior relative to DFM-1, while its net root residual still subtracts chess
+strength from `B(s)`.
+
+Policy-only includes the jointly trained Hero BT4 trunk as well as its policy
+head. This result therefore does not show that the DFM/JEPA training losses
+failed to improve the trunk. The next clean decomposition is Hero policy-only
+versus immutable raw BT4; a direct policy-only versus DFM-1 match would then
+measure how much damage exists before iterative refinement recovers it.
+
+Future DFM artifacts must report a direct same-checkpoint policy-only bypass
+gate. Beating raw BT4 is insufficient if the DFM root is weaker than `B(s)`.
+The immutable run is:
+
+```text
+artifacts/arena/hero-epoch-v1-policy-only-vs-dfm-p16-1024pairs-v1/state.json
+sha256 6cd279d23591d49d723ac052d677eee26c66e506ae6701c9f8a0d5537a447783
+```
+
 ## Revised decision
 
 Do not describe the broadcast architecture as chess-rejected. It failed the

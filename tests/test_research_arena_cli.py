@@ -176,6 +176,34 @@ def test_arena_cli_accepts_native_torch_hero_incumbent(
     assert args.candidate_torch_hero == checkpoint
     assert args.opponent_torch_hero == checkpoint
     assert args.opponent_raw_bt4 is False
+    assert args.candidate_torch_hero_policy_mode == "dfm"
+    assert args.opponent_torch_hero_policy_mode == "dfm"
+
+
+def test_arena_cli_accepts_hero_policy_only_vs_dfm(
+    workspace_tmp: Path,
+):
+    checkpoint = workspace_tmp / "hero"
+    args = parse_args(
+        [
+            "--candidate-torch-hero",
+            str(checkpoint),
+            "--candidate-torch-hero-policy-mode",
+            "policy_only",
+            "--opponent-torch-hero",
+            str(checkpoint),
+            "--opponent-torch-hero-policy-mode",
+            "dfm",
+            "--refinement-passes",
+            "16",
+            "--output-dir",
+            str(workspace_tmp / "hero-policy-only-vs-dfm"),
+        ]
+    )
+
+    assert _validate_native_torch_hero_mode(args) is True
+    assert args.candidate_torch_hero_policy_mode == "policy_only"
+    assert args.opponent_torch_hero_policy_mode == "dfm"
 
 
 def test_native_torch_hero_mode_rejects_mixed_runtimes(
@@ -240,13 +268,14 @@ def test_native_torch_hero_pair_loads_checkpoints_independently(
         run_config={},
         descriptor={},
     )
-    calls: list[tuple[Path, str, int, int]] = []
+    calls: list[tuple[Path, str, str, int, int]] = []
 
     def fake_load(checkpoint, **kwargs):
         calls.append(
             (
                 checkpoint.checkpoint_dir,
                 kwargs["model_id"],
+                kwargs["policy_mode"],
                 kwargs["refinement_passes"],
                 kwargs["inference_batch_size"],
             )
@@ -268,13 +297,15 @@ def test_native_torch_hero_pair_loads_checkpoints_independently(
         opponent_record={"kind": "torch_hero"},
         candidate_id="candidate-id",
         opponent_id="opponent-id",
+        candidate_policy_mode="policy_only",
+        opponent_policy_mode="dfm",
         refinement_passes=1,
         inference_batch_size=16,
     )
 
     assert calls == [
-        (Path("candidate"), "candidate-id", 1, 16),
-        (Path("opponent"), "opponent-id", 1, 16),
+        (Path("candidate"), "candidate-id", "policy_only", 1, 16),
+        (Path("opponent"), "opponent-id", "dfm", 1, 16),
     ]
     assert result[0] == "policy-candidate"
     assert result[2] == "policy-opponent"
@@ -329,6 +360,8 @@ def test_native_torch_hero_pair_preserves_raw_bt4_opponent_dispatch(
         },
         candidate_id="candidate-id",
         opponent_id="raw-id",
+        candidate_policy_mode="dfm",
+        opponent_policy_mode="dfm",
         refinement_passes=1,
         inference_batch_size=16,
     )
