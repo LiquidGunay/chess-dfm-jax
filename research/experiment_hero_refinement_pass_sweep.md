@@ -123,3 +123,41 @@ predeclared confirmation is triggered:
 Do not tune a count between these five values from the same openings. Keep
 all artifacts below `/mountpoint/.exp`, publish one compact JSON record and
 one score/latency plot, and store no additional model state.
+
+## Development-screen result and confirmation
+
+All five 128-pair runs completed with zero faults, zero cap draws, and normal
+termination for all 256 games:
+
+| Passes | Score vs raw BT4 | W/D/L | Mean physical call |
+|---:|---:|---:|---:|
+| 1 | 0.960938 | 236/20/0 | 28.955 ms |
+| 2 | 0.937500 | 224/32/0 | 31.059 ms |
+| 4 | 0.925781 | 218/38/0 | 36.415 ms |
+| 8 | 0.908203 | 210/45/1 | 44.586 ms |
+| 16 | 0.910156 | 210/46/0 | 65.198 ms |
+
+Relative to eight passes, the one-pass paired score delta is `+0.052734`,
+with better/equal/worse opening-pair counts `40/74/14`, descriptive paired-t
+95% interval `[0.024942, 0.080526]`, and two-sided `p = 0.000263`. One pass
+also reduces mean physical-call time by `35.06%`. This exceeds the
+predeclared fast-setting trigger and is positive rather than merely within
+the `0.01` score tolerance.
+
+Freeze one confirmation before changing any inference anchor:
+
+1. Run only one and eight passes over the first 256 frozen opening pairs in
+   new output directories. The first 128 must reproduce the existing pair
+   scores exactly; the primary confirmation slice is the newly added pair
+   indices 128--255.
+2. Keep every model, opponent, seed, codec, history, batching, and cap field
+   identical to the development screen.
+3. Confirm one pass only if the new 128-pair slice has positive paired score
+   delta, the combined 256-pair paired-t 95% interval has a strictly positive
+   lower bound, one-pass mean policy-call time is at most `0.8` times the
+   eight-pass time, and both runs have zero faults and zero cap draws.
+4. If any condition fails, retain eight passes as the model-search anchor and
+   treat the first result as development-pool selection. If all pass,
+   designate one pass as the confirmed fast/strength setting for this
+   checkpoint while retaining eight-pass results for continuity with earlier
+   experiments. Do not change training horizon or DFM loss horizon.

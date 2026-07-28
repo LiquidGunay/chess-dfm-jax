@@ -2046,4 +2046,10 @@ sweeps, held-out data, and repeated seeds.
   and opponent fixed; compare `1/2/4/8/16` passes sequentially, report paired
   score deltas and physical-call latency, and build a Pareto curve. This is a
   descriptive inference-compute study, not permission to change the frozen
-  eight-pass model-search anchor without a separate confirmation.
+  eight-pass model-search anchor without a separate confirmation. The first
+  128 pairs complete at scores `0.960938/0.937500/0.925781/0.908203/0.910156`
+  for `1/2/4/8/16` passes, all with zero faults and cap draws. One pass beats
+  eight by `0.052734` paired score with descriptive 95% interval
+  `[0.024942, 0.080526]` and is `35.06%` faster per physical call. This
+  triggers a frozen one-versus-eight confirmation on newly added opening
+  pairs before any inference-anchor decision.
