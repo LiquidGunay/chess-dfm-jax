@@ -2009,7 +2009,7 @@ sweeps, held-out data, and repeated seeds.
   sweep. Seal and delete only the rejected tensor file while retaining the
   accepted count-64 model and all compact evidence. See
   `research/analysis/hero_wdl_ablation_20260727.json` and `.png`.
-- [ ] Run the first post-hero coupling experiment in
+- [x] Run the first post-hero coupling experiment in
   `research/experiment_hero_closed_loop_feedback.md`. Keep all accepted
   count-64 model/loss/data/schedule settings and exactly eight DFM planner
   calls, but use the model's own legal pass-7 root proposal to predict one
@@ -2025,4 +2025,16 @@ sweeps, held-out data, and repeated seeds.
   extension. The 48 focused CPU tests pass. The 20-update systems smoke also
   passes with zero skips, warm-step throughput `251.329` examples/s,
   `21,781,476,864` bytes peak allocated HBM, nonzero applied feedback, and no
-  checkpoint; the matched candidate is authorized.
+  checkpoint. The matched candidate then completed all 1,024 updates at
+  `249.857` examples/s with zero skips. Its own feedback improves frozen DFM
+  CE by `0.000382`, and its same-opening Arena score rises from `0.908203` to
+  `0.916016`, but the paired 95% interval is
+  `[-0.025985, 0.041610]`. Against the feedback-off control, frozen DFM CE
+  worsens by `0.006121`, legal mass falls by `0.006660`, and horizon-8
+  prediction/target effective/stable ranks retain only
+  `92.44%..94.02%` of control. Reject the parameter-free final-pass adjoint
+  mechanism, keep feedback mode `none`, do not repeat or extend it, and
+  delete only the rejected tensor after sealing its SHA-256. A provenance
+  fix now records model-internal JEPA inference accurately; the corrected
+  deterministic Arena rerun reproduces the exact outcomes. Full evidence is
+  in `research/analysis/hero_closed_loop_feedback_20260728.json` and `.png`.

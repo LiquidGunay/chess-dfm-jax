@@ -1,7 +1,8 @@
 # Experiment: proposal-derived JEPA feedback before the final DFM pass
 
-Status: preregistered, CPU-gated, and systems-gated on 2026-07-27; the
-matched 1,024-update run is authorized.
+Status: completed and rejected on 2026-07-28. Keep
+`jepa_feedback_mode = "none"` active; the rejected candidate tensor has been
+removed after its hash and compact evidence were sealed.
 
 ## Question
 
@@ -179,3 +180,74 @@ action choice.
 Retain only the model needed for the active recipe after hashes and compact
 evidence are sealed. Never overlap training, validation, Arena, or SAE work
 on the single A10G.
+
+## Result
+
+The candidate completed all 1,024 updates / 1,048,576 examples with zero
+non-finite skips in 4,196.70 seconds. End-to-end throughput was `249.857`
+examples/s, mean sampled GPU utilization was `98.729%`, and peak allocated
+HBM was `21,781,476,864` bytes. Exactly one terminal model-only checkpoint
+was written:
+
+```text
+a206e3b74c1ace48dfe97edae03d66f31fee916816eb8822436bb5c0070c7f1f
+```
+
+On the identical 8,192-example frozen fast pool:
+
+| Metric | Feedback off | Final-pass feedback | Candidate - control |
+|---|---:|---:|---:|
+| DFM CE | 5.706299 | 5.712420 | +0.006121 |
+| Accuracy | 0.072433 | 0.073868 | +0.001434 |
+| Legal mass | 0.554204 | 0.547545 | -0.006660 |
+| Root legal CE | 2.119581 | 2.103285 | -0.016296 |
+| JEPA positive MSE | 0.133190 | 0.137335 | +0.004145 |
+| WDL CE | 0.771990 | 0.824971 | +0.052980 |
+
+Feedback was real and useful to the candidate's own logits: detached
+preliminary DFM CE was `5.712801`, final DFM CE was `5.712420`, and the
+improvement was `0.000382`. Mean applied feedback RMS was `0.087471` versus
+state RMS `1.250025`; the cap activated on `1.404%` of examples. This was not
+enough to offset the candidate's worse learned model. It missed the
+preregistered DFM-CE and legal-mass guardrails.
+
+Horizon-8 feature tails remained healthy, but both representations lost
+rank relative to the control:
+
+| Latent | Effective-rank retention | Stable-rank retention | p05 feature-std retention |
+|---|---:|---:|---:|
+| Prediction | 93.52% | 93.14% | 103.10% |
+| Target | 94.02% | 92.44% | 101.68% |
+
+The identical 128 color-reversed opening pairs produced:
+
+| Metric | Feedback off | Final-pass feedback |
+|---|---:|---:|
+| Score versus raw BT4 | 0.908203 | 0.916016 |
+| Points / games | 232.5 / 256 | 234.5 / 256 |
+| Mean physical policy call | 44.586 ms | 49.106 ms |
+| Faults / cap draws | 0 / 0 | 0 / 0 |
+
+The paired score delta was `+0.0078125`, with
+better/equal/worse opening-pair counts `33/67/28`, a descriptive paired-t
+95% interval `[-0.025985, 0.041610]`, and two-sided `p = 0.648`. The Arena
+point estimate passes the directional and timing gates, but is too noisy to
+rescue the failed validation and rank gates.
+
+During closeout, the Arena execution path and recorded model descriptor
+confirmed that feedback was active, but a legacy run-level
+`jepa_used_at_inference` field was hardcoded false. The metadata was fixed,
+15 focused Arena tests passed, and the deterministic Arena rerun reproduced
+the exact score and pentanomial counts. The final contracts record false for
+the control and true for the candidate.
+
+Reject this parameter-free final-pass adjoint mechanism. Do not repeat it or
+extend it to 10% of an epoch. This result does not reject learned feedback,
+multi-pass state/action coupling, or other ways of consuming predicted state.
+Keep the accepted count-64, WDL-0.25, feedback-off checkpoint as the active
+baseline. The rejected tensor was deleted after sealing its expected hash and
+size; all loss rows, validation metrics, Arena blocks, manifests, and compact
+evidence remain in:
+
+- `research/analysis/hero_closed_loop_feedback_20260728.json`
+- `research/analysis/hero_closed_loop_feedback_20260728.png`

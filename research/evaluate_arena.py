@@ -92,6 +92,19 @@ DEFAULT_MODELS_DIR = REPO_ROOT / "models" / "source" / "extracted"
 DEFAULT_SOURCE_RUN_ROOT = REPO_ROOT / "checkpoints" / "source" / "step0265000"
 
 
+def _descriptor_uses_jepa_at_inference(
+    descriptor: Mapping[str, Any],
+) -> bool:
+    """Return whether a model descriptor enables model-internal JEPA feedback."""
+    model_config = descriptor.get("model_config")
+    if not isinstance(model_config, Mapping):
+        return False
+    return (
+        model_config.get("jepa_feedback_mode", "none")
+        == "final_pass_adjoint"
+    )
+
+
 @dataclasses.dataclass(frozen=True)
 class FrozenTier:
     name: str
@@ -2119,7 +2132,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             "seed": int(args.seed),
             "opening_start_index": 0,
             "deterministic_greedy_policy": True,
-            "jepa_used_at_inference": False,
+            "jepa_used_at_inference": (
+                _descriptor_uses_jepa_at_inference(candidate_record)
+                or _descriptor_uses_jepa_at_inference(opponent_descriptor)
+            ),
         },
         "inference_batching": {
             "schema_version": STATIC_INFERENCE_BATCHING_SCHEMA,

@@ -27,6 +27,7 @@ from research.evaluate_arena import (
     FROZEN_TIERS,
     PolicyTracker,
     TrackingPolicy,
+    _descriptor_uses_jepa_at_inference,
     _resolved_run_options,
     _static_inference_batch_size,
     load_run_state,
@@ -76,6 +77,20 @@ def _history(*moves: str) -> list[str]:
         board.push_uci(move)
         result.append(board.fen(en_passant="legal"))
     return result
+
+
+def test_descriptor_jepa_inference_usage_tracks_feedback_mode():
+    assert not _descriptor_uses_jepa_at_inference({})
+    assert not _descriptor_uses_jepa_at_inference(
+        {"model_config": {"jepa_feedback_mode": "none"}}
+    )
+    assert _descriptor_uses_jepa_at_inference(
+        {
+            "model_config": {
+                "jepa_feedback_mode": "final_pass_adjoint",
+            }
+        }
+    )
 
 
 def test_arena_cli_accepts_raw_bt4_update_zero_self_match(workspace_tmp: Path):
