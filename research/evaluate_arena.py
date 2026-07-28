@@ -1273,7 +1273,8 @@ def load_native_torch_hero_pair(
     opponent_id: str,
     candidate_policy_mode: str,
     opponent_policy_mode: str,
-    refinement_passes: int,
+    candidate_refinement_passes: int,
+    opponent_refinement_passes: int,
     inference_batch_size: int,
 ) -> tuple[
     BatchedArenaPolicy,
@@ -1288,7 +1289,7 @@ def load_native_torch_hero_pair(
         candidate_checkpoint,
         model_id=candidate_id,
         policy_mode=candidate_policy_mode,
-        refinement_passes=refinement_passes,
+        refinement_passes=candidate_refinement_passes,
         inference_batch_size=inference_batch_size,
     )
     if opponent_checkpoint is None:
@@ -1311,7 +1312,7 @@ def load_native_torch_hero_pair(
             opponent_checkpoint,
             model_id=opponent_id,
             policy_mode=opponent_policy_mode,
-            refinement_passes=refinement_passes,
+            refinement_passes=opponent_refinement_passes,
             inference_batch_size=inference_batch_size,
         )
     candidate_device = candidate_load.get("device")
@@ -2166,6 +2167,22 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--additional-ply-cap", type=int)
     parser.add_argument("--refinement-passes", type=int, default=8)
     parser.add_argument(
+        "--candidate-refinement-passes",
+        type=int,
+        help=(
+            "Override --refinement-passes for the candidate only. This is "
+            "useful for matched Hero pass-count ablations."
+        ),
+    )
+    parser.add_argument(
+        "--opponent-refinement-passes",
+        type=int,
+        help=(
+            "Override --refinement-passes for the opponent only. This is "
+            "useful for matched Hero pass-count ablations."
+        ),
+    )
+    parser.add_argument(
         "--candidate-torch-hero-policy-mode",
         choices=("dfm", "policy_only"),
         default="dfm",
@@ -2235,6 +2252,29 @@ def _resolved_run_options(
     return pair_count, block_pairs, additional_ply_cap
 
 
+def _resolved_refinement_passes(
+    args: argparse.Namespace,
+) -> tuple[int, int]:
+    default = int(args.refinement_passes)
+    candidate = (
+        default
+        if args.candidate_refinement_passes is None
+        else int(args.candidate_refinement_passes)
+    )
+    opponent = (
+        default
+        if args.opponent_refinement_passes is None
+        else int(args.opponent_refinement_passes)
+    )
+    if default < 1:
+        raise ValueError("refinement_passes must be positive.")
+    if candidate < 1:
+        raise ValueError("candidate_refinement_passes must be positive.")
+    if opponent < 1:
+        raise ValueError("opponent_refinement_passes must be positive.")
+    return candidate, opponent
+
+
 def _validate_native_torch_hero_mode(
     args: argparse.Namespace,
 ) -> bool:
@@ -2282,8 +2322,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         args,
         tier,
     )
-    if args.refinement_passes < 1:
-        raise ValueError("refinement_passes must be positive.")
+    (
+        candidate_refinement_passes,
+        opponent_refinement_passes,
+    ) = _resolved_refinement_passes(args)
     if args.policy_batch_size_cap < 1:
         raise ValueError("policy_batch_size_cap must be positive.")
     if not math.isfinite(args.policy_timeout_seconds) or args.policy_timeout_seconds <= 0:
@@ -2418,6 +2460,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             "block_pairs": block_pairs,
             "additional_ply_cap": additional_ply_cap,
             "refinement_passes": int(args.refinement_passes),
+            "candidate_refinement_passes": candidate_refinement_passes,
+            "opponent_refinement_passes": opponent_refinement_passes,
             "candidate_torch_hero_policy_mode": (
                 args.candidate_torch_hero_policy_mode
             ),
@@ -2511,7 +2555,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             opponent_id=opponent_id,
             candidate_policy_mode=args.candidate_torch_hero_policy_mode,
             opponent_policy_mode=args.opponent_torch_hero_policy_mode,
-            refinement_passes=args.refinement_passes,
+            candidate_refinement_passes=candidate_refinement_passes,
+            opponent_refinement_passes=opponent_refinement_passes,
             inference_batch_size=inference_batch_size,
         )
     else:
@@ -2532,7 +2577,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 bt4_params=bt4_params,
                 model_id=candidate_id,
                 seed=args.seed,
-                refinement_passes=args.refinement_passes,
+                refinement_passes=candidate_refinement_passes,
                 collect_diagnostics=args.collect_diagnostics,
                 inference_batch_size=inference_batch_size,
             )
@@ -2546,7 +2591,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 bt4_params=bt4_params,
                 model_id=candidate_id,
                 seed=args.seed,
-                refinement_passes=args.refinement_passes,
+                refinement_passes=candidate_refinement_passes,
                 collect_diagnostics=args.collect_diagnostics,
                 inference_batch_size=inference_batch_size,
             )
@@ -2563,7 +2608,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 bt4_params=bt4_params,
                 model_id=opponent_id,
                 seed=args.seed + 1,
-                refinement_passes=args.refinement_passes,
+                refinement_passes=opponent_refinement_passes,
                 collect_diagnostics=args.collect_diagnostics,
                 inference_batch_size=inference_batch_size,
             )
@@ -2573,7 +2618,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 bt4_params=bt4_params,
                 model_id=opponent_id,
                 seed=args.seed + 1,
-                refinement_passes=args.refinement_passes,
+                refinement_passes=opponent_refinement_passes,
                 collect_diagnostics=args.collect_diagnostics,
                 inference_batch_size=inference_batch_size,
             )

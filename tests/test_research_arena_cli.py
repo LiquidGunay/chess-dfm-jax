@@ -35,6 +35,7 @@ from research.evaluate_arena import (
     _resolved_run_options,
     _static_inference_batch_size,
     _validate_torch_hero_refinement_passes,
+    _resolved_refinement_passes,
     _validated_torch_hero_model_config,
     load_native_torch_hero_pair,
     load_run_state,
@@ -180,6 +181,30 @@ def test_arena_cli_accepts_native_torch_hero_incumbent(
     assert args.opponent_torch_hero_policy_mode == "dfm"
 
 
+def test_arena_cli_resolves_independent_refinement_passes(
+    workspace_tmp: Path,
+):
+    checkpoint = workspace_tmp / "hero"
+    args = parse_args(
+        [
+            "--candidate-torch-hero",
+            str(checkpoint),
+            "--opponent-torch-hero",
+            str(checkpoint),
+            "--refinement-passes",
+            "8",
+            "--candidate-refinement-passes",
+            "128",
+            "--opponent-refinement-passes",
+            "16",
+            "--output-dir",
+            str(workspace_tmp / "hero-p128-vs-p16"),
+        ]
+    )
+
+    assert _resolved_refinement_passes(args) == (128, 16)
+
+
 def test_arena_cli_accepts_hero_policy_only_vs_dfm(
     workspace_tmp: Path,
 ):
@@ -299,13 +324,14 @@ def test_native_torch_hero_pair_loads_checkpoints_independently(
         opponent_id="opponent-id",
         candidate_policy_mode="policy_only",
         opponent_policy_mode="dfm",
-        refinement_passes=1,
+        candidate_refinement_passes=1,
+        opponent_refinement_passes=16,
         inference_batch_size=16,
     )
 
     assert calls == [
         (Path("candidate"), "candidate-id", "policy_only", 1, 16),
-        (Path("opponent"), "opponent-id", "dfm", 1, 16),
+        (Path("opponent"), "opponent-id", "dfm", 16, 16),
     ]
     assert result[0] == "policy-candidate"
     assert result[2] == "policy-opponent"
@@ -362,7 +388,8 @@ def test_native_torch_hero_pair_preserves_raw_bt4_opponent_dispatch(
         opponent_id="raw-id",
         candidate_policy_mode="dfm",
         opponent_policy_mode="dfm",
-        refinement_passes=1,
+        candidate_refinement_passes=128,
+        opponent_refinement_passes=16,
         inference_batch_size=16,
     )
 

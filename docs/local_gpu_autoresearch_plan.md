@@ -2112,3 +2112,33 @@ sweeps, held-out data, and repeated seeds.
   distillation from the already encoded sampled future state into the aligned
   H2--H8 DFM slot, with no inference teacher and a coefficient that decays to
   zero. Do not combine it initially with teacher-forced JEPA.
+- [x] Run the terminal Hero four-policy round robin in
+  `research/experiment_hero_policy_round_robin.md`. Add independent
+  candidate/opponent pass-count controls, smoke DFM-128, then run all six
+  edges among DFM-128, DFM-16, same-checkpoint policy-only, and immutable raw
+  BT4 on the same first 128 color-reversed opening pairs. All 1,536 games
+  terminate normally with zero faults and cap draws. DFM-128 and DFM-16 are
+  tied at score `0.501953`; DFM-128 scores only `0.277344` against
+  policy-only, while policy-only scores `0.994141` against raw BT4. A joint
+  Bradley-Terry fit anchored at raw BT4 gives DFM-16/DFM-128/policy-only
+  relative ratings `+474.92/+479.00/+659.96`; the DFM-128 minus DFM-16
+  matched-opening bootstrap 95% interval is `[-20.03,+27.39]` Elo.
+  DFM-128 is `5.12x` slower per physical call than DFM-16. Conclude that
+  refinement saturates by 16 passes and that the current DFM root path does
+  negative work relative to its much stronger jointly trained base policy,
+  without claiming the shared DFM/JEPA training gradients were globally
+  harmful. See
+  `research/analysis/hero_policy_round_robin_20260728.json`.
+- [ ] Run an isolated fresh-initialization all-horizon policy-passthrough
+  experiment next. Preserve the existing single supervised DFM CE, but use
+  `combined_logits[h] = B_h(current_tokens) + R_h`, with `B_1` equal to the
+  native pretrained BT4 policy head, `B_2..B_8` exact independent clones at
+  update zero, and the DFM residual output zero-initialized. Do not add a
+  separate head-only CE or any future-board/inference teacher. First profile
+  the vectorized eight-head path; seven clones add 22,070,272 BF16 parameters
+  and are computed once per board, not once per DFM pass. Compare against the
+  H1-only passthrough control with every other recipe choice fixed. Keep the
+  accepted per-horizon `z_pred` WDL head. For later fresh JEPA-to-DFM fusion,
+  replace the retrofit 10%-RMS cap with equal-scale normalized or
+  variance-preserving projected fusion, and change that coupling in both
+  passthrough arms or in a separate orthogonal ablation.
