@@ -278,7 +278,10 @@ global offset to all 64 state tokens.
 
 The candidate checkpoint was independently restored and checksum-verified as
 `eb20c698fea1eabd4ebf71c13a1c195204736183f7b173079bd34f2a6e9a995f`
-for frozen validation and Arena. Compact evidence and the comparison plot are:
+for frozen validation and Arena. After sealing that hash, its
+`713,388,280`-byte model tensor was deleted because the candidate failed the
+preregistered gates; its manifest, traces, validation output, and Arena
+evidence remain. Compact evidence and the comparison plot are:
 
 - `research/analysis/current_jepa_conditioning_20260728.json`
 - `research/analysis/current_jepa_conditioning_20260728.png`

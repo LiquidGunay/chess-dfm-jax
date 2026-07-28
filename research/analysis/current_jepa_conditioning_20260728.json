@@ -9,9 +9,9 @@
         "sha256": "77e7144e1c81d3d781abc3866b3603840db60e8812aafa9525cd226b7a6b9389",
         "size_bytes": 487
       },
-      "model_present": true,
-      "observed_sha256": "eb20c698fea1eabd4ebf71c13a1c195204736183f7b173079bd34f2a6e9a995f",
-      "observed_size_bytes": 713388280
+      "model_present": false,
+      "observed_sha256": null,
+      "observed_size_bytes": null
     },
     "control": {
       "expected_sha256": "05068c96b2bac8f10a3f3b853363bdb2ce49f935b026566705b3bdcd4d9060c9",
