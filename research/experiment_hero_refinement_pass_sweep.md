@@ -1,7 +1,7 @@
 # Experiment: refinement-pass compute/strength sweep
 
-Status: preregistered on 2026-07-28. This is a no-training diagnostic on the
-retained feedback-off hero/count-64 checkpoint.
+Status: completed and accepted on 2026-07-28. This is a no-training
+inference result on the retained feedback-off hero/count-64 checkpoint.
 
 Execution note: the first guarded one-pass launch stopped safely before
 model materialization or gameplay because the Torch Arena loader retained an
@@ -29,8 +29,9 @@ scores `0.908203` against raw BT4 over the frozen first 128 color-reversed
 opening pairs at eight passes, with zero faults and zero cap draws.
 
 This experiment changes test-time compute only. It does not train a model,
-change a loss, select on validation data, or alter the eight-pass strength
-anchor used by model-side autoresearch.
+change a loss, or select on validation data. The development sweep alone did
+not authorize an inference-anchor change; the separately frozen confirmation
+below did.
 
 ## Frozen model and Arena
 
@@ -161,3 +162,40 @@ Freeze one confirmation before changing any inference anchor:
    designate one pass as the confirmed fast/strength setting for this
    checkpoint while retaining eight-pass results for continuity with earlier
    experiments. Do not change training horizon or DFM loss horizon.
+
+## Confirmation outcome
+
+The new 256-pair one- and eight-pass runs completed with zero faults, zero
+cap draws, and normal termination for every game. Their first 128 pair-score
+arrays reproduce the development runs exactly.
+
+| Passes | Score vs raw BT4 | Points | W/D/L | Mean physical call |
+|---:|---:|---:|---:|---:|
+| 1 | 0.958984 | 491.0/512 | 470/42/0 | 28.902 ms |
+| 8 | 0.911133 | 466.5/512 | 422/89/1 | 45.152 ms |
+
+On the independently added pair indices 128--255, one pass beats eight by
+`+0.042969` score, with better/equal/worse pair counts `32/83/13`,
+descriptive paired-t 95% interval `[0.015473, 0.070465]`, and two-sided
+`p = 0.002442`. Across all 256 pairs, the delta is `+0.047852`, with counts
+`72/157/27`, interval `[0.028427, 0.067276]`, and
+`p = 0.000002137`.
+
+The one/eight latency ratio is `0.640117`, a `35.99%` reduction. Every
+predeclared confirmation gate passes. One pass is therefore the confirmed
+fast/strength inference setting for this exact checkpoint, and the
+model-side search budget moves to one pass. Eight-pass results remain a
+continuity diagnostic; the DFM training horizon remains eight actions.
+
+This does not establish a universal property of DFM architectures. With the
+current feedback-off implementation, one planner call exposes all eight
+action slots, while later calls condition on the model's own intermediate
+trajectory. The monotonic strength decline from one through eight passes is
+consistent with refinement exposure mismatch or error propagation, but this
+experiment does not identify the cause. Architectures that change the
+refinement mechanism must report their own pass sensitivity before claiming
+the same optimum.
+
+The immutable scalar record and Pareto plot are
+`research/analysis/hero_refinement_pass_sweep_20260728.json` and `.png`. No
+model checkpoint was written.

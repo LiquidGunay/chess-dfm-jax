@@ -2038,7 +2038,7 @@ sweeps, held-out data, and repeated seeds.
   fix now records model-internal JEPA inference accurately; the corrected
   deterministic Arena rerun reproduces the exact outcomes. Full evidence is
   in `research/analysis/hero_closed_loop_feedback_20260728.json` and `.png`.
-- [ ] Run the no-training refinement-pass compute/strength sweep in
+- [x] Run the no-training refinement-pass compute/strength sweep in
   `research/experiment_hero_refinement_pass_sweep.md`. The earlier deferral
   condition is now met because the retained count-64/WDL-0.25/feedback-off
   checkpoint scores `0.908203` against raw BT4 at eight passes. Hold that
@@ -2052,4 +2052,23 @@ sweeps, held-out data, and repeated seeds.
   eight by `0.052734` paired score with descriptive 95% interval
   `[0.024942, 0.080526]` and is `35.06%` faster per physical call. This
   triggers a frozen one-versus-eight confirmation on newly added opening
-  pairs before any inference-anchor decision.
+  pairs before any inference-anchor decision. The first 128 pair scores
+  reproduce exactly. On the new pair indices 128--255, one pass beats eight
+  by `0.042969`, with interval `[0.015473, 0.070465]`; over all 256 pairs the
+  delta is `0.047852`, with interval `[0.028427, 0.067276]`. Its measured
+  call latency is `0.640117` times the eight-pass latency, and both runs have
+  zero faults and cap draws. Every preregistered gate passes. Confirm one
+  pass as the fast/strength inference setting for this checkpoint and the
+  fixed budget for the next model-search loop, retain eight passes only for
+  continuity, and leave the eight-action training horizon unchanged. See
+  `research/analysis/hero_refinement_pass_sweep_20260728.json` and `.png`.
+- [ ] Add a native Torch-hero opponent path to the Arena before the next
+  model-side candidate. Future one-pass candidates should play the retained
+  count-64 hero checkpoint directly, producing a centered paired score with
+  useful resolution; one-pass score versus raw BT4 is already `0.958984` and
+  is too close to the ceiling to be the sole autoresearch ranker. Require
+  independent candidate/reference descriptors and checksums, role-correct
+  batching, strict legality, zero-fault CPU contract tests, and a guarded
+  same-checkpoint parity smoke before opening candidate training. Keep raw
+  BT4 as a periodic absolute anchor and eight-pass evaluation as a continuity
+  diagnostic rather than running either for every rejected candidate.

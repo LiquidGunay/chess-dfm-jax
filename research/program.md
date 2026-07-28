@@ -159,13 +159,17 @@ timing, and both 128-pair cap-256 strength anchors are complete. It scored
 BT4. These are descriptive model-pool-relative results, not promotion or
 absolute Elo. The fixed four-model representation comparison may proceed.
 
-Keep searchless inference fixed at eight DFM refinement passes during the
-initial stronger-model experiments. Balanced K=1 now improves the frozen
-offline gates in two exact runs, but its 128-pair arena interval remains
-unresolved.
-Pass-count ablation stays deferred until a separately preregistered compute
-study has sufficiently strong chess evidence. Changing refinement compute
-must not be mixed into an architecture comparison.
+The initial stronger-model experiments kept searchless inference fixed at
+eight DFM refinement passes. The later preregistered compute study on the
+retained Torch hero checkpoint is now complete: one pass beats eight by
+`0.047852` paired score over 256 frozen opening pairs, with 95% interval
+`[0.028427, 0.067276]`, while using only `0.640117` times the measured
+policy-call latency. Its independent 128-pair confirmation slice is also
+strictly positive. Freeze one pass as the next model-search inference budget,
+retain eight passes as a continuity diagnostic, and leave the eight-action
+training horizon unchanged. This is checkpoint-specific evidence; a model
+family that changes refinement semantics must separately report its
+pass-count sensitivity.
 
 The promotion assets are repaired and available. The source-derived v3 pool
 replaces the old claimable-threefold root before selection is frozen, has zero
@@ -727,12 +731,18 @@ compiler/resource metrics with no synthetic loss value.
 Once the PyTorch migration gate is open, model-side autoresearch uses chess
 play as its primary ranking signal. Each completed 30-minute candidate first
 passes the finite-loss, legality, checkpoint, validation, and latent-health
-gates, then plays the same 128 color-reversed development pairs under the
-frozen eight-pass, deterministic-greedy, cap-256 arena contract. Optimize the
-pentanomial pair score against the fixed reference and report its monotonic
-logistic-Elo transform; do not optimize the numerically less stable Elo
-transform directly. Record held-out DFM CE as a secondary explanatory metric,
-not the final ranker.
+gates, then plays the same 128 color-reversed development pairs against the
+retained Torch hero incumbent under the frozen one-pass,
+deterministic-greedy, cap-256 arena contract. Optimize the pentanomial pair
+score against that fixed reference and report its monotonic logistic-Elo
+transform; do not optimize the numerically less stable Elo transform
+directly. Record held-out DFM CE as a secondary explanatory metric, not the
+final ranker. Native Torch-hero-versus-Torch-hero Arena support and a guarded
+same-checkpoint parity smoke are prerequisites for the next candidate.
+Periodically rerun raw BT4 as an absolute anchor; its one-pass score is already
+near the ceiling and must not be the sole autoresearch ranker. Report
+eight-pass results only for continuity or a predeclared pass-sensitivity
+check, rather than spending that compute on every rejected candidate.
 
 Only model-side code may change inside this loop. Opening pools, histories,
 action codecs, game adjudication, inference passes, batching, ply cap, and the
