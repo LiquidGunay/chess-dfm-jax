@@ -853,3 +853,21 @@ terminal checkpoints pending an explicit cleanup decision. The next coherent
 architecture hypothesis is to combine the closed-loop feedback mechanism
 with a stronger one-pass base, using current-state WDL or policy-prelogit as
 the bootstrap rather than cloning future policy logits.
+
+## Active 10%-epoch scaling study (2026-07-29)
+
+The 1,024-update current-WDL, predicted-JEPA closed-loop, and combined
+current-WDL/closed-loop arms now advance to a matched `2,768`-update
+(`10.0004%`-epoch) comparison. All three restart from raw BT4 plus the same
+fresh seed-0 JEPA/DFM initialization and retain the full one-epoch Hero LR
+schedule. Frozen validation runs live at updates
+`554/1024/1384/2076/2768`; only one terminal recovery state is written per
+arm. Endpoint Arenas measure one-pass strength, eight-pass strength,
+same-checkpoint refinement, and policy-only bypass on a common set of 256
+color-reversed pairs.
+
+The complete sealed contract, curve-fitting hypotheses, and decision rule are
+in `research/experiment_three_arm_ten_percent_scaling.md`. The one-epoch Hero
+curve is a within-recipe shape prior, not permission to equate lower loss with
+greater Elo across architectures. Only one arm may advance to actual
+25/50/100% measurements after all three 10% endpoints are available.

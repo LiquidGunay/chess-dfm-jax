@@ -5368,20 +5368,46 @@ def _verified_training_checkpoint(
     observed_contract_sha256 = _json_sha256(contract)
     if observed_contract_sha256 != manifest.get("resume_contract_sha256"):
         raise ValueError("Training checkpoint resume-contract checksum mismatch")
-    if (
-        expected_resume_contract is not None
-        and _json_sha256(dict(expected_resume_contract))
-        != observed_contract_sha256
-    ):
-        raise ValueError(
-            "Training checkpoint resume contract does not match this run"
-        )
+    if expected_resume_contract is not None:
+        expected_contract = dict(expected_resume_contract)
+        if (
+            _json_sha256(expected_contract) != observed_contract_sha256
+            and _resume_contract_comparison_payload(expected_contract)
+            != _resume_contract_comparison_payload(contract)
+        ):
+            raise ValueError(
+                "Training checkpoint resume contract does not match this run"
+            )
     state_path = _require_workspace(root / manifest["state"]["path"], exists=True)
     if state_path.stat().st_size != int(manifest["state"]["size_bytes"]):
         raise ValueError(f"Training checkpoint size mismatch: {state_path}")
     if _sha256_file(state_path) != manifest["state"]["sha256"]:
         raise ValueError(f"Training checkpoint checksum mismatch: {state_path}")
     return state_path, manifest
+
+
+def _resume_contract_comparison_payload(
+    contract: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Remove a run's mutable stop boundary from resume compatibility.
+
+    ``--steps`` is only a process stop condition.  The optimizer schedule is
+    pinned independently by ``config.lr_total_examples`` and the restored
+    example counter, so extending a completed prefix must not invalidate an
+    otherwise exact model/optimizer/data resume.
+    """
+
+    payload = json.loads(
+        json.dumps(
+            dict(contract),
+            allow_nan=False,
+            sort_keys=True,
+        )
+    )
+    schedule = payload.get("schedule")
+    if isinstance(schedule, dict):
+        schedule.pop("target_updates", None)
+    return payload
 
 
 def load_training_checkpoint(
@@ -6313,6 +6339,11 @@ def train(args: argparse.Namespace) -> int:
     hero_milestones_enabled = bool(
         getattr(args, "hero_milestones", False)
     )
+    validation_updates = tuple(
+        int(value)
+        for value in getattr(args, "validation_updates", ())
+    )
+    live_validation_enabled = bool(validation_updates)
     lr_range_start = getattr(args, "lr_range_start", None)
     lr_range_end = getattr(args, "lr_range_end", None)
     lr_range_enabled = lr_range_start is not None or lr_range_end is not None
@@ -6383,6 +6414,47 @@ def train(args: argparse.Namespace) -> int:
         )
     if args.resume_checkpoint is not None and lr_range_enabled:
         raise ValueError("LR-range calibration cannot resume")
+    if live_validation_enabled:
+        if hero_milestones_enabled:
+            raise ValueError(
+                "Use either --hero-milestones or --validation-updates, not both"
+            )
+        if (
+            len(set(validation_updates)) != len(validation_updates)
+            or tuple(sorted(validation_updates)) != validation_updates
+        ):
+            raise ValueError(
+                "Validation updates must be unique and strictly increasing"
+            )
+        if (
+            args.steps <= 0
+            or validation_updates[0] <= 0
+            or validation_updates[-1] > args.steps
+        ):
+            raise ValueError(
+                "Validation updates must be in [1, --steps]"
+            )
+        if args.recipe != "hero" or lr_range_enabled:
+            raise ValueError(
+                "Frozen live validation currently requires the hero recipe"
+            )
+        if args.batch_size != 1024 or args.train_seconds != 0.0:
+            raise ValueError(
+                "Frozen live validation requires batch size 1024 and no time limit"
+            )
+        if (
+            args.remat_mode != "bt4-projector"
+            or args.attention_impl != "sdpa-all"
+            or args.compile_regions != "fresh"
+            or args.prefetch_depth != 1
+        ):
+            raise ValueError(
+                "Frozen live validation requires the compiled Hero runtime"
+            )
+        if args.data_start != 0 or args.seed != 0:
+            raise ValueError(
+                "Frozen live validation requires data-start 0 and seed 0"
+            )
     if hero_milestones_enabled:
         if args.recipe != "hero" or lr_range_enabled:
             raise ValueError(
@@ -6525,12 +6597,23 @@ def train(args: argparse.Namespace) -> int:
         args,
         enabled=hero_milestones_enabled,
     )
+    live_validation_contract = _live_validation_contract(
+        args,
+        updates=validation_updates,
+    )
     hero_milestone_resources = (
         _load_hero_milestone_resources(
             manifest_path=args.hero_eval_manifest,
             arena_pairs=args.hero_arena_pairs,
         )
         if hero_milestones_enabled
+        else None
+    )
+    live_validation_resources = (
+        _load_hero_validation_resources(
+            manifest_path=args.hero_eval_manifest,
+        )
+        if live_validation_enabled
         else None
     )
     resume_contract = _training_resume_contract(
@@ -6631,6 +6714,14 @@ def train(args: argparse.Namespace) -> int:
             if hero_milestone_resources is not None
             else hero_milestone_contract
         ),
+        "live_validation": (
+            {
+                **live_validation_contract,
+                "fast_pool": live_validation_resources.fast_pool,
+            }
+            if live_validation_resources is not None
+            else live_validation_contract
+        ),
         "lr_range": (
             {
                 "enabled": True,
@@ -6664,6 +6755,7 @@ def train(args: argparse.Namespace) -> int:
     milestone_evaluation_seconds = 0.0
     hero_validation_records: list[dict[str, Any]] = []
     hero_arena_records: list[dict[str, Any]] = []
+    live_validation_records: list[dict[str, Any]] = []
     validation_milestones_by_update = (
         {
             _hero_milestone_update(
@@ -6688,6 +6780,7 @@ def train(args: argparse.Namespace) -> int:
         if hero_milestones_enabled
         else {}
     )
+    live_validation_updates_set = set(validation_updates)
     monitor = (
         _start_gpu_monitor(
             output_dir,
@@ -6707,11 +6800,18 @@ def train(args: argparse.Namespace) -> int:
             milestone_update
         )
         arena_percentage = arena_milestones_by_update.get(milestone_update)
+        is_live_validation_update = (
+            milestone_update in live_validation_updates_set
+        )
         if (
-            hero_milestone_resources is None
+            (
+                hero_milestone_resources is None
+                and live_validation_resources is None
+            )
             or (
                 validation_percentage is None
                 and arena_percentage is None
+                and not is_live_validation_update
             )
         ):
             return
@@ -6721,6 +6821,7 @@ def train(args: argparse.Namespace) -> int:
         milestone_succeeded = False
         try:
             if validation_percentage is not None:
+                assert hero_milestone_resources is not None
                 hero_validation_records.append(
                     _run_hero_validation_milestone(
                         model,
@@ -6732,7 +6833,20 @@ def train(args: argparse.Namespace) -> int:
                         device=device,
                     )
                 )
+            if is_live_validation_update:
+                assert live_validation_resources is not None
+                live_validation_records.append(
+                    _run_frozen_validation_milestone(
+                        model,
+                        live_validation_resources,
+                        output_dir=output_dir,
+                        update=milestone_update,
+                        batch_size=args.batch_size,
+                        device=device,
+                    )
+                )
             if arena_percentage is not None:
+                assert hero_milestone_resources is not None
                 hero_arena_records.append(
                     _run_hero_arena_milestone(
                         model,
@@ -6771,11 +6885,12 @@ def train(args: argparse.Namespace) -> int:
                 )
 
     if (
-        hero_milestones_enabled
+        (hero_milestones_enabled or live_validation_enabled)
         and initial_update > 0
         and (
             initial_update in validation_milestones_by_update
             or initial_update in arena_milestones_by_update
+            or initial_update in live_validation_updates_set
         )
     ):
         run_live_milestones(
@@ -7116,6 +7231,10 @@ def train(args: argparse.Namespace) -> int:
             "contract": hero_milestone_contract,
             "validation_records": hero_validation_records,
             "arena_records": hero_arena_records,
+        },
+        "live_validation": {
+            "contract": live_validation_contract,
+            "records": live_validation_records,
         },
     }
     _write_json(output_dir / "report.json", report)
@@ -9051,9 +9170,13 @@ def _load_hero_frozen_pool(
 
 
 @dataclasses.dataclass(frozen=True)
-class _HeroMilestoneResources:
+class _HeroValidationResources:
     fast_batches: FrozenIndexTrajectoryBatches
     fast_pool: dict[str, Any]
+
+
+@dataclasses.dataclass(frozen=True)
+class _HeroMilestoneResources(_HeroValidationResources):
     opening_pool: dict[str, Any]
     loaded_histories: Any
     arena_provenance: dict[str, Any]
@@ -9131,6 +9254,40 @@ def _hero_milestone_contract(
     }
 
 
+def _live_validation_contract(
+    args: argparse.Namespace,
+    *,
+    updates: Sequence[int],
+) -> dict[str, Any]:
+    normalized_updates = tuple(int(update) for update in updates)
+    if not normalized_updates:
+        return {"enabled": False}
+    return {
+        "enabled": True,
+        "schedule_unit": "examples",
+        "total_examples": _HERO_TRAIN_EXAMPLES,
+        "updates": list(normalized_updates),
+        "observed_percentages": [
+            100.0 * update * int(args.batch_size) / _HERO_TRAIN_EXAMPLES
+            for update in normalized_updates
+        ],
+        "fast_validation": {
+            "batch_size": HERO_CONFIG.sigreg_example_count,
+            "pool": "fast",
+        },
+        "manifest_path": str(
+            _require_workspace(args.hero_eval_manifest, exists=True)
+        ),
+        "resume_boundary_policy": (
+            "a milestone exactly equal to the restored update is repeated; "
+            "earlier milestones are skipped"
+        ),
+        "checkpoint_policy": (
+            "validation uses the live model and serializes no model state"
+        ),
+    }
+
+
 def _verified_hero_manifest_asset(
     record: Mapping[str, Any],
     *,
@@ -9149,6 +9306,21 @@ def _verified_hero_manifest_asset(
     return path
 
 
+def _load_hero_validation_resources(
+    *,
+    manifest_path: Path,
+) -> _HeroValidationResources:
+    fast_batches, fast_pool = _load_hero_frozen_pool(
+        manifest_path=manifest_path,
+        pool_name="fast",
+        batch_size=HERO_CONFIG.sigreg_example_count,
+    )
+    return _HeroValidationResources(
+        fast_batches=fast_batches,
+        fast_pool=fast_pool,
+    )
+
+
 def _load_hero_milestone_resources(
     *,
     manifest_path: Path,
@@ -9159,10 +9331,8 @@ def _load_hero_milestone_resources(
 
     if arena_pairs < 1:
         raise ValueError("hero arena pair count must be positive")
-    fast_batches, fast_pool = _load_hero_frozen_pool(
+    validation_resources = _load_hero_validation_resources(
         manifest_path=manifest_path,
-        pool_name="fast",
-        batch_size=HERO_CONFIG.sigreg_example_count,
     )
     manifest_source = _require_workspace(manifest_path, exists=True)
     manifest = json.loads(manifest_source.read_text(encoding="utf-8"))
@@ -9205,8 +9375,8 @@ def _load_hero_milestone_resources(
         expected_manifest_sha256=expected_sidecar_manifest,
     )
     return _HeroMilestoneResources(
-        fast_batches=fast_batches,
-        fast_pool=fast_pool,
+        fast_batches=validation_resources.fast_batches,
+        fast_pool=validation_resources.fast_pool,
         opening_pool=opening_pool,
         loaded_histories=loaded_histories,
         arena_provenance={
@@ -9294,6 +9464,66 @@ def _run_hero_validation_milestone(
             {
                 "hero_validation_milestone": percentage,
                 "update": update,
+                "evaluation_seconds": evaluation_seconds,
+                "metrics": metrics,
+            },
+            sort_keys=True,
+        ),
+        flush=True,
+    )
+    return record
+
+
+def _run_frozen_validation_milestone(
+    model: JointModel,
+    resources: _HeroValidationResources,
+    *,
+    output_dir: Path,
+    update: int,
+    batch_size: int,
+    device: torch.device,
+) -> dict[str, Any]:
+    """Evaluate a live training prefix without writing a model snapshot."""
+
+    was_training = model.training
+    try:
+        metrics, evaluation_seconds = _evaluate_validation_pool(
+            model,
+            resources.fast_batches,
+            count=resources.fast_batches.steps_per_epoch,
+            seed=int(resources.fast_pool["pool_definition"]["seed"]),
+            device=device,
+        )
+    finally:
+        model.train(was_training)
+    observed_fraction = (
+        update * batch_size / _HERO_TRAIN_EXAMPLES
+    )
+    record = {
+        "schema_version": "torch-live-frozen-validation-milestone-v1",
+        "created_utc": datetime.now(UTC).isoformat(),
+        "git_commit": _git_commit(),
+        "update": update,
+        "examples": update * batch_size,
+        "observed_fraction": observed_fraction,
+        "observed_percentage": 100.0 * observed_fraction,
+        "pool": resources.fast_pool,
+        "evaluation_examples": int(
+            resources.fast_batches.global_indices.size
+        ),
+        "evaluation_seconds": evaluation_seconds,
+        "metrics": metrics,
+        "serialized_model_state": False,
+    }
+    _append_jsonl(
+        output_dir / "validation_metrics.jsonl",
+        record,
+    )
+    print(
+        json.dumps(
+            {
+                "live_validation_update": update,
+                "observed_percentage": 100.0 * observed_fraction,
                 "evaluation_seconds": evaluation_seconds,
                 "metrics": metrics,
             },
@@ -10354,6 +10584,16 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Enable the frozen one-epoch fast-validation and paired-Arena "
             "milestones without serializing intermediate model snapshots."
+        ),
+    )
+    train_parser.add_argument(
+        "--validation-updates",
+        type=int,
+        nargs="*",
+        default=(),
+        help=(
+            "Evaluate the frozen 8,192-example Hero validation pool at these "
+            "strictly increasing live updates without writing model snapshots."
         ),
     )
     train_parser.add_argument(

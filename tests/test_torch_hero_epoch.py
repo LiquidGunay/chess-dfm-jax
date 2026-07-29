@@ -967,6 +967,32 @@ def test_hero_milestones_round_up_by_examples():
     } == expected
 
 
+def test_live_validation_updates_parse_as_a_frozen_sparse_schedule():
+    args = build_parser().parse_args(
+        [
+            "train",
+            "--output-dir",
+            "/mountpoint/.exp/test-live-validation",
+            "--steps",
+            "2768",
+            "--validation-updates",
+            "554",
+            "1024",
+            "1384",
+            "2076",
+            "2768",
+        ]
+    )
+
+    assert args.validation_updates == [
+        554,
+        1024,
+        1384,
+        2076,
+        2768,
+    ]
+
+
 def test_latent_spectrum_metrics_expose_rank_and_centered_scale():
     generator = torch.Generator().manual_seed(20260727)
     diverse = torch.randn(32, 12, generator=generator)

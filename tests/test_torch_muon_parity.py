@@ -258,6 +258,7 @@ def test_torch_training_checkpoint_resumes_optimizer_exactly(tmp_path):
     resume_contract = {
         "schema_version": "unit-test-resume-v1",
         "batch_size": 8,
+        "schedule": {"target_updates": 2},
     }
     source_sha256 = "c" * 64
     manifest = save_training_checkpoint(
@@ -340,6 +341,17 @@ def test_torch_training_checkpoint_resumes_optimizer_exactly(tmp_path):
     assert restored == manifest
     assert resumed_optimizer.update == 2
     assert resumed_optimizer.examples_seen == 16
+    extended = load_training_checkpoint(
+        checkpoint_dir=checkpoint_dir,
+        model=resumed_model,
+        optimizer=resumed_optimizer,
+        expected_source_mapping_sha256=source_sha256,
+        expected_resume_contract={
+            **resume_contract,
+            "schedule": {"target_updates": 3},
+        },
+    )
+    assert extended == manifest
     with pytest.raises(ValueError, match="resume contract"):
         load_training_checkpoint(
             checkpoint_dir=checkpoint_dir,
