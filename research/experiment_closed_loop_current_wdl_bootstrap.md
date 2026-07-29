@@ -1,6 +1,6 @@
 # Experiment: current-WDL bootstrap for predicted-JEPA closed loop
 
-Status: preregistered on 2026-07-29; execution in progress.
+Status: completed on 2026-07-29; rejected as a refinement architecture.
 
 ## Motivation
 
@@ -82,3 +82,71 @@ mechanistically if:
 - offline policy/WDL/latent metrics show no new collapse.
 
 Only a later larger Arena can establish a real Elo gain.
+
+## Results
+
+The guarded batch-1,024 smoke passed, followed by all 1,024 registered
+updates. Training consumed 4,268.43 seconds (71.14 minutes) at 245.66
+examples/second end to end. Peak allocated HBM was 23,065,796,096 bytes;
+there were no guard faults, skipped updates, or intermediate checkpoints.
+The retained terminal state has SHA-256
+`845a4a6a08eb71f16a5e493e25be99fba9443b45c3f88818898bc7d9e85ef08e`.
+
+On the frozen 8,192-example validation pool, the combined candidate had:
+
+- DFM CE `5.71280`, action top-1 `7.240%`, and legal mass `54.829%`;
+- H1 CE `3.13721` and root legal-conditional CE `2.10079`;
+- current-WDL loss `0.79190` and accuracy `62.891%`;
+- closed-loop second-call CE improvement `0.04804`;
+- target/prediction SIGReg `0.06642/0.06660`; and
+- prediction effective rank rising from `6.50` at H1 to `10.32` at H8,
+  with prediction/target RMS ratios from `1.008` to `1.020`.
+
+The latent and offline gates passed, but offline policy quality was effectively
+tied with the isolated closed-loop arm (`5.71280` versus `5.71207` DFM CE)
+and slightly below Hero/current-WDL.
+
+All Arena games used the registered frozen first 128 color-reversed opening
+pairs, greedy legal selection, inference batch cap 16, and additional ply cap
+256. There were no faults, cap draws, or incomplete policy coverage.
+
+| Candidate | Reference | Score | W/D/L | Direct Elo (95% Hoeffding) | Candidate latency |
+| --- | --- | ---: | ---: | ---: | ---: |
+| combined p1 | Hero p1 | `47.85%` | 53/139/64 | `-14.9` (`-101.1`, `+69.4`) | 2.95 ms/position |
+| combined p8 | combined p1 | `49.02%` | 49/153/54 | `-6.8` (`-92.3`, `+77.9`) | 8.77 ms/position |
+| combined p8 | Hero p1 | `46.29%` | 50/137/69 | `-25.8` (`-113.0`, `+58.2`) | 8.65 ms/position |
+
+Current-WDL improved the combined arm's one-pass point estimate by 2.34
+percentage points relative to isolated closed-loop versus Hero, although the
+matched-opening bootstrap interval includes zero. It did not preserve
+iterative improvement: combined p8 versus its own p1 was 6.05 points below
+the isolated closed-loop arm's corresponding score, with a 50,000-sample
+matched-opening bootstrap interval of `[-10.94, -1.17]` points.
+
+The candidate therefore fails the registered mechanism test. The one-step
+closed-loop training objective does not establish that feedback can be
+composed seven times at inference, and adding current-state WDL interfered
+with the previously observed iterative gain. The checkpoint is retained for
+diagnostics rather than promoted.
+
+## H1 isolation diagnostic
+
+The all-horizon arm's original H1 BT4 policy was also evaluated with DFM
+bypassed against Hero's original H1 BT4 policy. It scored `24.80%`
+(22/83/151) over the same 256 games, corresponding to direct Elo `-192.7`
+with a 95% Hoeffding interval of `[-333.3, -93.9]`; there were no faults or
+cap draws.
+
+This rules out the idea that only the all-horizon DFM combination was poor.
+The H1 module had the same architecture and exact initialization as Hero, but
+did not remain the same learned function. H2--H8 used different future-action
+targets, and all seven losses flowed through the shared, trainable current
+BT4 trunk from update zero. Their aggregate optimization pressure damaged
+the representation used by H1. The direct all-heads DFM score (`14.45%`
+against Hero) was worse still, but the policy-only isolation already shows
+that shared-trunk interference is sufficient to explain a large part of the
+failure.
+
+The sealed machine-readable analysis is in
+`research/analysis/closed_loop_current_wdl_bootstrap_20260729.json`, with a
+compact comparison table in the adjacent CSV.
