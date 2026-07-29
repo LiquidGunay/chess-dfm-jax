@@ -381,6 +381,11 @@ def _validated_torch_hero_model_config(
     legacy_missing = {
         "jepa_feedback_mode",
         "dfm_condition_on_current_jepa_state",
+        "dfm_jepa_fusion_mode",
+        "policy_passthrough_mode",
+        "dfm_state_source",
+        "wdl_include_current_state",
+        "dfm_closed_loop_mode",
     }
     if unknown:
         raise ValueError(

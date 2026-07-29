@@ -1,7 +1,9 @@
 # Experiment: post-Hero passthrough and JEPA/DFM architecture suite
 
-Status: preregistered on 2026-07-28; implementation and CPU tests are in
-progress. No GPU candidate has started.
+Status: completed on 2026-07-28. All five matched candidates, frozen
+validations, the 15-edge primary round robin, five refinement diagnostics,
+and one focused closed-loop follow-up are complete. All six terminal
+checkpoints are retained.
 
 ## Goal
 
@@ -152,3 +154,122 @@ connected Bradley--Terry fit for the primary round robin, and one-versus-eight
 paired deltas. These are pool-relative Arena Elo estimates, not external
 human or engine ratings. Keep all terminal checkpoints through analysis;
 remove none without a later explicit decision.
+
+## Execution
+
+All five guarded smokes fit at the preregistered common batch size `1,024`,
+so every arm trained for `1,024` updates and exactly `1,048,576` examples.
+Approximate steady-state throughput and peak PyTorch allocation were:
+
+| Arm | examples/s | peak allocated HBM |
+| --- | ---: | ---: |
+| all-horizon heads | 240 | 21.97 GB |
+| normalized JEPA fusion | 256 | 18.48 GB |
+| current-state WDL | 257 | 18.48 GB |
+| predicted-JEPA closed loop | 247 | 23.05 GB |
+| policy-prelogit | 256 | 18.48 GB |
+
+One current-WDL launch failed before update one because a shared
+TorchInductor/Triton cache artifact raised an internal AST error. A diagnostic
+with the projector eager then OOMed, confirming that the compiled projector
+is required at batch `1,024`. Rebuilding the identical bounded regions in an
+isolated workspace-local cache restored the already-smoked behavior. The
+successful run used no changed numerical setting. The guard held the failed
+compiler process below 2.5 GB host RSS and no server-pressure event occurred.
+The remaining large runs used isolated workspace-local compiler caches.
+
+Every successful arm wrote only its terminal model-only checkpoint. Training
+wall time ranged from 68.6 to 72.6 minutes. The complete hashes, loss streams,
+and source paths are in
+`research/analysis/posthero_architecture_suite_20260728.json`.
+
+## Loss and frozen-validation results
+
+The table reports the trailing 64 training updates and the identical frozen
+8,192-example fast validation:
+
+| Model | train DFM CE | train total | val DFM CE | val action acc. | val legal mass |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Hero-1024 | 5.7025 | 7.4496 | 5.7063 | 7.243% | 55.42% |
+| all-horizon heads | 6.0994 | 8.0428 | 6.0689 | 5.576% | 51.85% |
+| normalized JEPA fusion | 5.7385 | 7.5146 | 5.7386 | 7.098% | 53.86% |
+| current-state WDL | 5.7049 | 7.4729 | 5.7086 | 7.306% | 55.37% |
+| predicted-JEPA closed loop | 5.7218 | 7.4712 | 5.7121 | 7.286% | 54.77% |
+| policy-prelogit | 5.7259 | 7.5541 | 5.7579 | 7.002% | 51.59% |
+
+Current-state WDL matches Hero's validation CE to within `0.0023` and has
+slightly higher action accuracy. During the final 64 training updates, the
+closed loop lowers second-call DFM CE by `0.1993` on average relative to its
+own first proposal. All-horizon cloned heads are already clearly worse by the
+offline metrics.
+
+## One-pass Arena
+
+All 15 primary edges completed on the same first 128 color-reversed opening
+pairs, for 3,840 games total. There were no policy faults, incomplete legal
+coverage positions, cap draws, or abnormal terminations. Direct candidate
+scores against Hero-1024 were:
+
+| Candidate | score vs Hero | points / games |
+| --- | ---: | ---: |
+| current-state WDL | 51.17% | 131.0 / 256 |
+| normalized JEPA fusion | 49.80% | 127.5 / 256 |
+| policy-prelogit | 49.02% | 125.5 / 256 |
+| predicted-JEPA closed loop, one pass | 45.51% | 116.5 / 256 |
+| all-horizon heads | 14.45% | 37.0 / 256 |
+
+The connected Bradley--Terry fit, anchored at Hero `0`, is:
+
+| Model | relative Elo | matched-opening bootstrap 95% |
+| --- | ---: | ---: |
+| policy-prelogit | +4.4 | [-13.7, +22.6] |
+| current-state WDL | +3.2 | [-14.1, +19.1] |
+| Hero-1024 | 0.0 | fixed anchor |
+| normalized JEPA fusion | -3.5 | [-23.4, +15.5] |
+| predicted-JEPA closed loop, one pass | -41.2 | [-57.2, -26.1] |
+| all-horizon heads | -297.9 | [-320.5, -276.3] |
+
+The first three new arms are statistically unresolved from Hero at this
+sample size. Policy-prelogit's connected estimate is marginally positive
+despite its worse validation CE, so small loss differences are not a reliable
+ordering of chess strength. The all-horizon prior is decisively harmful at
+this training budget.
+
+## Refinement result
+
+Eight-pass candidate scores against their own one-pass policy were:
+
+| Candidate | 8-pass score vs 1-pass |
+| --- | ---: |
+| predicted-JEPA closed loop | 55.08% |
+| all-horizon heads | 46.68% |
+| normalized JEPA fusion | 40.23% |
+| current-state WDL | 39.26% |
+| policy-prelogit | 33.01% |
+
+Predicted-JEPA closed loop is the only arm for which recurrent inference does
+positive chess work. A focused follow-up put its 8-pass policy directly
+against Hero-1024 at one pass: `130.5/256 = 50.98%`, direct logistic
+`+6.8` relative Elo with a deliberately conservative Hoeffding interval
+`[-77.9, +92.3]`. The closed-loop side averaged `9.08 ms` per evaluated
+position in Arena versus `2.83 ms` for Hero one-pass, about `3.2x` slower.
+
+This is a mechanism success rather than a promotion: closed-loop iteration
+recovers its weaker one-pass base and reaches approximately Hero strength,
+but it does not yet establish an Elo improvement. The next architecture
+iteration should preserve this predicted-state feedback while bootstrapping
+the one-pass policy from the current-WDL or policy-prelogit-strength base.
+
+## Reproducible artifacts
+
+- `research/analysis/posthero_architecture_suite_20260728.json`: validated
+  source ledger, all direct matches, connected fit, checkpoint hashes, and
+  latency.
+- `research/analysis/posthero_architecture_suite_20260728.csv`: compact
+  per-model comparison table.
+- `research/analysis/posthero_architecture_training_curves_20260728.png`:
+  matched training-loss curves.
+- `research/analysis/posthero_architecture_arena_20260728.png`: connected Elo
+  and refinement summary.
+- `research/analysis/build_posthero_architecture_suite.py`: deterministic
+  validator and artifact builder.

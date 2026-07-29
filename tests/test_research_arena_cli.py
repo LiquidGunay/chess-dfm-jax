@@ -623,7 +623,7 @@ def test_torch_hero_model_config_rejects_unrecognized_keys():
         _validated_torch_hero_model_config(config)
 
 
-def test_torch_hero_model_config_supplies_only_legacy_conditioning_default():
+def test_torch_hero_model_config_accepts_missing_optional_architecture_defaults():
     import dataclasses
 
     from research.train_torch import HERO_CONFIG
@@ -638,12 +638,22 @@ def test_torch_hero_model_config_supplies_only_legacy_conditioning_default():
             use_head_sdpa=True,
         )
     )
-    config.pop("dfm_condition_on_current_jepa_state")
+    legacy_missing = {
+        "jepa_feedback_mode",
+        "dfm_condition_on_current_jepa_state",
+        "dfm_jepa_fusion_mode",
+        "policy_passthrough_mode",
+        "dfm_state_source",
+        "wdl_include_current_state",
+        "dfm_closed_loop_mode",
+    }
+    for name in legacy_missing:
+        config.pop(name)
 
     validated = _validated_torch_hero_model_config(config)
 
     assert validated == config
-    assert "dfm_condition_on_current_jepa_state" not in validated
+    assert legacy_missing.isdisjoint(validated)
 
 
 def test_torch_hero_checkpoint_descriptor_accepts_recovery_state(

@@ -817,23 +817,39 @@ Reject a run if:
 Prefer simple changes whose effects can be explained. Record surprises and
 negative results; they are part of the research output.
 
-## Active post-Hero suite (2026-07-28)
+## Completed post-Hero suite (2026-07-28)
 
-The next bounded campaign is the five-arm fresh-initialization architecture
-suite preregistered in
+The five-arm fresh-initialization architecture suite preregistered in
 `research/experiment_post_hero_architecture_suite.md`: all-horizon cloned
 policy-logit passthrough, equal-scale current-JEPA fusion, current-state WDL,
 predicted-JEPA closed-loop feedback, and BT4 policy-prelogit feature
-passthrough. Each arm receives exactly 1,048,576 examples under the Hero loss
-and schedule, retains one terminal checkpoint, and is compared in a frozen
-Arena containing the retained Hero-1024 checkpoint. GPU smokes select a
-common feasible physical batch before any candidate training starts; fixed
-count-64 SIGReg and its coefficients do not change with that batch.
+passthrough is complete. Each arm received exactly 1,048,576 examples under
+the Hero loss and schedule, retained one terminal checkpoint, and was
+compared in a frozen Arena containing the retained Hero-1024 checkpoint. GPU
+smokes selected the common physical batch of `1,024`; fixed count-64 SIGReg
+and its coefficients did not change with that batch.
 
 The primary comparison is a one-pass six-model round robin. Because the
 retained Hero is strongest at one pass but the closed-loop arm needs at least
-two calls to consume a predicted state, every candidate also receives a
-predeclared eight-pass-versus-own-one-pass refinement diagnostic. This suite
-temporarily supersedes the ordinary single-candidate 30-minute loop; do not
-delete its terminal checkpoints until the complete validation and Arena
-analysis is sealed.
+two calls to consume a predicted state, every candidate also received a
+predeclared eight-pass-versus-own-one-pass refinement diagnostic.
+
+The result is asymmetric. Current-state WDL, normalized JEPA fusion, and
+policy-prelogit are statistically unresolved from Hero in the connected
+one-pass Arena; all-horizon cloned heads are rejected. Predicted-JEPA closed
+loop is weaker at one pass, but is the only arm whose eight-pass policy beats
+its own one-pass policy (`55.08%`). Its eight-pass policy scores `50.98%`
+directly against Hero one-pass. This is the first evidence in the local
+program that learned recurrent inference does positive chess work, although
+it is not yet a strength promotion and costs about `3.2x` Hero's Arena
+latency per evaluated position.
+
+The sealed ledger and plots are
+`research/analysis/posthero_architecture_suite_20260728.json`,
+`research/analysis/posthero_architecture_suite_20260728.csv`,
+`research/analysis/posthero_architecture_training_curves_20260728.png`, and
+`research/analysis/posthero_architecture_arena_20260728.png`. Retain all six
+terminal checkpoints pending an explicit cleanup decision. The next coherent
+architecture hypothesis is to combine the closed-loop feedback mechanism
+with a stronger one-pass base, using current-state WDL or policy-prelogit as
+the bootstrap rather than cloning future policy logits.
