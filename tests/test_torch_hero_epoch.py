@@ -435,6 +435,18 @@ def test_post_hero_architecture_overrides_are_explicit_and_validated():
     assert candidate.wdl_include_current_state is True
     assert HERO_CONFIG.policy_passthrough_mode == "root_only"
 
+    combined = _apply_hero_architecture_overrides(
+        HERO_CONFIG,
+        recipe="hero",
+        policy_passthrough_mode=None,
+        dfm_state_source=None,
+        dfm_jepa_fusion_mode=None,
+        wdl_include_current_state=True,
+        dfm_closed_loop_mode="predicted_jepa_tokens",
+    )
+    assert combined.wdl_include_current_state is True
+    assert combined.dfm_closed_loop_mode == "predicted_jepa_tokens"
+
     with pytest.raises(ValueError, match="recipe='hero'"):
         _apply_hero_architecture_overrides(
             HERO_CONFIG,
