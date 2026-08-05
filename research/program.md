@@ -854,7 +854,7 @@ architecture hypothesis is to combine the closed-loop feedback mechanism
 with a stronger one-pass base, using current-state WDL or policy-prelogit as
 the bootstrap rather than cloning future policy logits.
 
-## Active 10%-epoch scaling study (2026-07-29)
+## Interrupted 10%-epoch scaling study (2026-07-29 to 2026-08-05)
 
 The 1,024-update current-WDL, predicted-JEPA closed-loop, and combined
 current-WDL/closed-loop arms now advance to a matched `2,768`-update
@@ -871,3 +871,12 @@ in `research/experiment_three_arm_ten_percent_scaling.md`. The one-epoch Hero
 curve is a within-recipe shape prior, not permission to equate lower loss with
 greater Elo across architectures. Only one arm may advance to actual
 25/50/100% measurements after all three 10% endpoints are available.
+
+The queue did not finish. Current-WDL reached update `2,188` (`7.9049%` of an
+epoch) and preserved frozen validation through the 7.5% milestone before an
+external termination for which no guard abort or Python traceback was logged.
+No checkpoint was written because the sole recovery boundary was 10%.
+Closed-loop and combined never started. The partial curve and immutable source
+hashes are sealed in
+`research/analysis/three_arm_ten_percent_progress_20260805.json`; do not treat
+this as a three-arm comparison or promotion result.

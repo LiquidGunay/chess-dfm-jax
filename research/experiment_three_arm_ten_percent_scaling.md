@@ -1,6 +1,7 @@
 # Experiment: three-arm 10%-epoch WDL/closed-loop scaling
 
-Status: preregistered and started on 2026-07-29.
+Status: interrupted after four current-WDL milestones; progress sealed on
+2026-08-05. Closed-loop and combined did not start.
 
 ## Question
 
@@ -112,3 +113,35 @@ positive refinement. At this stage compare:
 After all three matched 10% runs and Arenas complete, choose at most one arm
 for actual 25%, 50%, and 100% milestones. A projected curve alone cannot
 authorize that extension.
+
+## Preserved partial result
+
+The current-WDL arm restarted deterministically after the first attempt was
+stopped by an operator directory move. The replacement reached update `2,188`
+(`2,240,512` examples, `7.9049%` of an epoch and `79.05%` of the planned
+10% prefix). It produced the 2%, 3.7%, 5%, and 7.5% frozen validations:
+
+| Epoch fraction | Update | DFM CE | Accuracy | Legal mass | Current-WDL loss | Current-WDL accuracy |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `2.0015%` | `554` | `5.89933` | `6.403%` | `44.127%` | `1.00418` | `56.323%` |
+| `3.6996%` | `1,024` | `5.70881` | `7.281%` | `55.282%` | `0.78507` | `62.756%` |
+| `5.0002%` | `1,384` | `5.61985` | `7.661%` | `58.707%` | `0.75618` | `64.697%` |
+| `7.5003%` | `2,076` | `5.48925` | `8.427%` | `64.033%` | `0.73648` | `64.587%` |
+
+The final 64 completed updates averaged DFM CE `5.26799`, total loss
+`6.71725`, action accuracy `10.264%`, and legal mass `64.254%`. Target and
+prediction SIGReg averaged `0.06794/0.06583`; prediction and target latent
+norms averaged `29.919/29.580`. There were no non-finite or skipped updates.
+
+The process then ended without a Python traceback, guard abort, terminal
+report, or checkpoint. The guard recorded a minimum `8,219,414,528` bytes of
+available host memory and peak process-group RSS `2,640,723,968` bytes, ruling
+out its RAM limits as the cause. Its precise external termination signal was
+not recorded. Because the sole recovery checkpoint was scheduled at update
+`2,768`, this partial model cannot resume. The fail-stop queue therefore did
+not launch the closed-loop or combined arms.
+
+The compact immutable ledger is
+`research/analysis/three_arm_ten_percent_progress_20260805.json`. Raw JSONL,
+GPU telemetry, and logs remain workspace-local and gitignored; their sizes
+and SHA-256 hashes are recorded in that ledger.
