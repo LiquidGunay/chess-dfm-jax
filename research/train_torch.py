@@ -93,6 +93,7 @@ _DATA_ROOT = _REPO_ROOT / "data" / "trajectory_v3"
 _RAW_BT4_PATH = _REPO_ROOT / "models" / "source" / "extracted" / "BT4_exported.pb.gz"
 _HERO_EVAL_MANIFEST = _REPO_ROOT / "research" / "eval" / "hero_epoch_v1" / "manifest.json"
 _HERO_FAST_VALIDATION_PERCENTAGES = tuple(range(10, 101, 10))
+_DEFAULT_LIVE_VALIDATION_EXAMPLES = 8_192
 _HERO_ARENA_PERCENTAGES = (25, 50, 75)
 _HERO_ARENA_PAIRS = 16
 _HERO_ARENA_ADDITIONAL_PLY_CAP = 256
@@ -6565,6 +6566,13 @@ def _training_resume_contract(
                 args,
                 enabled=bool(getattr(args, "hero_milestones", False)),
             ),
+            "live_validation": _live_validation_contract(
+                args,
+                updates=tuple(
+                    int(value)
+                    for value in getattr(args, "validation_updates", ())
+                ),
+            ),
         },
         "stochastic_state": (
             "all step choices derive from seed/update; data derives from "
@@ -7087,6 +7095,15 @@ def train(args: argparse.Namespace) -> int:
             raise ValueError("Frozen live validation requires the compiled Hero runtime")
         if args.data_start != 0 or args.seed != 0:
             raise ValueError("Frozen live validation requires data-start 0 and seed 0")
+        if (
+            isinstance(args.validation_example_count, bool)
+            or args.validation_example_count < HERO_CONFIG.sigreg_example_count
+            or args.validation_example_count % HERO_CONFIG.sigreg_example_count != 0
+        ):
+            raise ValueError(
+                "--validation-example-count must be a positive multiple of "
+                f"{HERO_CONFIG.sigreg_example_count}"
+            )
     if hero_milestones_enabled:
         if args.recipe not in _HERO_RECIPES or lr_range_enabled:
             raise ValueError("Hero milestone instrumentation requires the clean hero recipe")
@@ -7264,6 +7281,7 @@ def train(args: argparse.Namespace) -> int:
             _load_lc0_validation_resources(
                 data_root=args.data_root,
                 total_examples=config.lr_total_examples,
+                example_count=args.validation_example_count,
             )
             if data_format == "lc0_sequential"
             else _load_hero_validation_resources(
@@ -9673,6 +9691,17 @@ class _HeroValidationResources:
         return int(self.fast_pool["pool_definition"]["count"])
 
     @property
+    def evaluation_batches(self) -> int:
+        batch_size = int(self.fast_pool["data"]["batch_size"])
+        count = self.evaluation_examples
+        if count < batch_size or count % batch_size != 0:
+            raise ValueError("Frozen validation count must be a positive batch multiple")
+        batches = count // batch_size
+        if batches > int(self.fast_batches.steps_per_epoch):
+            raise ValueError("Frozen validation count exceeds the available batch pool")
+        return batches
+
+    @property
     def seed(self) -> int:
         return int(self.fast_pool["pool_definition"]["seed"])
 
@@ -9774,6 +9803,17 @@ def _live_validation_contract(
         pool = "fast"
         source_key = "manifest_path"
         source_path = str(_require_workspace(args.hero_eval_manifest, exists=True))
+    fast_validation = {
+        "batch_size": HERO_CONFIG.sigreg_example_count,
+        "pool": pool,
+    }
+    if data_format == "lc0_sequential":
+        fast_validation.update(
+            {
+                "requested_examples": int(args.validation_example_count),
+                "selection": "seeded_batch_permutation_prefix",
+            }
+        )
     return {
         "enabled": True,
         "schedule_unit": "examples",
@@ -9783,10 +9823,7 @@ def _live_validation_contract(
             100.0 * update * int(args.batch_size) / total_examples
             for update in normalized_updates
         ],
-        "fast_validation": {
-            "batch_size": HERO_CONFIG.sigreg_example_count,
-            "pool": pool,
-        },
+        "fast_validation": fast_validation,
         source_key: source_path,
         "resume_boundary_policy": (
             "a milestone exactly equal to the restored update is repeated; "
@@ -9833,6 +9870,7 @@ def _load_lc0_validation_resources(
     *,
     data_root: Path,
     total_examples: int,
+    example_count: int,
 ) -> _HeroValidationResources:
     from chess_dfm_jax.data.lc0_sequential import SequentialBatches
 
@@ -9843,9 +9881,22 @@ def _load_lc0_validation_resources(
         batch_size=HERO_CONFIG.sigreg_example_count,
         horizon=HERO_CONFIG.horizon,
         seed=validation_seed,
-        shuffle_batches=False,
+        shuffle_batches=True,
     )
-    count = batches.steps_per_epoch * batches.batch_size
+    batch_size = int(batches.batch_size)
+    if (
+        isinstance(example_count, bool)
+        or example_count < batch_size
+        or example_count % batch_size != 0
+    ):
+        raise ValueError(f"example_count must be a positive multiple of {batch_size}")
+    requested_batches = example_count // batch_size
+    evaluation_batches = min(requested_batches, int(batches.steps_per_epoch))
+    count = evaluation_batches * batch_size
+    selected_slots = [
+        list(batches._slot_for_step(index))  # noqa: SLF001 - bind exact frozen pool
+        for index in range(evaluation_batches)
+    ]
     return _HeroValidationResources(
         fast_batches=batches,
         fast_pool={
@@ -9854,6 +9905,10 @@ def _load_lc0_validation_resources(
                 "split": "validation",
                 "seed": validation_seed,
                 "count": count,
+                "requested_count": int(example_count),
+                "batch_count": evaluation_batches,
+                "selection": "seeded_batch_permutation_prefix",
+                "selected_slots_sha256": _json_sha256(selected_slots),
             },
             "schedule_total_examples": int(total_examples),
             "data": batches.provenance(),
@@ -9966,7 +10021,7 @@ def _run_hero_validation_milestone(
         metrics, evaluation_seconds = _evaluate_validation_pool(
             model,
             resources.fast_batches,
-            count=resources.fast_batches.steps_per_epoch,
+            count=resources.evaluation_batches,
             seed=resources.seed,
             device=device,
             policy_teacher_encoder=policy_teacher_encoder,
@@ -10023,7 +10078,7 @@ def _run_frozen_validation_milestone(
         metrics, evaluation_seconds = _evaluate_validation_pool(
             model,
             resources.fast_batches,
-            count=resources.fast_batches.steps_per_epoch,
+            count=resources.evaluation_batches,
             seed=resources.seed,
             device=device,
             policy_teacher_encoder=policy_teacher_encoder,
@@ -11177,8 +11232,18 @@ def build_parser() -> argparse.ArgumentParser:
         nargs="*",
         default=(),
         help=(
-            "Evaluate the frozen 8,192-example Hero validation pool at these "
+            "Evaluate a frozen validation pool at these "
             "strictly increasing live updates without writing model snapshots."
+        ),
+    )
+    train_parser.add_argument(
+        "--validation-example-count",
+        type=int,
+        default=_DEFAULT_LIVE_VALIDATION_EXAMPLES,
+        help=(
+            "Requested LC0 validation examples per live milestone. The loader "
+            "uses a deterministic seeded batch subset and clamps to the full "
+            "validation split when it is smaller."
         ),
     )
     train_parser.add_argument(

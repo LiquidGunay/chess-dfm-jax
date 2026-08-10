@@ -20,7 +20,7 @@ backend.
 
 ## Price and utilization snapshot
 
-Rates are frozen on 2026-08-09 for planning and must be refreshed before a
+Rates are frozen on 2026-08-10 for planning and must be refreshed before a
 material launch. Modal lists T4 at $0.000164/GPU-second and L4 at
 $0.000222/GPU-second, plus $0.0000131/core-second and
 $0.00000222/GiB-second. Training rates are $0.000542/GPU-second for L40S and
@@ -29,22 +29,138 @@ $0.654/hour on T4 or $0.862/hour on L4. The $25.50 planned-work allocation buys
 about 39 T4-hours or 29.6 L4-hours before credits. See
 [Modal pricing](https://modal.com/pricing).
 
-Runpod currently lists L4 Flex Serverless at $0.00019/second ($0.684/hour of
-worker time), an L4 Pod at $0.39/hour, and an A5000 Pod at $0.27/hour. Flex
-workers charge through startup, execution, and their idle timeout; Pod storage
-is additional. See [Runpod Serverless pricing](https://docs.runpod.io/serverless/pricing)
-and [Pod pricing](https://www.runpod.io/pricing).
+Runpod currently lists Community Pod rates of $0.99/hour for L40S and
+$1.39/hour for A100 PCIe 80 GB. Its June 2026 Secure Cloud price update lists
+$1.19/hour and $1.69/hour respectively. Standard network storage is
+$0.07/GB-month, but transferable network volumes can attach only to Secure
+Cloud Pods; temporary container disk is the fastest storage. See
+[Pod pricing](https://www.runpod.io/pricing), the
+[Secure price update](https://www.runpod.io/blog/runpod-slashes-gpu-prices-more-power-less-cost-for-ai-builders),
+and [network-volume constraints](https://docs.runpod.io/storage/network-volumes).
+For the Proposal A container (four cores and 32 GiB), Modal L40S costs
+$2.395584/hour all-in. The matched steady timings are 2.591 seconds/update on
+L40S and 2.525 on A100 40 GB, making the A100 about 2.5% faster but 3.46% more
+expensive per update on Modal. At Runpod Secure rates, the same measured A100
+speedup would make A100 roughly 38.5% more expensive per update than L40S.
 
-For the same L4, a $0.39/hour Pod beats the representative $0.862/hour Modal
-configuration only when useful-GPU utilization exceeds about 45.2%:
-`useful_hours / rented_hours > 0.39 / 0.862`. This is the operational gate.
-Below that utilization, scale-to-zero generally wins; above it, a scripted pod
-can roughly double useful GPU-hours per dollar. Credits, startup/download time,
-storage, availability, and measured throughput can move the boundary. Modal is
-the present default because its environment and hard budget are already
-verified and its current smoke usage was fully credited. Re-evaluate Runpod
-Serverless after Modal credits are exhausted or if its batch-worker workflow
-becomes simpler than a Pod.
+A $1.19/hour Secure Runpod L40S beats that Modal configuration when useful-GPU
+utilization exceeds about 49.7%: `useful_hours / rented_hours >
+1.19 / 2.395584`. The 7,774-update epoch projects to 5.595 useful L40S-hours,
+or about $6.66 on a Secure Pod versus $13.40 on Modal before staging and
+storage. Community at $0.99/hour lowers compute to about $5.54, but requires
+volume-disk plus Railway checkpoint recovery rather than a transferable
+network volume. This makes Modal the default for short fail-closed screens and
+a scripted, auto-terminating Runpod L40S the default for the promoted
+contiguous epoch. Credits, startup/download time, availability, and measured
+throughput can move the boundary, so the Pod must still pass the stateful-pod
+gate below.
+
+An FP32-master recovery checkpoint was measured on the training Volume at
+about 3.0 GiB (`state.safetensors`, plus a roughly 198 KiB manifest). The full
+converted sequential corpus is 8.64 GB and its immutable source tar is 1.77
+GB. Provision a 60 GB temporary Secure network volume for the promoted epoch:
+this accommodates six sparse recovery states, the final model, corpus, source,
+environment, and scratch with reserve. At the standard rate, 60 GB is
+$4.20/month if retained for a full month. Publish the pre-decay and terminal
+artifacts to Railway, verify them remotely, then delete the temporary volume;
+do not keep a Pod or its storage alive for convenience.
+
+## Promoted Proposal A epoch
+
+The 2026-08-10 frozen screen selected an equal encoder/main peak learning rate
+of `5e-5` and ordinary decoupled decay. All arms used batch 1,024, so the
+matched L40S/A100 result is not a small-batch comparison:
+
+| Arm | Validation total | Root legal top-1 | Current WDL CE | Frozen decision |
+| --- | ---: | ---: | ---: | --- |
+| `5e-5`, no decay | 7.6351 | 0.5191 | 0.8944 | LR winner/control |
+| `5e-5`, decoupled decay | **7.5942** | 0.5165 | 0.8967 | **promoted** |
+| `5e-5`, cautious decay | 7.6089 | **0.5243** | **0.8802** | secondary; missed the preregistered total-loss improvement threshold |
+
+The higher rates `1e-4`, `2e-4`, and `4e-4` failed the frozen policy/value
+guardrails even where DFM or total loss improved. The retained selector outputs
+are
+`research/analysis/proposal_a_tuning/lr_analysis.json` and
+`research/analysis/proposal_a_tuning/decay_analysis.json`. Final Modal usage
+after all seven screens was `$31.74240029` metered and `$1.08389398` billed
+after credits; do not launch another tuning arm against the internal
+`$34.00` stop line.
+
+The one-epoch contract is
+`research/analysis/proposal_a_one_epoch_preregister_20260810.json`:
+
+- open-loop `z0 -> DFM(a0..a7) -> JEPA(z1..z8)`, current and future WDL;
+- no teacher KL, legality auxiliary, closed loop, JEPA inference feedback, or
+  future-state teacher forcing;
+- 7,774 updates / 7,960,576 examples, 2% warmup, 78% stable, 20% linear decay;
+- exact recovery at updates 1,000, 2,500, 4,000, 5,500, 6,219, and 7,000;
+- deterministic 8,192-position validation at 6,219 and 7,774; and
+- one Secure L40S, a 60 GB network volume, 40 GB container disk, stale
+  heartbeat deletion after ten minutes, and an absolute nine-hour deletion.
+
+At `$1.19/hour`, the 6.25-hour central estimate is `$7.44`; the absolute
+nine-hour compute cap is `$10.71`. Six measured checkpoint writes add only
+about one minute. The remaining overhead reserve covers image/bootstrap,
+roughly fifteen minutes of corpus conversion, an 8.64 GB copy to container
+NVMe, two bounded validations, and provider variance.
+
+The launch tooling is
+`research/infra/runpod_proposal_a_epoch.py`,
+`runpod_epoch_bootstrap.py`, and `runpod_proposal_a_worker.py`. It uploads
+only the 1.77 GB source tar, 336 MB raw encoder, bootstrap, and content-bound
+manifest through the Runpod S3 API before a GPU exists. The Pod gets no Railway
+credential. It converts once on the network volume, audits the result, copies
+the hot corpus to container NVMe, and trains from the exact pushed Git commit.
+A terminal or failed worker syncs its status and deletes its own Pod with the
+provider-supplied Pod-scoped key. The local monitor independently deletes a
+wrong-GPU, over-price, stale, or terminal-but-still-running Pod.
+
+No Runpod resource has been created yet. Authentication requires two separate
+items:
+
+1. a normal Runpod API key for `runpodctl doctor` (Pod/volume lifecycle); and
+2. a Runpod S3 access-key ID and secret exposed only in the current shell as
+   `RUNPOD_S3_ACCESS_KEY_ID` and `RUNPOD_S3_SECRET_ACCESS_KEY`.
+
+Choose a datacenter that has both Secure L40S capacity and a documented S3 API
+endpoint. Then use:
+
+```bash
+.local/bin/runpodctl doctor
+.local/bin/runpodctl datacenter list
+.local/bin/runpodctl gpu list
+
+.local/bin/runpodctl network-volume create \
+  --name chess-dfm-proposal-a-epoch-v1 \
+  --size 60 \
+  --data-center-id S3_COMPATIBLE_DATACENTER
+
+.venv/bin/python -m research.infra.runpod_proposal_a_epoch stage \
+  --volume-id NETWORK_VOLUME_ID \
+  --s3-endpoint https://s3api-DATACENTER.runpod.io/ \
+  --output .local/runpod/proposal-a-stage.json
+
+# Dry-run: inspect the absolute deletion time and every launch argument.
+.venv/bin/python -m research.infra.runpod_proposal_a_epoch launch \
+  --stage-receipt .local/runpod/proposal-a-stage.json \
+  --output .local/runpod/proposal-a-launch-dry-run.json
+
+# Creating the Pod requires the explicit --execute switch.
+.venv/bin/python -m research.infra.runpod_proposal_a_epoch launch \
+  --stage-receipt .local/runpod/proposal-a-stage.json \
+  --output .local/runpod/proposal-a-launch.json \
+  --execute
+
+.venv/bin/python -m research.infra.runpod_proposal_a_epoch monitor \
+  --launch-receipt .local/runpod/proposal-a-launch.json \
+  --s3-endpoint https://s3api-DATACENTER.runpod.io/ \
+  --output .local/runpod/proposal-a-monitor.jsonl
+```
+
+Staging refuses a dirty or unpushed checkout, verifies local and remote sizes
+plus SHA-256 metadata, and never recursively lists the volume. Launch refuses
+an unverified stage receipt, then immediately deletes a Pod if its returned GPU
+is not L40S or its quoted rate exceeds `$1.25/hour`.
 
 ## Local safety envelope
 
@@ -390,8 +506,10 @@ seconds, startup/download time, checkpoint interval, expected retries, and the
 cost of idle debugging time under both providers. Use Runpod only when a warm
 process or local NVMe materially changes the failure/cost model. A pod launch
 must have an auto-termination condition, an external heartbeat, a Railway
-checkpoint target, and a tested bootstrap script. No Runpod credential is
-currently required.
+checkpoint target, and a tested bootstrap script. A network-volume design must
+price Secure Cloud explicitly; a Community design must push recovery state to
+Railway before depending on termination-prone volume disk. No Runpod
+credential is committed to the repository or written into a launch manifest.
 
 ## Recovery rules
 

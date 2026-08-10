@@ -1,0 +1,16 @@
+{
+  "bundle_sha256": "c8b25fa7d151aa82ab1c91f395a1a2f6c238d0a2f88e06ed1c04aa873080fe7a",
+  "created_utc": "2026-08-10T17:57:42Z",
+  "file_count": 1,
+  "kind": "raw-bt4-encoder",
+  "manifest_key": "chess-dfm/v1/bundles/sha256/c8b25fa7d151aa82ab1c91f395a1a2f6c238d0a2f88e06ed1c04aa873080fe7a/bundle.json",
+  "remote_head_verified_after_upload": true,
+  "schema_version": "chess-dfm-raw-bt4-railway-source-receipt-v1",
+  "source": {
+    "logical_name": "models/raw/BT4_exported.pb.gz",
+    "sha256": "61e43e98d2c4cb747498c6bc13a5bbb3b07e985d3f5d87f0351a4db855fa0651",
+    "size_bytes": 335916563
+  },
+  "storage_role": "immutable raw encoder source for reproducible Torch initialization",
+  "uploaded_files": 1
+}

@@ -39,6 +39,8 @@ from research.train_torch import (
     _closed_loop_proposal_actions,
     _hero_milestone_update,
     _latent_spectrum_metrics,
+    _live_validation_contract,
+    _load_lc0_validation_resources,
     _normalize_frozen_indices,
     _polarized_gradient_cosines,
     _prepare_wdl_supervision,
@@ -1350,6 +1352,97 @@ def test_live_validation_updates_parse_as_a_frozen_sparse_schedule():
         2076,
         2768,
     ]
+    assert args.validation_example_count == 8_192
+
+
+@pytest.mark.parametrize(
+    ("available_batches", "expected_batches"),
+    ((18, 18), (1_147, 128)),
+)
+def test_lc0_live_validation_uses_a_bounded_seeded_batch_subset(
+    monkeypatch: pytest.MonkeyPatch,
+    available_batches: int,
+    expected_batches: int,
+) -> None:
+    import chess_dfm_jax.data.lc0_sequential as lc0_sequential
+
+    class FakeSequentialBatches:
+        def __init__(
+            self,
+            dataset_root: Path,
+            *,
+            split: str,
+            batch_size: int,
+            horizon: int,
+            seed: int,
+            shuffle_batches: bool,
+        ) -> None:
+            self.dataset_root = dataset_root
+            self.split = split
+            self.batch_size = batch_size
+            self.horizon = horizon
+            self.seed = seed
+            self.shuffle_batches = shuffle_batches
+            self.steps_per_epoch = available_batches
+
+        def _slot_for_step(self, step: int) -> tuple[int, int]:
+            return step % 7, step
+
+        def provenance(self) -> dict[str, object]:
+            return {
+                "batch_size": self.batch_size,
+                "steps_per_epoch": self.steps_per_epoch,
+                "seed": self.seed,
+                "shuffle_batches": self.shuffle_batches,
+            }
+
+    monkeypatch.setattr(
+        lc0_sequential,
+        "SequentialBatches",
+        FakeSequentialBatches,
+    )
+    repository_root = Path(__file__).resolve().parents[1]
+
+    first = _load_lc0_validation_resources(
+        data_root=repository_root,
+        total_examples=7_960_576,
+        example_count=8_192,
+    )
+    second = _load_lc0_validation_resources(
+        data_root=repository_root,
+        total_examples=7_960_576,
+        example_count=8_192,
+    )
+
+    assert first.evaluation_batches == expected_batches
+    assert first.evaluation_examples == expected_batches * 64
+    assert first.fast_batches.shuffle_batches is True
+    assert first.fast_pool["pool_definition"]["requested_count"] == 8_192
+    assert (
+        first.fast_pool["pool_definition"]["selected_slots_sha256"]
+        == second.fast_pool["pool_definition"]["selected_slots_sha256"]
+    )
+
+
+def test_lc0_live_validation_contract_binds_subset_size_and_selection() -> None:
+    repository_root = Path(__file__).resolve().parents[1]
+    args = SimpleNamespace(
+        batch_size=1024,
+        data_format="lc0_sequential",
+        data_root=repository_root,
+        lr_total_examples=7_960_576,
+        validation_example_count=8_192,
+    )
+
+    contract = _live_validation_contract(args, updates=(6_219, 7_774))
+
+    assert contract["fast_validation"] == {
+        "batch_size": 64,
+        "pool": "lc0_sequential_validation",
+        "requested_examples": 8_192,
+        "selection": "seeded_batch_permutation_prefix",
+    }
+    assert contract["updates"] == [6_219, 7_774]
 
 
 def test_latent_spectrum_metrics_expose_rank_and_centered_scale():
