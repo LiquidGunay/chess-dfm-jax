@@ -20,7 +20,7 @@ import modal
 
 
 APP_NAME = "chess-dfm-training"
-RUNNER_REVISION = "hero-v2-modal-training-v5"
+RUNNER_REVISION = "hero-v2-modal-training-v6"
 BASE_GIT_COMMIT = "86ba0b37e3e188eab115b45a1460d079fac341f8"
 BASE_INPUT_BUNDLE_SHA256 = "8be17957ad779e3756092306daa95ad9c1c7f5d482b6409bda7a16bc6d6c7a44"
 BASE_INPUT_VOLUME_NAME = "chess-dfm-interpretability-inputs"
@@ -34,6 +34,17 @@ TRAINING_INPUT_MOUNT = f"{WORKSPACE_MOUNT}/training-inputs"
 TRAINING_RESULT_MOUNT = f"{WORKSPACE_MOUNT}/training-results"
 TRAINING_CACHE_MOUNT = f"{WORKSPACE_MOUNT}/training-cache"
 TRAINING_DATASET_LABEL = "trajectory-v3-lc0-test80-h8-sets1-3-20260430"
+LC0_PROPOSAL_A_DATASET_LABEL = "lc0-sequential-test80-20240401-0117-pilot-v1"
+LC0_PROPOSAL_A_STAGE_SCHEMA = "chess-dfm-modal-lc0-sequential-pilot-v1"
+LC0_PROPOSAL_A_INVENTORY_SHA256 = (
+    "4a3a640970aeac08fd152790e4b5dfe7b19ac600e6bec08d086eaf3510fe012e"
+)
+LC0_PROPOSAL_A_INVENTORY_SIZE_BYTES = 278_048_204
+LC0_PROPOSAL_A_SOURCE_ARCHIVE_SHA256 = (
+    "1c5e5d0d1d335bfeca9693700a1ad1415abfb190772bd051d1f00cb193eb3c2f"
+)
+LC0_PROPOSAL_A_FULL_EPOCH_EXAMPLES = 7_960_576
+LC0_PROPOSAL_A_CHUNK_INDICES = (0, 32, 64, 96, 128, 160, 192, 224, 253)
 HERO1_EXACT_PHASE1_RESULT_LABEL = (
     "hero-training-phase1-hero1_exact-l40s-fae7b0ccef5ca3668ed5"
 )
@@ -134,14 +145,19 @@ gpu_image = (
 @dataclasses.dataclass(frozen=True)
 class TrainingArm:
     recipe: str
+    data_format: str = "trajectory_v3"
+    dataset_label: str = TRAINING_DATASET_LABEL
     main_lr_multiplier: float | None = None
     encoder_lr_ratio: float | None = None
+    lr_total_examples: int | None = None
     optimizer_precision: str | None = None
+    weight_decay_multiplier: float | None = None
     weight_decay_mode: str | None = None
     legality_coeff: float | None = None
     policy_distill_coeff: float | None = None
     policy_distill_teacher_result_label: str | None = None
     policy_distill_teacher_state_sha256: str | None = None
+    wdl_include_current_state: bool | None = None
     dfm_closed_loop_mode: str | None = None
 
 
@@ -287,6 +303,39 @@ for _ratio_label, _ratio in (
         optimizer_precision="fp32_master",
         weight_decay_mode="cautious",
     )
+for _lr_label, _lr_multiplier in (
+    ("5em5", 0.1),
+    ("1em4", 0.2),
+    ("2em4", 0.4),
+    ("4em4", 0.8),
+):
+    _proposal_base = TrainingArm(
+        recipe="hero_v2",
+        data_format="lc0_sequential",
+        dataset_label=LC0_PROPOSAL_A_DATASET_LABEL,
+        main_lr_multiplier=_lr_multiplier,
+        encoder_lr_ratio=1.0,
+        lr_total_examples=LC0_PROPOSAL_A_FULL_EPOCH_EXAMPLES,
+        optimizer_precision="fp32_master",
+        weight_decay_mode="decoupled",
+        legality_coeff=0.0,
+        wdl_include_current_state=True,
+    )
+    TRAINING_ARMS[f"proposal_a_equal_lr_{_lr_label}_wd0"] = dataclasses.replace(
+        _proposal_base,
+        weight_decay_multiplier=0.0,
+    )
+    TRAINING_ARMS[f"proposal_a_equal_lr_{_lr_label}_wd1"] = dataclasses.replace(
+        _proposal_base,
+        weight_decay_multiplier=1.0,
+    )
+    TRAINING_ARMS[
+        f"proposal_a_equal_lr_{_lr_label}_wd1_cautious"
+    ] = dataclasses.replace(
+        _proposal_base,
+        weight_decay_multiplier=1.0,
+        weight_decay_mode="cautious",
+    )
 TRAINING_PROFILES = {
     "smoke": TrainingProfile(
         steps=1,
@@ -308,6 +357,13 @@ TRAINING_PROFILES = {
         save_recovery=False,
         save_model=False,
         log_every=1,
+    ),
+    "proposal_screen": TrainingProfile(
+        steps=252,
+        validation_updates=(252,),
+        save_recovery=False,
+        save_model=False,
+        log_every=10,
     ),
     "phase1": TrainingProfile(
         steps=554,
@@ -507,8 +563,12 @@ def _copy_contract_assets(
     return manifest_path
 
 
-def _training_dataset_root() -> Path:
-    return Path(TRAINING_INPUT_MOUNT) / TRAINING_DATASET_LABEL
+def _training_dataset_root(
+    dataset_label: str = TRAINING_DATASET_LABEL,
+) -> Path:
+    if Path(dataset_label).name != dataset_label:
+        raise ValueError("Unsafe training dataset label")
+    return Path(TRAINING_INPUT_MOUNT) / dataset_label
 
 
 def _validate_training_stage() -> dict[str, Any]:
@@ -544,6 +604,57 @@ def _validate_training_stage() -> dict[str, Any]:
     )
     if manifest != expected_manifest:
         raise RuntimeError("Training evaluation contract path drift")
+    return marker
+
+
+def _validate_lc0_proposal_a_stage() -> dict[str, Any]:
+    root = _training_dataset_root(LC0_PROPOSAL_A_DATASET_LABEL)
+    marker_path = root / ".stage.json"
+    if not root.is_dir() or not marker_path.is_file():
+        raise RuntimeError("Proposal A LC0 pilot has not been staged")
+    marker = json.loads(marker_path.read_text(encoding="utf-8"))
+    expected = {
+        "schema_version": LC0_PROPOSAL_A_STAGE_SCHEMA,
+        "dataset_label": LC0_PROPOSAL_A_DATASET_LABEL,
+        "source_archive_sha256": LC0_PROPOSAL_A_SOURCE_ARCHIVE_SHA256,
+        "selected_chunk_indices": list(LC0_PROPOSAL_A_CHUNK_INDICES),
+        "full_batch_1024_epoch_examples": LC0_PROPOSAL_A_FULL_EPOCH_EXAMPLES,
+        "inventory_file_count": 400,
+        "inventory_size_bytes": LC0_PROPOSAL_A_INVENTORY_SIZE_BYTES,
+        "inventory_sha256": LC0_PROPOSAL_A_INVENTORY_SHA256,
+        "split_totals": {
+            "train": {
+                "positions": 264_105,
+                "trainable_starts": 261_701,
+                "full_batches": 252,
+            },
+            "validation": {
+                "positions": 1_473,
+                "trainable_starts": 1_458,
+                "full_batches": 18,
+            },
+            "test": {
+                "positions": 2_201,
+                "trainable_starts": 2_181,
+                "full_batches": 31,
+            },
+        },
+    }
+    if any(marker.get(key) != value for key, value in expected.items()):
+        raise RuntimeError("Proposal A LC0 pilot stage marker drift")
+
+    sequential_root = root / "lc0_sequential"
+    source_manifest = sequential_root / "source_dataset_manifest.json"
+    train_manifests = tuple(sorted(sequential_root.glob("chunks/*/train/manifest.json")))
+    validation_manifests = tuple(
+        sorted(sequential_root.glob("chunks/*/validation/manifest.json"))
+    )
+    if (
+        not source_manifest.is_file()
+        or len(train_manifests) != len(LC0_PROPOSAL_A_CHUNK_INDICES)
+        or len(validation_manifests) != 8
+    ):
+        raise RuntimeError("Proposal A LC0 pilot inventory is incomplete")
     return marker
 
 
@@ -693,6 +804,11 @@ def _run_identity(
 ) -> str:
     profile = TRAINING_PROFILES[profile_name]
     arm = TRAINING_ARMS[arm_name]
+    dataset_identity_sha256 = (
+        TRAJECTORY_TAR_SHA256
+        if arm.data_format == "trajectory_v3"
+        else LC0_PROPOSAL_A_INVENTORY_SHA256
+    )
     identity = hashlib.sha256(
         _canonical_json_bytes(
             {
@@ -704,7 +820,11 @@ def _run_identity(
                     source_tree_sha256,
                     label="source_tree_sha256",
                 ),
-                "trajectory_tar_sha256": TRAJECTORY_TAR_SHA256,
+                "dataset": {
+                    "format": arm.data_format,
+                    "label": arm.dataset_label,
+                    "identity_sha256": dataset_identity_sha256,
+                },
                 "raw_bt4_sha256": RAW_BT4_SHA256,
             }
         )
@@ -755,6 +875,8 @@ def _training_command(
         str(raw_bt4_path),
         "--data-root",
         str(data_root),
+        "--data-format",
+        arm.data_format,
         "--output-dir",
         str(output_dir),
         "--batch-size",
@@ -815,6 +937,17 @@ def _training_command(
                 arm.weight_decay_mode,
             )
         )
+        if arm.lr_total_examples is not None:
+            command.extend(
+                ("--lr-total-examples", str(arm.lr_total_examples))
+            )
+        if arm.weight_decay_multiplier is not None:
+            command.extend(
+                (
+                    "--weight-decay-multiplier",
+                    repr(arm.weight_decay_multiplier),
+                )
+            )
         if arm.legality_coeff is not None:
             command.extend(("--legality-coeff", repr(arm.legality_coeff)))
         if arm.policy_distill_coeff is not None:
@@ -845,6 +978,12 @@ def _training_command(
                         arm.policy_distill_teacher_state_sha256,
                     )
                 )
+    if arm.wdl_include_current_state is not None:
+        command.append(
+            "--wdl-include-current-state"
+            if arm.wdl_include_current_state
+            else "--no-wdl-include-current-state"
+        )
     if arm.dfm_closed_loop_mode is not None:
         command.extend(
             (
@@ -996,6 +1135,7 @@ def _run_training(
         raise ValueError(f"Unknown training profile {profile_name!r}")
     if arm_name not in TRAINING_ARMS:
         raise ValueError(f"Unknown training arm {arm_name!r}")
+    arm = TRAINING_ARMS[arm_name]
     expected_source_tree_sha256 = _require_sha256(
         expected_source_tree_sha256,
         label="expected_source_tree_sha256",
@@ -1011,7 +1151,18 @@ def _run_training(
     if gpu not in device_name:
         raise RuntimeError(f"Requested {gpu} but Modal exposed {device_name!r}")
 
-    stage = _validate_training_stage()
+    if (
+        arm.data_format == "trajectory_v3"
+        and arm.dataset_label == TRAINING_DATASET_LABEL
+    ):
+        stage = _validate_training_stage()
+    elif (
+        arm.data_format == "lc0_sequential"
+        and arm.dataset_label == LC0_PROPOSAL_A_DATASET_LABEL
+    ):
+        stage = _validate_lc0_proposal_a_stage()
+    else:
+        raise RuntimeError("Training arm has an unsupported dataset contract")
     raw_bt4_path = _verify_raw_bt4_volume()
     source_tree_sha256 = _source_tree_sha256(Path("/root"))
     compile_source_tree_sha256 = _compile_source_tree_sha256(Path("/root"))
@@ -1112,9 +1263,16 @@ def _run_training(
         resume_update, resume_checkpoint = attempt_checkpoint
         resume_result_label = result_label
 
-    dataset_root = _training_dataset_root()
-    data_root = dataset_root / "trajectory_v3"
-    eval_manifest = dataset_root / "contracts" / "hero_epoch_v1" / "manifest.json"
+    dataset_root = _training_dataset_root(arm.dataset_label)
+    data_root = dataset_root / (
+        "trajectory_v3" if arm.data_format == "trajectory_v3" else "lc0_sequential"
+    )
+    eval_manifest = (
+        _training_dataset_root(TRAINING_DATASET_LABEL)
+        / "contracts"
+        / "hero_epoch_v1"
+        / "manifest.json"
+    )
     cache_root = Path(TRAINING_CACHE_MOUNT) / gpu.lower() / compile_source_tree_sha256
     cache_root.mkdir(parents=True, exist_ok=True)
     output_dir.parent.mkdir(parents=True, exist_ok=True)
@@ -1237,7 +1395,12 @@ def _run_training(
         "source_tree_sha256": source_tree_sha256,
         "compile_source_tree_sha256": compile_source_tree_sha256,
         "git_commit": git_commit,
-        "trajectory_stage": stage,
+        "dataset_stage": stage,
+        "dataset": {
+            "format": arm.data_format,
+            "label": arm.dataset_label,
+            "data_root": str(data_root),
+        },
         "raw_bt4_sha256": RAW_BT4_SHA256,
         "declared_attempt_upper_bound_dollars": declared_attempt_upper_bound_dollars,
         "resumed_from_result_label": resume_result_label,
@@ -1753,6 +1916,38 @@ def smoke_a100(**kwargs: str) -> dict[str, Any]:
     gpu="L40S",
     cpu=4.0,
     memory=32768,
+    timeout=2400,
+    startup_timeout=900,
+    retries=0,
+    max_containers=1,
+    single_use_containers=True,
+)
+def proposal_screen_l40s(**kwargs: str) -> dict[str, Any]:
+    return _run_training(gpu="L40S", **kwargs)
+
+
+@app.function(
+    image=gpu_image,
+    volumes=_TRAINING_VOLUMES,
+    gpu="A100-40GB",
+    cpu=4.0,
+    memory=32768,
+    timeout=2400,
+    startup_timeout=900,
+    retries=0,
+    max_containers=1,
+    single_use_containers=True,
+)
+def proposal_screen_a100(**kwargs: str) -> dict[str, Any]:
+    return _run_training(gpu="A100", **kwargs)
+
+
+@app.function(
+    image=gpu_image,
+    volumes=_TRAINING_VOLUMES,
+    gpu="L40S",
+    cpu=4.0,
+    memory=32768,
     timeout=5400,
     startup_timeout=900,
     retries=0,
@@ -1873,6 +2068,8 @@ def _spec(stage: str) -> tuple[Any, Decimal]:
     resources = {
         "smoke-l40s": (1200, 900, "L40S", Decimal("1.40")),
         "smoke-a100": (1200, 900, "A100-40GB", Decimal("1.50")),
+        "proposal_screen-l40s": (2400, 900, "L40S", Decimal("2.20")),
+        "proposal_screen-a100": (2400, 900, "A100-40GB", Decimal("2.34")),
         "phase1-l40s": (5400, 900, "L40S", Decimal("4.20")),
         "phase1-a100": (5400, 900, "A100-40GB", Decimal("4.50")),
         "u1024-l40s": (9000, 900, "L40S", Decimal("7.00")),
@@ -2025,6 +2222,8 @@ def main(
     functions = {
         ("smoke", "L40S"): smoke_l40s,
         ("smoke", "A100"): smoke_a100,
+        ("proposal_screen", "L40S"): proposal_screen_l40s,
+        ("proposal_screen", "A100"): proposal_screen_a100,
         ("phase1", "L40S"): phase1_l40s,
         ("phase1", "A100"): phase1_a100,
         ("u1024", "L40S"): u1024_l40s,

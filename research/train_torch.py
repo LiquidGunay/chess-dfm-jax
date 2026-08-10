@@ -6792,9 +6792,15 @@ def _resolve_training_recipe(
     override_values = {
         "main_lr_multiplier": getattr(args, "main_lr_multiplier", None),
         "encoder_lr_ratio": getattr(args, "encoder_lr_ratio", None),
+        "lr_total_examples": getattr(args, "lr_total_examples", None),
         "lr_schedule_kind": getattr(args, "lr_schedule_kind", None),
         "wsd_decay_fraction": getattr(args, "wsd_decay_fraction", None),
         "optimizer_precision": getattr(args, "optimizer_precision", None),
+        "weight_decay_multiplier": getattr(
+            args,
+            "weight_decay_multiplier",
+            None,
+        ),
         "weight_decay_mode": getattr(args, "weight_decay_mode", None),
     }
     if args.recipe != "hero_v2":
@@ -6833,6 +6839,39 @@ def _resolve_training_recipe(
         config = dataclasses.replace(
             config,
             bt4_learning_rate=config.learning_rate * float(encoder_lr_ratio),
+        )
+
+    lr_total_examples = override_values["lr_total_examples"]
+    if lr_total_examples is not None:
+        if (
+            isinstance(lr_total_examples, bool)
+            or not isinstance(lr_total_examples, int)
+            or lr_total_examples < 2
+        ):
+            raise ValueError("--lr-total-examples must be an integer of at least 2")
+        warmup_fraction = config.lr_warmup_examples / config.lr_total_examples
+        rescaled_warmup = round(warmup_fraction * lr_total_examples)
+        if not 0 < rescaled_warmup < lr_total_examples:
+            raise ValueError("Rescaled example-based warmup is invalid")
+        config = dataclasses.replace(
+            config,
+            lr_warmup_examples=rescaled_warmup,
+            lr_total_examples=lr_total_examples,
+        )
+
+    weight_decay_multiplier = override_values["weight_decay_multiplier"]
+    if weight_decay_multiplier is not None:
+        if (
+            isinstance(weight_decay_multiplier, bool)
+            or not math.isfinite(weight_decay_multiplier)
+            or not 0.0 <= weight_decay_multiplier <= 16.0
+        ):
+            raise ValueError(
+                "--weight-decay-multiplier must be finite and in [0, 16]"
+            )
+        config = dataclasses.replace(
+            config,
+            weight_decay=config.weight_decay * float(weight_decay_multiplier),
         )
 
     schedule_kind = override_values["lr_schedule_kind"] or policy.schedule_kind
@@ -7221,8 +7260,15 @@ def train(args: argparse.Namespace) -> int:
         else None
     )
     live_validation_resources = (
-        _load_hero_validation_resources(
-            manifest_path=args.hero_eval_manifest,
+        (
+            _load_lc0_validation_resources(
+                data_root=args.data_root,
+                total_examples=config.lr_total_examples,
+            )
+            if data_format == "lc0_sequential"
+            else _load_hero_validation_resources(
+                manifest_path=args.hero_eval_manifest,
+            )
         )
         if live_validation_enabled
         else None
@@ -9619,8 +9665,20 @@ def _load_hero_frozen_pool(
 
 @dataclasses.dataclass(frozen=True)
 class _HeroValidationResources:
-    fast_batches: FrozenIndexTrajectoryBatches
+    fast_batches: Any
     fast_pool: dict[str, Any]
+
+    @property
+    def evaluation_examples(self) -> int:
+        return int(self.fast_pool["pool_definition"]["count"])
+
+    @property
+    def seed(self) -> int:
+        return int(self.fast_pool["pool_definition"]["seed"])
+
+    @property
+    def total_examples(self) -> int:
+        return int(self.fast_pool.get("schedule_total_examples", _HERO_TRAIN_EXAMPLES))
 
 
 @dataclasses.dataclass(frozen=True)
@@ -9704,20 +9762,32 @@ def _live_validation_contract(
     normalized_updates = tuple(int(update) for update in updates)
     if not normalized_updates:
         return {"enabled": False}
+    data_format = getattr(args, "data_format", "trajectory_v3")
+    total_examples = int(
+        getattr(args, "lr_total_examples", None) or _HERO_TRAIN_EXAMPLES
+    )
+    if data_format == "lc0_sequential":
+        pool = "lc0_sequential_validation"
+        source_key = "data_root"
+        source_path = str(_require_workspace(args.data_root, exists=True))
+    else:
+        pool = "fast"
+        source_key = "manifest_path"
+        source_path = str(_require_workspace(args.hero_eval_manifest, exists=True))
     return {
         "enabled": True,
         "schedule_unit": "examples",
-        "total_examples": _HERO_TRAIN_EXAMPLES,
+        "total_examples": total_examples,
         "updates": list(normalized_updates),
         "observed_percentages": [
-            100.0 * update * int(args.batch_size) / _HERO_TRAIN_EXAMPLES
+            100.0 * update * int(args.batch_size) / total_examples
             for update in normalized_updates
         ],
         "fast_validation": {
             "batch_size": HERO_CONFIG.sigreg_example_count,
-            "pool": "fast",
+            "pool": pool,
         },
-        "manifest_path": str(_require_workspace(args.hero_eval_manifest, exists=True)),
+        source_key: source_path,
         "resume_boundary_policy": (
             "a milestone exactly equal to the restored update is repeated; "
             "earlier milestones are skipped"
@@ -9756,6 +9826,38 @@ def _load_hero_validation_resources(
     return _HeroValidationResources(
         fast_batches=fast_batches,
         fast_pool=fast_pool,
+    )
+
+
+def _load_lc0_validation_resources(
+    *,
+    data_root: Path,
+    total_examples: int,
+) -> _HeroValidationResources:
+    from chess_dfm_jax.data.lc0_sequential import SequentialBatches
+
+    validation_seed = 20_000
+    batches = SequentialBatches(
+        _require_workspace(data_root, exists=True),
+        split="validation",
+        batch_size=HERO_CONFIG.sigreg_example_count,
+        horizon=HERO_CONFIG.horizon,
+        seed=validation_seed,
+        shuffle_batches=False,
+    )
+    count = batches.steps_per_epoch * batches.batch_size
+    return _HeroValidationResources(
+        fast_batches=batches,
+        fast_pool={
+            "schema_version": "torch-lc0-sequential-validation-pool-v1",
+            "pool_definition": {
+                "split": "validation",
+                "seed": validation_seed,
+                "count": count,
+            },
+            "schedule_total_examples": int(total_examples),
+            "data": batches.provenance(),
+        },
     )
 
 
@@ -9865,7 +9967,7 @@ def _run_hero_validation_milestone(
             model,
             resources.fast_batches,
             count=resources.fast_batches.steps_per_epoch,
-            seed=int(resources.fast_pool["pool_definition"]["seed"]),
+            seed=resources.seed,
             device=device,
             policy_teacher_encoder=policy_teacher_encoder,
         )
@@ -9880,7 +9982,7 @@ def _run_hero_validation_milestone(
         "target_percentage": percentage,
         "observed_fraction": (update * batch_size / _HERO_TRAIN_EXAMPLES),
         "pool": resources.fast_pool,
-        "evaluation_examples": int(resources.fast_batches.global_indices.size),
+        "evaluation_examples": resources.evaluation_examples,
         "evaluation_seconds": evaluation_seconds,
         "metrics": metrics,
         "serialized_model_state": False,
@@ -9922,13 +10024,13 @@ def _run_frozen_validation_milestone(
             model,
             resources.fast_batches,
             count=resources.fast_batches.steps_per_epoch,
-            seed=int(resources.fast_pool["pool_definition"]["seed"]),
+            seed=resources.seed,
             device=device,
             policy_teacher_encoder=policy_teacher_encoder,
         )
     finally:
         model.train(was_training)
-    observed_fraction = update * batch_size / _HERO_TRAIN_EXAMPLES
+    observed_fraction = update * batch_size / resources.total_examples
     record = {
         "schema_version": "torch-live-frozen-validation-milestone-v1",
         "created_utc": datetime.now(UTC).isoformat(),
@@ -9938,7 +10040,7 @@ def _run_frozen_validation_milestone(
         "observed_fraction": observed_fraction,
         "observed_percentage": 100.0 * observed_fraction,
         "pool": resources.fast_pool,
-        "evaluation_examples": int(resources.fast_batches.global_indices.size),
+        "evaluation_examples": resources.evaluation_examples,
         "evaluation_seconds": evaluation_seconds,
         "metrics": metrics,
         "serialized_model_state": False,
@@ -10847,6 +10949,14 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     train_parser.add_argument(
+        "--lr-total-examples",
+        type=int,
+        help=(
+            "Hero-v2 example horizon for the learning-rate schedule. The "
+            "frozen 2% warmup fraction is rescaled to this horizon."
+        ),
+    )
+    train_parser.add_argument(
         "--lr-schedule-kind",
         choices=("legacy_cosine", "warmup_stable_linear_decay"),
         help="Hero-v2 schedule ablation; defaults to WSD.",
@@ -10871,6 +10981,14 @@ def build_parser() -> argparse.ArgumentParser:
             "to encoder.* parameters, while encoder_trunk_fp32_master excludes "
             "encoder.policy_head.* from that FP32 scope and main_fp32_master "
             "applies FP32 only outside encoder.*."
+        ),
+    )
+    train_parser.add_argument(
+        "--weight-decay-multiplier",
+        type=float,
+        help=(
+            "Multiply Hero-v2 weight decay after the main-LR area-preserving "
+            "rescaling; zero is the explicit no-decay control."
         ),
     )
     train_parser.add_argument(

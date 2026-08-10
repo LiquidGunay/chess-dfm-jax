@@ -1111,15 +1111,21 @@ def test_hero_v2_recipe_is_separate_recorded_optimizer_policy():
             recipe="hero_v2",
             main_lr_multiplier=1.5,
             encoder_lr_ratio=1.0 / 3.0,
+            lr_total_examples=7_960_576,
             lr_schedule_kind="legacy_cosine",
             wsd_decay_fraction=None,
             optimizer_precision="parameter",
+            weight_decay_multiplier=0.25,
             weight_decay_mode="cautious",
         )
     )
     assert overridden_config.learning_rate == pytest.approx(7.5e-4)
     assert overridden_config.bt4_learning_rate == pytest.approx(7.5e-4 / 3.0)
-    assert overridden_config.weight_decay == pytest.approx(HERO_V2_CONFIG.weight_decay / 1.5)
+    assert overridden_config.weight_decay == pytest.approx(
+        HERO_V2_CONFIG.weight_decay / 1.5 * 0.25
+    )
+    assert overridden_config.lr_total_examples == 7_960_576
+    assert overridden_config.lr_warmup_examples == round(0.02 * 7_960_576)
     assert overridden_policy.schedule_kind == "legacy_cosine"
     assert overridden_policy.wsd_decay_examples == 0
     assert overridden_policy.precision == "parameter"
@@ -1152,6 +1158,22 @@ def test_hero_v2_recipe_is_separate_recorded_optimizer_policy():
             SimpleNamespace(
                 recipe="hero_v2",
                 main_lr_multiplier=4.01,
+            )
+        )
+
+    with pytest.raises(ValueError, match="weight-decay-multiplier"):
+        _resolve_training_recipe(
+            SimpleNamespace(
+                recipe="hero_v2",
+                weight_decay_multiplier=-0.1,
+            )
+        )
+
+    with pytest.raises(ValueError, match="lr-total-examples"):
+        _resolve_training_recipe(
+            SimpleNamespace(
+                recipe="hero_v2",
+                lr_total_examples=1,
             )
         )
 

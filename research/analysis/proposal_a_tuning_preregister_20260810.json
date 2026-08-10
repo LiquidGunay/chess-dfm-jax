@@ -1,0 +1,58 @@
+{
+  "schema_version": "proposal-a-equal-lr-tuning-preregister-v1",
+  "created_date_utc": "2026-08-10",
+  "architecture": {
+    "dfm_closed_loop_mode": "none",
+    "jepa_feedback_mode": "none",
+    "policy_distill_coeff": 0.0,
+    "teacher_checkpoint": null,
+    "wdl_include_current_state": true
+  },
+  "data": {
+    "format": "lc0_sequential",
+    "full_batch_1024_epoch_examples": 7960576,
+    "pilot_chunk_indices": [0, 32, 64, 96, 128, 160, 192, 224, 253],
+    "pilot_inventory_sha256": "4a3a640970aeac08fd152790e4b5dfe7b19ac600e6bec08d086eaf3510fe012e",
+    "pilot_inventory_size_bytes": 278048204,
+    "pilot_train_updates": 252,
+    "pilot_validation_examples": 1152,
+    "test_split_used_for_selection": false
+  },
+  "fixed_controls": {
+    "batch_size": 1024,
+    "compute_dtype": "bfloat16",
+    "encoder_lr_ratio": 1.0,
+    "legality_coeff": 0.0,
+    "optimizer_precision": "fp32_master",
+    "schedule": "2pct_warmup_78pct_stable_20pct_linear_decay",
+    "seed": 0
+  },
+  "lr_stage": {
+    "learning_rates": [0.00005, 0.0001, 0.0002, 0.0004],
+    "weight_decay_multiplier": 0.0,
+    "updates": 252
+  },
+  "lr_promotion": {
+    "primary": "minimum_final_heldout_total_loss",
+    "root_top1_max_gap": 0.02,
+    "current_wdl_ce_max_gap": 0.05,
+    "substantial_vs_5e-5": {
+      "minimum_total_loss_improvement": 0.1,
+      "minimum_current_wdl_ce_improvement": 0.05,
+      "maximum_root_top1_regression": 0.02
+    },
+    "tie_break": "lower_learning_rate"
+  },
+  "weight_decay_stage": {
+    "arms": ["zero", "matched_decoupled", "matched_cautious"],
+    "maximum_root_top1_regression": 0.01,
+    "minimum_total_loss_improvement": 0.03,
+    "minimum_current_wdl_ce_improvement": 0.02,
+    "tie_break": "zero_decay"
+  },
+  "one_epoch": {
+    "terminal_update": 7774,
+    "pre_decay_checkpoint_update": 6219,
+    "run_after_tuning": true
+  }
+}

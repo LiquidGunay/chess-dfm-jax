@@ -24,9 +24,11 @@ policy. Its central configuration is:
 - cautious weight decay: an explicit ablation, not bundled into the baseline.
 
 The exposed training switches are `--recipe hero_v2`,
-`--main-lr-multiplier`, `--encoder-lr-ratio`, `--lr-schedule-kind`,
-`--wsd-decay-fraction`, `--optimizer-precision`, and
-`--weight-decay-mode`. Objective interventions additionally use explicit,
+`--main-lr-multiplier`, `--encoder-lr-ratio`, `--lr-total-examples`,
+`--lr-schedule-kind`, `--wsd-decay-fraction`, `--optimizer-precision`,
+`--weight-decay-multiplier`, and `--weight-decay-mode`. The total-example
+override preserves the frozen 2% warmup fraction while retargeting WSD to a
+new corpus horizon. Objective interventions additionally use explicit,
 serialized `--legality-coeff` and `--policy-distill-coeff` overrides. Policy
 distillation is training-only and never changes inference. Its teacher is now
 explicitly serialized as `--policy-distill-teacher online|checkpoint`; the

@@ -96,6 +96,10 @@ def test_phase1_matrix_contains_exact_hero1_and_separated_v2_controls() -> None:
         "v2_fp32_1_12_legality0_distill1",
         "v2_fp32_1_12_legality0_hero1distill1",
         "v2_fp32_1_12_legality0_hero1distill1_closedloop",
+        "proposal_a_equal_lr_5em5_wd0",
+        "proposal_a_equal_lr_1em4_wd0",
+        "proposal_a_equal_lr_2em4_wd0",
+        "proposal_a_equal_lr_4em4_wd0",
     } <= set(TRAINING_ARMS)
     assert TRAINING_ARMS["hero1_exact"].recipe == "hero"
     assert TRAINING_ARMS["v2_bf16_1_30"].optimizer_precision == "parameter"
@@ -143,6 +147,17 @@ def test_phase1_matrix_contains_exact_hero1_and_separated_v2_controls() -> None:
     )
     assert TRAINING_ARMS["v2_fp32_1_10"].encoder_lr_ratio == pytest.approx(0.1)
     assert TRAINING_ARMS["v2_fp32_1_3"].encoder_lr_ratio == pytest.approx(1.0 / 3.0)
+    proposal = TRAINING_ARMS["proposal_a_equal_lr_1em4_wd0"]
+    assert proposal.data_format == "lc0_sequential"
+    assert proposal.main_lr_multiplier == pytest.approx(0.2)
+    assert proposal.encoder_lr_ratio == 1.0
+    assert proposal.lr_total_examples == 7_960_576
+    assert proposal.optimizer_precision == "fp32_master"
+    assert proposal.weight_decay_multiplier == 0.0
+    assert proposal.legality_coeff == 0.0
+    assert proposal.policy_distill_coeff is None
+    assert proposal.wdl_include_current_state is True
+    assert proposal.dfm_closed_loop_mode is None
     assert "research/stitch_training_segments.py" in SOURCE_TREE_PATHS
     assert "research/stitch_training_segments.py" not in COMPILE_SOURCE_TREE_PATHS
 
@@ -166,6 +181,12 @@ def test_phase1_matrix_contains_exact_hero1_and_separated_v2_controls() -> None:
     assert diagnostic.log_every == 1
     assert diagnostic.save_recovery is False
     assert diagnostic.save_model is False
+
+    proposal_screen = TRAINING_PROFILES["proposal_screen"]
+    assert proposal_screen.steps == 252
+    assert proposal_screen.validation_updates == (252,)
+    assert proposal_screen.save_recovery is False
+    assert proposal_screen.save_model is False
 
     phase2 = TRAINING_PROFILES["phase2"]
     assert phase2.steps == 2_768
@@ -287,6 +308,25 @@ def test_training_command_preserves_hero1_and_explicitly_serializes_v2(tmp_path:
             **common,
         )
 
+    proposal = _training_command(
+        profile_name="proposal_screen",
+        arm_name="proposal_a_equal_lr_1em4_wd0",
+        output_dir=tmp_path / "proposal-output",
+        raw_bt4_path=tmp_path / "raw.pb.gz",
+        data_root=tmp_path / "lc0_sequential",
+        eval_manifest=tmp_path / "eval.json",
+    )
+    assert proposal[proposal.index("--data-format") + 1] == "lc0_sequential"
+    assert proposal[proposal.index("--steps") + 1] == "252"
+    assert proposal[proposal.index("--main-lr-multiplier") + 1] == "0.2"
+    assert proposal[proposal.index("--encoder-lr-ratio") + 1] == "1.0"
+    assert proposal[proposal.index("--lr-total-examples") + 1] == "7960576"
+    assert proposal[proposal.index("--weight-decay-multiplier") + 1] == "0.0"
+    assert "--wdl-include-current-state" in proposal
+    assert "--policy-distill-coeff" not in proposal
+    assert "--policy-distill-teacher" not in proposal
+    assert "--dfm-closed-loop-mode" not in proposal
+
 
     resume_checkpoint = (
         tmp_path / "runs" / "phase1" / "checkpoints" / "update00000554"
@@ -319,6 +359,8 @@ def test_training_command_preserves_hero1_and_explicitly_serializes_v2(tmp_path:
         "movement",
         "smoke-l40s",
         "smoke-a100",
+        "proposal_screen-l40s",
+        "proposal_screen-a100",
         "phase1-l40s",
         "phase1-a100",
         "u1024-l40s",

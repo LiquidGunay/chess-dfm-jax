@@ -18,11 +18,15 @@ point for:
 
 ## Local GPU autoresearch status
 
-The active interpretability program is the
-[raw-BT4 versus one-epoch Hero Torch plan](docs/hero_bt4_interpretability_plan.md).
-It makes model diffing the first gate, then covers literature replication,
-causal tracing, published transcoder/LoRSA transfer, and paired cross-model
-sparse methods under the local 30 GB and remote $42.50/month budgets.
+The active model program is the preregistered
+[Proposal A training and LC0-search plan](docs/proposal_a_training_and_search_plan.md).
+It first tunes the open-loop state-action-state Torch model on value-rich LC0
+records, then promotes one full-epoch artifact through searchless and matched
+LC0-MCTS comparisons. The subsequent interpretability program is the
+[raw-BT4 versus one-epoch Hero Torch plan](docs/hero_bt4_interpretability_plan.md):
+model diffing first, then literature replication, causal tracing, published
+transcoder/LoRSA transfer, and paired cross-model sparse methods under the
+local 30 GB and remote $42.50/month budgets.
 
 The clean A10G research path lives on `research/local-gpu-autoresearch`; the
 historical TPU implementation is preserved on
