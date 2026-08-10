@@ -1,0 +1,273 @@
+{
+  "artifact_contract_gate": {
+    "criteria": {
+      "bt4_architecture_matches": true,
+      "input_hook_matches": true,
+      "layer_matches": true,
+      "main_environment_pickle_not_loaded": true,
+      "normalization_folded": true,
+      "output_hook_matches": true,
+      "reviewed_conversion": true,
+      "sequence_shape_matches": true,
+      "source_pickle_declared_isolated": true,
+      "upstream_commit_pinned": true
+    },
+    "expected": {
+      "input_hook": "blocks.14.hook_attn_in",
+      "layer": 14,
+      "output_hook": "blocks.14.hook_attn_out",
+      "sequence_shape": [
+        "batch",
+        64,
+        1024
+      ],
+      "upstream_commit": "f946a5736f40397f5c834104aeac6e8e6ff753bd"
+    },
+    "passed": true
+  },
+  "interpretation_contract": {
+    "attention_head_mean_caveat": "Native BT4 has 32 heads and LoRSA has a separately learned head count; native-vs-LoRSA pattern JS therefore compares their head-mean distributions.",
+    "development_split_only": true,
+    "exploratory": true,
+    "hero_transfer_interpretable": true,
+    "lorsa_frozen": true,
+    "test_split_opened": false
+  },
+  "layer": 14,
+  "position_count": 512,
+  "schema_version": "bt4-published-lorsa-transfer-metrics-v1",
+  "source_compatibility_gate": {
+    "criteria": {
+      "artifact_contract_passed": true,
+      "cosine_ge_0.85": true,
+      "mean_policy_js_le_0.02": true,
+      "native_attention_recompute_max_abs_error_le_1e-5": true,
+      "normalized_mse_le_0.25": true,
+      "top1_agreement_ge_0.80": true
+    },
+    "failure_action": "skip Hero transfer and prohibit published-feature claims",
+    "interpretation": "Passing establishes bounded source compatibility, not semantic validity of every feature or equivalence to the native attention heads.",
+    "passed": true,
+    "scope": "exploratory 512-position Raw source compatibility pilot"
+  },
+  "source_stage": {
+    "attention_pattern": {
+      "first_mean_query_entropy": {
+        "count": 512,
+        "maximum": 3.4242606163024902,
+        "mean": 3.170930744614452,
+        "median": 3.165759325027466,
+        "minimum": 2.836081027984619,
+        "p95": 3.3065415382385255
+      },
+      "head_mean_js": {
+        "count": 512,
+        "maximum": 0.029887741431593895,
+        "mean": 0.023611363762029214,
+        "median": 0.023729722946882248,
+        "minimum": 0.016444623470306396,
+        "p95": 0.027690610848367214
+      },
+      "second_mean_query_entropy": {
+        "count": 512,
+        "maximum": 3.499575138092041,
+        "mean": 3.328963164705783,
+        "median": 3.3286890983581543,
+        "minimum": 3.0953292846679688,
+        "p95": 3.4201947450637817
+      }
+    },
+    "native_attention_recompute_max_abs_error": 0.0,
+    "policy_replacement": {
+      "js_divergence": {
+        "count": 512,
+        "maximum_absolute": 0.08568525314331055,
+        "mean": 0.003029177233546676,
+        "median": 0.000625986373052001
+      },
+      "target_log_odds_change": {
+        "count": 512,
+        "maximum_absolute": 1.7314262390136719,
+        "mean": -0.1288102653925307,
+        "median": -0.09011101722717285
+      },
+      "top1_agreement": {
+        "count": 512,
+        "mean": 0.98046875,
+        "true_count": 502
+      },
+      "total_variation": {
+        "count": 512,
+        "maximum_absolute": 0.3900289535522461,
+        "mean": 0.03199414157552383,
+        "median": 0.012221571058034897
+      }
+    },
+    "reconstruction": {
+      "cosine": 0.9670990402150126,
+      "explained_variance": 0.5850591988015708,
+      "mse": 0.6002715471224382,
+      "normalized_mse": 0.06474381025357717,
+      "reconstruction_rms": 2.9597611204684964,
+      "relative_l2": 0.2544480502058862,
+      "target_rms": 3.0449120427551417
+    },
+    "status": "complete"
+  },
+  "transfer_stage": {
+    "hero": {
+      "attention_pattern": {
+        "first_mean_query_entropy": {
+          "count": 512,
+          "maximum": 3.423661708831787,
+          "mean": 3.199834667611867,
+          "median": 3.1996588706970215,
+          "minimum": 2.9328932762145996,
+          "p95": 3.3323792934417726
+        },
+        "head_mean_js": {
+          "count": 512,
+          "maximum": 0.030632231384515762,
+          "mean": 0.022955563177674776,
+          "median": 0.023017629981040955,
+          "minimum": 0.016294769942760468,
+          "p95": 0.02711065672338009
+        },
+        "second_mean_query_entropy": {
+          "count": 512,
+          "maximum": 3.5008649826049805,
+          "mean": 3.3470498360693455,
+          "median": 3.3467507362365723,
+          "minimum": 3.163491725921631,
+          "p95": 3.4348335027694703
+        }
+      },
+      "native_attention_recompute_max_abs_error": 0.0,
+      "policy_replacement": {
+        "js_divergence": {
+          "count": 512,
+          "maximum_absolute": 0.08608917891979218,
+          "mean": 0.0036416390571112345,
+          "median": 0.0008405647240579128
+        },
+        "target_log_odds_change": {
+          "count": 512,
+          "maximum_absolute": 1.7316596508026123,
+          "mean": -0.21556907339254394,
+          "median": -0.16935443878173828
+        },
+        "top1_agreement": {
+          "count": 512,
+          "mean": 0.98046875,
+          "true_count": 502
+        },
+        "total_variation": {
+          "count": 512,
+          "maximum_absolute": 0.38765913248062134,
+          "mean": 0.03649414788071681,
+          "median": 0.015095370821654797
+        }
+      },
+      "reconstruction": {
+        "cosine": 0.9673357971286198,
+        "explained_variance": 0.5592932170873472,
+        "mse": 0.5631623701834102,
+        "normalized_mse": 0.06444307903714899,
+        "reconstruction_rms": 2.899443808455967,
+        "relative_l2": 0.2538564142131315,
+        "target_rms": 2.9561650137127
+      }
+    },
+    "raw_hero": {
+      "attention_pattern": {
+        "lorsa_first_mean_query_entropy": {
+          "count": 512,
+          "maximum": 3.499575138092041,
+          "mean": 3.328963164705783,
+          "median": 3.3286890983581543,
+          "minimum": 3.0953292846679688,
+          "p95": 3.4201947450637817
+        },
+        "lorsa_head_mean_js": {
+          "count": 512,
+          "maximum": 0.02286338061094284,
+          "mean": 0.0016909203213799628,
+          "median": 0.0013070943532511592,
+          "minimum": 0.00033959702705033123,
+          "p95": 0.004305463097989558
+        },
+        "lorsa_matched_head_js": {
+          "count": 512,
+          "maximum": 0.0819457471370697,
+          "mean": 0.008900647149403085,
+          "median": 0.007749825716018677,
+          "minimum": 0.0036385278217494488,
+          "p95": 0.016494706273078915
+        },
+        "lorsa_second_mean_query_entropy": {
+          "count": 512,
+          "maximum": 3.5008649826049805,
+          "mean": 3.3470498360693455,
+          "median": 3.3467507362365723,
+          "minimum": 3.163491725921631,
+          "p95": 3.4348335027694703
+        },
+        "native_first_mean_query_entropy": {
+          "count": 512,
+          "maximum": 3.4242606163024902,
+          "mean": 3.170930744614452,
+          "median": 3.165759325027466,
+          "minimum": 2.836081027984619,
+          "p95": 3.3065415382385255
+        },
+        "native_head_mean_js": {
+          "count": 512,
+          "maximum": 0.015950309112668037,
+          "mean": 0.0015460286472261942,
+          "median": 0.0013183460105210543,
+          "minimum": 0.0004662999417632818,
+          "p95": 0.00288668645080179
+        },
+        "native_matched_head_js": {
+          "count": 512,
+          "maximum": 0.06756988167762756,
+          "mean": 0.007672254319459171,
+          "median": 0.0069523705169558525,
+          "minimum": 0.0035362434573471546,
+          "p95": 0.01268059220165014
+        },
+        "native_second_mean_query_entropy": {
+          "count": 512,
+          "maximum": 3.423661708831787,
+          "mean": 3.199834667611867,
+          "median": 3.1996588706970215,
+          "minimum": 2.9328932762145996,
+          "p95": 3.3323792934417726
+        }
+      },
+      "degradation": {
+        "normalized_mse_delta_hero_minus_raw": -0.00030073121642817946,
+        "normalized_mse_ratio_hero_over_raw": 0.9953550584179348,
+        "policy_js_delta_hero_minus_raw": 0.0006124618235645585
+      },
+      "support_jaccard_per_position": {
+        "count": 512,
+        "maximum": 0.7849869132041931,
+        "mean": 0.5836057135602459,
+        "median": 0.584794282913208,
+        "minimum": 0.19715049862861633,
+        "p95": 0.7057594060897827
+      },
+      "support_transfer": {
+        "first_dead_feature_fraction": 0.47235107421875,
+        "mean_first_l0": 29.967803955078125,
+        "mean_resolved_activation_correlation": 0.6730132324673608,
+        "mean_second_l0": 29.9744873046875,
+        "mean_support_jaccard": 0.5836057099895293,
+        "resolved_activation_correlations": 7372,
+        "second_dead_feature_fraction": 0.50091552734375
+      }
+    },
+    "status": "complete"
+  }
+}

@@ -1,0 +1,871 @@
+{
+  "arenas": {
+    "candidate_1_vs_control_1": {
+      "candidate": "candidate",
+      "candidate_refinement_passes": 1,
+      "complete_move_codec_coverage": true,
+      "game_count": 256,
+      "input_sha256": {
+        "blocks": {
+          "block-00000000-pairs-0016.json": "630399fbed05be364bfdf056c7284013b3fe4ddb538ee092b912659b55b2cff7",
+          "block-00000016-pairs-0016.json": "bd8ba8810639ff2575118e60dd1d08b2df12f63e0f5780a3f6d019b06478cf1a",
+          "block-00000032-pairs-0016.json": "0ba77a13a1cb11025ffd38db049bb9c3c1413cef11c8c6f859c8c26d3ce1e297",
+          "block-00000048-pairs-0016.json": "2a256f1295a40bd2dbe4d5f20104ec74453511dd1f43edf32adced8d1e6e19fa",
+          "block-00000064-pairs-0016.json": "8a722dcbc51859b3c040fa1dd0c0f1e417a1e7ed60e3e24da2299fa2a69fb981",
+          "block-00000080-pairs-0016.json": "cb416f9263ec2a9f38a647ad690583df0a2e76873da97ba6d9b21c35a349990e",
+          "block-00000096-pairs-0016.json": "128915f15a5db22f602c90d96f16dd3432347334c8a77e80b53d7fada166ebfb",
+          "block-00000112-pairs-0016.json": "9a18ef8af3f2fbc40d79aa5e929cc57f07c23e178641c2f5c7dc71fdb3f7ac98"
+        },
+        "modal_arena.json": "accdef3e97b9e2ed9ac7ef292ab3947fec6e691218735e3281c2cb282aaa6534",
+        "state.json": "4ec019a4b659e619cbb8596b88b675b821b65f83624ad2a355515de8f9ec1563"
+      },
+      "opening_indices": [
+        256,
+        383
+      ],
+      "opponent": "control",
+      "opponent_refinement_passes": 1,
+      "pair_count": 128,
+      "pentanomial": [
+        34,
+        62,
+        26,
+        6,
+        0
+      ],
+      "relative_elo": -183.6838661643841,
+      "relative_elo_interval_95": [
+        -318.5842426711396,
+        -86.62816628859801
+      ],
+      "scientific_role": "preregistered primary",
+      "score": 0.2578125,
+      "score_interval_95": [
+        0.13777215108500993,
+        0.37785284891499005
+      ],
+      "state_path": "/home/ubuntu/chess-dfm-jax/research/analysis/hero_v2_phase1/u1024/full_loop_arenas/candidate1_vs_control1/hero-arena-128p-o256-cpass1-opass1-101a7d2daf1b40a98215/state.json",
+      "status": "complete",
+      "zero_cap_draws": true,
+      "zero_faults": true
+    },
+    "candidate_8_vs_candidate_1": {
+      "candidate": "candidate",
+      "candidate_refinement_passes": 8,
+      "complete_move_codec_coverage": true,
+      "game_count": 256,
+      "input_sha256": {
+        "blocks": {
+          "block-00000000-pairs-0016.json": "00483e4a21cd6190803c8ca8d828a673182070eadc946c5a489655e5eb5cb3db",
+          "block-00000016-pairs-0016.json": "d276ddbc8d4e2bbfe7164730ca66fff6aeeec5452991c45aaebe7a08731e1bba",
+          "block-00000032-pairs-0016.json": "3dae717b7375aa1df1334c128f122ddb0bcbf149afcd90b98d35f930548bcaa7",
+          "block-00000048-pairs-0016.json": "046305ea37d467ea91f936ae45b176d893f389e8d4a4657099fb706753d50a13",
+          "block-00000064-pairs-0016.json": "f10ba0e53df6d79efab4c54bd63d673eb439c88b6c9592b2ca904793b2fe0c9f",
+          "block-00000080-pairs-0016.json": "e964b426269a7c8c12450a218379a7c6a94919776118ee3f1815c59e34b0ecb5",
+          "block-00000096-pairs-0016.json": "95912a5cb202b4ab92b0e10925e985d70df53bf9a6f9180fc274ff7cf2511ca3",
+          "block-00000112-pairs-0016.json": "2147688139c604804be5addd2cb98f4569cca04fb65a531b8449c881fe2163a7"
+        },
+        "modal_arena.json": "42718bcd7e426dc4aee0c8b9a636c1962dfd6b445008041b8c486affcc284575",
+        "state.json": "66bd8d4bb5495b96439481d2df25650692e92e535b489972e28d09ee3eb51335"
+      },
+      "opening_indices": [
+        256,
+        383
+      ],
+      "opponent": "candidate",
+      "opponent_refinement_passes": 1,
+      "pair_count": 128,
+      "pentanomial": [
+        0,
+        6,
+        25,
+        62,
+        35
+      ],
+      "relative_elo": 187.2480042419488,
+      "relative_elo_interval_95": [
+        89.52071664272658,
+        324.36606841256975
+      ],
+      "scientific_role": "preregistered primary",
+      "score": 0.74609375,
+      "score_interval_95": [
+        0.62605340108501,
+        0.86613409891499
+      ],
+      "state_path": "/home/ubuntu/chess-dfm-jax/research/analysis/hero_v2_phase1/u1024/full_loop_arenas/candidate8_vs_candidate1/hero-arena-128p-o256-cpass8-opass1-9f92b515ce56c3632002/state.json",
+      "status": "complete",
+      "zero_cap_draws": true,
+      "zero_faults": true
+    },
+    "candidate_8_vs_control_1": {
+      "candidate": "candidate",
+      "candidate_refinement_passes": 8,
+      "complete_move_codec_coverage": true,
+      "game_count": 256,
+      "input_sha256": {
+        "blocks": {
+          "block-00000000-pairs-0016.json": "270de566880c45533720d38cff73d80082d1be61862bc922676303881aeffc50",
+          "block-00000016-pairs-0016.json": "ff84bf8563940167d6bf21490175e76ce80715cfdc363c62d8b6f3f339546a46",
+          "block-00000032-pairs-0016.json": "daffba503d384510bb1b62b27c8c1bc6504be8eba2d226c860d9db7cb7071d33",
+          "block-00000048-pairs-0016.json": "18630bb3e7a632ce4bdd3055b7ca06f9c4e54275866473ee3e793d4b6917630e",
+          "block-00000064-pairs-0016.json": "e3504998c1238e5c32adf171363dc4173acdceb135d9f4cd973822798f7ca8c4",
+          "block-00000080-pairs-0016.json": "e4563b3f8eebd6beb0742c37feb2c473f2ad489ed7521cf0379143f304331c26",
+          "block-00000096-pairs-0016.json": "d3d8f3c900f8cabefefd097979419e0911be4c097aef7591e603af1195a6b602",
+          "block-00000112-pairs-0016.json": "4255903e32e3fef02ce19c4da36c66ca969c58e95310b90aed982c72f1972ff7"
+        },
+        "modal_arena.json": "2ed2fe4c8cefec25b0331cef190ee935b471fe5f51a46157e9996671bc123f41",
+        "state.json": "d481006e7d1711d17c791c11801170384f04ab92e318b230197be0a7aceab1e8"
+      },
+      "opening_indices": [
+        256,
+        383
+      ],
+      "opponent": "control",
+      "opponent_refinement_passes": 1,
+      "pair_count": 128,
+      "pentanomial": [
+        6,
+        30,
+        50,
+        36,
+        6
+      ],
+      "relative_elo": 8.144513059083144,
+      "relative_elo_interval_95": [
+        -76.48144537525116,
+        93.76779238446274
+      ],
+      "scientific_role": "preregistered primary",
+      "score": 0.51171875,
+      "score_interval_95": [
+        0.39167840108500995,
+        0.63175909891499
+      ],
+      "state_path": "/home/ubuntu/chess-dfm-jax/research/analysis/hero_v2_phase1/u1024/full_loop_arenas/candidate8_vs_control1/hero-arena-128p-o256-cpass8-opass1-8b10cdc14c0e3c4aad80/state.json",
+      "status": "complete",
+      "zero_cap_draws": true,
+      "zero_faults": true
+    },
+    "candidate_8_vs_control_8": {
+      "candidate": "candidate",
+      "candidate_refinement_passes": 8,
+      "complete_move_codec_coverage": true,
+      "game_count": 256,
+      "input_sha256": {
+        "blocks": {
+          "block-00000000-pairs-0016.json": "f1c9a76b6706ca2bf24a966dc91c649c1a3d0e0180847091c47a0128f9a17e73",
+          "block-00000016-pairs-0016.json": "9892284f3f847856889549d1d8523460edd053f4af9a49258e4afcdca4292a79",
+          "block-00000032-pairs-0016.json": "5d32ceab997bb6be29262253acc703f9039873b9290310ba3d4ee92e70b97a60",
+          "block-00000048-pairs-0016.json": "b16c26eb830c9d69eda2977816fbf183c30b191926d7e8514e4d6e9e8088e4ef",
+          "block-00000064-pairs-0016.json": "e7568ba6a209710333db7b5c440db469ae1003396bb972b835f55d49bff9a8ed",
+          "block-00000080-pairs-0016.json": "7be4032aad7f1f6504bf9da9af70c4ad0a0bc6d37e91269d44872b9883c3ef82",
+          "block-00000096-pairs-0016.json": "a13bffc53a05afbd284572c93270ae447c365d247b57996bca65d4d5afc33853",
+          "block-00000112-pairs-0016.json": "3f212754ca5970e47187b7f3ac5ca16fdf3c87a0d2faff54b67c6f9502e2e34d"
+        },
+        "modal_arena.json": "e50a04412ece8a883156d3f9d88a7da70d794f5295afde6c62d7b061121de1c7",
+        "state.json": "5dfccfb1df2c7410623fc0ac5ac122d8c3bb50f391c9e5608e22294ae0368c97"
+      },
+      "opening_indices": [
+        256,
+        383
+      ],
+      "opponent": "control",
+      "opponent_refinement_passes": 8,
+      "pair_count": 128,
+      "pentanomial": [
+        0,
+        0,
+        20,
+        55,
+        53
+      ],
+      "relative_elo": 256.9649798739639,
+      "relative_elo_interval_95": [
+        142.59300376029867,
+        461.71668163577715
+      ],
+      "scientific_role": "preregistered primary",
+      "score": 0.814453125,
+      "score_interval_95": [
+        0.69441277608501,
+        0.93449347391499
+      ],
+      "state_path": "/home/ubuntu/chess-dfm-jax/research/analysis/hero_v2_phase1/u1024/full_loop_arenas/candidate8_vs_control8/hero-arena-128p-o256-cpass8-opass8-365e2b1cfc2b1acccfe7/state.json",
+      "status": "complete",
+      "zero_cap_draws": true,
+      "zero_faults": true
+    },
+    "control_1_vs_control_8_exploratory": {
+      "candidate": "control",
+      "candidate_refinement_passes": 1,
+      "complete_move_codec_coverage": true,
+      "game_count": 256,
+      "input_sha256": {
+        "blocks": {
+          "block-00000000-pairs-0016.json": "89bc7027d7f40477fc3a432d4bcce8e1846637c4690dc42d832a4751e173d707",
+          "block-00000016-pairs-0016.json": "c6dbc1df4eb57a83f97558e46b9c4d08dfb6f8d65e1454c94d358be2074dc2e0",
+          "block-00000032-pairs-0016.json": "c5753ff254a60883ead04ebecce4aa930da44643f60b19a02e25c4ff89b80b41",
+          "block-00000048-pairs-0016.json": "14c52fa75aed9f0e2b909cd68e587764b6c0c732d1d15d3c3391d6df7d297df8",
+          "block-00000064-pairs-0016.json": "9c2db0fb6d0575196506819375ae859b6e3e000fc9b6ef8bad190b7d8568da1f",
+          "block-00000080-pairs-0016.json": "e03a7e30407738080e8f8b05c68269de3c1b55fa0358da239b0ef3e2e1dc1111",
+          "block-00000096-pairs-0016.json": "8df894f4707173aea513b61ec5d40acc2c40b90db203620690dd7f1b91935c03",
+          "block-00000112-pairs-0016.json": "c1d43f6c19d23c59984f0b9c283ff4c5e12dacfd35dbf4fc1b92f0981a96bbc3"
+        },
+        "modal_arena.json": "8a5b87462eddbe2fb70a7e9d762faab1f85fdf08f65d73c3f6fa00c512d147b7",
+        "state.json": "52827e9992f9a921a99c83cc1c5232dd3cea98a111a9f78c078f658f5d210e33"
+      },
+      "opening_indices": [
+        256,
+        383
+      ],
+      "opponent": "control",
+      "opponent_refinement_passes": 8,
+      "pair_count": 128,
+      "pentanomial": [
+        0,
+        0,
+        22,
+        60,
+        46
+      ],
+      "relative_elo": 237.45072951643982,
+      "relative_elo_interval_95": [
+        128.42311873878222,
+        417.1233769525271
+      ],
+      "scientific_role": "exploratory",
+      "score": 0.796875,
+      "score_interval_95": [
+        0.67683465108501,
+        0.91691534891499
+      ],
+      "state_path": "/home/ubuntu/chess-dfm-jax/research/analysis/hero_v2_phase1/u1024/full_loop_arenas/control1_vs_control8_exploratory/hero-arena-128p-o256-cpass1-opass8-d405f464c054e0769ea4/state.json",
+      "status": "complete",
+      "zero_cap_draws": true,
+      "zero_faults": true
+    }
+  },
+  "cost": {
+    "arena_and_movement_delta_usd": 0.6201627700000003,
+    "billed_cost_usd_at_final_query": 0.0,
+    "metered_before_arena_and_movement_usd": 26.48728616,
+    "metered_before_experiment_usd": 21.10530926,
+    "metered_final_usd": 27.10744893,
+    "provenance": "Fresh Modal billing queries were taken before each launch; final metered and billed values were queried after both movement audits.",
+    "remaining_to_repository_stop_usd": 6.89255107,
+    "repository_new_launch_stop_usd": 34.0,
+    "whole_experiment_delta_usd": 6.002139670000002,
+    "workspace_budget_usd": 42.5
+  },
+  "evidence_complete_utc": "2026-08-10T08:40:16.656098+00:00",
+  "exploratory_interpretation": {
+    "conclusion": "Ordinary iterative unmasking harms the control. The candidate's fair-compute advantage therefore depends on JEPA feedback, rather than arising from generic repetition of the planner.",
+    "control_one_pass_vs_control_eight_pass": {
+      "candidate": "control",
+      "candidate_refinement_passes": 1,
+      "complete_move_codec_coverage": true,
+      "game_count": 256,
+      "input_sha256": {
+        "blocks": {
+          "block-00000000-pairs-0016.json": "89bc7027d7f40477fc3a432d4bcce8e1846637c4690dc42d832a4751e173d707",
+          "block-00000016-pairs-0016.json": "c6dbc1df4eb57a83f97558e46b9c4d08dfb6f8d65e1454c94d358be2074dc2e0",
+          "block-00000032-pairs-0016.json": "c5753ff254a60883ead04ebecce4aa930da44643f60b19a02e25c4ff89b80b41",
+          "block-00000048-pairs-0016.json": "14c52fa75aed9f0e2b909cd68e587764b6c0c732d1d15d3c3391d6df7d297df8",
+          "block-00000064-pairs-0016.json": "9c2db0fb6d0575196506819375ae859b6e3e000fc9b6ef8bad190b7d8568da1f",
+          "block-00000080-pairs-0016.json": "e03a7e30407738080e8f8b05c68269de3c1b55fa0358da239b0ef3e2e1dc1111",
+          "block-00000096-pairs-0016.json": "8df894f4707173aea513b61ec5d40acc2c40b90db203620690dd7f1b91935c03",
+          "block-00000112-pairs-0016.json": "c1d43f6c19d23c59984f0b9c283ff4c5e12dacfd35dbf4fc1b92f0981a96bbc3"
+        },
+        "modal_arena.json": "8a5b87462eddbe2fb70a7e9d762faab1f85fdf08f65d73c3f6fa00c512d147b7",
+        "state.json": "52827e9992f9a921a99c83cc1c5232dd3cea98a111a9f78c078f658f5d210e33"
+      },
+      "opening_indices": [
+        256,
+        383
+      ],
+      "opponent": "control",
+      "opponent_refinement_passes": 8,
+      "pair_count": 128,
+      "pentanomial": [
+        0,
+        0,
+        22,
+        60,
+        46
+      ],
+      "relative_elo": 237.45072951643982,
+      "relative_elo_interval_95": [
+        128.42311873878222,
+        417.1233769525271
+      ],
+      "scientific_role": "exploratory",
+      "score": 0.796875,
+      "score_interval_95": [
+        0.67683465108501,
+        0.91691534891499
+      ],
+      "state_path": "/home/ubuntu/chess-dfm-jax/research/analysis/hero_v2_phase1/u1024/full_loop_arenas/control1_vs_control8_exploratory/hero-arena-128p-o256-cpass1-opass8-d405f464c054e0769ea4/state.json",
+      "status": "complete",
+      "zero_cap_draws": true,
+      "zero_faults": true
+    }
+  },
+  "frozen_validation": {
+    "evaluation_examples": 8192,
+    "metrics": {
+      "candidate_closed_loop_context_rms": {
+        "candidate": 4.295248357579112
+      },
+      "candidate_first_planner_dfm_ce_loss": {
+        "candidate": 5.865612201392651
+      },
+      "candidate_second_minus_first_planner_dfm_ce": {
+        "candidate": -0.36956752836704254,
+        "improvement_positive": 0.36956752836704254
+      },
+      "dfm_ce_loss": {
+        "candidate": 5.496044673025608,
+        "candidate_minus_control": -0.013914652168750763,
+        "control": 5.509959325194359,
+        "direction": "lower"
+      },
+      "jepa_positive_loss": {
+        "candidate": 0.1361459088511765,
+        "candidate_minus_control": -0.023098384262993932,
+        "control": 0.15924429311417043,
+        "direction": "lower"
+      },
+      "root_legal_conditional_ce": {
+        "candidate": 1.4680880960077047,
+        "candidate_minus_control": 0.00518913846462965,
+        "control": 1.462898957543075,
+        "direction": "lower"
+      },
+      "root_legal_top1_accuracy": {
+        "candidate": 0.5037841796875,
+        "candidate_minus_control": 0.0006103515625,
+        "control": 0.503173828125,
+        "direction": "higher"
+      },
+      "wdl_accuracy": {
+        "candidate": 0.62396240234375,
+        "candidate_minus_control": 0.0060272216796875,
+        "control": 0.6179351806640625,
+        "direction": "higher"
+      },
+      "wdl_brier_score": {
+        "candidate": 0.4619113067165017,
+        "candidate_minus_control": -0.022938313893973827,
+        "control": 0.48484962061047554,
+        "direction": "lower"
+      },
+      "wdl_ece_15": {
+        "candidate": 0.09998775427811779,
+        "candidate_minus_control": -0.004844070470426232,
+        "control": 0.10483182474854402,
+        "direction": "lower"
+      },
+      "wdl_loss": {
+        "candidate": 0.7759294034913182,
+        "candidate_minus_control": -0.03950518276542425,
+        "control": 0.8154345862567425,
+        "direction": "lower"
+      }
+    },
+    "update": 1024
+  },
+  "headline": {
+    "blocking_result": "The current final-only policy objective materially damages the one-pass base; its entire 95% pair-aware interval is below 0.45.",
+    "mechanism_success_under_exact_preregistered_rule": false,
+    "mechanistic_result": "Predicted-JEPA recurrence makes iterative inference useful and recovers the candidate to control one-pass parity.",
+    "recommendation": "Retain the full-loop architecture for a bounded multi-exit training ablation; do not launch a Hero-scale run with this loss composition."
+  },
+  "latent_health": {
+    "horizons": [
+      {
+        "action_shuffled_mse": 0.09036693425150588,
+        "checks": {
+          "beats_action_shuffled": true,
+          "beats_identity": true,
+          "beats_shuffled": true,
+          "beats_zero": true,
+          "no_material_effective_rank_collapse": true,
+          "rms_ratio_in_preregistered_range": true
+        },
+        "horizon": 1,
+        "identity_mse": 0.09211342688649893,
+        "jepa_mse": 0.08944138351944275,
+        "passed": true,
+        "pred_target_effective_rank_ratio": 0.981692370492965,
+        "pred_target_rms_ratio": 1.020579586736858,
+        "shuffled_mse": 2.3505398482084274,
+        "zero_mse": 1.2815736611373723
+      },
+      {
+        "action_shuffled_mse": 0.0712219952547457,
+        "checks": {
+          "beats_action_shuffled": true,
+          "beats_identity": true,
+          "beats_shuffled": true,
+          "beats_zero": true,
+          "no_material_effective_rank_collapse": true,
+          "rms_ratio_in_preregistered_range": true
+        },
+        "horizon": 2,
+        "identity_mse": 0.09358564842841588,
+        "jepa_mse": 0.0676986628677696,
+        "passed": true,
+        "pred_target_effective_rank_ratio": 0.9824097217060626,
+        "pred_target_rms_ratio": 1.023400413338095,
+        "shuffled_mse": 2.178689144551754,
+        "zero_mse": 1.1745882243849337
+      },
+      {
+        "action_shuffled_mse": 0.13076825765892863,
+        "checks": {
+          "beats_action_shuffled": true,
+          "beats_identity": true,
+          "beats_shuffled": true,
+          "beats_zero": true,
+          "no_material_effective_rank_collapse": true,
+          "rms_ratio_in_preregistered_range": true
+        },
+        "horizon": 3,
+        "identity_mse": 0.18408552021719515,
+        "jepa_mse": 0.12206010660156608,
+        "passed": true,
+        "pred_target_effective_rank_ratio": 0.9697898733429611,
+        "pred_target_rms_ratio": 1.0344860111363232,
+        "shuffled_mse": 2.030946181155741,
+        "zero_mse": 1.0735802608542144
+      },
+      {
+        "action_shuffled_mse": 0.12592552922433242,
+        "checks": {
+          "beats_action_shuffled": true,
+          "beats_identity": true,
+          "beats_shuffled": true,
+          "beats_zero": true,
+          "no_material_effective_rank_collapse": true,
+          "rms_ratio_in_preregistered_range": true
+        },
+        "horizon": 4,
+        "identity_mse": 0.2203101780032739,
+        "jepa_mse": 0.11315311712678522,
+        "passed": true,
+        "pred_target_effective_rank_ratio": 0.9796951748430729,
+        "pred_target_rms_ratio": 1.031966839917004,
+        "shuffled_mse": 1.893339417874813,
+        "zero_mse": 0.9947350570000708
+      },
+      {
+        "action_shuffled_mse": 0.1723317102296278,
+        "checks": {
+          "beats_action_shuffled": true,
+          "beats_identity": true,
+          "beats_shuffled": true,
+          "beats_zero": true,
+          "no_material_effective_rank_collapse": true,
+          "rms_ratio_in_preregistered_range": true
+        },
+        "horizon": 5,
+        "identity_mse": 0.31707544391974807,
+        "jepa_mse": 0.15454770607175305,
+        "passed": true,
+        "pred_target_effective_rank_ratio": 0.9854688812047243,
+        "pred_target_rms_ratio": 1.0359535440802574,
+        "shuffled_mse": 1.7753514619544148,
+        "zero_mse": 0.9228262836113572
+      },
+      {
+        "action_shuffled_mse": 0.17771065013948828,
+        "checks": {
+          "beats_action_shuffled": true,
+          "beats_identity": true,
+          "beats_shuffled": true,
+          "beats_zero": true,
+          "no_material_effective_rank_collapse": true,
+          "rms_ratio_in_preregistered_range": true
+        },
+        "horizon": 6,
+        "identity_mse": 0.38397267484106123,
+        "jepa_mse": 0.1561225227196701,
+        "passed": true,
+        "pred_target_effective_rank_ratio": 0.999688072130084,
+        "pred_target_rms_ratio": 1.0322353085502982,
+        "shuffled_mse": 1.6625276524573565,
+        "zero_mse": 0.8597074658609927
+      },
+      {
+        "action_shuffled_mse": 0.21572333970107138,
+        "checks": {
+          "beats_action_shuffled": true,
+          "beats_identity": true,
+          "beats_shuffled": true,
+          "beats_zero": true,
+          "no_material_effective_rank_collapse": true,
+          "rms_ratio_in_preregistered_range": true
+        },
+        "horizon": 7,
+        "identity_mse": 0.4882578228134662,
+        "jepa_mse": 0.18988087680190802,
+        "passed": true,
+        "pred_target_effective_rank_ratio": 1.0117200915701687,
+        "pred_target_rms_ratio": 1.035988446790725,
+        "shuffled_mse": 1.5705970032140613,
+        "zero_mse": 0.8051823177374899
+      },
+      {
+        "action_shuffled_mse": 0.22418243205174804,
+        "checks": {
+          "beats_action_shuffled": true,
+          "beats_identity": true,
+          "beats_shuffled": true,
+          "beats_zero": true,
+          "no_material_effective_rank_collapse": true,
+          "rms_ratio_in_preregistered_range": true
+        },
+        "horizon": 8,
+        "identity_mse": 0.5667570100631565,
+        "jepa_mse": 0.19626289792358875,
+        "passed": true,
+        "pred_target_effective_rank_ratio": 1.0314191128127277,
+        "pred_target_rms_ratio": 1.0304455128498375,
+        "shuffled_mse": 1.4945667246356606,
+        "zero_mse": 0.7650661910884082
+      }
+    ],
+    "passed": true,
+    "rank_collapse_operationalization": "effective-rank ratio below 0.5; the preregistration named material rank collapse but did not set a tighter numeric boundary"
+  },
+  "limitations": [
+    "All play is deterministic greedy policy play, not search-based Elo.",
+    "The arena tier is development-only and relative Elo is checkpoint-pool relative.",
+    "The four primary comparisons reuse the same held-out opening slice; they are matched contrasts, not independent replications.",
+    "The ablation covers 1,048,576 examples, far short of the full Hero horizon.",
+    "The exploratory fifth arena was preregistered separately and cannot rescue the primary promotion rule."
+  ],
+  "matched_training_contract": {
+    "common_examples": 1048576,
+    "common_updates": 1024,
+    "matched": true,
+    "only_scientific_deltas": [
+      "config.dfm_closed_loop_mode: none -> predicted_jepa_tokens",
+      "fresh parameter added: dfm_jepa_rollout_adapter.w"
+    ]
+  },
+  "next_bounded_experiment": {
+    "goal": "Preserve candidate one-pass strength while retaining the learned benefit from JEPA-conditioned recurrent inference.",
+    "primary_arm": "Full loop plus deep supervision on both exits: apply fixed-Hero1 teacher KL and legal-root/DFM objectives to preliminary one-pass logits as well as final loop-conditioned logits.",
+    "promotion_boundary": "Require p1 noninferiority and a positive p8-p1 recurrence effect. Only then preregister a longer scaling comparison.",
+    "required_baseline": "Repeat this exact no-loop control on the common prefix.",
+    "screen": "Use a matched 1,024-update prefix, then repeat candidate p1 vs control p1 and candidate p8 vs candidate p1 first; run p8 vs control only after both pass.",
+    "secondary_arm_if_budget_allows": "The same multi-exit objective with pass dropout or a fixed mixture of one-pass and loop-conditioned batches, so the first exit remains a trained deployment path."
+  },
+  "parameter_movement": {
+    "candidate_loop_adapter": {
+      "changed_fraction": 1.0,
+      "cosine": 0.8897324425985305,
+      "delta_absolute_max": 0.08738101273775101,
+      "delta_l2": 8.104880395175213,
+      "delta_rms": 0.015829844521826588,
+      "initial_l2": 15.987469172997566,
+      "parameter_count": 262144,
+      "relative_delta_l2": 0.5069520577318237,
+      "trained_l2": 17.749950463056077
+    },
+    "groups": {
+      "all": {
+        "candidate_relative_delta_l2": 0.006654480363297364,
+        "candidate_to_control_ratio": 0.9747670423438907,
+        "control_relative_delta_l2": 0.006826739184058002
+      },
+      "embedding": {
+        "candidate_relative_delta_l2": 0.005721822127327564,
+        "candidate_to_control_ratio": 1.0089307968806636,
+        "control_relative_delta_l2": 0.005671174024043932
+      },
+      "layers": {
+        "candidate_relative_delta_l2": 0.0067625796595228395,
+        "candidate_to_control_ratio": 0.9714078225822003,
+        "control_relative_delta_l2": 0.00696162775542256
+      },
+      "policy_head": {
+        "candidate_relative_delta_l2": 0.012824347516859883,
+        "candidate_to_control_ratio": 0.9943497572958502,
+        "control_relative_delta_l2": 0.012897219939728147
+      },
+      "trunk": {
+        "candidate_relative_delta_l2": 0.006642788401849982,
+        "candidate_to_control_ratio": 0.9746754083657653,
+        "control_relative_delta_l2": 0.006815385250139758
+      }
+    },
+    "input_sha256": {
+      "candidate": "1ec07cdd1af7e62c7f2d571c5a62a5ce871d1e1c2c86f68af3c3a2d0cd2da560",
+      "control": "7f65c1d6508ca07363361b17c387e1eb6758713cedfd913c450430d03b3825c1"
+    },
+    "interpretation": "The loop-specific adapter moved strongly while candidate trunk movement was slightly lower than the matched control; the loop effect is not explained by runaway encoder drift.",
+    "passed": true
+  },
+  "preregistered_decision": {
+    "decision": "retain_architecture_but_reject_current_training_composition",
+    "failed_gates": [
+      "candidate_one_pass_not_materially_damaged"
+    ],
+    "gates": {
+      "candidate_eight_pass_beats_own_one_pass": {
+        "evidence": {
+          "required": "> 0.5",
+          "score": 0.74609375
+        },
+        "passed": true
+      },
+      "candidate_eight_pass_recovers_to_control_one_pass": {
+        "evidence": {
+          "required": "point >= 0.5 OR lower interval bound >= 0.45",
+          "score": 0.51171875,
+          "score_interval_95": [
+            0.39167840108500995,
+            0.63175909891499
+          ]
+        },
+        "passed": true
+      },
+      "candidate_one_pass_not_materially_damaged": {
+        "evidence": {
+          "interpretation": "An interval wholly below 0.45 supports the preregistered material-deficit rejection condition.",
+          "required": "upper interval bound >= 0.45",
+          "score": 0.2578125,
+          "score_interval_95": [
+            0.13777215108500993,
+            0.37785284891499005
+          ]
+        },
+        "passed": false
+      },
+      "offline_latent_and_systems_health": {
+        "evidence": {
+          "all_primary_arenas_zero_fault_and_codec_complete": true,
+          "latent_health_passed": true,
+          "movement_audit_passed": true,
+          "systems_passed": true
+        },
+        "passed": true
+      }
+    },
+    "mechanism_success": false
+  },
+  "preregistration": {
+    "exploratory_arena_preregistration": {
+      "path": "/home/ubuntu/chess-dfm-jax/research/analysis/hero_v2_phase1/u1024/full_loop_control_refinement_exploratory_preregister.json",
+      "scientific_role": "mechanism clarification only",
+      "sha256": "2531e756032940297f32bb3d13d1a8e1a2d01f92cbd74bac448aba763ea3f995"
+    },
+    "path": "/home/ubuntu/chess-dfm-jax/research/analysis/hero_v2_phase1/v2_fp32_1_12_legality0_hero1distill1_full_loop_u1024-preregister.json",
+    "sha256": "836083ff3baae36f9dc66ca52d287af53545bdc52c0c3b4a6a1c3094187b41ad"
+  },
+  "question": "Does proposal-conditioned predicted-JEPA feedback compose with the fixed-Hero1-teacher Hero-v2 recipe, preserving a strong one-pass base while making recurrent DFM inference useful?",
+  "runs": {
+    "candidate": {
+      "checkpoint_state_sha256": "0c2613a6d2de6244fa37158f79c2da55fdccb15fd222eb973c02a0fb67e3896b",
+      "directory": "/home/ubuntu/chess-dfm-jax/research/analysis/hero_v2_phase1/u1024/v2_fp32_1_12_legality0_hero1distill1_closedloop",
+      "examples_per_second_end_to_end": 300.7402035981353,
+      "gpu_peak_memory_reserved_bytes": 35194404864,
+      "input_sha256": {
+        "compact_manifest.json": "8d33c25d52dc8da9cba4b234bbedfb97fd163a0060849ec9ee06cdb6f3b8f428",
+        "loss_summary.json": "992a53c1ea22b61d3738aa32382d4a12221e64acaf6286d5242cf5ed4fe6dcb0",
+        "metrics.jsonl": "d72403d2f376765af9276855e48bb4dba477e778db62f498b2cf210b93dc863f",
+        "report.json": "41972e2ed3a922555ff695a58b94b27d0703bed9bcbfa69134edd1cc43fe4157",
+        "run_config.json": "da0ce1716e46e41fd18eececd679b3a0b32f33a3d5b4caef679ebec45846cda8",
+        "validation_metrics.jsonl": "52c9bd018bf43a116fadad0a02877dae257ada1db4fef01fe55113ffee0bddb3"
+      }
+    },
+    "control": {
+      "checkpoint_state_sha256": "9cb21d328d9bdce38751603434a62e9755066839a673efcf7908fbf712a8282b",
+      "directory": "/home/ubuntu/chess-dfm-jax/research/analysis/hero_v2_phase1/u1024/v2_fp32_1_12_legality0_hero1distill1",
+      "examples_per_second_end_to_end": 305.1331588248282,
+      "gpu_peak_memory_reserved_bytes": 29905387520,
+      "input_sha256": {
+        "compact_manifest.json": "0a0ccd0779513692e76cd493eed540fbcc481711c8e0f02ad21d131bba956b36",
+        "loss_summary.json": "e63092e8bf7eaecced96ee0119d65a9b7bcefb03eb757292def909c613837274",
+        "metrics.jsonl": "6d161659e83b25667e3e8880e6ba39e324c672a0a5f885769e0c113b199c96f0",
+        "report.json": "227fd5bec86d9add592057c1acc99863d847ee9322b44ba4034f205e54eb8233",
+        "run_config.json": "0c20df4a1eadc01796f585b6cb8c208a4def8e2e2c4807582e5db58e5703c9d6",
+        "validation_metrics.jsonl": "d5018f81242d6cf85a744ada3ec010cd55b8dda5de97687be3006d82d70dd8fc"
+      }
+    }
+  },
+  "schema_version": "chess-dfm-full-loop-ablation-decision-v1",
+  "systems_diagnostic": {
+    "checks": {
+      "all_finite_no_skips": true,
+      "hbm_headroom_at_least_one_gib": true,
+      "immutable_teacher_exact": true,
+      "loop_active": true,
+      "median_useful_examples_per_second_at_least_150": true,
+      "no_diagnostic_checkpoint": true,
+      "positive_context_rms": true,
+      "ten_updates": true
+    },
+    "input_sha256": {
+      "metrics.jsonl": "08b4eb194ff07e7eb69ec49cf8f7745ce9aef5002a954a90acc614e5185224b0",
+      "report.json": "3e9994d0607ae07d2bf8bc16b16124b4a2eb5cf5070e92e71a97a9affcd6c62a",
+      "run_config.json": "8d3b7cb67a0eca4374f72714910bd0f14fb38cd14c17cf0aba3ff01ddec18099"
+    },
+    "median_useful_examples_per_second_updates_3_10": 340.76314684194807,
+    "passed": true,
+    "peak_reserved_bytes": 35194404864,
+    "physical_hbm_bytes": 51527024640,
+    "physical_hbm_headroom_bytes": 16332619776
+  },
+  "training_curves": {
+    "bootstrap_contract": {
+      "block_updates": 32,
+      "method": "paired circular moving-block bootstrap",
+      "replicates": 10000,
+      "seed": 20260810,
+      "start_update": 101
+    },
+    "candidate_loop_trajectory": {
+      "dfm_closed_loop_context_rms": {
+        "full_mean": 2.2092603871715255,
+        "last_64_mean": 3.377143520861864,
+        "terminal": 3.467968702316284
+      },
+      "dfm_closed_loop_dfm_ce_improvement": {
+        "full_mean": 0.42141253175213933,
+        "last_64_mean": 0.7483384236693382,
+        "terminal": 0.8430657386779785
+      },
+      "jepa_feedback_preliminary_dfm_ce_loss": {
+        "full_mean": 6.377382634673268,
+        "last_64_mean": 6.239801600575447,
+        "terminal": 6.417097568511963
+      }
+    },
+    "metrics": {
+      "dfm_ce_loss": {
+        "full_mean": {
+          "candidate": 5.955970102921128,
+          "candidate_minus_control": -0.017958405427634716,
+          "control": 5.973928508348763
+        },
+        "last_64_mean": {
+          "candidate": 5.491463176906109,
+          "candidate_minus_control": -0.0407109260559082,
+          "control": 5.532174102962017
+        },
+        "paired_moving_block_bootstrap_updates_101_1024": {
+          "block_updates": 32,
+          "ci": [
+            -0.0254936498868001,
+            -0.015605728283072965
+          ],
+          "confidence_level": 0.95,
+          "interpretation": "negative favors candidate",
+          "mean_candidate_minus_control": -0.02058840778482941,
+          "replicates": 10000,
+          "seed": 20260810
+        }
+      },
+      "jepa_positive_loss": {
+        "full_mean": {
+          "candidate": 0.2382263563995366,
+          "candidate_minus_control": -0.009638940544391517,
+          "control": 0.24786529694392812
+        },
+        "last_64_mean": {
+          "candidate": 0.14667547261342406,
+          "candidate_minus_control": -0.006946290144696832,
+          "control": 0.1536217627581209
+        },
+        "paired_moving_block_bootstrap_updates_101_1024": {
+          "block_updates": 32,
+          "ci": [
+            -0.014533852505824202,
+            -0.006436910872746792
+          ],
+          "confidence_level": 0.95,
+          "interpretation": "negative favors candidate",
+          "mean_candidate_minus_control": -0.010526788868493848,
+          "replicates": 10000,
+          "seed": 20260810
+        }
+      },
+      "loss": {
+        "full_mean": {
+          "candidate": 7.249314607586712,
+          "candidate_minus_control": -0.03900140197947621,
+          "control": 7.288316009566188
+        },
+        "last_64_mean": {
+          "candidate": 6.4599132016301155,
+          "candidate_minus_control": -0.0587129145860672,
+          "control": 6.518626116216183
+        },
+        "paired_moving_block_bootstrap_updates_101_1024": {
+          "block_updates": 32,
+          "ci": [
+            -0.05457409448695905,
+            -0.03354317032413566
+          ],
+          "confidence_level": 0.95,
+          "interpretation": "negative favors candidate",
+          "mean_candidate_minus_control": -0.044134629753244906,
+          "replicates": 10000,
+          "seed": 20260810
+        }
+      },
+      "root_legal_conditional_ce": {
+        "full_mean": {
+          "candidate": 1.5925396145321429,
+          "candidate_minus_control": -0.0013253868091851473,
+          "control": 1.593865001341328
+        },
+        "last_64_mean": {
+          "candidate": 1.46686802059412,
+          "candidate_minus_control": -0.0008959732949733734,
+          "control": 1.4677639938890934
+        },
+        "paired_moving_block_bootstrap_updates_101_1024": {
+          "block_updates": 32,
+          "ci": [
+            -0.0042587749466493525,
+            0.0005795469886554744
+          ],
+          "confidence_level": 0.95,
+          "interpretation": "negative favors candidate",
+          "mean_candidate_minus_control": -0.0019027165004185268,
+          "replicates": 10000,
+          "seed": 20260810
+        }
+      },
+      "wdl_loss": {
+        "full_mean": {
+          "candidate": 0.9485398370889015,
+          "candidate_minus_control": -0.006387841363903135,
+          "control": 0.9549276784528047
+        },
+        "last_64_mean": {
+          "candidate": 0.7677705730311573,
+          "candidate_minus_control": -0.01469798618927598,
+          "control": 0.7824685592204332
+        },
+        "paired_moving_block_bootstrap_updates_101_1024": {
+          "block_updates": 32,
+          "ci": [
+            -0.011916287047425648,
+            -0.0030880046863254037
+          ],
+          "confidence_level": 0.95,
+          "interpretation": "negative favors candidate",
+          "mean_candidate_minus_control": -0.00751508211160635,
+          "replicates": 10000,
+          "seed": 20260810
+        }
+      }
+    }
+  }
+}

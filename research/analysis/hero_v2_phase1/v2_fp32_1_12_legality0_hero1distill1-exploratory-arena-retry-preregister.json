@@ -1,0 +1,59 @@
+{
+  "schema_version": "chess-dfm-post-gate-exploratory-arena-retry-preregister-v1",
+  "created_utc": "2026-08-09T19:30:31Z",
+  "status": "sealed_before_retry_launch",
+  "parent": {
+    "path": "research/analysis/hero_v2_phase1/v2_fp32_1_12_legality0_hero1distill1-exploratory-arena-preregister.json",
+    "sha256": "7265f72711dd209fc9c9a29a1a7e9129eb5bb72ea5e44bb035cea34fe6a60705"
+  },
+  "failed_attempt": {
+    "modal_app_id": "ap-tGf3rJAw4ifUa3kSEgr7zG",
+    "function_call_id": "fc-01KZKZJ8NT03CJSDX864BX790T",
+    "arena_source_tree_sha256": "91369f0556a07fc07b5b8125a06615110f4d4a99c7396244c2dfcee04a76b248",
+    "outcome": "failed_before_games",
+    "games_completed": 0,
+    "stopped_utc": "2026-08-09T19:23:12Z",
+    "failure": "The arena validator required policy_distill_teacher_mode and policy_distill_teacher_state_sha256 on the sealed Hero1 config created before those fields existed.",
+    "scientific_information_observed": false
+  },
+  "compatibility_fix": {
+    "scope": "Treat the two newly introduced policy-teacher provenance fields as optional only when reading legacy Torch model configs, using the Config defaults. No model, checkpoint, inference, move selection, opening, estimator, or arena rule changed.",
+    "legacy_effective_semantics": {
+      "policy_distill_coeff": 0.0,
+      "policy_distill_teacher_mode": "online",
+      "policy_distill_teacher_state_sha256": "",
+      "active_teacher": false
+    },
+    "fixed_teacher_semantics": "The candidate records all teacher fields explicitly; its checkpoint-teacher identity remains unchanged and is not defaulted.",
+    "direct_exact_hero1_config_validation": "passed; 54 input keys returned unchanged",
+    "tests": "10 maintained Torch arena tests passed",
+    "ruff": "passed"
+  },
+  "retry_contract": {
+    "models": "unchanged from parent",
+    "primary_dfm": {
+      "candidate_policy_mode": "dfm",
+      "opponent_policy_mode": "dfm",
+      "pair_count": 128,
+      "games": 256,
+      "refinement_passes": 1
+    },
+    "mechanistic_policy_only": "unchanged from parent and permitted only after a safely completed primary arena",
+    "analysis_and_safety_rules": "unchanged from parent",
+    "interpretation_boundary": "The retry remains post-gate exploratory and cannot retroactively pass frozen validation, promote the arm, or authorize Phase 2."
+  },
+  "implementation": {
+    "git_commit": "86ba0b37e3e188eab115b45a1460d079fac341f8",
+    "arena_source_tree_sha256": "614267c6eb03c569f19095572120d25b775b4b9c4e6b5e862f4b948a27ce0324",
+    "evaluate_arena_sha256": "6759e743dee8951dbbbe5f3a3ed42b0f01ca43cebf9795d0ce49229aed498d92",
+    "modal_arena_app_sha256": "72859873dcec65d3db29fae8ad09228b9c5d1e44afaa23b1d3384ede015cfa2f",
+    "legacy_test_sha256": "e525105cd0b1855ecca55d6e42d6620e5465fb4e50594a4f7a1c63b6a336bfb7",
+    "torch_only_test_sha256": "11db5aa125a0140b95a673040ead04404839912f9bcbe065ec4d7304ee9904dc"
+  },
+  "cost_guard": {
+    "workspace_budget_usd": 42.5,
+    "repository_new_launch_stop_usd": 34.0,
+    "retry_attempt_cap_usd": 1.0,
+    "fresh_billing_query_required_immediately_before_retry": true
+  }
+}

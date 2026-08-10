@@ -23,20 +23,15 @@ import time
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 import chess
-import jax
-import jax.numpy as jnp
 import numpy as np
-from flax import nnx
 
-from chess_dfm_jax.analysis.profile_targets import load_mapped_bt4_params
-from chess_dfm_jax.nnx_bt4 import make_bt4_model
 from chess_dfm_jax.policy import (
     ACTION_CODEC_LC0_CANONICAL_1858,
     ACTION_CODEC_LEGACY_ABSOLUTE_1858,
@@ -58,17 +53,6 @@ from research.arena_history_trust import (
     HISTORY_VALIDATION_SCHEMA,
     HISTORY_VALIDATION_TRUSTED_ARENA_ENDPOINT,
 )
-from research.import_legacy import import_legacy_checkpoint
-from research.local_policy import (
-    PLANE_HISTORY_MODE_CURRENT_ONLY_AS_PREPROCESSED,
-    STATIC_INFERENCE_BATCHING_SCHEMA,
-    STATIC_INFERENCE_PADDING_MODE,
-    LocalDFMPolicy,
-)
-from research.raw_bt4_policy import (
-    RAW_BT4_POLICY_COMPUTE_DTYPE,
-    LocalBT4Policy,
-)
 from research.play_arena import (
     ArenaGameplayResult,
     BatchedArenaPolicy,
@@ -84,10 +68,18 @@ from research.prepare import (
     sha256_file,
 )
 
+if TYPE_CHECKING:
+    from research.local_policy import LocalDFMPolicy
+    from research.raw_bt4_policy import LocalBT4Policy
+
 
 ARENA_RUN_SCHEMA = "chess-dfm-relative-arena-run-v3"
 ARENA_BLOCK_SCHEMA = "chess-dfm-relative-arena-block-v3"
 RELATIVE_ELO_SCOPE = "checkpoint_pool_relative_only"
+PLANE_HISTORY_MODE_CURRENT_ONLY_AS_PREPROCESSED = "current_only_as_preprocessed"
+STATIC_INFERENCE_BATCHING_SCHEMA = "chess-dfm-static-inference-batching-v1"
+STATIC_INFERENCE_PADDING_MODE = "repeat_first_validated_encoded_row_v1"
+RAW_BT4_POLICY_COMPUTE_DTYPE = "bfloat16"
 DEFAULT_MODELS_DIR = REPO_ROOT / "models" / "source" / "extracted"
 DEFAULT_SOURCE_RUN_ROOT = REPO_ROOT / "checkpoints" / "source" / "step0265000"
 
@@ -310,6 +302,14 @@ def atomic_write_json(path: Path, payload: Mapping[str, Any]) -> Path:
 
 
 def _git_commit() -> str:
+    override = os.environ.get("CHESS_DFM_GIT_COMMIT")
+    if override is not None:
+        if (
+            len(override) != 40
+            or any(character not in "0123456789abcdef" for character in override)
+        ):
+            raise ValueError("CHESS_DFM_GIT_COMMIT must be a lowercase Git SHA-1")
+        return override
     return subprocess.run(
         ["git", "rev-parse", "HEAD"],
         cwd=REPO_ROOT,
@@ -386,6 +386,9 @@ def _validated_torch_hero_model_config(
         "dfm_state_source",
         "wdl_include_current_state",
         "dfm_closed_loop_mode",
+        "policy_distill_coeff",
+        "policy_distill_teacher_mode",
+        "policy_distill_teacher_state_sha256",
     }
     if unknown:
         raise ValueError(
@@ -764,11 +767,12 @@ def torch_hero_checkpoint_descriptor(
         "dfm_blocks",
         "jepa_transition",
     ]
+    recorded_recipe = run_config.get("recipe")
     if (
         run_config.get("framework") != "torch"
         or run_config.get("execution") != "regional-compile"
         or run_config.get("torch_compile") is not True
-        or run_config.get("recipe") != "hero"
+        or recorded_recipe not in {"hero", "hero_v2"}
         or run_config.get("compile_regions") != expected_compile_regions
     ):
         raise ValueError("Torch hero run execution contract mismatch.")
@@ -787,7 +791,7 @@ def torch_hero_checkpoint_descriptor(
         runtime = resume_contract.get("runtime")
         if (
             resume_contract.get("framework") != "torch"
-            or resume_contract.get("recipe") != "hero"
+            or resume_contract.get("recipe") != recorded_recipe
             or resume_contract.get("git_commit") != run_config.get("git_commit")
             or resume_contract.get("config") != expected_config
             or not isinstance(runtime, dict)
@@ -820,7 +824,7 @@ def torch_hero_checkpoint_descriptor(
             "leaf_count": int(state[model_leaf_count_key]),
         },
         "lineage": {
-            "recipe": "hero",
+            "recipe": recorded_recipe,
             "training_git_commit": run_config.get("git_commit"),
         },
         "torch_run_config": {
@@ -829,6 +833,7 @@ def torch_hero_checkpoint_descriptor(
             "git_commit": run_config.get("git_commit"),
             "framework": run_config.get("framework"),
             "execution": run_config.get("execution"),
+            "recipe": recorded_recipe,
             "torch_compile": run_config.get("torch_compile"),
             "compile_regions": expected_compile_regions,
         },
@@ -931,6 +936,8 @@ def _torch_hero_model_id(
 
 
 def _dtype(name: str) -> Any:
+    import jax.numpy as jnp
+
     values = {
         "float16": jnp.float16,
         "bfloat16": jnp.bfloat16,
@@ -948,6 +955,9 @@ def _create_model_only(
     *,
     seed: int,
 ) -> Any:
+    from flax import nnx
+
+    from chess_dfm_jax.nnx_bt4 import make_bt4_model
     from research.train import JointLatentSASAModel
 
     encoder = make_bt4_model(
@@ -972,6 +982,7 @@ def load_research_policy(
     collect_diagnostics: bool,
     inference_batch_size: int,
 ) -> tuple[LocalDFMPolicy, dict[str, Any]]:
+    from research.local_policy import LocalDFMPolicy
     from research.train import (
         EmaTargetModel,
         load_research_checkpoint_for_evaluation,
@@ -1022,11 +1033,16 @@ def load_torch_research_policy(
 ) -> tuple[LocalDFMPolicy, dict[str, Any]]:
     """Materialize a strict Torch model-only state into the frozen JAX arena."""
 
+    import jax.numpy as jnp
+    from flax import nnx
+
+    from chess_dfm_jax.nnx_bt4 import make_bt4_model
     from research.evaluate_torch_migration_parity import (
         _apply_and_verify_jax_checkpoint,
         _checkpoint_tree,
         _jax_config,
     )
+    from research.local_policy import LocalDFMPolicy
     from research.train import JointLatentSASAModel
 
     started = time.perf_counter()
@@ -1086,6 +1102,8 @@ def load_source_policy(
     collect_diagnostics: bool,
     inference_batch_size: int,
 ) -> tuple[LocalDFMPolicy, dict[str, Any]]:
+    from research.import_legacy import import_legacy_checkpoint
+    from research.local_policy import LocalDFMPolicy
     from research.train import create_joint_components
 
     started = time.perf_counter()
@@ -1353,6 +1371,11 @@ def load_raw_bt4_policy(
     inference_batch_size: int,
 ) -> tuple[LocalBT4Policy, dict[str, Any]]:
     """Construct the immutable BF16 raw-BT4 policy-head opponent."""
+
+    import jax.numpy as jnp
+
+    from chess_dfm_jax.nnx_bt4 import make_bt4_model
+    from research.raw_bt4_policy import LocalBT4Policy
 
     started = time.perf_counter()
     model = make_bt4_model(
@@ -1985,6 +2008,18 @@ def run_blocks(
 
     pair_target = int(contract["run"]["pair_count"])
     block_pairs = int(contract["run"]["block_pairs"])
+    opening_start_index = int(
+        contract["run"].get("opening_start_index", 0)
+    )
+    if opening_start_index < 0:
+        raise ValueError("opening_start_index must be non-negative.")
+    opening_stop_index = opening_start_index + pair_target
+    if opening_stop_index > len(opening_pool["openings"]):
+        raise ValueError(
+            "Arena opening range exceeds the frozen pool: "
+            f"[{opening_start_index}, {opening_stop_index}) versus "
+            f"{len(opening_pool['openings'])} openings."
+        )
     candidate_id = candidate_policy.model_id
     opponent_id = opponent_policy.model_id
     while len(aggregate["pair_scores"]) < pair_target:
@@ -1992,12 +2027,19 @@ def run_blocks(
             break
         start = len(aggregate["pair_scores"])
         count = min(block_pairs, pair_target - start)
-        fens = [opening["fen"] for opening in opening_pool["openings"][start : start + count]]
+        opening_start = opening_start_index + start
+        opening_stop = opening_start + count
+        fens = [
+            opening["fen"]
+            for opening in opening_pool["openings"][
+                opening_start:opening_stop
+            ]
+        ]
         pairs = make_color_reversed_pairs(
             fens,
             model_a=candidate_id,
             model_b=opponent_id,
-            start_index=start,
+            start_index=opening_start,
         )
         histories = histories_for_pairs(pairs, loaded_histories)
         candidate_tracker = PolicyTracker()
@@ -2170,6 +2212,15 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         default="correctness",
     )
     parser.add_argument("--pair-count", type=int)
+    parser.add_argument(
+        "--opening-start-index",
+        type=int,
+        default=0,
+        help=(
+            "Zero-based index of the first frozen opening. The selected "
+            "range is [index, index + pair_count)."
+        ),
+    )
     parser.add_argument("--block-pairs", type=int)
     parser.add_argument("--additional-ply-cap", type=int)
     parser.add_argument("--refinement-passes", type=int, default=8)
@@ -2335,6 +2386,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     ) = _resolved_refinement_passes(args)
     if args.policy_batch_size_cap < 1:
         raise ValueError("policy_batch_size_cap must be positive.")
+    opening_start_index = int(args.opening_start_index)
+    if opening_start_index < 0:
+        raise ValueError("opening_start_index must be non-negative.")
     if not math.isfinite(args.policy_timeout_seconds) or args.policy_timeout_seconds <= 0:
         raise ValueError("policy_timeout_seconds must be positive and finite.")
     inference_batch_size = _static_inference_batch_size(
@@ -2348,6 +2402,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         tier.pool_path,
         expected_pool_sha256=tier.pool_sha256,
     )
+    opening_stop_index = opening_start_index + pair_count
+    if opening_stop_index > len(opening_pool["openings"]):
+        raise ValueError(
+            "Arena opening range exceeds the frozen pool: "
+            f"[{opening_start_index}, {opening_stop_index}) versus "
+            f"{len(opening_pool['openings'])} openings."
+        )
     loaded_histories = load_opening_history_sidecar(
         tier.histories_path,
         opening_pool=opening_pool,
@@ -2479,7 +2540,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             "policy_timeout_seconds": float(args.policy_timeout_seconds),
             "collect_diagnostics": bool(args.collect_diagnostics),
             "seed": int(args.seed),
-            "opening_start_index": 0,
+            "opening_start_index": opening_start_index,
             "deterministic_greedy_policy": True,
             "jepa_used_at_inference": (
                 (
@@ -2567,6 +2628,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             inference_batch_size=inference_batch_size,
         )
     else:
+        import jax
+
+        from chess_dfm_jax.analysis.profile_targets import load_mapped_bt4_params
+
         bt4_params = load_mapped_bt4_params(models_dir=models_dir)
         if args.candidate_raw_bt4:
             candidate_policy, candidate_load = load_raw_bt4_policy(

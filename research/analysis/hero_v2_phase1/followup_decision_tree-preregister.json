@@ -1,0 +1,55 @@
+{
+  "schema_version": "chess-dfm-hero-v2-phase1-followup-preregister-v1",
+  "sealed_utc": "2026-08-09T11:39:11.637000+00:00",
+  "purpose": "Choose at most one additional Phase-1 optimization arm without inspecting terminal BF16-1:30 or FP32-1:12 validation, movement, or arena results.",
+  "frozen_inputs": {
+    "control_contract_sha256": "7de08c6676bdcfcbee70ecc5f80260490729dc540e1dee927cdca204672163e3",
+    "fp32_1_30_comparison_sha256": "2327b2360bf07833328e54ac80c80bfb38181339b890238082addd3fb2d78b38",
+    "fp32_1_12_preregister_sha256": "2da781fc52f719e94ff76bbb9e8dabc837ad31c4b413068a64d5ee5d024c24d4",
+    "known_control_root_legal_top1_accuracy": 0.455078125,
+    "known_fp32_1_30_root_legal_top1_accuracy": 0.4091796875,
+    "known_fp32_1_30_root_top1_delta": -0.0458984375,
+    "known_fp32_1_30_trunk_relative_delta_l2": 0.0021673511276479405,
+    "known_fp32_1_10_trunk_relative_delta_l2": 0.005248938986083084
+  },
+  "unobserved_when_sealed": [
+    "v2_bf16_1_30 terminal validation and movement",
+    "v2_fp32_1_12 terminal validation, movement, and arena"
+  ],
+  "behavior_definitions": {
+    "root_top1_retained": "candidate minus matched Hero-1 is at least -0.01 on the frozen 8192-position validation pool",
+    "root_top1_material_regression": "candidate minus matched Hero-1 is at most -0.03 on the frozen 8192-position validation pool",
+    "arena_clearly_worse": "the paired score confidence interval lies wholly below 0.5; a low-power point estimate alone is not decisive",
+    "movement_safe": "trunk relative-delta L2 is below 0.005 and global relative-delta L2 is below 0.01"
+  },
+  "ordered_decision_tree": [
+    {
+      "priority": 1,
+      "condition": "FP32-1:12 passes the frozen curve, validation, and movement screens; retains root top-1; and its 16-pair arena is not clearly worse",
+      "action": "Launch no additional Phase-1 arm; advance FP32-1:12 to Phase 2 as a behavioral candidate."
+    },
+    {
+      "priority": 2,
+      "condition": "BF16-1:30 retains root top-1 while full-FP32-1:30 has the already-observed material root-top1 regression",
+      "action": "Attribute the leading contrast to whole-model precision. Implement encoder_fp32_master. Launch encoder-only FP32 at ratio 1:12 if FP32-1:12 movement is safe, otherwise at ratio 1:30."
+    },
+    {
+      "priority": 3,
+      "condition": "BF16-1:30 itself has a material root-top1 regression",
+      "action": "Treat schedule/decay or main learning rate as implicated. Launch the existing full-FP32 ratio-1:12 arm with main-LR multiplier 0.75; do not launch hybrid precision first."
+    },
+    {
+      "priority": 4,
+      "condition": "BF16-1:30 root-top1 delta is between -0.03 and -0.01, or evidence is otherwise ambiguous",
+      "action": "Launch the minimal encoder-only FP32 ratio-1:30 contrast."
+    }
+  ],
+  "hard_limits": {
+    "additional_phase1_training_arms_before_reassessment": 1,
+    "forbid_ratio_1_3": true,
+    "require_fresh_billing_before_launch": true,
+    "require_16_pair_smoke_before_phase2": true,
+    "phase1_loss_velocity_is_not_strength_promotion": true,
+    "full_interpretability_before_behavioral_winner": false
+  }
+}

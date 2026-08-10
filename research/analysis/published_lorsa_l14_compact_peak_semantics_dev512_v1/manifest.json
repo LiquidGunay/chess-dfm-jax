@@ -1,0 +1,184 @@
+{
+  "analysis_configuration": {
+    "fit_fraction": 0.5,
+    "minimum_evaluation_support": 8,
+    "minimum_fit_joint_support": 5,
+    "minimum_fit_support": 16,
+    "seed": 20260808,
+    "smoothing": 0.5,
+    "top_per_class": 3
+  },
+  "analysis_configuration_sha256": "09893793423becfe568d32af13bce9342ecb6a9e2987b57822b9347c1d5060e2",
+  "claim_gate": {
+    "descriptive_peak_location_association": true,
+    "feature_causality": false,
+    "raw_hero_semantic_equivalence": false,
+    "token_level_feature_semantics": false
+  },
+  "concepts": [
+    {
+      "array": "piece_code_i8",
+      "class_names": [
+        "empty",
+        "our_pawn",
+        "our_knight",
+        "our_bishop",
+        "our_rook",
+        "our_queen",
+        "our_king",
+        "their_pawn",
+        "their_knight",
+        "their_bishop",
+        "their_rook",
+        "their_queen",
+        "their_king"
+      ],
+      "name": "piece_code"
+    },
+    {
+      "array": "legal_origin_u8",
+      "class_names": [
+        "no",
+        "yes"
+      ],
+      "name": "legal_origin"
+    },
+    {
+      "array": "legal_destination_u8",
+      "class_names": [
+        "no",
+        "yes"
+      ],
+      "name": "legal_destination"
+    },
+    {
+      "array": "capture_destination_u8",
+      "class_names": [
+        "no",
+        "yes"
+      ],
+      "name": "capture_destination"
+    },
+    {
+      "array": "checking_destination_u8",
+      "class_names": [
+        "no",
+        "yes"
+      ],
+      "name": "checking_destination"
+    },
+    {
+      "array": "occupied_ours_u8",
+      "class_names": [
+        "no",
+        "yes"
+      ],
+      "name": "occupied_ours"
+    },
+    {
+      "array": "occupied_theirs_u8",
+      "class_names": [
+        "no",
+        "yes"
+      ],
+      "name": "occupied_theirs"
+    },
+    {
+      "array": "our_king_zone_u8",
+      "class_names": [
+        "no",
+        "yes"
+      ],
+      "name": "our_king_zone"
+    },
+    {
+      "array": "their_king_zone_u8",
+      "class_names": [
+        "no",
+        "yes"
+      ],
+      "name": "their_king_zone"
+    },
+    {
+      "array": "pinned_ours_u8",
+      "class_names": [
+        "no",
+        "yes"
+      ],
+      "name": "pinned_ours"
+    },
+    {
+      "array": "pinned_theirs_u8",
+      "class_names": [
+        "no",
+        "yes"
+      ],
+      "name": "pinned_theirs"
+    },
+    {
+      "array": "attacked_undefended_ours_u8",
+      "class_names": [
+        "no",
+        "yes"
+      ],
+      "name": "attacked_undefended_ours"
+    },
+    {
+      "array": "attacked_undefended_theirs_u8",
+      "class_names": [
+        "no",
+        "yes"
+      ],
+      "name": "attacked_undefended_theirs"
+    }
+  ],
+  "immutable_after_creation": true,
+  "input_gates": {
+    "development_split_only": true,
+    "evaluation_reselection": false,
+    "group_disjoint_fit_evaluation": true,
+    "hero_transfer_complete": true,
+    "position_group_puzzle_action_alignment_verified": true,
+    "public_corpus_checksum_inventory_verified": true,
+    "public_corpus_identity_matches_source": true,
+    "source_artifact_contract_passed": true,
+    "source_checksum_inventory_verified": true,
+    "source_compatibility_gate_passed": true,
+    "test_split_opened": false
+  },
+  "public_corpus": {
+    "checksum_ledger_sha256": "0fd02e18b0ccf0a7dfb053d259a4ca176affc8419caf732be905bfcca3038267",
+    "checksums": {
+      "engine_positions.npz": "a1f8f4b25aaa4b0576933f7aaa17885786c883816428b2f3edb64c091c4f7215",
+      "manifest.json": "1b1285eb902fd8e7bd0fca6474df847a36439825f6601c4f9249cb33a55ca37f",
+      "puzzles.npz": "e9acdaadba3095938a4d97e07ece7bbcbf18fa532c9bd7f73352ec36bc198c47"
+    },
+    "group_identity_sha256": "144ac1717376cc13d47c905e98f9c36213ca0632673cb1aead11c8b192337e5a",
+    "manifest_integrity_sha256": "9195f857f60ab123b353095b6b931c589ae69098750ea6b26e53e7d871f349d0",
+    "manifest_path": "/home/ubuntu/chess-dfm-jax/research/eval/interpretability_public_v2/manifest.json",
+    "position_identity_sha256": "37feebb08141bdc648f38f3e1ad7035cc15cf09679e0ea85bea11a8c62dc5f90"
+  },
+  "report_identity_sha256": "8f17a6f519fd49a54fb273968f0047a4182648723b0e782df0c37a671d7ced34",
+  "schema_version": "bt4-lorsa-compact-peak-report-manifest-v1",
+  "source_files": {
+    "research/interpretability/sparse/build_compact_feature_report.py": "79076c0537259549620f954a21c6ef64c3a8618cd1ce3b4ba3157939bb159f8e",
+    "research/interpretability/sparse/compact_feature_semantics.py": "4307475cd21aa7028a264f768634d596be05eac36161e5e7d7ffb4333ebb66c8"
+  },
+  "source_run": {
+    "artifact_contract_gate_passed": true,
+    "checksum_ledger_sha256": "4ef15781c14a03d3422dca811d72734da67793e3cfcec0f4565abee053071add",
+    "checksums": {
+      "examples.jsonl": "7bd61a1bb6b3e9e2240311532331461651199fa3b6fff22f848fdeaee9150c3f",
+      "manifest.json": "fd9c5b42e8a51ef17a995708d97491c90c4cfbdc77cb45953e0cc425df3db12f",
+      "metrics.json": "63da2ac0237dc95b86a55921d151a9b5f6cc56714ecec318f0bcffd700a362d4",
+      "run.log": "759a8c019e7d1bb4fe5895a7799ddbd23864f2c51445afbdb3f2bb617c747396"
+    },
+    "group_count": 512,
+    "n_features": 16384,
+    "path": "/home/ubuntu/chess-dfm-jax/research/analysis/published_lorsa_l14_transfer_dev512_v1",
+    "position_count": 512,
+    "run_id": "sha256:b7b67d80087f5beec16a1ce3fe331cf228457394ea15cd50d56ee21213209e0c",
+    "schema_version": "bt4-published-lorsa-transfer-run-v1",
+    "source_compatibility_gate_passed": true
+  }
+}

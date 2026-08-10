@@ -1,0 +1,162 @@
+{
+  "aggregation_unit": "position; bootstrap clusters are source game_id",
+  "completed_utc": "2026-08-07T17:41:44.152747+00:00",
+  "configuration": {
+    "batch_size": 2,
+    "bootstrap_replicates": 10000,
+    "bootstrap_seed": 20260808,
+    "compute_dtype": "bfloat16",
+    "cpu_threads": 2,
+    "layers": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14
+    ],
+    "positions": 128,
+    "projection_seed": 20260807,
+    "seed": 20260807,
+    "sketch_width": 64
+  },
+  "cost": {
+    "actual_provider_dollars": 0.0,
+    "backend": "local",
+    "estimated_dollars": 0.0
+  },
+  "created_utc": "2026-08-07T17:41:08.228956+00:00",
+  "elapsed_seconds": 35.933594369038474,
+  "environment": {
+    "cuda_runtime": "12.1",
+    "cudnn": 90100,
+    "device": "cuda",
+    "gpu": {
+      "compute_capability": [
+        7,
+        5
+      ],
+      "name": "NVIDIA GeForce GTX 1660 Ti",
+      "peak_allocated_bytes": 985098240,
+      "peak_reserved_bytes": 1031798784,
+      "total_memory_bytes": 6442123264
+    },
+    "numpy": "2.2.6",
+    "platform": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+    "python": "3.12.3",
+    "torch": "2.5.1+cu121"
+  },
+  "exclusions": "none; fail closed on nonfinite values or ABI drift",
+  "hypotheses": {
+    "null": "the development corpus may resolve no meaningful encoder delta; head-only or no resolved change remains valid",
+    "primary": "Hero may differ from raw BT4 in parameters, corresponding representations, and legal-policy behavior"
+  },
+  "inputs": {
+    "corpus_data_sha256": "cce0247810039fbe9ebfec863febe1f1b3c3e8d2c92b896c51714afca8df1121",
+    "corpus_manifest": "/home/ubuntu/chess-dfm-jax/research/eval/interpretability_pilot_v1/manifest.json",
+    "corpus_manifest_integrity_sha256": "9b38b1cb42d187555e2fff2bf83754213bfe0f57420cb037b6d3080fede64c2e",
+    "models": {
+      "arm_semantics": "first letter encoder; second letter policy head",
+      "arms": [
+        "RR",
+        "HR",
+        "RH",
+        "HH"
+      ],
+      "encoder_layout_sha256": "c8c7fdcab3dfb1b6af5f1ac3a54f9347dd52e3d4673ad6f88e8d9407523d8bbb",
+      "hero_leaf_count": 462,
+      "hero_state_sha256": "665ac91ad37e14a6c8810068700dba021e39e9c0fe145c8bf620882bb5a71692",
+      "on_disk_mixed_checkpoints": false,
+      "raw_asset_sha256": "61e43e98d2c4cb747498c6bc13a5bbb3b07e985d3f5d87f0351a4db855fa0651",
+      "raw_mapping_sha256": "c7a22e25a74e959357f294dfdda4a8f47372d79c96ada49131967bec75b2d93c",
+      "resident_parameter_bytes": 793834496,
+      "schema_version": "bt4-raw-hero-comparison-models-v1"
+    }
+  },
+  "payload_identities": {
+    "activation_position_metrics_sha256": "e9d5688d289c894f141090e0cc5ff8a3307223fcc373c1eaa430c6bd42567c63",
+    "corpus_manifest_integrity_sha256": "9b38b1cb42d187555e2fff2bf83754213bfe0f57420cb037b6d3080fede64c2e",
+    "examples_sha256": "c302ba719f85a57eaf2ab0ba0c9f43f4e60d639cab0757961f3deccb6cf8c900",
+    "hero_state_sha256": "665ac91ad37e14a6c8810068700dba021e39e9c0fe145c8bf620882bb5a71692",
+    "metrics_content_sha256": "a92a382bbbf9090343fe3b2f3fbd4eff0da3840faea2e880ba4553a6f1ef5bc7",
+    "raw_asset_sha256": "61e43e98d2c4cb747498c6bc13a5bbb3b07e985d3f5d87f0351a4db855fa0651"
+  },
+  "preflight": {
+    "bfloat16": {
+      "capture_parity": "bit-exact lattice logits and terminal tokens",
+      "finite_logits": true,
+      "logits_fp32_sha256": "ebf8f647766704d4267a1ce2c882f52f0f92a4abe1d69dfd58bd3e5046a78eab",
+      "position_count": 1,
+      "repeatability": "bit-exact logits, tokens, and all selected captures"
+    },
+    "float32": {
+      "capture_parity": "bit-exact lattice logits and terminal tokens",
+      "finite_logits": true,
+      "logits_fp32_sha256": "244d41f983ff492100d0eee2b0034abe781d7ff4acd7c8ce4774b782cad40819",
+      "position_count": 1,
+      "repeatability": "bit-exact logits, tokens, and all selected captures"
+    }
+  },
+  "run_id": "sha256:8e96bdc849cf50e681af9e0c6e64a2a73063716f279071911a2566bb9f662f13",
+  "run_identity_contract": "SHA256 of canonical payload identities; timestamps and paths excluded",
+  "schema_version": "bt4-interpretability-run-manifest-v1",
+  "scientific_status": "exploratory development pilot; eligible for tooling validation and expensive-layer selection, not terminal confirmatory claims",
+  "source": {
+    "files_sha256": {
+      "research/interpretability/__init__.py": "fb57d905eb5344a6883a47c0762c6c46c8f7b96e4147ef171e9bdb227bc72f7b",
+      "research/interpretability/accumulators.py": "343834f910f549684fcda362cea28acda44f42c0b26faabfe55db6d708b1ca47",
+      "research/interpretability/activation_diff.py": "d6c152448533943a884bfb685ae0d0ead87f031dbac30d87048676d4d7face1b",
+      "research/interpretability/artifacts.py": "8dc06be6218e941599990b9276f08985835294b61d3d94acdb9671cf67161c20",
+      "research/interpretability/behavior_diff.py": "47855cb54ef62e1ef5a38bf7f45e242af5b7f2e44aee8e0fd6af78a2b180ef1f",
+      "research/interpretability/models.py": "24b838550d510d85871b796decfb2d5961b46c48286184ac8478d729c293b33c",
+      "research/interpretability/parameter_diff.py": "e1f1fae263a7d64d3e10e508bc89e1b8cee246f5d36d60f98e65811898b9b0d2",
+      "research/interpretability/pilot.py": "19c80b1e3d69c5cbd238150f1c65774aaef54fba40a38125eefc1ea74c64c1a7",
+      "research/interpretability/pilot_corpus.py": "e5035e645a40344b3463abbf6252c75759660132dfc2afc5e1c0661d43be4c41",
+      "research/interpretability/spectral_diff.py": "48ea3d14011baebb6e0699e3fe36e0ff03cd35d445409249bf6e31d6c997bc23",
+      "research/train_torch.py": "639fa4f9a9a44276db5563c2b45c3e9215d810e5f1140a29dde9f5b39dc6259a"
+    },
+    "git": {
+      "branch": "research/local-gpu-autoresearch",
+      "commit": "86ba0b37e3e188eab115b45a1460d079fac341f8",
+      "status": [
+        "M .gitignore",
+        " M README.md",
+        " M chess_dfm_jax/__init__.py",
+        " M research/resource_guard.py",
+        " M research/train_torch.py",
+        " M tests/test_research_resource_guard.py",
+        "?? docs/hero_bt4_interpretability_plan.md",
+        "?? research/analysis/.raw_hero_pilot_v1.335248.partial/",
+        "?? research/analysis/raw_hero_matrix_spectra_20260807.json",
+        "?? research/analysis/raw_hero_parameter_diff_20260807.json",
+        "?? research/eval/interpretability_pilot_v1/",
+        "?? research/interpretability/",
+        "?? research/requirements_torch_local.txt",
+        "?? research/run_torch_gpu.sh",
+        "?? tests/test_torch_activation_diff.py",
+        "?? tests/test_torch_behavior_diff.py",
+        "?? tests/test_torch_bt4_representation_hooks.py",
+        "?? tests/test_torch_interpretability_accumulators.py",
+        "?? tests/test_torch_interpretability_artifacts.py",
+        "?? tests/test_torch_interpretability_models.py",
+        "?? tests/test_torch_parameter_diff.py",
+        "?? tests/test_torch_pilot_corpus.py",
+        "?? tests/test_torch_spectral_diff.py",
+        "?? tests/test_torch_spectral_diff.py.orig"
+      ],
+      "status_sha256": "fdd03f60e7a3bdc4236bfea4e1301070ebeead6f6e3b30ef4fcbf1a67f80b0fd",
+      "worktree_clean": false
+    }
+  },
+  "status": "complete",
+  "stopping_rule": "exactly the first 128 rows of the immutable corpus"
+}

@@ -1,0 +1,69 @@
+{
+  "schema_version": "chess-dfm-hero-v2-conditional-decision-v1",
+  "created_utc": "2026-08-09T12:52:36Z",
+  "status": "sealed_before_trunk_terminal_validation",
+  "parent_preregistration": {
+    "path": "research/analysis/hero_v2_phase1/v2_trunk_fp32_1_12-preregister.json",
+    "sha256": "edf9856eed07003da730d6822f2296cf67c2ffcdd1b5b24f94dd8695d92a608c"
+  },
+  "information_available_when_sealed": {
+    "trunk_terminal_result_available": false,
+    "trunk_last_observed_update": 20,
+    "whole_encoder_hybrid_result": {
+      "root_legal_top1_accuracy": 0.413330078125,
+      "jepa_positive_loss": 0.24681561556644738,
+      "wdl_loss": 1.0675159920938313
+    },
+    "whole_model_fp32_1_12_result": {
+      "root_legal_top1_accuracy": 0.41455078125,
+      "jepa_positive_loss": 0.19060196122154593,
+      "wdl_loss": 0.9990151883102953
+    }
+  },
+  "interpretation": "Encoder-only FP32 reproduces the whole-model FP32 policy regression, localizing that harm to encoder.*. Restoring non-encoder BF16 does not rescue top-1 but does worsen JEPA and WDL validation, so FP32 state outside the encoder may still be useful when isolated from encoder adaptation.",
+  "terminal_branches": [
+    {
+      "id": "trunk_behavior_safe",
+      "condition": "v2_trunk_fp32_1_12 frozen root legal top-1 >= 0.445078125 and frozen validation comparator passes",
+      "action": "run movement audit and paired arena against Hero 1; no Phase 2 unless arena play is not clearly worse"
+    },
+    {
+      "id": "trunk_behavior_regresses",
+      "condition": "v2_trunk_fp32_1_12 frozen root legal top-1 < 0.445078125 with intact matched-run provenance",
+      "action": "run exactly one v2_main_fp32_1_30 Phase-1 arm: FP32 master/state for every non-encoder parameter, parameter precision for all encoder.* parameters, Hero-matched encoder LR ratio 1/30"
+    },
+    {
+      "id": "trunk_terminal_ambiguous",
+      "condition": "terminal artifact integrity, exact-resume lineage, or frozen-validation identity fails",
+      "action": "launch no new arm; audit the failed contract"
+    }
+  ],
+  "main_only_arm": {
+    "recipe": "hero_v2",
+    "schedule_kind": "warmup_stable_linear_decay",
+    "main_lr_multiplier": 1.0,
+    "encoder_lr_ratio": 0.03333333333333333,
+    "optimizer_precision": "main_fp32_master",
+    "fp32_scope": "every parameter not under encoder.*",
+    "parameter_precision_scope": "all encoder.* parameters, including encoder.policy_head.*",
+    "weight_decay_mode": "decoupled",
+    "question": "Can the newly initialized planning and predictive heads learn with FP32 accumulation while the pretrained chess encoder remains behaviorally anchored on its Hero-like BF16 path?"
+  },
+  "main_only_gates": {
+    "root_legal_top1_noninferiority_floor": 0.445078125,
+    "max_trunk_relative_delta_l2": 0.005,
+    "max_global_relative_delta_l2": 0.01,
+    "requires_frozen_validation_comparator": true,
+    "requires_arena_before_phase2": true,
+    "loss_alone_cannot_promote": true
+  },
+  "after_main_only_reassessment": {
+    "if_behavior_is_safe": "run paired arena; allocate Phase 2 only if play is not clearly worse and at least one predictive objective improves materially",
+    "if_behavior_is_not_better": "stop precision partition arms and preregister an objective/model intervention, prioritizing reduced root-legality pressure or explicit pretrained-policy preservation",
+    "no_objective_arm_selected_here": true
+  },
+  "multiplicity": {
+    "maximum_new_phase1_training_arms_after_trunk_before_reassessment": 1,
+    "trunk_terminal_outcome_not_inspected_when_branches_were_declared": true
+  }
+}

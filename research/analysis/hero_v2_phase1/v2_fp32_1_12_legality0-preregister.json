@@ -1,0 +1,121 @@
+{
+  "schema_version": "chess-dfm-hero-v2-objective-preregister-v1",
+  "created_utc": "2026-08-09T14:25:44Z",
+  "status": "sealed_before_launch",
+  "parent_arena_preregister": {
+    "path": "research/analysis/hero_v2_phase1/v2_main_fp32_1_30-arena-preregister.json",
+    "sha256": "ae5c13626965a938ee5cf121fc4b1ffd4a8bc3cc4b0bb78d90fb3b4e7c3b079d"
+  },
+  "post_arena_evidence": {
+    "arena_state_path": "research/analysis/hero_v2_phase1/arena/v2_main_fp32_1_30_vs_hero1/128p/state.json",
+    "arena_state_sha256": "a1d29523c20e7035cd6e5ec18279ee1f4452f2375b76dccb27f8dc902ad586f4",
+    "candidate_score": 0.486328125,
+    "pair_aware_score_interval_95pct": [
+      0.36628777608500995,
+      0.60636847391499
+    ],
+    "paired_logistic_elo": -9.502560557608613,
+    "paired_logistic_elo_interval_95pct": [
+      -95.22786361387415,
+      75.058695834286
+    ],
+    "wins_draws_losses": [
+      40,
+      169,
+      47
+    ],
+    "fault_count": 0,
+    "cap_draw_count": 0,
+    "main_only_comparison_sha256": "4318bff877ab20f2a8f06d6442de8f96b9332dc6aa4fec994640fc7f39b6960b",
+    "main_only_root_legal_top1_accuracy": 0.454833984375,
+    "main_only_trunk_relative_delta_l2": 0.00036700135143499584,
+    "interpretation": "Hero-like encoder movement preserved masked-play parity, but the main-only recipe did not improve the frozen predictive suite and remains ineligible for more compute."
+  },
+  "causal_motivation": {
+    "reference_arm": "v2_fp32_1_12",
+    "reference_root_legal_top1_accuracy": 0.41455078125,
+    "reference_mean_paired_total_loss_delta": -1.0013666615087031,
+    "reference_mean_paired_weighted_legality_delta": -0.7265363764592204,
+    "legality_share_of_total_loss_improvement": 0.7255448023050705,
+    "reference_mean_paired_loss_delta_excluding_legality": -0.2748302850494827,
+    "reference_mean_paired_dfm_ce_delta": -0.24053804989953398,
+    "fact": "Arena inference masks all legal moves with complete codec coverage, so root illegal mass has no direct selection value.",
+    "hypothesis": "At the effective FP32 encoder learning rate, the root illegal-mass objective dominates useful early adaptation and drives policy-critical encoder drift. Removing only that gradient may retain the non-legality predictive gain while preserving legal-masked move ranking."
+  },
+  "arm": {
+    "name": "v2_fp32_1_12_legality0",
+    "profile": "phase1",
+    "gpu": "L40S",
+    "updates": 554,
+    "examples_per_update": 1024,
+    "recipe": "hero_v2",
+    "main_lr_multiplier": 1.0,
+    "encoder_lr_ratio": 0.08333333333333333,
+    "optimizer_precision": "fp32_master",
+    "schedule_kind": "warmup_stable_linear_decay",
+    "wsd_decay_fraction": 0.2,
+    "weight_decay_mode": "decoupled",
+    "legality_coeff": 0.0,
+    "unchanged_objectives": {
+      "dfm_ce_coeff": 1.0,
+      "root_legal_ce_coeff": 0.08707768618513193,
+      "jepa_positive_coeff": 1.0,
+      "target_sigreg_coeff": 2.0,
+      "pred_sigreg_coeff": 2.0,
+      "wdl_coeff": 0.25
+    }
+  },
+  "analysis_contract": {
+    "matched_control": "hero1_exact",
+    "ordered_example_prefix": true,
+    "total_training_loss_is_not_comparable": "The candidate intentionally omits a control loss term.",
+    "primary_predictive_estimand": {
+      "name": "canonical_nonlegality_loss",
+      "formula": "dfm_ce + root_legal_ce_coeff*root_legal_conditional_ce + jepa_positive + 2*target_sigreg + 2*pred_sigreg + 0.25*wdl_ce",
+      "paired_inference": "32-update block bootstrap, 10000 replicates, seed 20260809",
+      "success": "95% interval for candidate-minus-Hero1 is wholly below zero"
+    },
+    "component_reports": [
+      "dfm_ce_loss",
+      "root_legal_conditional_ce",
+      "root_legal_top1_accuracy",
+      "jepa_positive_loss",
+      "wdl_loss",
+      "wdl_accuracy",
+      "first_legal_mass_as_diagnostic_only"
+    ],
+    "behavior_gate": {
+      "hero1_root_legal_top1_accuracy": 0.455078125,
+      "noninferiority_floor": 0.445078125,
+      "action_if_failed": "reject without arena",
+      "action_if_passed": "run movement audit and one 128-pair masked-play arena"
+    },
+    "arena_rule": {
+      "pair_count": 128,
+      "refinement_passes": 1,
+      "deterministic_greedy_dfm": true,
+      "clearly_worse": "pair-aware 95% score interval wholly below 0.5",
+      "promotion_requires": "behavior not clearly worse and a successful canonical nonlegality-loss test"
+    }
+  },
+  "source_identity": {
+    "compile_source_tree_sha256": "d1dd707315c4d17fbc9471f3a0ed4deb17e1d62315e094db620a0af9ba4a074b",
+    "full_source_tree_sha256": "af5916eecae707f2ec35eb30ab9087e687be575e3113183dfb632df16605176f"
+  },
+  "verification": {
+    "focused_tests": "84 passed, 1 skipped",
+    "ruff": "passed",
+    "git_diff_check": "passed",
+    "last_observed_modal_month_spend_usd": 15.43743803,
+    "workspace_native_hard_budget_usd": 42.5,
+    "repository_new_launch_stop_usd": 34.0,
+    "fresh_billing_required_at_launch": true
+  },
+  "multiplicity": {
+    "additional_training_arms_before_reassessment": 1,
+    "selected_without_inspecting_its_outcome": true,
+    "if_behavior_fails": "implement and preregister explicit policy preservation or distillation; do not tune the legality coefficient post hoc",
+    "if_behavior_passes_but_predictive_test_fails": "reject and move to policy-preserving model intervention",
+    "if_both_pass": "run movement and arena before any Phase 2 decision"
+  }
+}

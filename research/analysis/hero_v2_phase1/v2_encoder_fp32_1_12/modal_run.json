@@ -1,0 +1,64 @@
+{
+  "archived_attempts": [],
+  "arm": "v2_encoder_fp32_1_12",
+  "arm_config": {
+    "encoder_lr_ratio": 0.08333333333333333,
+    "main_lr_multiplier": 1.0,
+    "optimizer_precision": "encoder_fp32_master",
+    "recipe": "hero_v2",
+    "weight_decay_mode": "decoupled"
+  },
+  "compile_source_tree_sha256": "f3619b1b8f9a6cc1d62c9750f943a6a2b147a810ebc4bc920dc7517b0908519d",
+  "compute_capability": [
+    8,
+    9
+  ],
+  "declared_attempt_upper_bound_dollars": "4.19227200",
+  "device_name": "NVIDIA L40S",
+  "device_total_memory_bytes": 47665709056,
+  "git_commit": "86ba0b37e3e188eab115b45a1460d079fac341f8",
+  "gpu": "L40S",
+  "metric_segments": [
+    "/workspace/training-results/runs/hero-training-phase1-v2_encoder_fp32_1_12-l40s-7127d02123acafd829c4"
+  ],
+  "profile": "phase1",
+  "profile_config": {
+    "log_every": 20,
+    "recovery_updates": [
+      100,
+      200,
+      300,
+      400,
+      500,
+      554
+    ],
+    "resume_from_profile": null,
+    "save_model": true,
+    "save_recovery": true,
+    "steps": 554,
+    "validation_updates": [
+      554
+    ]
+  },
+  "raw_bt4_sha256": "61e43e98d2c4cb747498c6bc13a5bbb3b07e985d3f5d87f0351a4db855fa0651",
+  "remote_function_seconds": 2141.28527974,
+  "result_label": "hero-training-phase1-v2_encoder_fp32_1_12-l40s-7127d02123acafd829c4",
+  "resume_checkpoint": null,
+  "resume_update": 0,
+  "resumed_from_result_label": null,
+  "runner_revision": "hero-v2-modal-training-v3",
+  "schema_version": "chess-dfm-modal-training-run-v1",
+  "source_tree_sha256": "74196488d0d546029c10db3f9e523ea7b65c410699f2b90f5c171e08543f2766",
+  "trajectory_stage": {
+    "archive_sha256": "d8feffa259580563c8097fa4a604ca415469dd80da66dabda170ac9ce929b968",
+    "archive_size_bytes": 11531386880,
+    "dataset_label": "trajectory-v3-lc0-test80-h8-sets1-3-20260430",
+    "drive_file_id": "14jgdmEZsBVMFtQ7Vvjm3PTWU2QlE45KV",
+    "eval_manifest": "/workspace/training-inputs/trajectory-v3-lc0-test80-h8-sets1-3-20260430/contracts/hero_epoch_v1/manifest.json",
+    "file_bytes": 11507849049,
+    "file_count": 30728,
+    "gpu_active": false,
+    "schema_version": "chess-dfm-modal-training-stage-v1",
+    "stage_seconds": 224.584403218
+  }
+}

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import dataclasses
 import math
+from pathlib import Path
 from types import SimpleNamespace
 
 import chess
@@ -16,6 +17,8 @@ from chess_dfm_jax.policy import (
 )
 from research.train_torch import (
     HERO_CONFIG,
+    HERO_V2_CONFIG,
+    HERO_V2_OPTIMIZER_POLICY,
     JepaFeedbackResult,
     JointModel,
     MuonAdamW,
@@ -25,8 +28,11 @@ from research.train_torch import (
     TorchHeroArenaPolicy,
     _analyze_lr_range_records,
     _apply_hero_architecture_overrides,
+    _base_policy_root_diagnostics,
     _apply_hero_dfm_jepa_conditioning_override,
     _apply_hero_feedback_override,
+    _apply_hero_legality_override,
+    _apply_hero_policy_distill_override,
     _apply_hero_wdl_override,
     _apply_sigreg_sample_override,
     _canonicalize_trajectory_batch_reference,
@@ -36,6 +42,7 @@ from research.train_torch import (
     _normalize_frozen_indices,
     _polarized_gradient_cosines,
     _prepare_wdl_supervision,
+    _resolve_training_recipe,
     _proposal_from_root_logits,
     _root_legal_mask_from_indices,
     _shared_sigreg_gradient_projection,
@@ -46,6 +53,105 @@ from research.train_torch import (
     canonicalize_trajectory_batch,
     initialize_fresh_modules,
 )
+
+
+def test_base_policy_root_diagnostics_use_the_exact_legal_action_space() -> None:
+    base = torch.tensor(
+        [[3.0, 50.0, 1.0, -2.0], [40.0, 0.0, -3.0, 2.0]],
+        requires_grad=True,
+    )
+    residual = torch.tensor(
+        [[-2.0, 10.0, 3.0, 1.0], [-10.0, 1.0, 1.0, 1.0]],
+        requires_grad=True,
+    )
+    dfm = base + residual
+    targets = torch.tensor([0, 1])
+    legal_idx = torch.tensor([[0, 2], [1, 3]])
+    legal_count = torch.tensor([2, 2])
+    result = _base_policy_root_diagnostics(
+        base,
+        dfm,
+        targets,
+        legal_idx,
+        legal_count,
+        torch.ones(2),
+    )
+
+    assert result["base_policy_active"].item() == 1.0
+    assert result["base_policy_root_legal_top1_accuracy"].item() == 0.5
+    assert result["base_policy_dfm_root_legal_top1_agreement"].item() == 0.5
+    expected_ce = 0.5 * (
+        torch.logsumexp(base[0, [0, 2]], dim=0)
+        - base[0, 0]
+        + torch.logsumexp(base[1, [1, 3]], dim=0)
+        - base[1, 1]
+    )
+    torch.testing.assert_close(
+        result["base_policy_root_legal_conditional_ce"],
+        expected_ce,
+    )
+    assert result["base_policy_dfm_root_legal_kl"].item() > 0.0
+
+    result["base_policy_dfm_root_legal_kl"].backward()
+    assert base.grad is not None
+    torch.testing.assert_close(base.grad, torch.zeros_like(base))
+    assert residual.grad is not None
+    assert torch.count_nonzero(residual.grad) > 0
+    torch.testing.assert_close(residual.grad[0, [1, 3]], torch.zeros(2))
+    torch.testing.assert_close(residual.grad[1, [0, 2]], torch.zeros(2))
+
+
+def test_fixed_policy_teacher_is_stopped_while_current_student_receives_gradient() -> None:
+    base = torch.tensor([[2.0, 0.0, -1.0, 1.0]], requires_grad=True)
+    residual = torch.tensor([[0.5, 0.0, 1.0, -0.5]], requires_grad=True)
+    teacher = torch.tensor([[0.0, 0.0, 3.0, -2.0]], requires_grad=True)
+    result = _base_policy_root_diagnostics(
+        base,
+        base + residual,
+        torch.tensor([2]),
+        torch.tensor([[0, 2]]),
+        torch.tensor([2]),
+        torch.ones(1),
+        policy_teacher_root_logits=teacher,
+    )
+
+    assert result["policy_teacher_active"].item() == 1.0
+    assert result["policy_teacher_root_legal_top1_accuracy"].item() == 1.0
+    assert result["policy_teacher_dfm_root_legal_kl"].item() > 0.0
+    assert not torch.equal(
+        result["policy_teacher_dfm_root_legal_kl"],
+        result["base_policy_dfm_root_legal_kl"],
+    )
+    result["policy_teacher_dfm_root_legal_kl"].backward()
+    assert teacher.grad is None
+    assert base.grad is not None and torch.count_nonzero(base.grad) > 0
+    assert residual.grad is not None and torch.count_nonzero(residual.grad) > 0
+    torch.testing.assert_close(base.grad, residual.grad)
+
+
+def test_base_policy_root_diagnostics_are_explicitly_inactive_without_head() -> None:
+    result = _base_policy_root_diagnostics(
+        None,
+        torch.zeros((2, 4)),
+        torch.tensor([0, 1]),
+        torch.tensor([[0, 2], [1, 3]]),
+        torch.tensor([2, 2]),
+        torch.ones(2),
+    )
+
+    assert set(result) == {
+        "base_policy_active",
+        "base_policy_root_legal_conditional_ce",
+        "base_policy_dfm_root_legal_kl",
+        "base_policy_root_legal_top1_accuracy",
+        "base_policy_dfm_root_legal_top1_agreement",
+        "policy_teacher_active",
+        "policy_teacher_root_legal_conditional_ce",
+        "policy_teacher_dfm_root_legal_kl",
+        "policy_teacher_root_legal_top1_accuracy",
+        "policy_teacher_dfm_root_legal_top1_agreement",
+    }
+    assert all(value.item() == 0.0 for value in result.values())
 
 
 def test_eager_fused_backward_layernorm_preserves_forward_bits() -> None:
@@ -813,6 +919,37 @@ def test_current_wdl_supervision_swaps_win_loss_and_keeps_scale():
     )
 
 
+def test_current_wdl_supervision_prefers_explicit_search_target():
+    predicted = torch.randn(2, 2, 4)
+    current = torch.randn(2, 4)
+    raw = torch.tensor(
+        [
+            [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]],
+            [[0.0, 0.0, 1.0], [1.0, 0.0, 0.0]],
+        ]
+    )
+    explicit = torch.tensor(
+        [
+            [0.2, 0.3, 0.5],
+            [0.6, 0.1, 0.3],
+        ]
+    )
+
+    states, targets, weight = _prepare_wdl_supervision(
+        predicted,
+        current,
+        raw,
+        torch.ones(2),
+        torch.ones(2, 2),
+        include_current_state=True,
+        current_target=explicit,
+    )
+
+    torch.testing.assert_close(states[:, 0], current)
+    torch.testing.assert_close(targets[:, 0], explicit)
+    torch.testing.assert_close(weight, torch.ones(2, 3))
+
+
 def test_root_proposal_is_legal_target_independent_and_fail_closed():
     legal_idx = torch.tensor(
         [
@@ -946,6 +1083,206 @@ def test_hero_optimizer_hyperparameters_are_frozen_after_lr_range():
     assert HERO_CONFIG.learning_rate == 5e-4
     assert HERO_CONFIG.bt4_learning_rate == pytest.approx(5e-4 / 30.0)
     assert HERO_CONFIG.weight_decay == 1e-2
+
+
+def test_hero_v2_recipe_is_separate_recorded_optimizer_policy():
+    legacy_config, legacy_policy = _resolve_training_recipe(
+        SimpleNamespace(recipe="hero")
+    )
+    assert legacy_config is HERO_CONFIG
+    assert legacy_policy.schedule_kind == "legacy_cosine"
+    assert legacy_policy.precision == "parameter"
+    assert HERO_CONFIG.bt4_learning_rate == pytest.approx(5e-4 / 30.0)
+
+    config, policy = _resolve_training_recipe(SimpleNamespace(recipe="hero_v2"))
+    assert config is HERO_V2_CONFIG
+    assert config.bt4_learning_rate / config.learning_rate == pytest.approx(0.1)
+    assert config.weight_decay == pytest.approx(
+        HERO_CONFIG.weight_decay / 1.7784570994812559
+    )
+    assert policy == HERO_V2_OPTIMIZER_POLICY
+    assert policy.schedule_kind == "warmup_stable_linear_decay"
+    assert policy.wsd_decay_examples == round(0.20 * 28_343_296)
+    assert policy.precision == "fp32_master"
+    assert policy.weight_decay_mode == "decoupled"
+
+    overridden_config, overridden_policy = _resolve_training_recipe(
+        SimpleNamespace(
+            recipe="hero_v2",
+            main_lr_multiplier=1.5,
+            encoder_lr_ratio=1.0 / 3.0,
+            lr_schedule_kind="legacy_cosine",
+            wsd_decay_fraction=None,
+            optimizer_precision="parameter",
+            weight_decay_mode="cautious",
+        )
+    )
+    assert overridden_config.learning_rate == pytest.approx(7.5e-4)
+    assert overridden_config.bt4_learning_rate == pytest.approx(7.5e-4 / 3.0)
+    assert overridden_config.weight_decay == pytest.approx(HERO_V2_CONFIG.weight_decay / 1.5)
+    assert overridden_policy.schedule_kind == "legacy_cosine"
+    assert overridden_policy.wsd_decay_examples == 0
+    assert overridden_policy.precision == "parameter"
+    assert overridden_policy.weight_decay_mode == "cautious"
+
+    hybrid_config, hybrid_policy = _resolve_training_recipe(
+        SimpleNamespace(
+            recipe="hero_v2",
+            main_lr_multiplier=1.0,
+            encoder_lr_ratio=1.0 / 12.0,
+            lr_schedule_kind=None,
+            wsd_decay_fraction=None,
+            optimizer_precision="encoder_fp32_master",
+            weight_decay_mode=None,
+        )
+    )
+    assert hybrid_config.bt4_learning_rate / hybrid_config.learning_rate == pytest.approx(1 / 12)
+    assert hybrid_policy.precision == "encoder_fp32_master"
+
+    with pytest.raises(ValueError, match="require --recipe hero_v2"):
+        _resolve_training_recipe(
+            SimpleNamespace(
+                recipe="hero",
+                encoder_lr_ratio=0.1,
+            )
+        )
+
+    with pytest.raises(ValueError, match="main-lr-multiplier"):
+        _resolve_training_recipe(
+            SimpleNamespace(
+                recipe="hero_v2",
+                main_lr_multiplier=4.01,
+            )
+        )
+
+def test_hero_legality_override_is_explicit_and_validated():
+    assert (
+        _apply_hero_legality_override(
+            HERO_CONFIG,
+            recipe="hero",
+            legality_coeff=None,
+        )
+        is HERO_CONFIG
+    )
+    ablated = _apply_hero_legality_override(
+        HERO_V2_CONFIG,
+        recipe="hero_v2",
+        legality_coeff=0.0,
+    )
+    assert ablated.legality_coeff == 0.0
+    assert HERO_V2_CONFIG.legality_coeff == 2.0
+
+    with pytest.raises(ValueError, match="hero-only"):
+        _apply_hero_legality_override(
+            HERO_CONFIG,
+            recipe="continuation",
+            legality_coeff=0.0,
+        )
+    for invalid in (-1.0, math.inf, math.nan, True):
+        with pytest.raises(ValueError, match="finite and non-negative"):
+            _apply_hero_legality_override(
+                HERO_CONFIG,
+                recipe="hero",
+                legality_coeff=invalid,
+            )
+
+
+
+
+
+def test_hero_policy_distillation_is_default_off_stopped_and_validated():
+    assert HERO_CONFIG.policy_distill_coeff == 0.0
+    assert HERO_CONFIG.policy_distill_teacher_mode == "online"
+    assert HERO_CONFIG.policy_distill_teacher_state_sha256 == ""
+    assert (
+        _apply_hero_policy_distill_override(
+            HERO_CONFIG,
+            recipe="hero",
+            policy_distill_coeff=None,
+        )
+        is HERO_CONFIG
+    )
+    distilled = _apply_hero_policy_distill_override(
+        HERO_V2_CONFIG,
+        recipe="hero_v2",
+        policy_distill_coeff=1.0,
+    )
+    assert distilled.policy_distill_coeff == 1.0
+    assert distilled.policy_distill_teacher_mode == "online"
+    assert HERO_V2_CONFIG.policy_distill_coeff == 0.0
+
+    fixed = _apply_hero_policy_distill_override(
+        HERO_V2_CONFIG,
+        recipe="hero_v2",
+        policy_distill_coeff=1.0,
+        policy_distill_teacher_mode="checkpoint",
+        policy_distill_teacher_state_sha256="a" * 64,
+    )
+    assert fixed.policy_distill_teacher_mode == "checkpoint"
+    assert fixed.policy_distill_teacher_state_sha256 == "a" * 64
+    _validate_hero_architecture_config(fixed)
+    with pytest.raises(ValueError, match="lowercase SHA-256"):
+        _apply_hero_policy_distill_override(
+            HERO_V2_CONFIG,
+            recipe="hero_v2",
+            policy_distill_coeff=1.0,
+            policy_distill_teacher_mode="checkpoint",
+            policy_distill_teacher_state_sha256="",
+        )
+    with pytest.raises(ValueError, match="cannot carry"):
+        _apply_hero_policy_distill_override(
+            HERO_V2_CONFIG,
+            recipe="hero_v2",
+            policy_distill_coeff=1.0,
+            policy_distill_teacher_mode="online",
+            policy_distill_teacher_state_sha256="a" * 64,
+        )
+
+    with pytest.raises(ValueError, match="hero-only"):
+        _apply_hero_policy_distill_override(
+            HERO_CONFIG,
+            recipe="continuation",
+            policy_distill_coeff=1.0,
+        )
+    without_policy_head = dataclasses.replace(
+        HERO_V2_CONFIG,
+        use_bt4_policy_residual=False,
+    )
+    with pytest.raises(ValueError, match="native BT4 policy residual"):
+        _apply_hero_policy_distill_override(
+            without_policy_head,
+            recipe="hero_v2",
+            policy_distill_coeff=1.0,
+        )
+    for invalid in (-1.0, math.inf, math.nan, True):
+        with pytest.raises(ValueError, match="finite and non-negative"):
+            _apply_hero_policy_distill_override(
+                HERO_CONFIG,
+                recipe="hero",
+                policy_distill_coeff=invalid,
+            )
+
+    args = build_parser().parse_args(
+        [
+            "train",
+            "--output-dir",
+            "/mountpoint/.exp/test-policy-distill",
+            "--policy-distill-coeff",
+            "1.0",
+            "--policy-distill-teacher",
+            "checkpoint",
+            "--policy-distill-teacher-checkpoint-dir",
+            "/mountpoint/.exp/teacher/checkpoint",
+            "--policy-distill-teacher-state-sha256",
+            "a" * 64,
+        ]
+    )
+    assert args.policy_distill_coeff == 1.0
+    assert args.policy_distill_teacher == "checkpoint"
+    assert args.policy_distill_teacher_checkpoint_dir == Path(
+        "/mountpoint/.exp/teacher/checkpoint"
+    )
+    assert args.policy_distill_teacher_state_sha256 == "a" * 64
 
 
 def test_hero_milestones_round_up_by_examples():

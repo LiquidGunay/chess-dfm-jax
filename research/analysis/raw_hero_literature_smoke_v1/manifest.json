@@ -1,0 +1,163 @@
+{
+  "cost": {
+    "backend": "local GTX 1660 Ti",
+    "provider_dollars": 0.0
+  },
+  "elapsed_seconds": 20.222529573948123,
+  "environment": {
+    "cuda_runtime": "12.1",
+    "device": "cuda",
+    "gpu": {
+      "name": "NVIDIA GeForce GTX 1660 Ti",
+      "peak_allocated_bytes": 1717429760,
+      "peak_reserved_bytes": 1742733312,
+      "total_memory_bytes": 6442123264
+    },
+    "numpy": "2.2.6",
+    "python": "3.12.3",
+    "torch": "2.5.1+cu121"
+  },
+  "experiment": {
+    "all_lens_layers": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14
+    ],
+    "attribution_count": 1,
+    "batch_size": 1,
+    "causal_attention_delta_layers": [
+      0,
+      7,
+      14
+    ],
+    "causal_boundary": "resid_post_after_ln",
+    "compute_dtype": "float32",
+    "confirmatory": false,
+    "ig_steps": 4,
+    "patch_directions": [
+      "hero_to_raw_raw_head",
+      "raw_to_hero_raw_head",
+      "hero_to_raw_hero_head",
+      "raw_to_hero_hero_head"
+    ],
+    "position_count": 2,
+    "seed": 20260808,
+    "smoothgrad_samples": 2,
+    "test_split_opened": false
+  },
+  "git": {
+    "branch": "research/local-gpu-autoresearch",
+    "commit": "86ba0b37e3e188eab115b45a1460d079fac341f8",
+    "status": [
+      "M .gitignore",
+      " M README.md",
+      " M chess_dfm_jax/__init__.py",
+      " M research/resource_guard.py",
+      " M research/train_torch.py",
+      " M tests/test_research_resource_guard.py",
+      " M tests/test_torch_gradient_parity.py",
+      " M tests/test_torch_muon_parity.py",
+      "?? docs/hero_bt4_interpretability_plan.md",
+      "?? research/analysis/.raw_hero_literature_smoke_v1.421289.partial/",
+      "?? research/analysis/modal_smoke_20260807.json",
+      "?? research/analysis/published_tc_l14_transfer_dev64_v1/",
+      "?? research/analysis/published_tc_l14_transfer_pilot_v1/",
+      "?? research/analysis/raw_hero_matrix_spectra_20260807.json",
+      "?? research/analysis/raw_hero_parameter_diff_20260807.json",
+      "?? research/analysis/raw_hero_pilot_v1/",
+      "?? research/eval/interpretability_pilot_v1/",
+      "?? research/eval/interpretability_public_v1/",
+      "?? research/eval/interpretability_public_v2/",
+      "?? research/infra/",
+      "?? research/interpretability/",
+      "?? research/requirements_infra.txt",
+      "?? research/requirements_torch_local.txt",
+      "?? research/run_torch_gpu.sh",
+      "?? tests/test_torch_activation_diff.py",
+      "?? tests/test_torch_artifact_store.py",
+      "?? tests/test_torch_attention_components.py",
+      "?? tests/test_torch_attribution.py",
+      "?? tests/test_torch_behavior_diff.py",
+      "?? tests/test_torch_bt4_representation_hooks.py",
+      "?? tests/test_torch_delta_crosscoder.py",
+      "?? tests/test_torch_interpretability_accumulators.py",
+      "?? tests/test_torch_interpretability_artifacts.py",
+      "?? tests/test_torch_interpretability_models.py",
+      "?? tests/test_torch_literature_pilot.py",
+      "?? tests/test_torch_logit_lens.py",
+      "?? tests/test_torch_lookahead.py",
+      "?? tests/test_torch_lorsa.py",
+      "?? tests/test_torch_paired_diff.py",
+      "?? tests/test_torch_parameter_diff.py",
+      "?? tests/test_torch_patching.py",
+      "?? tests/test_torch_pilot_corpus.py",
+      "?? tests/test_torch_probes.py",
+      "?? tests/test_torch_public_chess_data.py",
+      "?? tests/test_torch_remote_cost.py",
+      "?? tests/test_torch_sparse_transcoder.py",
+      "?? tests/test_torch_sparse_transfer_pilot.py",
+      "?? tests/test_torch_spectral_diff.py"
+    ],
+    "status_sha256": "c01c22ce1ad6aa7194d1c5a560e4fef556a851e26364302c0d21889a9b7ce2dd",
+    "worktree_clean": false
+  },
+  "model_lattice": {
+    "arm_semantics": "first letter encoder; second letter policy head",
+    "arms": [
+      "RR",
+      "HR",
+      "RH",
+      "HH"
+    ],
+    "encoder_layout_sha256": "c8c7fdcab3dfb1b6af5f1ac3a54f9347dd52e3d4673ad6f88e8d9407523d8bbb",
+    "hero_leaf_count": 462,
+    "hero_state_sha256": "665ac91ad37e14a6c8810068700dba021e39e9c0fe145c8bf620882bb5a71692",
+    "on_disk_mixed_checkpoints": false,
+    "raw_asset_sha256": "61e43e98d2c4cb747498c6bc13a5bbb3b07e985d3f5d87f0351a4db855fa0651",
+    "raw_mapping_sha256": "c7a22e25a74e959357f294dfdda4a8f47372d79c96ada49131967bec75b2d93c",
+    "resident_parameter_bytes": 793834496,
+    "schema_version": "bt4-raw-hero-comparison-models-v1"
+  },
+  "payload_identities": {
+    "attribution_examples": "e7063691d7890e43501437891c6bbb28f14ab3f22fc113f3420b089c49855fce",
+    "hero": "665ac91ad37e14a6c8810068700dba021e39e9c0fe145c8bf620882bb5a71692",
+    "metrics": "a485e3366cb11b02ab9ad6110533233e3b9c3b344cd32cbc2b4df94f05d2108f",
+    "positions": "ffd6994edd5cbcd74ef50707f5f1834a60e07c45119949a779b5dc3208b1c6c6",
+    "raw": "61e43e98d2c4cb747498c6bc13a5bbb3b07e985d3f5d87f0351a4db855fa0651"
+  },
+  "public_corpus_manifest": {
+    "integrity_sha256": "9195f857f60ab123b353095b6b931c589ae69098750ea6b26e53e7d871f349d0",
+    "path": "/home/ubuntu/chess-dfm-jax/research/eval/interpretability_public_v2/manifest.json",
+    "position_digest_sha256": "ffd6994edd5cbcd74ef50707f5f1834a60e07c45119949a779b5dc3208b1c6c6",
+    "selection": "lowest position_id in development split",
+    "split": "development only"
+  },
+  "puzzle_source": {
+    "path": "/home/ubuntu/chess-dfm-jax/data/external/chessbench/puzzles.csv",
+    "sha256": "099d54e681a07b9e82b4462aaf5436a6e833edc6f56b92ea7c2d2413f7efbe48"
+  },
+  "run_id": "sha256:66344022b1c2d2f8571569340956e186e973b51cc9919f3a160800b8a4d18715",
+  "schema_version": "bt4-raw-hero-literature-pilot-run-v1",
+  "source_files": {
+    "research/interpretability/attention.py": "150672785c52d68443706f38f9325eb7518da16def4816014886a85a12c5a2bb",
+    "research/interpretability/attribution.py": "c5eb60283a6269cc5c6dbc166aa3066710b8c00c11d743c01392077d88296ebf",
+    "research/interpretability/literature_pilot.py": "10871d1d16f977373025bf7455f90d22259a1f113b8e75b262fcb5043213d136",
+    "research/interpretability/logit_lens.py": "5eb81331586a11449d642366231b869b3b18c75e26f9c48ffd5c5ad10f22cc95",
+    "research/interpretability/paired_diff.py": "d37cb9829c3487555607bbb5cf2197b96fb17be5492a2dbb0f073e8a694d4d41",
+    "research/interpretability/patching.py": "97f2a401ec0115f987694601ef519c9eeec918bcb84ad9e027aed94956e6f363",
+    "research/train_torch.py": "c9ce7531f43a4e7bc0a6e1fa02a238dac8abb8eddf76da3530aa3b960904b4a3"
+  },
+  "started_utc": "2026-08-08T05:22:22.118151+00:00"
+}

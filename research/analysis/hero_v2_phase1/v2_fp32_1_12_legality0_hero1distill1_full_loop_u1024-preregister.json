@@ -1,0 +1,120 @@
+{
+  "schema_version": "chess-dfm-hero-v2-full-loop-u1024-preregister-v1",
+  "created_utc": "2026-08-10T04:26:11Z",
+  "authorization": "The user explicitly authorized a full-loop ablation based on the earlier 1,024-update predicted-JEPA experiment.",
+  "question": "Does proposal-conditioned predicted-JEPA feedback compose with the fixed-Hero1-teacher Hero-v2 recipe, preserving a strong one-pass base while making recurrent DFM inference useful?",
+  "prior_evidence": {
+    "contract_path": "research/experiment_post_hero_architecture_suite.md",
+    "analysis_path": "research/analysis/posthero_architecture_suite_20260728.json",
+    "prior_closed_loop_checkpoint_sha256": "90a3429d6d17b6df4563b4babf589fb200dc8f59254316ab857f954bff717ea2",
+    "prior_updates": 1024,
+    "prior_result": {
+      "one_pass_score_vs_hero1024": 0.455078125,
+      "eight_pass_score_vs_own_one_pass": 0.55078125,
+      "eight_pass_score_vs_hero1024_one_pass": 0.509765625,
+      "interpretation": "The isolated loop was the only prior architecture arm improved by recurrent inference, but it started from a weaker one-pass policy."
+    }
+  },
+  "implementation": {
+    "scientific_source_tree_sha256": "0446c726a5b667154224f8c54783d33d493f77dc266a7c5a0d97b9d12efd1f37",
+    "runner_source_tree_sha256": "e68435793148069e448b8cc15f6087550cc6c0a44102b4e08ce3d0dbe7d9b98e",
+    "train_torch_sha256": "9541da799bf37ea0af0ebeb9f0ab84285d2dcdce65e2d3c53e13057051314714",
+    "modal_train_app_sha256": "3629597fa15fd3d8a991348712caff3d95740faa569721e240bef3a477d37ddc",
+    "focused_test_result": "77 passed",
+    "mechanism": {
+      "mode": "predicted_jepa_tokens",
+      "first_planner": "Produces proposal logits and differentiable action hidden states.",
+      "proposal_indices": "Legal root argmax and deterministic later-horizon argmax; detached and target-safe.",
+      "jepa": "Consumes proposal action IDs plus first-planner action hidden states and recurrently predicts all eight future states.",
+      "second_planner": "Consumes learned projections of predicted JEPA states as per-action context; policy losses apply only to second-planner logits.",
+      "gradient_path": "Final policy gradients flow through the JEPA-to-DFM adapter, JEPA rollout, hidden adapter, and first-planner hidden states; only discrete proposal indices are stopped."
+    }
+  },
+  "training_design": {
+    "initialization": "Raw BT4 plus seed-0 fresh DFM/JEPA modules; neither arm continues from a candidate checkpoint.",
+    "batch_size": 1024,
+    "updates": 1024,
+    "examples": 1048576,
+    "data_start": 0,
+    "validation_updates": [554, 1024],
+    "recovery_updates": [200, 400, 554, 700, 850, 1024],
+    "common_recipe": {
+      "recipe": "hero_v2",
+      "main_lr_multiplier": 1.0,
+      "encoder_lr_ratio": 0.08333333333333333,
+      "optimizer_precision": "fp32_master",
+      "lr_schedule_kind": "warmup_stable_linear_decay",
+      "wsd_decay_fraction": 0.2,
+      "weight_decay_mode": "decoupled",
+      "legality_coeff": 0.0,
+      "policy_distill_coeff": 1.0,
+      "policy_distill_teacher_mode": "checkpoint",
+      "policy_distill_teacher_result_label": "hero-training-phase1-hero1_exact-l40s-fae7b0ccef5ca3668ed5",
+      "policy_distill_teacher_state_sha256": "e518083ee5476e7ff15e7c34caf9c0505f8fb7d330ea5a6882e4e9e5c1ef1912"
+    },
+    "control": {
+      "arm": "v2_fp32_1_12_legality0_hero1distill1",
+      "dfm_closed_loop_mode": "none",
+      "expected_result_label": "hero-training-u1024-v2_fp32_1_12_legality0_hero1distill1-l40s-3d907b44f56783c43cfc"
+    },
+    "candidate": {
+      "arm": "v2_fp32_1_12_legality0_hero1distill1_closedloop",
+      "dfm_closed_loop_mode": "predicted_jepa_tokens",
+      "expected_result_label": "hero-training-u1024-v2_fp32_1_12_legality0_hero1distill1_closedloop-l40s-232597992b5f5d3bda9b",
+      "only_intended_delta": "Enable the full loop and instantiate its isolated-name initialized JEPA-rollout-to-DFM adapter."
+    }
+  },
+  "systems_gate": {
+    "diagnostic_profile": "10 updates on L40S before either 1,024-update launch",
+    "candidate_diagnostic_result_label": "hero-training-diagnostic-v2_fp32_1_12_legality0_hero1distill1_closedloop-l40s-30a8ab5e7e029f6c0113",
+    "requirements": [
+      "All losses and gradients are finite with zero skipped or nonfinite updates.",
+      "The immutable Hero1 teacher loads with exact state identity and zero trainable parameters.",
+      "dfm_closed_loop_active equals 1 and closed-loop context RMS is finite and positive.",
+      "At least 1 GiB of physical HBM headroom remains at peak reservation.",
+      "Median useful throughput over updates 3 through 10 is at least 150 examples per second.",
+      "No recovery or model checkpoint is written by the diagnostic."
+    ]
+  },
+  "analysis": {
+    "primary_boundary": 1024,
+    "training_comparisons": [
+      "Examples-weighted total and component-loss curves on the common data prefix.",
+      "Frozen DFM CE, legal-masked root CE/top-1, WDL loss/accuracy/calibration, JEPA positive loss, SIGReg, target/prediction RMS, and effective/stable rank.",
+      "Candidate second-planner versus detached first-planner DFM CE improvement.",
+      "Exact parameter movement and adapter activity."
+    ],
+    "representation_policy": "JEPA noninferiority to the 554-update control is diagnostic, not a short-run veto. Hard failures are nonfinite values, collapse against trivial baselines, pathological RMS ratio outside [0.5, 2.0], or material rank collapse.",
+    "arena_plan": {
+      "tier": "hero_development",
+      "opening_pair_indices": [256, 383],
+      "pair_count": 128,
+      "selection": "deterministic greedy legal argmax with color reversal",
+      "comparisons": [
+        "candidate one pass versus control one pass",
+        "candidate eight passes versus candidate one pass",
+        "candidate eight passes versus control one pass",
+        "candidate eight passes versus control eight passes"
+      ],
+      "requirements": "Implement and test a content-bound opening offset before launch; do not silently reuse inspected pairs 0 through 255."
+    }
+  },
+  "decision_rule": {
+    "mechanism_success": [
+      "Candidate eight-pass point score exceeds 0.5 versus its own one-pass policy.",
+      "Candidate eight-pass point score is at least 0.5 versus control one-pass, or its pair-aware interval excludes a material deficit below 0.45.",
+      "Candidate one-pass pair-aware interval versus control does not support a material deficit below 0.45.",
+      "Offline latent-health and systems gates pass with zero arena faults and complete move-codec coverage."
+    ],
+    "retain_for_longer_scaling": "Mechanism success authorizes a newly bounded longer comparison; it does not itself promote a terminal Hero2.",
+    "reject": "Reject this composition if recurrent inference is not useful, if the one-pass base is materially damaged without eight-pass recovery, or if numerical/latent collapse occurs.",
+    "no_post_hoc_tuning": "Do not change distillation, learning rate, loop adapter scale, pass count, or loss coefficients after inspecting this run."
+  },
+  "budget": {
+    "workspace_budget_usd": 42.5,
+    "new_launch_stop_usd": 34.0,
+    "metered_before_experiment_usd": 21.10530926,
+    "u1024_l40s_declared_attempt_cap_usd": 7.0,
+    "rule": "Refresh Modal billing immediately before every launch and stop if the repository guard rejects it."
+  }
+}

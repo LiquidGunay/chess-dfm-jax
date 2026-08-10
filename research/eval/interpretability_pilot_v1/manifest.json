@@ -1,0 +1,3142 @@
+{
+  "arrays": {
+    "actions_u16": {
+      "dtype": "uint16",
+      "shape": [
+        128,
+        8
+      ]
+    },
+    "actions_uci": {
+      "dtype": "<U5",
+      "shape": [
+        128,
+        8
+      ]
+    },
+    "batch_size": {
+      "dtype": "int32",
+      "shape": []
+    },
+    "fen_t": {
+      "dtype": "<U71",
+      "shape": [
+        128
+      ]
+    },
+    "future_valid_u8": {
+      "dtype": "uint8",
+      "shape": [
+        128,
+        8
+      ]
+    },
+    "game_id": {
+      "dtype": "<U30",
+      "shape": [
+        128
+      ]
+    },
+    "global_index_u32": {
+      "dtype": "uint32",
+      "shape": [
+        128
+      ]
+    },
+    "horizon": {
+      "dtype": "int32",
+      "shape": []
+    },
+    "input_format": {
+      "dtype": "<U25",
+      "shape": [
+        128
+      ]
+    },
+    "legal_codec": {
+      "dtype": "<U20",
+      "shape": []
+    },
+    "legal_count_u16": {
+      "dtype": "uint16",
+      "shape": [
+        128,
+        8
+      ]
+    },
+    "legal_idx_u16": {
+      "dtype": "uint16",
+      "shape": [
+        128,
+        8,
+        128
+      ]
+    },
+    "pilot_schema": {
+      "dtype": "<U36",
+      "shape": []
+    },
+    "plane_codec": {
+      "dtype": "<U5",
+      "shape": []
+    },
+    "plane_sha256": {
+      "dtype": "<U64",
+      "shape": [
+        128
+      ]
+    },
+    "planes_future_u8": {
+      "dtype": "uint8",
+      "shape": [
+        128,
+        8,
+        112,
+        8,
+        8
+      ]
+    },
+    "planes_t_u8": {
+      "dtype": "uint8",
+      "shape": [
+        128,
+        112,
+        8,
+        8
+      ]
+    },
+    "ply": {
+      "dtype": "int32",
+      "shape": [
+        128
+      ]
+    },
+    "position_id": {
+      "dtype": "<U64",
+      "shape": [
+        128
+      ]
+    },
+    "result": {
+      "dtype": "<U7",
+      "shape": [
+        128
+      ]
+    },
+    "schema_version": {
+      "dtype": "<U13",
+      "shape": []
+    },
+    "selection_rank_u16": {
+      "dtype": "uint16",
+      "shape": [
+        128
+      ]
+    },
+    "source": {
+      "dtype": "<U7",
+      "shape": [
+        128
+      ]
+    },
+    "source_archive_sha256": {
+      "dtype": "<U64",
+      "shape": []
+    },
+    "source_member": {
+      "dtype": "<U22",
+      "shape": [
+        128
+      ]
+    },
+    "source_member_sha256": {
+      "dtype": "<U64",
+      "shape": [
+        128
+      ]
+    },
+    "source_row_u16": {
+      "dtype": "uint16",
+      "shape": [
+        128
+      ]
+    },
+    "source_schema_version": {
+      "dtype": "<U13",
+      "shape": []
+    },
+    "source_shard_u16": {
+      "dtype": "uint16",
+      "shape": [
+        128
+      ]
+    },
+    "source_uri": {
+      "dtype": "<U116",
+      "shape": [
+        128
+      ]
+    },
+    "value_targets": {
+      "dtype": "float32",
+      "shape": [
+        128,
+        8
+      ]
+    },
+    "wdl_targets": {
+      "dtype": "float32",
+      "shape": [
+        128,
+        8,
+        3
+      ]
+    }
+  },
+  "data": {
+    "format": "deterministic-npz; fixed ZIP timestamp; no pickle",
+    "path": "positions.npz",
+    "sha256": "cce0247810039fbe9ebfec863febe1f1b3c3e8d2c92b896c51714afca8df1121",
+    "size_bytes": 97474
+  },
+  "hero_evaluation_manifest": {
+    "path": "research/eval/hero_epoch_v1/manifest.json",
+    "position_indices_path": "research/eval/hero_epoch_v1/position_indices.npz",
+    "position_indices_sha256": "c20102b49358dda5c9d6828e703cf133b196b3bf3b018cb143290aa8c1dc3e96",
+    "sha256": "0efbd1780f53ad57dde17c8b000e0b56a459a839ba09a0d9a7d1863dbf3f63f5",
+    "split_inventory_sha256": "c02ecfd114fa1dbf59e0d7189cc32b0aedd5a468c6e24145b131e0e58745b281"
+  },
+  "immutable_after_creation": true,
+  "manifest_integrity": {
+    "algorithm": "sha256-canonical-json-without-manifest_integrity",
+    "sha256": "9b38b1cb42d187555e2fff2bf83754213bfe0f57420cb037b6d3080fede64c2e"
+  },
+  "positions": [
+    {
+      "fen": "8/8/3k4/5p2/5P2/8/3K4/8 b - - 3 93",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 936,
+      "plane_sha256": "3125ac7214e8ee8c4c7e06c9a77797361635b6051898f2903a764f1ef9ec2769",
+      "ply": 185,
+      "position_id": "4fc809031dc6a8c52ed6f9cbce8d39be3f5035b89330f1af88f8f19dcebb218c",
+      "selection_rank": 22,
+      "source_member": "./val/chunk_000000.npz",
+      "source_member_sha256": "71555a5c59419cc0a5038c02cb2b9cc898b3d5b4372541f2c77b2afda158ffae",
+      "source_row": 936,
+      "source_shard_ordinal": 0
+    },
+    {
+      "fen": "8/8/8/8/5n2/8/2b2k1K/8 w - - 76 109",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 4902,
+      "plane_sha256": "3e6c7e3cd62613baa695dfb3d183cdb781c330d06370f17c3dbbe1a243bf3ddb",
+      "ply": 216,
+      "position_id": "7cd6d79648ccee281f416e3a4ba3a4a319f6d03847f587f41054c6535d72c839",
+      "selection_rank": 65,
+      "source_member": "./val/chunk_000004.npz",
+      "source_member_sha256": "7bd3c6c37370e5d21440214f3e250c30e4241a912b7992cac7a75710bf7fd61a",
+      "source_row": 806,
+      "source_shard_ordinal": 4
+    },
+    {
+      "fen": "b1r2k1r/p3qp1p/1p3n1b/4p1pP/4P3/1P3R2/PQ3PPN/1B1RNK2 w kq - 2 23",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 8480,
+      "plane_sha256": "bde2a91eb4aff87a9ccd5722793787e41dcf01bbd3fde436ab2249a485cbc906",
+      "ply": 44,
+      "position_id": "c3217e044b47994a86e49a154d6b9a56556e88ecebe30bdeec613ee0cd186144",
+      "selection_rank": 41,
+      "source_member": "./val/chunk_000008.npz",
+      "source_member_sha256": "423abb0937e2eff06876d25b01de3931db753f921df5f8d5ae4c0e5164aa86e0",
+      "source_row": 288,
+      "source_shard_ordinal": 8
+    },
+    {
+      "fen": "6k1/3q2p1/1p6/2p5/P4B2/P5K1/8/7Q b - - 11 50",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 11462,
+      "plane_sha256": "7e1de2f648a803d27de5dfc50d1fb0c53fa2590bd1ecc620982ec88d0dcf55af",
+      "ply": 99,
+      "position_id": "4fba0cf801ba79162a24a8ab63f4cd53c4208f42a1539a346ff788a7bcc37efa",
+      "selection_rank": 82,
+      "source_member": "./val/chunk_000011.npz",
+      "source_member_sha256": "d44aa529acef7f8e32a8120a9325bf5968078dd0b6dbc734a257cc3ad787d53b",
+      "source_row": 198,
+      "source_shard_ordinal": 11
+    },
+    {
+      "fen": "1r3r2/5pk1/2pq1n1p/p2n2p1/2BP4/1PN2QP1/P4PP1/R2R2K1 w - - 1 22",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 21303,
+      "plane_sha256": "454a12f92f59c4ba6c8963ca0c55e0c4e70f8b2e76d11169ad71a7684ac30fc5",
+      "ply": 42,
+      "position_id": "bf2abe526edb3992b20dae8ca40dc662b0d8ff0ee6d22923921b5dc01a4dbb2c",
+      "selection_rank": 105,
+      "source_member": "./val/chunk_000020.npz",
+      "source_member_sha256": "d9ea4ed3f0e614f24c39bb2d8741516bae1b2ff3b20432321f3eeb9fbf3f1ec4",
+      "source_row": 823,
+      "source_shard_ordinal": 20
+    },
+    {
+      "fen": "2k1r3/1pp5/p5q1/5p2/3R4/3QBKP1/PP3P1r/R7 b - - 2 27",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 41721,
+      "plane_sha256": "99f6667943c942da8d6bd1d1b92e565e969060abd9b0c8a931e3c622829ecb57",
+      "ply": 53,
+      "position_id": "69606fe0f9399fe31199deed7a0bf06b34f6707796cae3a724f0803ed5cace75",
+      "selection_rank": 67,
+      "source_member": "./val/chunk_000040.npz",
+      "source_member_sha256": "337f0b186ce80e03cdf5df47308f9c43bfe2be475d5b1d0cf936aa2cd62142a4",
+      "source_row": 761,
+      "source_shard_ordinal": 40
+    },
+    {
+      "fen": "r7/5p1k/1p1Np1qp/2bpP3/P4P2/1Q4PP/7K/2R5 b - - 12 45",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 60554,
+      "plane_sha256": "1b03af5ce05c7032ed1f376060e81bb6cf3028922b79bd75078cec28c50f0590",
+      "ply": 89,
+      "position_id": "b3e11392220c8588c42ee6b2f32674951bfafa3a020af05da7fb9c1103b73783",
+      "selection_rank": 78,
+      "source_member": "./val/chunk_000059.npz",
+      "source_member_sha256": "faeddc5a224216b0063480055c4ef40c22468f9aea9c5f844da70f32adf00b0f",
+      "source_row": 138,
+      "source_shard_ordinal": 59
+    },
+    {
+      "fen": "1r6/5pp1/r1p1p2k/p1R1P2P/5PK1/5P1P/1P3R2/8 w - - 4 32",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 66015,
+      "plane_sha256": "bec5ff89482221ed2ca45e6e2b2aebfbfc6687be1bc8ec87690e94c4b25b373e",
+      "ply": 62,
+      "position_id": "acc61f6c0357093442dbaa983f5b87aa550c51c3da685e5509d673149f45c52b",
+      "selection_rank": 93,
+      "source_member": "./val/chunk_000064.npz",
+      "source_member_sha256": "68ee348c33ae106c220ab7f96b47779578520d8b2da67ffda9b1bd5f697c7038",
+      "source_row": 479,
+      "source_shard_ordinal": 64
+    },
+    {
+      "fen": "2r5/p3Q1bk/2p3p1/3q2P1/P6P/3p2B1/5P1K/2R5 b - - 3 39",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 78897,
+      "plane_sha256": "d088b455fed6df4d5f57db158f658ed0f4052be4279fdd929d763bf8b51a6f23",
+      "ply": 77,
+      "position_id": "16eab148034c929529d2cc913583669dc858f4254614d66ddd00f0addf6ee638",
+      "selection_rank": 83,
+      "source_member": "./val/chunk_000077.npz",
+      "source_member_sha256": "ebec1c5aad53fe94695a5a48d359d8408fe459fe23022ab5d8d62fe84014c45c",
+      "source_row": 49,
+      "source_shard_ordinal": 77
+    },
+    {
+      "fen": "8/4r3/5p2/6pP/1p1k1nP1/8/1P3K1R/5B2 w - - 3 72",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 89076,
+      "plane_sha256": "0cef605663eac824bca8ca91340a36c167b03d56d3434bb0484909a94828998d",
+      "ply": 142,
+      "position_id": "1a3c27e53f0c65757a568f38a6dc61e15341f575d2c843b09b16062eafac668c",
+      "selection_rank": 50,
+      "source_member": "./val/chunk_000086.npz",
+      "source_member_sha256": "1e8d50c9c7be2f1fa546bf57660519f74428139edc271a94c0fd62972cdc45a0",
+      "source_row": 1012,
+      "source_shard_ordinal": 86
+    },
+    {
+      "fen": "8/P4p2/1B3k1K/8/5pP1/5P2/r7/8 w - - 10 54",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 99317,
+      "plane_sha256": "97e544ad32c091fff0c4a2530ed1de619856fa7550035aad800658912d5bc5cc",
+      "ply": 106,
+      "position_id": "979f4fdbe2e25ca37f5da29fa24bb9667ec32e8bce06c08b0b6a2bfaf97b5a18",
+      "selection_rank": 62,
+      "source_member": "./val/chunk_000096.npz",
+      "source_member_sha256": "6001ef4a2fbb5a878eca33d7ee924899e7cf7842a1c69587c914ce1f5742fa36",
+      "source_row": 1013,
+      "source_shard_ordinal": 96
+    },
+    {
+      "fen": "5rk1/p6p/4p1p1/2rp2n1/4P3/2P3P1/P2N2K1/3R3R w - - 0 30",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 126508,
+      "plane_sha256": "0e098ce4eb26c12221a642e02d03323579412d860073dc1d245bc41f006dbb74",
+      "ply": 58,
+      "position_id": "ec7e2e3b49690f6511143c51115d0854bd907f810bf1e957332d3dd4ac2a7d05",
+      "selection_rank": 11,
+      "source_member": "./val/chunk_000123.npz",
+      "source_member_sha256": "8496bf22ad547066f88270a3f74886193f7b29c07aa7cfba3156278aaf6ca081",
+      "source_row": 556,
+      "source_shard_ordinal": 123
+    },
+    {
+      "fen": "r2qkb1r/1bpn1ppp/p3pn2/8/P1BP4/4PN2/3N1PPP/R1BQ1RK1 b kq - 4 10",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 137969,
+      "plane_sha256": "68969975daa1126b8fc35df64ed93dced68889cf5929ba0b5aeb63e78d2cad05",
+      "ply": 19,
+      "position_id": "4b2a9b3d2867cd142aa33932d8a5755f7b21e9378d75a9881b005bf7f40ed797",
+      "selection_rank": 61,
+      "source_member": "./val/chunk_000134.npz",
+      "source_member_sha256": "8e2652ccc4bf5169b8f1f6495fd5c3b7888ca40a8472007c553576f45a0e82f2",
+      "source_row": 753,
+      "source_shard_ordinal": 134
+    },
+    {
+      "fen": "1r3rk1/6pp/p1p5/3pp1q1/QP1Pp1b1/4P2P/1P3PP1/R4RK1 w - - 0 20",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 179859,
+      "plane_sha256": "7ebe837cee4bba42026d554b227d68b50bd9fcd7b26e50b5493a559e99863e40",
+      "ply": 38,
+      "position_id": "d706e02219b17c07b8df362d22b29ab256bdf76e7447983f3ba0f84f028f955b",
+      "selection_rank": 48,
+      "source_member": "./val/chunk_000175.npz",
+      "source_member_sha256": "722d55a0b3a91848375bfca29b72ab51a6fdd765cdcbf1c3353472bc15132799",
+      "source_row": 659,
+      "source_shard_ordinal": 175
+    },
+    {
+      "fen": "rnbq1rk1/p1p2ppp/1p2pn2/3p4/3P1P2/2P2N1P/PP1N1PP1/R2QKB1R b KQ - 0 8",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 220981,
+      "plane_sha256": "864ca00b10d27343ba233a65d696cfdccf370915e8d969d6523535b297fdbf61",
+      "ply": 15,
+      "position_id": "245a28e5f559030c7b86274033feff8521fd4dc5e8b2009da5c6f8ef6c35777d",
+      "selection_rank": 74,
+      "source_member": "./val/chunk_000215.npz",
+      "source_member_sha256": "420ba49ca3aee919f953e972f89ff0bcd49cdc9095075c5f84e1e763886f7b5b",
+      "source_row": 821,
+      "source_shard_ordinal": 215
+    },
+    {
+      "fen": "r4rk1/3n1pp1/2p1qn1p/1p1p1b2/1Q1P4/PPN1PN1P/4BPP1/2R2K1R w - - 3 21",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 223649,
+      "plane_sha256": "6621e7583bca2801a1f8b828beba28d862328e7120ff8b59cf5b54b2df346fc1",
+      "ply": 40,
+      "position_id": "f54249edaaf008f8df18338d8b8ba2401d42338e7a63c5d18f3929ad2fc152d1",
+      "selection_rank": 80,
+      "source_member": "./val/chunk_000218.npz",
+      "source_member_sha256": "340ee6968056d3dd38185f60b2ae13da0c9e8812fb0c16db81f328a092e8daf0",
+      "source_row": 417,
+      "source_shard_ordinal": 218
+    },
+    {
+      "fen": "8/8/5RP1/5N1k/p1K4P/1r6/7b/8 w - - 5 52",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 255879,
+      "plane_sha256": "703c0e539ebf8b50321f167ef93b59afb81c0f5a0eb8cbe2de193a0955d6d098",
+      "ply": 102,
+      "position_id": "85a8f43c33f46236548881c43e88eafda290bf6bec47e9ba685482abefeee582",
+      "selection_rank": 118,
+      "source_member": "./val/chunk_000249.npz",
+      "source_member_sha256": "e4f613b954da43ddfb87ae43755585e9e838f4ee2b5fc11bc9637c19bb58dead",
+      "source_row": 903,
+      "source_shard_ordinal": 249
+    },
+    {
+      "fen": "4rrk1/pp1n1q1p/2p5/P3Ppp1/2pPp3/4P1P1/1PQ3BP/R3R1K1 b - - 1 24",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 262528,
+      "plane_sha256": "b3ad5a8bd86903dbc7b439ed3fc5ace2acdadf0fdeb71ea4985e3eea85db70ca",
+      "ply": 47,
+      "position_id": "4b9579a33f1781c624f57c364ed29d6d3dedd4b6fdd9fe81d63f13f3fd4f038f",
+      "selection_rank": 100,
+      "source_member": "./val/chunk_000256.npz",
+      "source_member_sha256": "33e96ec412056713fbeb2d54a83e398bb01cba90b731ed318b9fbbdf5ceca658",
+      "source_row": 384,
+      "source_shard_ordinal": 256
+    },
+    {
+      "fen": "1r1qk2r/4nppp/4b3/1pbpP3/2p5/2N2B2/1PP2PPP/R1BQ1RK1 w k - 0 15",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 313260,
+      "plane_sha256": "9ead5510ee67a9e83a007aeb70c6346a9ff39d8b2124d955a308b4b802cd2a0e",
+      "ply": 28,
+      "position_id": "016f1da17970478a02d363de5ca726fbb81ba40e924e7e86dbf21dd1f45d3a2b",
+      "selection_rank": 27,
+      "source_member": "./val/chunk_000305.npz",
+      "source_member_sha256": "4608ef00d03180af56e7713e24550a7247d1bba5e12079334554b99f610bf39d",
+      "source_row": 940,
+      "source_shard_ordinal": 305
+    },
+    {
+      "fen": "5k2/1p2b3/4P3/3N3p/n4P2/2P2K1P/8/8 b - - 1 55",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 321786,
+      "plane_sha256": "af97d8622fa3136e2b79054a41c5cd67531357024c0bc85a6a1112453a420876",
+      "ply": 109,
+      "position_id": "ea73096b3b2c2f88a3aadc1f653274a8bc3ce20ca815049dabb283181cbecca9",
+      "selection_rank": 119,
+      "source_member": "./val/chunk_000314.npz",
+      "source_member_sha256": "816b7337fa27995ddaa53a17c89e344fbb56b6dcba7f40d348e2acda42df79fe",
+      "source_row": 250,
+      "source_shard_ordinal": 314
+    },
+    {
+      "fen": "7k/8/6BP/3p1P2/1p1P4/pP2r3/Rb4K1/8 w - - 1 48",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 336072,
+      "plane_sha256": "d8d6abfe09483618f1a021db28ce41d90951013251a460b5d9cdb169407b9e20",
+      "ply": 94,
+      "position_id": "df663c3d9d37ce1670a3303a6800b8e0c3850e56997a1b405f11e637cc29d609",
+      "selection_rank": 40,
+      "source_member": "./val/chunk_000328.npz",
+      "source_member_sha256": "7084d9118296f76627c3eec130bc02c8fa5adb5f7e9532a223087cb830d9a2ab",
+      "source_row": 200,
+      "source_shard_ordinal": 328
+    },
+    {
+      "fen": "rnbqkbnr/pppppppp/8/8/8/5N2/PPPPPPPP/RNBQKB1R b KQkq - 1 1",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 344037,
+      "plane_sha256": "294146a0a1fedb42ff1f2e1f2576ea23a377e1b70a4dc309dc948672d89f0166",
+      "ply": 1,
+      "position_id": "3def6aca8b3ed98a58bd3e59edbce5da8a4bd88089882a2e0809287cd10a0211",
+      "selection_rank": 111,
+      "source_member": "./val/chunk_000335.npz",
+      "source_member_sha256": "a052aee19901cb62021ab0e753fd0bdef4435e047722a89195a87b5115efcb70",
+      "source_row": 997,
+      "source_shard_ordinal": 335
+    },
+    {
+      "fen": "2rr2k1/1p2qpp1/p1n1bn1p/3p4/5N2/1P2PN1P/Pb2QPP1/1B1RR1K1 w - - 0 21",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 379816,
+      "plane_sha256": "f1e9e1657c134de29cd7bd2e6cda70cd69d29046cf519f53292b0ff66075c9de",
+      "ply": 40,
+      "position_id": "9c33be15a3dcaf6b0aab8a5e00cde731c439bcf08aeeb286d188e7dd8e27e0c2",
+      "selection_rank": 58,
+      "source_member": "./val/chunk_000370.npz",
+      "source_member_sha256": "2afd46c31abe620e8aa58ed56fde2e3e1f9d4fdbe7e295ae36ffb56d6f36c965",
+      "source_row": 936,
+      "source_shard_ordinal": 370
+    },
+    {
+      "fen": "3r2k1/pb1qppbp/1p3np1/2p4r/3B2P1/PP1PP2P/2Q2PB1/RN1RN1K1 b - - 0 17",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 409681,
+      "plane_sha256": "5015d85b50707fc15aa972e1886b8326ab2d9ade572335c6dfff31a4d21d8a64",
+      "ply": 33,
+      "position_id": "d652868e145649bf29d9c45ee6f95899eafb828371c2a506836df9e9487d50b1",
+      "selection_rank": 5,
+      "source_member": "./val/chunk_000400.npz",
+      "source_member_sha256": "1d1d9b541486ff8832dd1c4dda389c819ca353d5201be949002d8ed6ae2802de",
+      "source_row": 81,
+      "source_shard_ordinal": 400
+    },
+    {
+      "fen": "8/3q4/K7/8/1k6/8/8/8 w - - 15 147",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 416823,
+      "plane_sha256": "b14d7f68bcf91f521084a5a91dd28fce726037bfd1052e9f48be4b9230f3a1d4",
+      "ply": 292,
+      "position_id": "69774b76ac0b715641053051b88a80690051b9d53aaabae4f0ca683fdabbf08e",
+      "selection_rank": 2,
+      "source_member": "./val/chunk_000407.npz",
+      "source_member_sha256": "de476a18b13234859a4660a0e05ef6c0d0c2f14fb2c97439816e6d447c821285",
+      "source_row": 55,
+      "source_shard_ordinal": 407
+    },
+    {
+      "fen": "2k5/2n3RP/8/5P2/8/4K3/P7/8 w - - 7 71",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 418160,
+      "plane_sha256": "a8f1931656f0f6a7b02a61c9fe9a88acf1aea67c7350c3bb52a96d1e18392c17",
+      "ply": 140,
+      "position_id": "3a50772dd29b0796d6c5543a83aa2c875dec5e0b30b73abe23d45c2fc90f6860",
+      "selection_rank": 99,
+      "source_member": "./val/chunk_000408.npz",
+      "source_member_sha256": "0d2ae436ad989311b8fbd1a103ebd3dc321e59854ea9d8e32c52c404ecd99182",
+      "source_row": 368,
+      "source_shard_ordinal": 408
+    },
+    {
+      "fen": "8/8/6k1/8/2RK4/8/r7/8 b - - 90 161",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 473251,
+      "plane_sha256": "8350f86a1a16a390e17fd322e414445563a89518412fc6dc322189e566d9b7c8",
+      "ply": 321,
+      "position_id": "76905b96d7e2f9834edf2176220d27cf6db8237de245848bb20a0aaec065ecaa",
+      "selection_rank": 16,
+      "source_member": "./val/chunk_000462.npz",
+      "source_member_sha256": "2c84ab19ca4949f8d2b23a4319923062a4eb3ab5ab27b50bfd4180ca5237b9ff",
+      "source_row": 163,
+      "source_shard_ordinal": 462
+    },
+    {
+      "fen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 474854,
+      "plane_sha256": "5160e37dee1571b7f79158c5eb226a0d8a36525444d51663b4144307fd0dba92",
+      "ply": 0,
+      "position_id": "7f958f1c496f402178fe25d37418dd0c60083b294c12271acf92b9d18f884dd6",
+      "selection_rank": 101,
+      "source_member": "./val/chunk_000463.npz",
+      "source_member_sha256": "b3b3f8d1b2a71231bca33ae6d37ca19e48ea4dd00fc5f1b1cde04ce6b752f488",
+      "source_row": 742,
+      "source_shard_ordinal": 463
+    },
+    {
+      "fen": "r1bqkbnr/pppppppp/2n5/8/8/5N2/PPPPPPPP/RNBQKB1R w KQkq - 2 2",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 481715,
+      "plane_sha256": "30967b89400f56c3b6f969732fbdda2144ec6e60dbe5db42ebe4f0cf92083355",
+      "ply": 2,
+      "position_id": "465b65dadeb3125cd4aa5871592f5a2aa842ca8f350ff2878c87db6a5ff216b5",
+      "selection_rank": 17,
+      "source_member": "./val/chunk_000470.npz",
+      "source_member_sha256": "5f2e3d6156c03300e2a6af32fcff3108082a342fce3dd32939eefe92e775ff7c",
+      "source_row": 435,
+      "source_shard_ordinal": 470
+    },
+    {
+      "fen": "r1b1kbnr/pp1n1ppp/1qp1p3/3p4/3PP3/P1N1BP2/1PP3PP/R2QKBNR b KQkq - 2 6",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 483192,
+      "plane_sha256": "7835d0415b82d5d9aaba9b78c2d95035534faac48bdec4dc09d5b494ee8c0f71",
+      "ply": 11,
+      "position_id": "3ed82f5a2043c1fccfbafcba282406c3027e806054a47d3b861d645705dc62d9",
+      "selection_rank": 127,
+      "source_member": "./val/chunk_000471.npz",
+      "source_member_sha256": "bd6eeb77eb9cc5d7bf57f9083502c79d12352c6133477d29e3b61c607dc4caf1",
+      "source_row": 888,
+      "source_shard_ordinal": 471
+    },
+    {
+      "fen": "rnbqkbnr/pp2pppp/8/2pp4/3P4/2P2N2/PP2PPPP/RNBQKB1R b KQkq - 0 3",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 503981,
+      "plane_sha256": "ebf8764bca036c1c8c3e770c4a217705b1ef7d6ce2c58d627b7004e77f078252",
+      "ply": 5,
+      "position_id": "720a9ceded9538d09e6aab7d93bf26916a06da333db2de20c2ea6a96243f571f",
+      "selection_rank": 57,
+      "source_member": "./val/chunk_000492.npz",
+      "source_member_sha256": "c05b9aea04560f600178b66fdb2ae3960ee1bde0f8badaab1d44395d3846b35e",
+      "source_row": 173,
+      "source_shard_ordinal": 492
+    },
+    {
+      "fen": "r2qk2r/ppp2p2/3pn3/6pp/2P1P3/3P4/PP3QPP/RN2K2R w KQkq - 2 15",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 539415,
+      "plane_sha256": "8035cd1f833503b7aaf92a82d08dfb5b1afb10d5194bd53eb6246c4d95208fac",
+      "ply": 28,
+      "position_id": "e3e2a442ea85e822590f75ad8d0ea8e82cc7805a30f99674c14f074b8c781fc9",
+      "selection_rank": 45,
+      "source_member": "./val/chunk_000526.npz",
+      "source_member_sha256": "9038e3733923edb757d87e99daa63be979f893f6b8b654fd38f8278bbd48068b",
+      "source_row": 791,
+      "source_shard_ordinal": 526
+    },
+    {
+      "fen": "3R4/6p1/4k3/6p1/6K1/8/8/5r2 w - - 12 102",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 551181,
+      "plane_sha256": "2ee16761218118103bb7ea692d023a37584746ee1c2fb965c219212a7a3b5bb8",
+      "ply": 202,
+      "position_id": "9159aa97c4bf750b2bf7d1ffa2fd8b11d5e2b5004ea7ec71d0e109b7e4ed3d3b",
+      "selection_rank": 37,
+      "source_member": "./val/chunk_000538.npz",
+      "source_member_sha256": "a775a61fd2c0d4521e960c9d1bee1b4ba596b491b62e0e7ceb5d6748ce4b608e",
+      "source_row": 269,
+      "source_shard_ordinal": 538
+    },
+    {
+      "fen": "7k/8/8/5K2/5B2/7p/8/8 b - - 4 95",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 552391,
+      "plane_sha256": "eb59117205bc6d1bba07ea24ef0b4b891a08623cff66a27c7a86756b34599c25",
+      "ply": 189,
+      "position_id": "3b1f5d33e52a949387673c7413c260a4938fe2362aad4a54c0b8830ade8fd908",
+      "selection_rank": 81,
+      "source_member": "./val/chunk_000539.npz",
+      "source_member_sha256": "ad7a6b6638626f96ea9ed5c5a2b1b7209610937408c24816ae5d73d6b2086410",
+      "source_row": 455,
+      "source_shard_ordinal": 539
+    },
+    {
+      "fen": "r1b2rk1/1pppnppp/p1n2q2/8/3bPN2/2N4P/PPPQBPP1/R1B1K2R b KQ - 10 10",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 559031,
+      "plane_sha256": "bfae4265d8fa85cd596a680e1119ed467eba21e4441d15ceb61a114c5c3f2adb",
+      "ply": 19,
+      "position_id": "d1fed3130c00e6a1937b091d6675e19687440ac73b32d2ff5bdaa020063665de",
+      "selection_rank": 71,
+      "source_member": "./val/chunk_000545.npz",
+      "source_member_sha256": "f5b90f47d3d774b955cfff74c403b93b0d8a3fc38c0889f948314405349495c2",
+      "source_row": 951,
+      "source_shard_ordinal": 545
+    },
+    {
+      "fen": "8/6B1/4p1kP/4N1p1/8/4KP1r/8/8 b - - 1 69",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 561170,
+      "plane_sha256": "34fbf7c28e2d203009139494f8f77b7acbfdce0518c98c3d827f352820a5de87",
+      "ply": 137,
+      "position_id": "3fb2a971bfb5baa717194939f52ff49cb4488654e9789c38ea8845896e210cde",
+      "selection_rank": 113,
+      "source_member": "./val/chunk_000548.npz",
+      "source_member_sha256": "2b4073092c5a0836ff404742237b926801a57383c284314c8ecb3e83d0b339cf",
+      "source_row": 18,
+      "source_shard_ordinal": 548
+    },
+    {
+      "fen": "6k1/1PR5/8/6p1/8/8/3r3P/R5K1 b - - 4 64",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 562663,
+      "plane_sha256": "1ad541e7bca3729e5f115dc8dbc6fb5d46237b7074dc2cc2ec304429e3dacd66",
+      "ply": 127,
+      "position_id": "9a06e4c065537e5ef70ca8a95ca9de79ffa4ae43c8ea28d9a505dbe3ac3ab8de",
+      "selection_rank": 109,
+      "source_member": "./val/chunk_000549.npz",
+      "source_member_sha256": "8a01cb458ab7387409d1b48036b404f82512de032d00c77494dd26ba52c53a8d",
+      "source_row": 487,
+      "source_shard_ordinal": 549
+    },
+    {
+      "fen": "4r1k1/1p1b1pp1/1q2p2p/p2p4/2rN1P1P/P1P5/1PQ2PP1/R3R1K1 w - - 0 21",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 563376,
+      "plane_sha256": "301eb8d42d253ac13af10cbec1aa6dcbc349bd67e452a672cde53dcf3880261c",
+      "ply": 40,
+      "position_id": "e97ef38d52900c2b5b2c3b50b1e47916380ddb026ff64226c0af4ada4995c277",
+      "selection_rank": 79,
+      "source_member": "./val/chunk_000550.npz",
+      "source_member_sha256": "b064a598bd2182f396fb8714a32d33d7698852dde6b6c0a50e2cd29afe189951",
+      "source_row": 176,
+      "source_shard_ordinal": 550
+    },
+    {
+      "fen": "5n2/1R3bk1/8/6Kp/1p3P2/3R3P/6P1/8 w - - 3 59",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 565475,
+      "plane_sha256": "fd8dceaea8544007f2b240827a048ce0cc3b355372e9f0b92c0688d8929a0199",
+      "ply": 116,
+      "position_id": "c835a49305ba6481abe0f8a7af9089bf2c7c9bf869d4dab4a9cdd21bcbb171aa",
+      "selection_rank": 10,
+      "source_member": "./val/chunk_000552.npz",
+      "source_member_sha256": "31bf462e8ab23b70c8e9ddbf25fd9ae4d6665dfc7cedb17fc14a2f166cc50eab",
+      "source_row": 227,
+      "source_shard_ordinal": 552
+    },
+    {
+      "fen": "3r1k2/R3b2p/2Q5/3RP3/5P2/4q1K1/1P5P/8 w - - 3 35",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 566957,
+      "plane_sha256": "a42580c8e3462ca5a1c0f536d323e03ca12a4c5f8516d5de1ef620290ce719bc",
+      "ply": 68,
+      "position_id": "0bcbdb6b0268d382c190c07da0629fe668ca88e1e0ffdb98814ccd9a8348bf4c",
+      "selection_rank": 42,
+      "source_member": "./val/chunk_000553.npz",
+      "source_member_sha256": "3fefbde0f4b5e2f6b54ea9e18f4cf2d250bf8c2260912691d2861990ed633b6b",
+      "source_row": 685,
+      "source_shard_ordinal": 553
+    },
+    {
+      "fen": "r1bqkb1r/pp2pppp/2N5/8/1n6/6P1/PP2PPBP/RNBQK2R b KQkq - 0 8",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 566977,
+      "plane_sha256": "1d97d201c4505863e8ce740f9d8b987abef534b69b389d13fd4db560efb471db",
+      "ply": 15,
+      "position_id": "e0ef177393b538d5e592d5afe1d91184d87f2aa1dcedf22197d56bb9d158c36b",
+      "selection_rank": 114,
+      "source_member": "./val/chunk_000553.npz",
+      "source_member_sha256": "3fefbde0f4b5e2f6b54ea9e18f4cf2d250bf8c2260912691d2861990ed633b6b",
+      "source_row": 705,
+      "source_shard_ordinal": 553
+    },
+    {
+      "fen": "rnbqkbnr/pppp1ppp/4p3/8/3P4/5N2/PPP1PPPP/RNBQKB1R b KQkq - 0 2",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 570779,
+      "plane_sha256": "ac7ef3fa47e4e79bd6344f6482ec3436d94a0eb3864ccb31e3a1bb81a9a2fa34",
+      "ply": 3,
+      "position_id": "acd92fc0da9cf82aab842f10c5f3c23b241169ce0dd2ba6921151639036b0f5f",
+      "selection_rank": 51,
+      "source_member": "./val/chunk_000557.npz",
+      "source_member_sha256": "f5447c1fc0aad98b5abf41276445f408947dd40b209fbaae036981b892aad63a",
+      "source_row": 411,
+      "source_shard_ordinal": 557
+    },
+    {
+      "fen": "2r3k1/2P2p1p/2R3p1/p2prp2/7P/5P2/P4PK1/5R2 w - - 0 33",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 597635,
+      "plane_sha256": "f3e5a1d376c98c2e770790206f0fb52f4f31b365dcfb697596be3bac2bc8f8b8",
+      "ply": 64,
+      "position_id": "ecc85010aa108d02530b4c4a2e8d43be74e2f5322a67e0348675cd5178a5b2b4",
+      "selection_rank": 104,
+      "source_member": "./val/chunk_000583.npz",
+      "source_member_sha256": "a36e0667974724464be4f891e9559cc48bfd1259b20cb59bcf9471653edb612d",
+      "source_row": 643,
+      "source_shard_ordinal": 583
+    },
+    {
+      "fen": "8/3b2k1/pp1n2p1/6P1/5P1R/1P1KP2P/P7/8 b - - 8 45",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 603594,
+      "plane_sha256": "935e9cb08f0e5d8deafffa568cb8b7f8529ddec240e25c00ede51463683c84a2",
+      "ply": 89,
+      "position_id": "270bcd3700d234b5024e9904b50192ad03f3b5f2ed6929e30406a5efa2c3e1b2",
+      "selection_rank": 59,
+      "source_member": "./val/chunk_000589.npz",
+      "source_member_sha256": "a0a662c4e554f2c86326145ba05bad17cea29a83d00a95195ee6d3cb3083652c",
+      "source_row": 458,
+      "source_shard_ordinal": 589
+    },
+    {
+      "fen": "8/5Rpp/2k5/1p2p3/3n2rP/8/1P3BP1/6K1 w - - 1 36",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 623707,
+      "plane_sha256": "9352e28db9ff7a4af0165419e8a9a9c958e7f5534a1238a766f79d8b7e7b32fd",
+      "ply": 70,
+      "position_id": "c2a421791ff70d5ab0a7bfb72c856f519485adcfc9545de57cb7f797f1bdec44",
+      "selection_rank": 47,
+      "source_member": "./val/chunk_000609.npz",
+      "source_member_sha256": "6de3a39cba8ee942d117a9cebc6de66e32fa888f228a91645e78146f3a04f395",
+      "source_row": 91,
+      "source_shard_ordinal": 609
+    },
+    {
+      "fen": "r1b2rk1/1p2qppp/n3p3/p1ppN2n/2PP4/6P1/PPQNPPBP/R3K2R w KQ - 0 11",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 626473,
+      "plane_sha256": "660ba853a181132e7eb5e05dff606521d9581800c843af05bb98d25ec3495c1e",
+      "ply": 20,
+      "position_id": "b5ca4a71daec05eead2e702d49acc26ad8b9f24ebbc2c200ac8121492de5b6b8",
+      "selection_rank": 66,
+      "source_member": "./val/chunk_000611.npz",
+      "source_member_sha256": "44763921ad23ca15eba0c8786c7a64575afd65ca862dce97d3d3aa13538d3053",
+      "source_row": 809,
+      "source_shard_ordinal": 611
+    },
+    {
+      "fen": "4r1k1/1q3pb1/1r2p1pp/1p2P3/1P1Pp1PP/4P3/3B1Q2/R4RK1 w - - 0 29",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 630419,
+      "plane_sha256": "03f9f4c6e3f70862e0efac10987b8cbf1ddfb9204915d254cea3079a0dad0ca5",
+      "ply": 56,
+      "position_id": "4614cdaf9c9825f8e1130d2d560e7804d07dbf63bde4775d9438f7d3417b7752",
+      "selection_rank": 85,
+      "source_member": "./val/chunk_000615.npz",
+      "source_member_sha256": "cccc09a751225c399394542596f745a03c1239910da4c5cb00a89bf8e1be30e0",
+      "source_row": 659,
+      "source_shard_ordinal": 615
+    },
+    {
+      "fen": "1r1qk2r/pbppbppp/2n2n2/1p1Bp3/4P3/2PPB2P/PP2NPP1/RN1QK2R w KQk - 3 10",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 639780,
+      "plane_sha256": "1a484b316486414dc47bfcae4c0a5135a1133ec405f9834bc04507a5f387e902",
+      "ply": 18,
+      "position_id": "4ed590a33a4acb5aa072c1bf9fbc8b1b56f64879673647ab673dd941921970ed",
+      "selection_rank": 123,
+      "source_member": "./val/chunk_000624.npz",
+      "source_member_sha256": "e717651c1e1f8bd3cc65d01567a53f5b83c39b62e50846266fcc43bf4257a1f7",
+      "source_row": 804,
+      "source_shard_ordinal": 624
+    },
+    {
+      "fen": "r4rk1/pbqn1pbp/1p2p1p1/1P6/2Pp4/P2P4/1B1NBPPP/R2QR1K1 w - - 0 16",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 644421,
+      "plane_sha256": "7185887370fd93c7e9ba2174e471b1c7713101a4b9a09cdf31ddd2c86f169695",
+      "ply": 30,
+      "position_id": "b264e2f4c2d2f2fd0c3dfedc64241109f6f074dda5a9ea36237febeac63a6c7c",
+      "selection_rank": 20,
+      "source_member": "./val/chunk_000629.npz",
+      "source_member_sha256": "19fd3ee772bd3bdeeb4017979d7ae15dcecd748b91cf9662bec4fe63add58e23",
+      "source_row": 325,
+      "source_shard_ordinal": 629
+    },
+    {
+      "fen": "r3q1k1/2R2n1p/p1p2Bp1/P1p1p1P1/2P1P1Q1/1P6/5PK1/8 w - - 3 50",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 649148,
+      "plane_sha256": "9daaa8e4e6710b008f4809c6d0d5452be9f568f933f215b69c773f2e64c9c8c2",
+      "ply": 98,
+      "position_id": "54bd8510856fc108b7402040e6913943dabf7b1e670ee4058f5088016de911b6",
+      "selection_rank": 31,
+      "source_member": "./val/chunk_000633.npz",
+      "source_member_sha256": "118c80e92543bc376886115ac1c48931a3d356c033127961e09780e13a1d0894",
+      "source_row": 956,
+      "source_shard_ordinal": 633
+    },
+    {
+      "fen": "r4rk1/2pq1ppp/3p1b2/p1B5/4P3/PP4PP/2PQ1PK1/4RR2 w - - 1 27",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 656116,
+      "plane_sha256": "0e4f07d3d3681c34cf2a6a652c0b80ae88debfc01f2d88169ed153ae7e878ba8",
+      "ply": 52,
+      "position_id": "0f7925d282cd00e0479e2dc4ac3fbc024da70f078c714435bde7b46be4f1974d",
+      "selection_rank": 12,
+      "source_member": "./val/chunk_000640.npz",
+      "source_member_sha256": "19458b5d1954a8b587c06e572eb90ecc8859d0b347c96c5e81a8b83c1f747c53",
+      "source_row": 756,
+      "source_shard_ordinal": 640
+    },
+    {
+      "fen": "r4rk1/5pbp/2N1b1p1/1P6/B1p5/PPp4P/5PP1/1R2R1K1 w - - 0 28",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 662654,
+      "plane_sha256": "8a1534e556f1c093758abdc0bcc100501656b5e85b8ad93bfb2685a156a00c8e",
+      "ply": 54,
+      "position_id": "6873c818e5efd3fde5203f6ad9a695fd61c13b9c31a50089e0711071be000122",
+      "selection_rank": 96,
+      "source_member": "./val/chunk_000647.npz",
+      "source_member_sha256": "e9af19282faee736d2b0c9a428436e3c325698c4036ca70bfcc18b3c11b33c5d",
+      "source_row": 126,
+      "source_shard_ordinal": 647
+    },
+    {
+      "fen": "8/5p1k/4p2p/3qP1r1/8/6P1/2Q2P2/R5K1 b - - 2 44",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 681194,
+      "plane_sha256": "89cb6ff71c7e5e03976a1712909e33e7b9c8bf860aa863bc0bd9023ee6077140",
+      "ply": 87,
+      "position_id": "5709e0fbcbbbfa175ddecfe1c5db6971d8d96edb758c99a4d66dd7e5033a2680",
+      "selection_rank": 21,
+      "source_member": "./val/chunk_000665.npz",
+      "source_member_sha256": "38a109fd55dd8e34ae014220ef87f3ac9a4f14380a4a7eefba4aea6760de408f",
+      "source_row": 234,
+      "source_shard_ordinal": 665
+    },
+    {
+      "fen": "8/1b6/3B3p/5k2/2pp4/3P1PK1/2P5/8 w - - 0 53",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 695309,
+      "plane_sha256": "0942ff38e0b6a9564a93b3ab4773c1d0d75da7e9897d4acc819fd234d4b72ea8",
+      "ply": 104,
+      "position_id": "4c8b0aeff543a82fbed7072f13d00661188db5227d41654da8f72dcdddf5b881",
+      "selection_rank": 46,
+      "source_member": "./val/chunk_000679.npz",
+      "source_member_sha256": "220e50c70ca5660c57d55b1fd2e719a90d1b5e0f9e82ed1e9b0a4f2a6f2ab51a",
+      "source_row": 13,
+      "source_shard_ordinal": 679
+    },
+    {
+      "fen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 710371,
+      "plane_sha256": "5160e37dee1571b7f79158c5eb226a0d8a36525444d51663b4144307fd0dba92",
+      "ply": 0,
+      "position_id": "783e674001eff2a7c908869e3d37362be1f4caed5473c18fef7ca82787abad8a",
+      "selection_rank": 8,
+      "source_member": "./val/chunk_000693.npz",
+      "source_member_sha256": "fb024793aec2cadab495d0fd37c989e702b8a3057a91922d30dfb8cee3f6810d",
+      "source_row": 739,
+      "source_shard_ordinal": 693
+    },
+    {
+      "fen": "rnbqkb1r/pp1ppppp/5n2/2p5/8/2P1PN2/PP1P1PPP/RNBQKB1R b KQkq - 0 3",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 710849,
+      "plane_sha256": "d088fa7775ede893aaa5ffd3e7a8a10e58b56472f41c2fe8c16e1f802ebeebdc",
+      "ply": 5,
+      "position_id": "b065e0773bb5c15ba1feffe066cfb69730a780ebb920e73237ba31aa7ac788f6",
+      "selection_rank": 77,
+      "source_member": "./val/chunk_000694.npz",
+      "source_member_sha256": "5709954bcad884fdd251a3025bac9097c88b06084335555a73b74fc1cc309c91",
+      "source_row": 193,
+      "source_shard_ordinal": 694
+    },
+    {
+      "fen": "r1r1b1k1/1pq2pp1/2n1pn1p/p2p4/Pb1P4/1N1BPN1P/1B3PP1/1RRQ2K1 b - - 1 20",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 730895,
+      "plane_sha256": "0965af918e72b918cf4863132ba381607c51252737eb4ee6f9b4a5c9ad266f7e",
+      "ply": 39,
+      "position_id": "a0633978b44058240ef7f9c5278e0b0c13e7c666b418d46b928e1f974b8e20cd",
+      "selection_rank": 63,
+      "source_member": "./val/chunk_000713.npz",
+      "source_member_sha256": "c8e797f0bd2e0cb92b1766c5bb1d6ea658b2971e6490192b37f53e5a256fec27",
+      "source_row": 783,
+      "source_shard_ordinal": 713
+    },
+    {
+      "fen": "r2qk2r/1b1nbppp/pp3n2/2ppN3/3P4/1P1BP3/PB1N1PPP/R2Q1RK1 w kq - 6 12",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 737135,
+      "plane_sha256": "99b97410e1c2b619c84e49c3fb0db6fb06490336cb7b36f8b1ab6e3a09df9271",
+      "ply": 22,
+      "position_id": "d5ba24c0a172f9fac0f6a26a69050f65a9f600be560d8472813b6175f8d0f40c",
+      "selection_rank": 4,
+      "source_member": "./val/chunk_000719.npz",
+      "source_member_sha256": "dd64b33133a3e2077a51a2584e4ca67f87389812a0c8994ae151965196e613f8",
+      "source_row": 879,
+      "source_shard_ordinal": 719
+    },
+    {
+      "fen": "r2r2k1/1pb3p1/2p3p1/2n5/2Pp2P1/7R/1B2PPB1/1R3K2 b - - 1 29",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 761523,
+      "plane_sha256": "c3908b2042c44f86c904043a6f48fb1089ed6cc9b1f0d1921c94b1cc4ddc480c",
+      "ply": 57,
+      "position_id": "8805a6ac8572f9aeda74fe70ad6295ead227eb87dc2e2c6c50c5f47a6211ee27",
+      "selection_rank": 97,
+      "source_member": "./val/chunk_000743.npz",
+      "source_member_sha256": "d664a654e79fa7e0cba766e98b5d83681d5c5c9a0a715752e82f737bd4b946bf",
+      "source_row": 691,
+      "source_shard_ordinal": 743
+    },
+    {
+      "fen": "r1b3k1/1pp2ppp/p2q1n2/3P4/P7/2N1Q2P/1P2BPP1/R5K1 b - - 2 17",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 766387,
+      "plane_sha256": "2eec9b9fed37087943e1e515bebf825fc5a2b0fb66e74ab7e1b0638e983e9984",
+      "ply": 33,
+      "position_id": "8dae3ee1b17c66b2ba065a6916c2999947e1b42eda49524f6f62456f89240b61",
+      "selection_rank": 122,
+      "source_member": "./val/chunk_000748.npz",
+      "source_member_sha256": "a92b7164b469552230b1dd5d2eef96848b2db88b3d41965d8695ed8bacb4b555",
+      "source_row": 435,
+      "source_shard_ordinal": 748
+    },
+    {
+      "fen": "6k1/5p1p/1p4p1/2b1Q3/1q6/6P1/4RP1P/6K1 b - - 2 48",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 783221,
+      "plane_sha256": "eb85eb024a3db2ad4edac0a4841984e5db6e6a68d6cbd077b9ebdaba84a336ce",
+      "ply": 95,
+      "position_id": "c50e39c2484b0534e14e1253e2266a3a2365f1d1c43ac6b2f10dd667c0d0e8b8",
+      "selection_rank": 35,
+      "source_member": "./val/chunk_000764.npz",
+      "source_member_sha256": "7fdd84f5d043ae49c58adbac0fb007f9553e58eb640db6cf685a3223b9273794",
+      "source_row": 885,
+      "source_shard_ordinal": 764
+    },
+    {
+      "fen": "rnbqkb1r/pp2pp1p/2p2np1/3p4/2PP4/4P3/PPQB1PPP/RN2KBNR b KQkq - 1 5",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 794098,
+      "plane_sha256": "802f62ff518922b85e9b2624ef532e2fff49d43e9815f8ad69f0eee20e33b0d9",
+      "ply": 9,
+      "position_id": "749114c457ac065ebb536e4c5ba4f47dcbc17733025883500985e0ff051ec4f0",
+      "selection_rank": 125,
+      "source_member": "./val/chunk_000775.npz",
+      "source_member_sha256": "43b1baf97d5d385dbaa615d59e0441b958515c4e020c9cb15f51de2401fc8c6d",
+      "source_row": 498,
+      "source_shard_ordinal": 775
+    },
+    {
+      "fen": "r1bqr1k1/1ppn1pp1/p2b1n1p/P2P4/3P4/1QN2N2/1P2BPPP/R1B2RK1 w - - 0 13",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 795398,
+      "plane_sha256": "f91add67ea5b610877416af99c8dd68f13a23fa95d19f4e431c35bce84179cbb",
+      "ply": 24,
+      "position_id": "f32070092fd1d41b9ba3ce735c62447a036b30573b82ef39c232a1dd0e078fcf",
+      "selection_rank": 43,
+      "source_member": "./val/chunk_000776.npz",
+      "source_member_sha256": "6b08d1e935cc8f282519d9ee23151d9b373ed9b3e8d17c904df5fad5b758f889",
+      "source_row": 774,
+      "source_shard_ordinal": 776
+    },
+    {
+      "fen": "r2r2k1/2p2ppp/1pn1p1n1/1N2P3/P2PN3/2P5/5PPP/R3R1K1 b - - 3 25",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 807556,
+      "plane_sha256": "444159fb3f0df1e590758b90550d627a1505ecab2d370c31e951dcc4f202edde",
+      "ply": 49,
+      "position_id": "268532fb6cf6f05c628f2d70a20dd4892dd8ce17e31b88cc44d8d3828f8bcf63",
+      "selection_rank": 120,
+      "source_member": "./val/chunk_000788.npz",
+      "source_member_sha256": "c9d3ed4cfe9841cfb4f60e013d16928bc87e9a25f184908878c5aaf678edee39",
+      "source_row": 644,
+      "source_shard_ordinal": 788
+    },
+    {
+      "fen": "r3k1r1/1p3p1p/2p1bnp1/2P5/q2N1Q2/6P1/P3PPBP/5RK1 w q - 0 20",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 808527,
+      "plane_sha256": "2d730878b1c9f3d95d464e90319b5881a32b98e66fae6cd00dc0446e9702c582",
+      "ply": 38,
+      "position_id": "6767834eecc6bed5ca01045719b82d09cc41433a3989bc71e6c2e80d33de4b47",
+      "selection_rank": 7,
+      "source_member": "./val/chunk_000789.npz",
+      "source_member_sha256": "53bfd823a15aed40642f0a7e92156c682a12fa95c8dc897b75b1e717bb148ffa",
+      "source_row": 591,
+      "source_shard_ordinal": 789
+    },
+    {
+      "fen": "2b1r1k1/2b2q1p/pp3Pp1/n2p4/3Pp1B1/PP6/1B2N1PP/3Q1RK1 w - - 0 29",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 813774,
+      "plane_sha256": "c287960964045f078f3927dd3e5fefbcf13b51ec462a7db95f32588f52950e2f",
+      "ply": 56,
+      "position_id": "66e21e6da48c16d930e10447a35eda35668fb8e416fade959d7b473db5253199",
+      "selection_rank": 73,
+      "source_member": "./val/chunk_000794.npz",
+      "source_member_sha256": "10c6d7d4fba3ddeabfcadf228dc94558a37f0db24c9585fead7320ed98c09896",
+      "source_row": 718,
+      "source_shard_ordinal": 794
+    },
+    {
+      "fen": "2R5/4pk2/5pp1/7p/5B1P/3P2P1/1r1bPP2/5K2 w - - 13 33",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 832954,
+      "plane_sha256": "7a08458c3ca143308c3df3a3d0488c7d13d41a75e85a5294a1cbbca960ea0d61",
+      "ply": 64,
+      "position_id": "467379708e3e2517e45e4a0c7b02bf42fc585893c821634263f8f01f4b97e09a",
+      "selection_rank": 54,
+      "source_member": "./val/chunk_000813.npz",
+      "source_member_sha256": "9769da3fa28ea7f72ffe83e5fdb6d19a7a742fcf57c755d37ca39811d4669d74",
+      "source_row": 442,
+      "source_shard_ordinal": 813
+    },
+    {
+      "fen": "8/8/8/B3Q3/8/5K2/2k5/8 b - - 55 119",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 841239,
+      "plane_sha256": "2713a746ab825fcee3c7dda39800a0421c4a181fc1713d6d8f3c598744b13623",
+      "ply": 237,
+      "position_id": "6b09e0ba04162ac379cfa2aa7a45f0f55645abd9cd88dcb236f23fd28d03f3a4",
+      "selection_rank": 56,
+      "source_member": "./val/chunk_000821.npz",
+      "source_member_sha256": "c9a4769d7481ea6f2dc38457a31ce338291b5609bfcff1746a37ed8dfcd4f1c5",
+      "source_row": 535,
+      "source_shard_ordinal": 821
+    },
+    {
+      "fen": "r1b1k2r/ppp1qppp/2nb1n2/8/2BP4/P3BN2/1P3PPP/RN1QK2R b KQkq - 4 10",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 857004,
+      "plane_sha256": "d0dc5b8673ec6abb6f489bfa11910eb544a275c809faa583421de856c08d310e",
+      "ply": 19,
+      "position_id": "aefa05b05efd03330ad8b513626084f6fd8b10ce6e35a9cabfc34912d3b9dc67",
+      "selection_rank": 115,
+      "source_member": "./val/chunk_000836.npz",
+      "source_member_sha256": "b76bf3252f97e1633fa090220eeab243e0978caca5990e0c27a42b39ab35b22a",
+      "source_row": 940,
+      "source_shard_ordinal": 836
+    },
+    {
+      "fen": "2r1k3/2P5/2R2P2/8/8/p6p/P4K2/8 w - - 2 54",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 858097,
+      "plane_sha256": "3c69248a2f83a75dccf603bee41490d30b597e910dd3b97b7aeffd584574e37f",
+      "ply": 106,
+      "position_id": "19e13610e80d71f03f2a9d7580dc5268abed8447628a925804dec97e7a29f792",
+      "selection_rank": 24,
+      "source_member": "./val/chunk_000837.npz",
+      "source_member_sha256": "8a7159b39fc881f833648d94a48bdeb637c6d72bc56dc910a8cf541601648d71",
+      "source_row": 1009,
+      "source_shard_ordinal": 837
+    },
+    {
+      "fen": "2n1r3/1p3k1p/3p1p2/p1pP1P1q/P1P1Q3/1PB1P2P/5N2/5K2 w - - 1 37",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 861010,
+      "plane_sha256": "680f43f46aa224f7da6b3f2787ddc0cb550da392b9c85a8f4c1d2b08bf742a03",
+      "ply": 72,
+      "position_id": "4da51a6f213e5acb38ea958297632275030c5dc7c3336e734b21afaef3734563",
+      "selection_rank": 36,
+      "source_member": "./val/chunk_000840.npz",
+      "source_member_sha256": "362ad3a31e05e5a0fd36df02f3ddbc3e3a16b15cc9742c5db3c57e070cbac6a9",
+      "source_row": 850,
+      "source_shard_ordinal": 840
+    },
+    {
+      "fen": "r4rk1/1p3pbp/2p1pnp1/p7/2PP1B2/5B1P/PP3PP1/3RR1K1 b - - 1 17",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 871851,
+      "plane_sha256": "63b90671efea541895cb0c9711ad5bf4f29421591a33afdeff642f5f7875f156",
+      "ply": 33,
+      "position_id": "7ab8d09559db6cb11aa4f18b685b99e1a5653f13ecc3ced5168b55c062d88d09",
+      "selection_rank": 95,
+      "source_member": "./val/chunk_000851.npz",
+      "source_member_sha256": "feb276c7f6108feed7dcfb7ee53e360fa0a2a9d5025e821ecef17ae2587dc4a7",
+      "source_row": 427,
+      "source_shard_ordinal": 851
+    },
+    {
+      "fen": "r2qr1k1/2p2pp1/N2b1n1p/3bN3/3P1P2/P2Q4/1P1B2PP/2R1R1K1 b - - 0 23",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 880124,
+      "plane_sha256": "e1f48ff6be684877bdb50818cacb6bba7f33caefc6dc85e92051c65bb97c4086",
+      "ply": 45,
+      "position_id": "b97baf541ad35301b227be9e3a7b12c75c984044aa2752c4177703c68327dddc",
+      "selection_rank": 64,
+      "source_member": "./val/chunk_000859.npz",
+      "source_member_sha256": "66cf4ebbdb25542f9e62a1c61cc78a091106c33df26cd24c89aed9f9fcfde381",
+      "source_row": 508,
+      "source_shard_ordinal": 859
+    },
+    {
+      "fen": "r2qk2r/pp1b1ppp/2nb1n2/8/Q2Pp3/P1N5/1P2PPPP/R1B1KBNR w KQkq - 1 9",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 882067,
+      "plane_sha256": "65659a2385806c0af129dd687ca0a112395271d8f68b70da1942b0797911ff1d",
+      "ply": 16,
+      "position_id": "0a6a6e242490deb556eafe685fdeb9d21af0e5457e9a24ecff24b3c6c749e445",
+      "selection_rank": 29,
+      "source_member": "./val/chunk_000861.npz",
+      "source_member_sha256": "75ff57e1771083006d67d1021220c9535562611079a61b9179e7f15c7de9255c",
+      "source_row": 403,
+      "source_shard_ordinal": 861
+    },
+    {
+      "fen": "r2qr1k1/p2nbp1p/1p4p1/2p5/PP1P1Q2/N2bPN2/3B1PPP/1R2K2R b K - 1 18",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 885100,
+      "plane_sha256": "438c1b24dbc28f846ad0576a0f2aa27044c92ed86a201f96ec47bba71748b7c2",
+      "ply": 35,
+      "position_id": "a05ae5376cb468c39efb516011e5720f4829d85ab75f41ba0bae44425dd18808",
+      "selection_rank": 72,
+      "source_member": "./val/chunk_000864.npz",
+      "source_member_sha256": "826d469528362898731ea5fe6e59bbf4200df051e383de1318f4889e0f07b48b",
+      "source_row": 364,
+      "source_shard_ordinal": 864
+    },
+    {
+      "fen": "4k3/R2n4/4ppNp/2r5/5P2/6KP/8/8 w - - 3 46",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 887585,
+      "plane_sha256": "5318e4ad05df8632a07ffef8ae9dac58f8ab6c37aa3fe82e027ae10fa787d8b2",
+      "ply": 90,
+      "position_id": "50bc2404121e893c7458dfbd207cfe5c4179f5c5218a38bad990e5a5e2b9607e",
+      "selection_rank": 23,
+      "source_member": "./val/chunk_000866.npz",
+      "source_member_sha256": "6ab58457c8b11e0291b483b323928a264b02bbe9b2bc21a459528e0a0089f703",
+      "source_row": 801,
+      "source_shard_ordinal": 866
+    },
+    {
+      "fen": "rnbqk2r/ppp1ppbp/1n4p1/8/3PP3/5N2/PP2BPPP/RNBQK2R b KQkq - 2 7",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 894889,
+      "plane_sha256": "109ea7a800ab44806dcee63f40e1d8e95de757859c6b8f3a985994f68a374620",
+      "ply": 13,
+      "position_id": "bd6df4023fd46a2b4da189a810e846b73a44d320294cc5b19b0e088d9ea8e7f4",
+      "selection_rank": 126,
+      "source_member": "./val/chunk_000873.npz",
+      "source_member_sha256": "6713b087fddfd8a472b6a0a051a637a7c12b606158aea7f21441c0910aa8af82",
+      "source_row": 937,
+      "source_shard_ordinal": 873
+    },
+    {
+      "fen": "6k1/p5pp/2pq1r2/5p2/3r4/1Q3PP1/PP2R2P/2R3K1 b - - 3 23",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 921341,
+      "plane_sha256": "eac87407c9eb2e789b63abd352cab6b74a073a44202bdc78f7f2409e0eacb87f",
+      "ply": 45,
+      "position_id": "ce082d233cce6e95be53aeaaa6540343bd8c05c8a9a28940e8d34d0aabcdab0b",
+      "selection_rank": 90,
+      "source_member": "./val/chunk_000899.npz",
+      "source_member_sha256": "ee579eacb86f814eac44474ff64b7210e2ba4cc4c9e30a77b2af5dfed23a6780",
+      "source_row": 765,
+      "source_shard_ordinal": 899
+    },
+    {
+      "fen": "r4r1k/1pp1q1pp/2n2p2/2NQp3/8/pP1P1BP1/P3PP1P/2R3K1 b - - 0 21",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 967213,
+      "plane_sha256": "c68a8af4594ef0200206ab1745d6c3f07747b9b0f1106fd33a5ecbcc6ad81978",
+      "ply": 41,
+      "position_id": "e9ed6d74ed064acb51171fc35721ac74ed0e917bd373776ac28d375c636d4941",
+      "selection_rank": 87,
+      "source_member": "./val/chunk_000944.npz",
+      "source_member_sha256": "2497e085301a5d14eb5ff46ae524fe1df1975de2139329ec74b38eefe1ec72ad",
+      "source_row": 557,
+      "source_shard_ordinal": 944
+    },
+    {
+      "fen": "4k3/1n6/8/8/8/8/4K3/2R5 b - - 44 128",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 980195,
+      "plane_sha256": "5706d34a49227fef66418acd2065801ca6312a3fc06dbc2996b9a40031b7aa7b",
+      "ply": 255,
+      "position_id": "ff6b2b4f8b23e7e208bc599695e754e93f2663b6064a6dc172f0d67830abdc37",
+      "selection_rank": 94,
+      "source_member": "./val/chunk_000957.npz",
+      "source_member_sha256": "b6674171229a186e6b8371d12b553053d479c8f330881b360daaca2fd61f4479",
+      "source_row": 227,
+      "source_shard_ordinal": 957
+    },
+    {
+      "fen": "rnbqkb1r/pp1p1ppp/4pn2/2p5/2P5/6P1/PP1PPPBP/RNBQK1NR w KQkq - 0 4",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 981367,
+      "plane_sha256": "cd52ac1b8afaf543da68f3de156deda4f8ac7d23c1b8a50085db38ad0c58973d",
+      "ply": 6,
+      "position_id": "87385c9a15351c4a727d632dccd8e49acccded56fc0a8c6b1ff60d03125d9588",
+      "selection_rank": 33,
+      "source_member": "./val/chunk_000958.npz",
+      "source_member_sha256": "57b9668a4c337b9b29bdb591d0d24d1883cf4ebf08a371f7d351bb7684a4677f",
+      "source_row": 375,
+      "source_shard_ordinal": 958
+    },
+    {
+      "fen": "6k1/8/8/3p2p1/4n2p/4rN1P/6P1/1R4K1 w - - 2 42",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 983530,
+      "plane_sha256": "de61b7ddc2b7c1ef060242048801826163c259ca043e3a9bfdacabe0123c1ad5",
+      "ply": 82,
+      "position_id": "feae8719efd6835f6a38a1a696c8668d0823b66fe25cf2376aac467301a07823",
+      "selection_rank": 3,
+      "source_member": "./val/chunk_000960.npz",
+      "source_member_sha256": "95b3203557bfa2c6ded9d004ee796226e2993a470fa15f0523015f5f49bd2217",
+      "source_row": 490,
+      "source_shard_ordinal": 960
+    },
+    {
+      "fen": "r4rk1/1p1b1pp1/2p3qp/3p4/pN1Pn1Pb/P1PB3P/1P2RP1B/R4QK1 w - - 1 24",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 990297,
+      "plane_sha256": "8ff3481f2d91df857df7931b5aa8636e86856c687113297e99afe983ecae8fdb",
+      "ply": 46,
+      "position_id": "40c5b974d751931c8deb6763f734f65b2f34db3606072bbb592858994d806553",
+      "selection_rank": 6,
+      "source_member": "./val/chunk_000967.npz",
+      "source_member_sha256": "6cd76bd957c241809797ebe1378ad1eca70d06e935784201b48b4da7ebed61bb",
+      "source_row": 89,
+      "source_shard_ordinal": 967
+    },
+    {
+      "fen": "8/6pp/5p2/R2kb3/p1p5/PrB2P1P/1P2KP2/8 b - - 9 39",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 1015756,
+      "plane_sha256": "fa853e471d81f050acfb0a6151c3aaacf77de5a5776c3cbeb4f7c3e6b1dfbe11",
+      "ply": 77,
+      "position_id": "f5585f5c5863b011777fb9523fe026cd89c733c9f7272317504ab27a9aeda3e4",
+      "selection_rank": 106,
+      "source_member": "./val/chunk_000991.npz",
+      "source_member_sha256": "7d254a01447555d71aa46a6e4606e184dcf672d7053395746dbaa4b5ff1b8760",
+      "source_row": 972,
+      "source_shard_ordinal": 991
+    },
+    {
+      "fen": "r5k1/4qppp/p7/4pb2/3P4/PQ1pP2P/3N1PP1/1R4K1 b - - 1 25",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 1025817,
+      "plane_sha256": "2572759dd5f22a6393eccd0e02ae4b83d50bc66c0b26d41600223ce9cc96992e",
+      "ply": 49,
+      "position_id": "975b5d7b8f1c13f1e7d86e823b6b49e8827308dc1e6caa5b0f6ff77b35e6d1b2",
+      "selection_rank": 25,
+      "source_member": "./val/chunk_001001.npz",
+      "source_member_sha256": "ae24106df1d5eaaf2baf119d057dca6edf61b843db97a7c99360401ded972ef5",
+      "source_row": 793,
+      "source_shard_ordinal": 1001
+    },
+    {
+      "fen": "r1bqk2r/1ppp1ppp/p1n2n2/2b1p3/4P3/2NB1N2/PPPP1PPP/1RBQK2R w Kkq - 2 6",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 1026357,
+      "plane_sha256": "f454a8d57e089d3b2eec061186fa4de12b088b8097b0ad79207e6a3f2dbd1310",
+      "ply": 10,
+      "position_id": "9eb7184aa58ae9408f78ec564af3e39f69683ae303c24b18a1bfc82302af4579",
+      "selection_rank": 121,
+      "source_member": "./val/chunk_001002.npz",
+      "source_member_sha256": "ea7e87430b30f59ce530ffe112fd5117f63eef028acce6fc12887137cb96efa4",
+      "source_row": 309,
+      "source_shard_ordinal": 1002
+    },
+    {
+      "fen": "2r5/8/8/1k6/5K2/R7/8/8 w - - 45 103",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 1042868,
+      "plane_sha256": "3b652db391b69b78470e12bfc892104341ab9e10070a435e9cbbda6138346140",
+      "ply": 204,
+      "position_id": "6fccfd7cc54266406b8fece04a7a7a53ef6e67395676ed8b81a92b7abb48a0d6",
+      "selection_rank": 68,
+      "source_member": "./val/chunk_001018.npz",
+      "source_member_sha256": "8ca5b8d4396211e14c6f1a2b2483c7195432ef5d8e3d2b3a816efdb2c241a7d7",
+      "source_row": 436,
+      "source_shard_ordinal": 1018
+    },
+    {
+      "fen": "8/5p2/1K2k2p/3b4/2p2P2/8/8/7q b - - 1 52",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 1045079,
+      "plane_sha256": "27360436a743842d627977d8309a20b7c5de188c723c6073473f7c89ff8452bb",
+      "ply": 103,
+      "position_id": "b6664df0bcfbea65d19f30b6feca40a7842c69643d44841f4593660485cd23fe",
+      "selection_rank": 53,
+      "source_member": "./val/chunk_001020.npz",
+      "source_member_sha256": "76e612a9e6a7f37ca64884247ebe567ee028d95ba93d856ba3a732aaf3d53887",
+      "source_row": 599,
+      "source_shard_ordinal": 1020
+    },
+    {
+      "fen": "8/5k2/5b2/3P3p/4P1p1/4PPP1/1R2K2P/8 b - - 0 44",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 1067619,
+      "plane_sha256": "bc697d7e914b9b6a84f143d9f3cf1d9c4eb916c2b289b48ed1fa5313ec90ddd1",
+      "ply": 87,
+      "position_id": "fb4d05114e18862fa6d45aa0343abaef94b3bb87117b8c0562b2f8462a6304d6",
+      "selection_rank": 89,
+      "source_member": "./val/chunk_001042.npz",
+      "source_member_sha256": "c11d553cb2342239cd9854a3015032b0ebab64fcde54a8cecd3a74255650a9b7",
+      "source_row": 611,
+      "source_shard_ordinal": 1042
+    },
+    {
+      "fen": "1rb2r1k/p2q2b1/3p1n1p/3Bpp2/2P3pP/1PN1P1P1/P2NQP2/2R2RK1 b - - 5 25",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 1088798,
+      "plane_sha256": "d82ffe3f55ceaa67e749200be8198b72a676b63dab404664b7afb961b562b30e",
+      "ply": 49,
+      "position_id": "09b85cae78ade746cc11842dd892f56da5469dcaa8fef66ce7a8d8234818d467",
+      "selection_rank": 9,
+      "source_member": "./val/chunk_001063.npz",
+      "source_member_sha256": "ff422f22a532cb775dc006bd67b045f31b407abc469182edde261e4572fb7b8a",
+      "source_row": 286,
+      "source_shard_ordinal": 1063
+    },
+    {
+      "fen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 1091708,
+      "plane_sha256": "5160e37dee1571b7f79158c5eb226a0d8a36525444d51663b4144307fd0dba92",
+      "ply": 0,
+      "position_id": "b1a53ddf39e0cc6e5ac63608a6981f2ad1d33435bafeba0ac0be777252ad827a",
+      "selection_rank": 52,
+      "source_member": "./val/chunk_001066.npz",
+      "source_member_sha256": "ac14df15528497ea1b019ba35cc3e6d7ec070baf7d8c8c6bf508bba3079c965d",
+      "source_row": 124,
+      "source_shard_ordinal": 1066
+    },
+    {
+      "fen": "6n1/5N2/4K2p/6pk/8/8/8/8 w - - 0 64",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 1098605,
+      "plane_sha256": "9b1fb20fdb7c1ba850eef148e55a77b06aa3bb4081d407c9c707eb521dbfe5cc",
+      "ply": 126,
+      "position_id": "18a59fabf561f3ac3cd24fe3ce2d6786067b0a8cfa046ef2fcace5cf80a88b54",
+      "selection_rank": 44,
+      "source_member": "./val/chunk_001072.npz",
+      "source_member_sha256": "beaeca1960e8d763903e0e264a2fca93a3975f70cab78c64d648b9e922bc503f",
+      "source_row": 877,
+      "source_shard_ordinal": 1072
+    },
+    {
+      "fen": "r3b1k1/3n1p2/3q2pp/3pN3/1p1P3P/1Q1BP1P1/1P3P2/2R3K1 b - - 0 29",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 1114587,
+      "plane_sha256": "143e6668e44d30b3c3d295d2a5f6213f34b61ec84f8a87f9b864cc64c53e2fa6",
+      "ply": 57,
+      "position_id": "a27b23aeecea50d28f909a6d0b5e04d335084d95616601d3d2fbb006a12e49cd",
+      "selection_rank": 124,
+      "source_member": "./val/chunk_001088.npz",
+      "source_member_sha256": "d9b69adfd7b228c96937a7276b87bb024d14191c439d156c9d345a781391ae3b",
+      "source_row": 475,
+      "source_shard_ordinal": 1088
+    },
+    {
+      "fen": "2r1b3/3r2pk/R6p/B1p2p1P/4pP2/8/1P3PP1/2R1K3 w - - 8 41",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 1114913,
+      "plane_sha256": "e4e20c670689d0b204fc6be14026b4502b3223b9dedf9375f33b2272e480bcd3",
+      "ply": 80,
+      "position_id": "705a8555a123bf187e31a3806edf64aa75d23b2eb209094ee26238aa83409d8c",
+      "selection_rank": 117,
+      "source_member": "./val/chunk_001088.npz",
+      "source_member_sha256": "d9b69adfd7b228c96937a7276b87bb024d14191c439d156c9d345a781391ae3b",
+      "source_row": 801,
+      "source_shard_ordinal": 1088
+    },
+    {
+      "fen": "2r5/1p1b1p2/3p1k1p/p2P1p2/5P2/PR1B4/1P3KPP/8 b - - 2 24",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 1118393,
+      "plane_sha256": "c748da3d70d57434c63218412f84c54ef0e3937cbcd59be273c5ef674e5b6746",
+      "ply": 47,
+      "position_id": "9760bd5a3f7685475d86bf3caa29ffcc78ddd052b20f5dd144876ccd48972262",
+      "selection_rank": 107,
+      "source_member": "./val/chunk_001092.npz",
+      "source_member_sha256": "d8bc2ef17434b2681b47b41896a82957be3fe34fd6dada47804d92297e29073f",
+      "source_row": 185,
+      "source_shard_ordinal": 1092
+    },
+    {
+      "fen": "8/8/8/3k2p1/2n3Pp/5P1P/4KN2/8 b - - 21 62",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 1122091,
+      "plane_sha256": "56321e0f439c93c61c39b0461b6072d035ede99d0a1da683ec938e8557763e51",
+      "ply": 123,
+      "position_id": "03f0d5f57bdca0e7d768a5da91cd86b7bc10c61776d753c918af2980bec4cae8",
+      "selection_rank": 103,
+      "source_member": "./val/chunk_001095.npz",
+      "source_member_sha256": "30bcf0af78f9b354237a8a839fb1f149bf4b48b87caae79321a1fe3e2bea189d",
+      "source_row": 811,
+      "source_shard_ordinal": 1095
+    },
+    {
+      "fen": "8/8/8/Q2p1k1p/P4q2/2P5/3K1P2/8 w - - 9 63",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 1194392,
+      "plane_sha256": "1b0e5d3a6a46baae48f91c39bf55206a11b8c861ea9b3b36341826ea2d204984",
+      "ply": 124,
+      "position_id": "a805d5da3dc2696589bffc0e167dd1fc502e0dd325ec8b0fa76b751d69110d54",
+      "selection_rank": 1,
+      "source_member": "./val/chunk_001166.npz",
+      "source_member_sha256": "ca10a830b22fbf21159971a36ecc6bdbf722d2f0dc661273fd4dbcc252afd6c4",
+      "source_row": 408,
+      "source_shard_ordinal": 1166
+    },
+    {
+      "fen": "8/1pB3pk/2b2p2/1p1p3p/1P1P1KPP/1r3P2/8/5R2 w - - 2 59",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 1223708,
+      "plane_sha256": "6a90694414968ca4b3df5aeb3ae6ed61766b6fc7bf4ad4718a16458a63a42ca7",
+      "ply": 116,
+      "position_id": "794abdb1e8fb093585787281ad5c1e6a0c560bd97bae32e600722755c29634e8",
+      "selection_rank": 38,
+      "source_member": "./val/chunk_001195.npz",
+      "source_member_sha256": "cecb857439f59a9441be24256e267bb05fa03e64bd4848a2dcc3c6566374b257",
+      "source_row": 28,
+      "source_shard_ordinal": 1195
+    },
+    {
+      "fen": "1brnk3/pp4p1/6rp/2pNp3/1PP1PpPP/P2P1N1K/8/1R3R2 b - - 6 34",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 1229408,
+      "plane_sha256": "d10d48424652abaf5cf30c6d7f0fa1ffdf883c38562eb1dc47151350100c47af",
+      "ply": 67,
+      "position_id": "a41890ba9c075c5648bcf39f51d0f7c478bd7dbe626da07d26064a5ead67bceb",
+      "selection_rank": 76,
+      "source_member": "./val/chunk_001200.npz",
+      "source_member_sha256": "56386fef513f993cc47823ea0750ca17396a13197d1ffbbad37547a3c7ae9550",
+      "source_row": 608,
+      "source_shard_ordinal": 1200
+    },
+    {
+      "fen": "rnbqkb1r/pppppppp/5n2/8/3P4/8/PPP1PPPP/RNBQKBNR w KQkq - 1 2",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 1234743,
+      "plane_sha256": "3ae823426d0a8a6ef9bedc6c52e45799f53c20a752f98a3e678e4d154d12cc99",
+      "ply": 2,
+      "position_id": "d98946306925725f5a50b2d310869ad6465d7e278a1a30d609dee00cedf1670f",
+      "selection_rank": 34,
+      "source_member": "./val/chunk_001205.npz",
+      "source_member_sha256": "8c495f73e9520220805efb681a0babee58dc2997bf12c7263e59abc7856108a5",
+      "source_row": 823,
+      "source_shard_ordinal": 1205
+    },
+    {
+      "fen": "2r3k1/pqr1np2/4p1pp/1P6/P2PP1P1/1B1Q1N1P/2R4b/2R2K2 b - - 0 34",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 1241641,
+      "plane_sha256": "3515a358b56f8388dee1022fc6a1628e2b2e0113427d8d50d6d034bd4fbc48c6",
+      "ply": 67,
+      "position_id": "4b35c2f0a8a2011effd39720de4689d486d572cf5f216b83b6f49d33f50a06e8",
+      "selection_rank": 55,
+      "source_member": "./val/chunk_001212.npz",
+      "source_member_sha256": "06d3d627b8da711e06418e8cb001df075e7775580bc5c2f1bcdd403d33dc1713",
+      "source_row": 553,
+      "source_shard_ordinal": 1212
+    },
+    {
+      "fen": "2kr2nr/ppp3p1/q5p1/5p2/3p2Pb/P2P3P/1PPQNPB1/R3K2R w KQ - 2 17",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 1244549,
+      "plane_sha256": "effd7a9526eb54443353d0d1020a831b36d4bac45dbb22d82abe576194510dfa",
+      "ply": 32,
+      "position_id": "7f92162b16d4b8ee04c16303cf69b20d2a49d494d5563f1a07852398513fbc1c",
+      "selection_rank": 28,
+      "source_member": "./val/chunk_001215.npz",
+      "source_member_sha256": "6113ba98243de0ec11829a167c42cc094dbd56165fd8550cb9ad0a2cc2e86519",
+      "source_row": 389,
+      "source_shard_ordinal": 1215
+    },
+    {
+      "fen": "1r3r1k/1bpqbppp/1n2p3/p3P3/P1pPN1Q1/3BBN2/1P3PPP/R1R3K1 b - - 0 18",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 1244966,
+      "plane_sha256": "1de7ba1c0b28c6ec8d6df1cf00adbeb5bf51ab28ddc8a587a020d3aa39222834",
+      "ply": 35,
+      "position_id": "33d230d544976d76b22436fc84d45742d67c96ace639e7de0ddaa1a53d959955",
+      "selection_rank": 19,
+      "source_member": "./val/chunk_001215.npz",
+      "source_member_sha256": "6113ba98243de0ec11829a167c42cc094dbd56165fd8550cb9ad0a2cc2e86519",
+      "source_row": 806,
+      "source_shard_ordinal": 1215
+    },
+    {
+      "fen": "3qr1k1/pp3bp1/4rp1p/P2N4/2pP4/1n2P1P1/RP3QBP/5RK1 b - - 4 30",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 1257125,
+      "plane_sha256": "316354ff4f84490ecdc861fca3d36c26ef6f75106ef405a6ebeb3792bda8588f",
+      "ply": 59,
+      "position_id": "1dc93e566214454e821956d55be2507aaedef3b122913101b3c5460633fa969d",
+      "selection_rank": 84,
+      "source_member": "./val/chunk_001227.npz",
+      "source_member_sha256": "2a6bfc9fa73c977e6ff12eeaae3cd32201d98fd9f58a2b084ad060034c9323d6",
+      "source_row": 677,
+      "source_shard_ordinal": 1227
+    },
+    {
+      "fen": "5r2/kpb2pR1/p4r2/8/P1BpqP1R/1P6/2P2Q2/5K2 b - - 10 43",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 1261165,
+      "plane_sha256": "c1f84d772d84873d869727acbaee93a07fa297dc092a0b2f60622d002a6d678a",
+      "ply": 85,
+      "position_id": "735d152c74244645adba986977bca434bcdfed4eab61f0cd6dbc40ea21a560f8",
+      "selection_rank": 110,
+      "source_member": "./val/chunk_001231.npz",
+      "source_member_sha256": "93c06df9c854d092782409503adcc2a9515e148df02395f373e39c0489ffcf28",
+      "source_row": 621,
+      "source_shard_ordinal": 1231
+    },
+    {
+      "fen": "2r1r1k1/2q2pb1/pp1pPn1p/5b2/1PP2B2/1QN2B1P/P5P1/2R1R1K1 b - - 0 24",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 1264958,
+      "plane_sha256": "651ff3f622927ec35c9fa00c1623249786ca21487460593630dc5c308903f03a",
+      "ply": 47,
+      "position_id": "372bdfbc3422ac034d3ef949355b0ad502d176baa3b3997cf9b6bb8b853922c9",
+      "selection_rank": 112,
+      "source_member": "./val/chunk_001235.npz",
+      "source_member_sha256": "6db52c5ada450b99987bbea9a9a28c61d78e4861cd8490dacf948bae21f95eb6",
+      "source_row": 318,
+      "source_shard_ordinal": 1235
+    },
+    {
+      "fen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 1288919,
+      "plane_sha256": "5160e37dee1571b7f79158c5eb226a0d8a36525444d51663b4144307fd0dba92",
+      "ply": 0,
+      "position_id": "d3c3807d0a9e5449b1b5aaf1d0582e36bae6122608fc02879a2d946fadd11cda",
+      "selection_rank": 14,
+      "source_member": "./val/chunk_001258.npz",
+      "source_member_sha256": "2c8dfdeffbc2127e1411cbeb8ff75ecb8c0cedf1b6741d15a84538e91c4b3e5f",
+      "source_row": 727,
+      "source_shard_ordinal": 1258
+    },
+    {
+      "fen": "1rr1bbk1/1p1n1pp1/p3p3/8/P1PqPP2/1PN5/3QBK1R/3R4 w - - 0 44",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 1298115,
+      "plane_sha256": "35a6be45bfaab33b3480af82dd23f1f81751c69e2b4a71b3b2fa2013d2e1152b",
+      "ply": 86,
+      "position_id": "6c72b3c9c45afad600f6f181db8fe270ee8bf2f49639b65c092d4017c6cb27d7",
+      "selection_rank": 49,
+      "source_member": "./val/chunk_001267.npz",
+      "source_member_sha256": "e208bc8d228b5e2ac2e74c4d6e171d23fe7586a31a5976373f1b7bf51b76b938",
+      "source_row": 707,
+      "source_shard_ordinal": 1267
+    },
+    {
+      "fen": "3r2k1/1R3p2/4p1pp/r7/6PP/1p2KP2/1P6/2R5 w - - 2 37",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 1322759,
+      "plane_sha256": "3a831c8ef1dd27069ea74a098c3e16c6c27e349214bab6bbbe97e28858d911ae",
+      "ply": 72,
+      "position_id": "34512ab0bd09e4c6832e4d6f8cd299189d8112644b5005ae1a415e575d90b7a2",
+      "selection_rank": 75,
+      "source_member": "./val/chunk_001291.npz",
+      "source_member_sha256": "2f4d1c2a9477767b8e314465c9957cb2081eb8d62d33259b8ac027315cccfe37",
+      "source_row": 775,
+      "source_shard_ordinal": 1291
+    },
+    {
+      "fen": "8/5kp1/4n1r1/8/1P5p/R6P/6N1/6K1 b - - 4 63",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 1343886,
+      "plane_sha256": "ffeda11d0dd752dc3b7ac926992b3f72cc340da528d91a43e29e154cc1443383",
+      "ply": 125,
+      "position_id": "40a227eb0ea7bd18b7319482668ba1dbec381d4a54fee08f90023b9647a0999c",
+      "selection_rank": 108,
+      "source_member": "./val/chunk_001312.npz",
+      "source_member_sha256": "2f679cb5839736028227560098d5c78c966de8e058a1d736139728aeee0017d7",
+      "source_row": 398,
+      "source_shard_ordinal": 1312
+    },
+    {
+      "fen": "1k1r3r/3p1p2/1p5p/p2qp3/1bN3p1/3P4/RPP2PPP/Q4RK1 b - - 3 22",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 1348331,
+      "plane_sha256": "1986f12a7cc8af4a5d171bb63427b6d947b97c26239d1f0635ef9fdbb31f115c",
+      "ply": 43,
+      "position_id": "8f9994a828a14b059b5089ac7d4596e9286c74a5f93f3ea36920f1e20725b6a1",
+      "selection_rank": 70,
+      "source_member": "./val/chunk_001316.npz",
+      "source_member_sha256": "f2da4de4003ba6bd2223f3983cf3d023ddeebc45e0d5c42c9d874e6c31df925c",
+      "source_row": 747,
+      "source_shard_ordinal": 1316
+    },
+    {
+      "fen": "5Q2/1b6/k7/2K4p/5ppP/8/8/3N4 b - - 11 83",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 1357931,
+      "plane_sha256": "0659aa7e0ea0cdd3589ea1cb6162b2c2a3e319a8b61b1308e504464d44523019",
+      "ply": 165,
+      "position_id": "68041a311b4f0e01ab9009aa0c7c35ffd901979a4586fb8286d77e2e82aee7c6",
+      "selection_rank": 60,
+      "source_member": "./val/chunk_001326.npz",
+      "source_member_sha256": "a1f3cd89f7251cb9407227087ff51ff794007e5300d8b154b80134f14b765c95",
+      "source_row": 107,
+      "source_shard_ordinal": 1326
+    },
+    {
+      "fen": "8/6k1/6n1/3QP3/1bPP4/1q4P1/6K1/8 b - - 6 57",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 1358665,
+      "plane_sha256": "3dec0696db2e5f39463593d08248b442c9d12b7116febe890c5491c364749410",
+      "ply": 113,
+      "position_id": "c4c2f500befe2f01a577243f10b9b3c33f18330f79c57e5e5ddeabd896cb8eea",
+      "selection_rank": 13,
+      "source_member": "./val/chunk_001326.npz",
+      "source_member_sha256": "a1f3cd89f7251cb9407227087ff51ff794007e5300d8b154b80134f14b765c95",
+      "source_row": 841,
+      "source_shard_ordinal": 1326
+    },
+    {
+      "fen": "2k5/6p1/2n2n1p/rp2p1N1/Pb6/1PNK4/5PPP/3R3R b - - 1 24",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 1367990,
+      "plane_sha256": "67bba8a12a393ee5846e859520463d148523d795944c83543d99e1b29daf2f2b",
+      "ply": 47,
+      "position_id": "9671fc44e19aa20bbaf03d1fcb94aeefb6ca3045cb2a377697ca5b8decbac736",
+      "selection_rank": 86,
+      "source_member": "./val/chunk_001335.npz",
+      "source_member_sha256": "e8ccb1cc30d59b2703481ef95c6845bdab3be394e3bc05710143d46ddc7107d4",
+      "source_row": 950,
+      "source_shard_ordinal": 1335
+    },
+    {
+      "fen": "rnbqkb1r/ppp1pppp/5n2/3p4/3P4/5N2/PPP1PPPP/RNBQKB1R w KQkq - 2 3",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 1386295,
+      "plane_sha256": "03beb4571081805b2216f8a412688a102ea1ac65357e0b8d397fe6df1c59e959",
+      "ply": 4,
+      "position_id": "48f0bb0e3dfbd8489c896e839d6263f25a77bd127cd78a4a85c6a13962b1ea3d",
+      "selection_rank": 88,
+      "source_member": "./val/chunk_001353.npz",
+      "source_member_sha256": "e7b278e38877cbe982e8e5f44e6ceb89e4ea7fbdda3f971eb2a3c00fd9a6ee80",
+      "source_row": 823,
+      "source_shard_ordinal": 1353
+    },
+    {
+      "fen": "8/b4p2/8/8/6kP/5r2/7K/8 b - - 5 73",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 1392677,
+      "plane_sha256": "e3b6b8a848c2940bc5c18f9418354434a726c6f6015dd6264069fcc4586d569e",
+      "ply": 145,
+      "position_id": "0a70686aa723aba92826b4ce697a5f29be7a390f4c1911591b0f7a17b0752cf4",
+      "selection_rank": 98,
+      "source_member": "./val/chunk_001360.npz",
+      "source_member_sha256": "a95da24b63f92c60cd1e9942dba0612b1c92998b20fc2b81a9289d7ec6b23a4c",
+      "source_row": 37,
+      "source_shard_ordinal": 1360
+    },
+    {
+      "fen": "rnbqk2r/ppppppbp/5np1/8/2PP4/5N2/PP2PPPP/RNBQKB1R w KQkq - 3 4",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 1398065,
+      "plane_sha256": "8c9a5322f01fd1d117d8da1ad0d19a840ffa0db86e7e34d7553893a29f0bd579",
+      "ply": 6,
+      "position_id": "db9122581690fda8b914d417d4f66cbad2b5d26174b61e98796034157640becb",
+      "selection_rank": 32,
+      "source_member": "./val/chunk_001365.npz",
+      "source_member_sha256": "04d52dc3abca4f99bc5ef3ea093cab4284f1241d18db9774c1237ee2ec60a67f",
+      "source_row": 305,
+      "source_shard_ordinal": 1365
+    },
+    {
+      "fen": "1r1rk3/p4p2/b1p2p1p/2Q1P3/8/Pq1p2R1/1P3PPP/4R1K1 b - - 0 24",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 1425259,
+      "plane_sha256": "a612726b53a0efd5458651bc301695ce6c7e31dad7d2b3480fe5ff44ce8047ef",
+      "ply": 47,
+      "position_id": "896d8ecf8e2e07ee6a485e1295e8f7e65059dec4fdafaf0af635cc98e8871b3a",
+      "selection_rank": 26,
+      "source_member": "./val/chunk_001391.npz",
+      "source_member_sha256": "3abf2418acaa241b71719d299db23c05a6aa6d4fadba5ada2cb2563cd9e4c47b",
+      "source_row": 875,
+      "source_shard_ordinal": 1391
+    },
+    {
+      "fen": "6k1/5pp1/2p2n2/pp1n1P2/3B1b1p/P4NPK/1P5P/2rBR3 w - - 2 36",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 1426971,
+      "plane_sha256": "16760392417918cb9f02040eb7f8359c023a599fec4df1f17317d519102362cf",
+      "ply": 70,
+      "position_id": "556ded8b50190e73bdd6ca48ce2178c27a52030f9cb8a88801a1fa4df9bc8c8a",
+      "selection_rank": 0,
+      "source_member": "./val/chunk_001393.npz",
+      "source_member_sha256": "93d382df94dae0e87b1ef6644db8e421940d4d1b29f336a2ecce3f9d4bfc1559",
+      "source_row": 539,
+      "source_shard_ordinal": 1393
+    },
+    {
+      "fen": "8/6b1/8/8/p1k3B1/8/4K3/8 w - - 18 98",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 1427187,
+      "plane_sha256": "1f99b4b7028867f965e0733d50e15cee5db959f716b4cfc009388e146de22632",
+      "ply": 194,
+      "position_id": "34e7c1a224a0b2cc444b2b4411708a9c33e1cd950724585ecffd6f23cde4bc73",
+      "selection_rank": 39,
+      "source_member": "./val/chunk_001393.npz",
+      "source_member_sha256": "93d382df94dae0e87b1ef6644db8e421940d4d1b29f336a2ecce3f9d4bfc1559",
+      "source_row": 755,
+      "source_shard_ordinal": 1393
+    },
+    {
+      "fen": "7b/8/2k3P1/3p1K2/1N6/1P6/8/8 b - - 6 71",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 1429139,
+      "plane_sha256": "48e048d0abb166e4181dd556f74d5b182091d5db7f2b7798c52463d8f7e29bf8",
+      "ply": 141,
+      "position_id": "e2d9221ca21cda798b02de602329946fd91069dbc4f0bc7b136f6c5687f877b6",
+      "selection_rank": 18,
+      "source_member": "./val/chunk_001395.npz",
+      "source_member_sha256": "b2f97b4ec6a668f02fb1bc389ae0e91c43c481fcc1d36a1c93736224a168c1d2",
+      "source_row": 659,
+      "source_shard_ordinal": 1395
+    },
+    {
+      "fen": "r1bqkbnr/pppp1ppp/2n5/4p3/3P4/2P5/PP2PPPP/RNBQKBNR w KQkq - 1 3",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 1459698,
+      "plane_sha256": "42fd805e4a2038a5269a0327114ca683b26ea54c0429ef0563274526c8d87304",
+      "ply": 4,
+      "position_id": "1c816e781cbaab851f2eabd54abfade2d1b0f80db1823a5f389b3301859c0a91",
+      "selection_rank": 91,
+      "source_member": "./val/chunk_001425.npz",
+      "source_member_sha256": "29b969c080e73e9373325fa0d03a5b961af0a47eaefb74c1582f153846ebd729",
+      "source_row": 498,
+      "source_shard_ordinal": 1425
+    },
+    {
+      "fen": "r5k1/ppqb1pb1/2p2r1p/P2p2p1/2PN4/1Q2P1P1/1P2BPP1/R4RK1 b - - 0 21",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 1460252,
+      "plane_sha256": "444379be705aead317f45190267a83551330858ca38e8debe820bf39107dda7f",
+      "ply": 41,
+      "position_id": "bb142e69a487397e4af59baebdc1974d606e65bf634e63cbb57f33cd58ad076c",
+      "selection_rank": 30,
+      "source_member": "./val/chunk_001426.npz",
+      "source_member_sha256": "b7440852052643616c24d14cc2212047c61d323515d02aaa26d5b3f739762b7e",
+      "source_row": 28,
+      "source_shard_ordinal": 1426
+    },
+    {
+      "fen": "k7/1b1BQ3/8/8/4P3/2P5/1p6/3K4 w - - 0 49",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 1491977,
+      "plane_sha256": "48a2d179aedd1a07431d18c6b4b1c5deca0f68848a769e9a096c2e0982da1bf5",
+      "ply": 96,
+      "position_id": "2956cec4b4439148c555c54806841391bbfd119d31deeae891d7dc4a8c16bcb0",
+      "selection_rank": 116,
+      "source_member": "./val/chunk_001457.npz",
+      "source_member_sha256": "ed19e8bbd6163b25fb0e5c7ad88e8c7d70d83d83d653e8053f1a5e3048e3451c",
+      "source_row": 9,
+      "source_shard_ordinal": 1457
+    },
+    {
+      "fen": "r1bqk2r/3nbp1p/p3p1p1/2ppP3/Pp3B1P/2N1P1Q1/1PP1BPP1/R3K2R w KQkq - 0 14",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 1515940,
+      "plane_sha256": "b010260ffd632459389ca32964e25c2eb7e7978d5f81796fd5708c2eb4862bb1",
+      "ply": 26,
+      "position_id": "4ab189495769b3cd0b9ea40d525074d848364fd2f04f64c949b739d43b34fdc8",
+      "selection_rank": 92,
+      "source_member": "./val/chunk_001480.npz",
+      "source_member_sha256": "81e55e17533c34a2f7d88c7bb40e4b4839366d4601c403d387f80d7b06ea0a6b",
+      "source_row": 420,
+      "source_shard_ordinal": 1480
+    },
+    {
+      "fen": "rnb1kb1r/ppq1pppp/2p2n2/3p4/3P4/4PN1P/PPP2PP1/RNBQKB1R w KQkq - 1 5",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 1516133,
+      "plane_sha256": "ce3263e0968855f6bc68f6e667fefed4242cf79e7f77f59e439811a7d7e2bdbf",
+      "ply": 8,
+      "position_id": "8e3ba91f5602ccaddb758d3eae9692dd69ed90fd78ea1bba2fd3d1dfcc68fc53",
+      "selection_rank": 102,
+      "source_member": "./val/chunk_001480.npz",
+      "source_member_sha256": "81e55e17533c34a2f7d88c7bb40e4b4839366d4601c403d387f80d7b06ea0a6b",
+      "source_row": 613,
+      "source_shard_ordinal": 1480
+    },
+    {
+      "fen": "1r1q1rk1/5ppp/b1ppnn2/b3p3/2N1P3/P2P1NP1/2Q2PBP/R1B2RK1 w - - 0 19",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 1556631,
+      "plane_sha256": "5465b90834f0844a79eec9596d2fce19d5dfa4f3e59adefa637b7b4fedf639df",
+      "ply": 36,
+      "position_id": "a5c9b388895ef8392c88089a267660ddc57302768708ef34540dce24376ea66b",
+      "selection_rank": 69,
+      "source_member": "./val/chunk_001520.npz",
+      "source_member_sha256": "e4efc722d95e06660035c19b8602962d72a587e93ac9c51e5b699da88867808a",
+      "source_row": 151,
+      "source_shard_ordinal": 1520
+    },
+    {
+      "fen": "7r/r4pk1/1RQ3p1/P1P1p1P1/8/1N2P1Pq/5PK1/8 w - - 1 44",
+      "game_id": "? | ? | ????.??.?? | ? | ? | ?",
+      "global_index": 1557517,
+      "plane_sha256": "e01131e03a321e0018e29b62af7cb23cbc43613837f9dcefa42b588ab63d9221",
+      "ply": 86,
+      "position_id": "275c2e34ecf4b0542caa24a70704aa04ae8c5ed42b55210f1559efcf4aa1076c",
+      "selection_rank": 15,
+      "source_member": "./val/chunk_001521.npz",
+      "source_member_sha256": "d69a056c7684c2eb4058d484e67dcbc9e3c35dc28a684d950ac63a7e5d381ced",
+      "source_row": 13,
+      "source_shard_ordinal": 1521
+    }
+  ],
+  "schema_version": "bt4-interpretability-pilot-corpus-v1",
+  "scientific_use": {
+    "allowed": [
+      "engineering validation",
+      "development-layer selection",
+      "metric implementation checks"
+    ],
+    "forbidden": [
+      "terminal confirmatory claims",
+      "blind-test reporting"
+    ]
+  },
+  "selection": {
+    "count": 128,
+    "rule": "first 128 frozen indices, then sorted for materialization",
+    "sorted_indices_sha256": "760b1dfb6552fbad1cc9f46cb4fd87c7fe15706c8ae126f415ea35d8676247c3",
+    "source_array": "fast_val_global_index",
+    "source_order_indices_sha256": "b0e544c4269d9472d9422f94af4c534c9d0c1424b7636d51689bc2b96507d695",
+    "source_pool": "Hero fast validation",
+    "split": "val"
+  },
+  "source_archive": {
+    "drive_file_id": "14jgdmEZsBVMFtQ7Vvjm3PTWU2QlE45KV",
+    "name": "trajectory_v3_lc0_test80_h8_sets1_3_20260430.tar",
+    "range": {
+      "global_end": 1201040111,
+      "global_start": 571904512,
+      "sha256": "c243f20eb1512cb7fe5fb1a4c4e4173dc9761bea3483ddb4076ac55f939749af",
+      "size_bytes": 629135600
+    },
+    "sha256": "d8feffa259580563c8097fa4a604ca415469dd80da66dabda170ac9ce929b968",
+    "size_bytes": 11531386880,
+    "verification_scope": "Full archive identity is pinned by its retained SHA256 sidecar; the locally fetched range is independently hashed and every consumed member is tar-checksummed and content-hashed."
+  },
+  "source_shards": [
+    {
+      "global_header_offset": 1087637504,
+      "global_payload_offset": 1087638016,
+      "member_name": "./val/chunk_000000.npz",
+      "member_sha256": "71555a5c59419cc0a5038c02cb2b9cc898b3d5b4372541f2c77b2afda158ffae",
+      "selected_rows": [
+        936
+      ],
+      "size_bytes": 377302
+    },
+    {
+      "global_header_offset": 617166848,
+      "global_payload_offset": 617167360,
+      "member_name": "./val/chunk_000004.npz",
+      "member_sha256": "7bd3c6c37370e5d21440214f3e250c30e4241a912b7992cac7a75710bf7fd61a",
+      "selected_rows": [
+        806
+      ],
+      "size_bytes": 358064
+    },
+    {
+      "global_header_offset": 1014884864,
+      "global_payload_offset": 1014885376,
+      "member_name": "./val/chunk_000008.npz",
+      "member_sha256": "423abb0937e2eff06876d25b01de3931db753f921df5f8d5ae4c0e5164aa86e0",
+      "selected_rows": [
+        288
+      ],
+      "size_bytes": 362442
+    },
+    {
+      "global_header_offset": 938981376,
+      "global_payload_offset": 938981888,
+      "member_name": "./val/chunk_000011.npz",
+      "member_sha256": "d44aa529acef7f8e32a8120a9325bf5968078dd0b6dbc734a257cc3ad787d53b",
+      "selected_rows": [
+        198
+      ],
+      "size_bytes": 377813
+    },
+    {
+      "global_header_offset": 914184704,
+      "global_payload_offset": 914185216,
+      "member_name": "./val/chunk_000020.npz",
+      "member_sha256": "d9ea4ed3f0e614f24c39bb2d8741516bae1b2ff3b20432321f3eeb9fbf3f1ec4",
+      "selected_rows": [
+        823
+      ],
+      "size_bytes": 362305
+    },
+    {
+      "global_header_offset": 766944768,
+      "global_payload_offset": 766945280,
+      "member_name": "./val/chunk_000040.npz",
+      "member_sha256": "337f0b186ce80e03cdf5df47308f9c43bfe2be475d5b1d0cf936aa2cd62142a4",
+      "selected_rows": [
+        761
+      ],
+      "size_bytes": 387994
+    },
+    {
+      "global_header_offset": 670437376,
+      "global_payload_offset": 670437888,
+      "member_name": "./val/chunk_000059.npz",
+      "member_sha256": "faeddc5a224216b0063480055c4ef40c22468f9aea9c5f844da70f32adf00b0f",
+      "selected_rows": [
+        138
+      ],
+      "size_bytes": 376181
+    },
+    {
+      "global_header_offset": 635880960,
+      "global_payload_offset": 635881472,
+      "member_name": "./val/chunk_000064.npz",
+      "member_sha256": "68ee348c33ae106c220ab7f96b47779578520d8b2da67ffda9b1bd5f697c7038",
+      "selected_rows": [
+        479
+      ],
+      "size_bytes": 379213
+    },
+    {
+      "global_header_offset": 848513536,
+      "global_payload_offset": 848514048,
+      "member_name": "./val/chunk_000077.npz",
+      "member_sha256": "ebec1c5aad53fe94695a5a48d359d8408fe459fe23022ab5d8d62fe84014c45c",
+      "selected_rows": [
+        49
+      ],
+      "size_bytes": 374209
+    },
+    {
+      "global_header_offset": 1022828544,
+      "global_payload_offset": 1022829056,
+      "member_name": "./val/chunk_000086.npz",
+      "member_sha256": "1e8d50c9c7be2f1fa546bf57660519f74428139edc271a94c0fd62972cdc45a0",
+      "selected_rows": [
+        1012
+      ],
+      "size_bytes": 386239
+    },
+    {
+      "global_header_offset": 977794560,
+      "global_payload_offset": 977795072,
+      "member_name": "./val/chunk_000096.npz",
+      "member_sha256": "6001ef4a2fbb5a878eca33d7ee924899e7cf7842a1c69587c914ce1f5742fa36",
+      "selected_rows": [
+        1013
+      ],
+      "size_bytes": 373448
+    },
+    {
+      "global_header_offset": 666710016,
+      "global_payload_offset": 666710528,
+      "member_name": "./val/chunk_000123.npz",
+      "member_sha256": "8496bf22ad547066f88270a3f74886193f7b29c07aa7cfba3156278aaf6ca081",
+      "selected_rows": [
+        556
+      ],
+      "size_bytes": 361863
+    },
+    {
+      "global_header_offset": 1134947328,
+      "global_payload_offset": 1134947840,
+      "member_name": "./val/chunk_000134.npz",
+      "member_sha256": "8e2652ccc4bf5169b8f1f6495fd5c3b7888ca40a8472007c553576f45a0e82f2",
+      "selected_rows": [
+        753
+      ],
+      "size_bytes": 346377
+    },
+    {
+      "global_header_offset": 689978368,
+      "global_payload_offset": 689978880,
+      "member_name": "./val/chunk_000175.npz",
+      "member_sha256": "722d55a0b3a91848375bfca29b72ab51a6fdd765cdcbf1c3353472bc15132799",
+      "selected_rows": [
+        659
+      ],
+      "size_bytes": 382358
+    },
+    {
+      "global_header_offset": 709562368,
+      "global_payload_offset": 709562880,
+      "member_name": "./val/chunk_000215.npz",
+      "member_sha256": "420ba49ca3aee919f953e972f89ff0bcd49cdc9095075c5f84e1e763886f7b5b",
+      "selected_rows": [
+        821
+      ],
+      "size_bytes": 382487
+    },
+    {
+      "global_header_offset": 581269504,
+      "global_payload_offset": 581270016,
+      "member_name": "./val/chunk_000218.npz",
+      "member_sha256": "340ee6968056d3dd38185f60b2ae13da0c9e8812fb0c16db81f328a092e8daf0",
+      "selected_rows": [
+        417
+      ],
+      "size_bytes": 375944
+    },
+    {
+      "global_header_offset": 661067264,
+      "global_payload_offset": 661067776,
+      "member_name": "./val/chunk_000249.npz",
+      "member_sha256": "e4f613b954da43ddfb87ae43755585e9e838f4ee2b5fc11bc9637c19bb58dead",
+      "selected_rows": [
+        903
+      ],
+      "size_bytes": 366953
+    },
+    {
+      "global_header_offset": 872887296,
+      "global_payload_offset": 872887808,
+      "member_name": "./val/chunk_000256.npz",
+      "member_sha256": "33e96ec412056713fbeb2d54a83e398bb01cba90b731ed318b9fbbdf5ceca658",
+      "selected_rows": [
+        384
+      ],
+      "size_bytes": 371551
+    },
+    {
+      "global_header_offset": 1056040448,
+      "global_payload_offset": 1056040960,
+      "member_name": "./val/chunk_000305.npz",
+      "member_sha256": "4608ef00d03180af56e7713e24550a7247d1bba5e12079334554b99f610bf39d",
+      "selected_rows": [
+        940
+      ],
+      "size_bytes": 360454
+    },
+    {
+      "global_header_offset": 882664448,
+      "global_payload_offset": 882664960,
+      "member_name": "./val/chunk_000314.npz",
+      "member_sha256": "816b7337fa27995ddaa53a17c89e344fbb56b6dcba7f40d348e2acda42df79fe",
+      "selected_rows": [
+        250
+      ],
+      "size_bytes": 375981
+    },
+    {
+      "global_header_offset": 1007094784,
+      "global_payload_offset": 1007095296,
+      "member_name": "./val/chunk_000328.npz",
+      "member_sha256": "7084d9118296f76627c3eec130bc02c8fa5adb5f7e9532a223087cb830d9a2ab",
+      "selected_rows": [
+        200
+      ],
+      "size_bytes": 378707
+    },
+    {
+      "global_header_offset": 1129414144,
+      "global_payload_offset": 1129414656,
+      "member_name": "./val/chunk_000335.npz",
+      "member_sha256": "a052aee19901cb62021ab0e753fd0bdef4435e047722a89195a87b5115efcb70",
+      "selected_rows": [
+        997
+      ],
+      "size_bytes": 372783
+    },
+    {
+      "global_header_offset": 954017280,
+      "global_payload_offset": 954017792,
+      "member_name": "./val/chunk_000370.npz",
+      "member_sha256": "2afd46c31abe620e8aa58ed56fde2e3e1f9d4fdbe7e295ae36ffb56d6f36c965",
+      "selected_rows": [
+        936
+      ],
+      "size_bytes": 378805
+    },
+    {
+      "global_header_offset": 1027646976,
+      "global_payload_offset": 1027647488,
+      "member_name": "./val/chunk_000400.npz",
+      "member_sha256": "1d1d9b541486ff8832dd1c4dda389c819ca353d5201be949002d8ed6ae2802de",
+      "selected_rows": [
+        81
+      ],
+      "size_bytes": 358708
+    },
+    {
+      "global_header_offset": 586849792,
+      "global_payload_offset": 586850304,
+      "member_name": "./val/chunk_000407.npz",
+      "member_sha256": "de476a18b13234859a4660a0e05ef6c0d0c2f14fb2c97439816e6d447c821285",
+      "selected_rows": [
+        55
+      ],
+      "size_bytes": 362076
+    },
+    {
+      "global_header_offset": 803665920,
+      "global_payload_offset": 803666432,
+      "member_name": "./val/chunk_000408.npz",
+      "member_sha256": "0d2ae436ad989311b8fbd1a103ebd3dc321e59854ea9d8e32c52c404ecd99182",
+      "selected_rows": [
+        368
+      ],
+      "size_bytes": 384082
+    },
+    {
+      "global_header_offset": 594699264,
+      "global_payload_offset": 594699776,
+      "member_name": "./val/chunk_000462.npz",
+      "member_sha256": "2c84ab19ca4949f8d2b23a4319923062a4eb3ab5ab27b50bfd4180ca5237b9ff",
+      "selected_rows": [
+        163
+      ],
+      "size_bytes": 360008
+    },
+    {
+      "global_header_offset": 780775936,
+      "global_payload_offset": 780776448,
+      "member_name": "./val/chunk_000463.npz",
+      "member_sha256": "b3b3f8d1b2a71231bca33ae6d37ca19e48ea4dd00fc5f1b1cde04ce6b752f488",
+      "selected_rows": [
+        742
+      ],
+      "size_bytes": 379155
+    },
+    {
+      "global_header_offset": 702813184,
+      "global_payload_offset": 702813696,
+      "member_name": "./val/chunk_000470.npz",
+      "member_sha256": "5f2e3d6156c03300e2a6af32fcff3108082a342fce3dd32939eefe92e775ff7c",
+      "selected_rows": [
+        435
+      ],
+      "size_bytes": 370916
+    },
+    {
+      "global_header_offset": 690361344,
+      "global_payload_offset": 690361856,
+      "member_name": "./val/chunk_000471.npz",
+      "member_sha256": "bd6eeb77eb9cc5d7bf57f9083502c79d12352c6133477d29e3b61c607dc4caf1",
+      "selected_rows": [
+        888
+      ],
+      "size_bytes": 381291
+    },
+    {
+      "global_header_offset": 1104174592,
+      "global_payload_offset": 1104175104,
+      "member_name": "./val/chunk_000492.npz",
+      "member_sha256": "c05b9aea04560f600178b66fdb2ae3960ee1bde0f8badaab1d44395d3846b35e",
+      "selected_rows": [
+        173
+      ],
+      "size_bytes": 364096
+    },
+    {
+      "global_header_offset": 999234048,
+      "global_payload_offset": 999234560,
+      "member_name": "./val/chunk_000526.npz",
+      "member_sha256": "9038e3733923edb757d87e99daa63be979f893f6b8b654fd38f8278bbd48068b",
+      "selected_rows": [
+        791
+      ],
+      "size_bytes": 347742
+    },
+    {
+      "global_header_offset": 884950528,
+      "global_payload_offset": 884951040,
+      "member_name": "./val/chunk_000538.npz",
+      "member_sha256": "a775a61fd2c0d4521e960c9d1bee1b4ba596b491b62e0e7ceb5d6748ce4b608e",
+      "selected_rows": [
+        269
+      ],
+      "size_bytes": 365970
+    },
+    {
+      "global_header_offset": 775186432,
+      "global_payload_offset": 775186944,
+      "member_name": "./val/chunk_000539.npz",
+      "member_sha256": "ad7a6b6638626f96ea9ed5c5a2b1b7209610937408c24816ae5d73d6b2086410",
+      "selected_rows": [
+        455
+      ],
+      "size_bytes": 385551
+    },
+    {
+      "global_header_offset": 612659712,
+      "global_payload_offset": 612660224,
+      "member_name": "./val/chunk_000545.npz",
+      "member_sha256": "f5b90f47d3d774b955cfff74c403b93b0d8a3fc38c0889f948314405349495c2",
+      "selected_rows": [
+        951
+      ],
+      "size_bytes": 378057
+    },
+    {
+      "global_header_offset": 877761024,
+      "global_payload_offset": 877761536,
+      "member_name": "./val/chunk_000548.npz",
+      "member_sha256": "2b4073092c5a0836ff404742237b926801a57383c284314c8ecb3e83d0b339cf",
+      "selected_rows": [
+        18
+      ],
+      "size_bytes": 378278
+    },
+    {
+      "global_header_offset": 1081618944,
+      "global_payload_offset": 1081619456,
+      "member_name": "./val/chunk_000549.npz",
+      "member_sha256": "8a01cb458ab7387409d1b48036b404f82512de032d00c77494dd26ba52c53a8d",
+      "selected_rows": [
+        487
+      ],
+      "size_bytes": 381236
+    },
+    {
+      "global_header_offset": 929155584,
+      "global_payload_offset": 929156096,
+      "member_name": "./val/chunk_000550.npz",
+      "member_sha256": "b064a598bd2182f396fb8714a32d33d7698852dde6b6c0a50e2cd29afe189951",
+      "selected_rows": [
+        176
+      ],
+      "size_bytes": 388335
+    },
+    {
+      "global_header_offset": 1041069568,
+      "global_payload_offset": 1041070080,
+      "member_name": "./val/chunk_000552.npz",
+      "member_sha256": "31bf462e8ab23b70c8e9ddbf25fd9ae4d6665dfc7cedb17fc14a2f166cc50eab",
+      "selected_rows": [
+        227
+      ],
+      "size_bytes": 383771
+    },
+    {
+      "global_header_offset": 1055655936,
+      "global_payload_offset": 1055656448,
+      "member_name": "./val/chunk_000553.npz",
+      "member_sha256": "3fefbde0f4b5e2f6b54ea9e18f4cf2d250bf8c2260912691d2861990ed633b6b",
+      "selected_rows": [
+        685,
+        705
+      ],
+      "size_bytes": 383961
+    },
+    {
+      "global_header_offset": 1052313088,
+      "global_payload_offset": 1052313600,
+      "member_name": "./val/chunk_000557.npz",
+      "member_sha256": "f5447c1fc0aad98b5abf41276445f408947dd40b209fbaae036981b892aad63a",
+      "selected_rows": [
+        411
+      ],
+      "size_bytes": 366859
+    },
+    {
+      "global_header_offset": 1131260928,
+      "global_payload_offset": 1131261440,
+      "member_name": "./val/chunk_000583.npz",
+      "member_sha256": "a36e0667974724464be4f891e9559cc48bfd1259b20cb59bcf9471653edb612d",
+      "selected_rows": [
+        643
+      ],
+      "size_bytes": 384597
+    },
+    {
+      "global_header_offset": 847754752,
+      "global_payload_offset": 847755264,
+      "member_name": "./val/chunk_000589.npz",
+      "member_sha256": "a0a662c4e554f2c86326145ba05bad17cea29a83d00a95195ee6d3cb3083652c",
+      "selected_rows": [
+        458
+      ],
+      "size_bytes": 382180
+    },
+    {
+      "global_header_offset": 767333376,
+      "global_payload_offset": 767333888,
+      "member_name": "./val/chunk_000609.npz",
+      "member_sha256": "6de3a39cba8ee942d117a9cebc6de66e32fa888f228a91645e78146f3a04f395",
+      "selected_rows": [
+        91
+      ],
+      "size_bytes": 392531
+    },
+    {
+      "global_header_offset": 802550784,
+      "global_payload_offset": 802551296,
+      "member_name": "./val/chunk_000611.npz",
+      "member_sha256": "44763921ad23ca15eba0c8786c7a64575afd65ca862dce97d3d3aa13538d3053",
+      "selected_rows": [
+        809
+      ],
+      "size_bytes": 364394
+    },
+    {
+      "global_header_offset": 1131646464,
+      "global_payload_offset": 1131646976,
+      "member_name": "./val/chunk_000615.npz",
+      "member_sha256": "cccc09a751225c399394542596f745a03c1239910da4c5cb00a89bf8e1be30e0",
+      "selected_rows": [
+        659
+      ],
+      "size_bytes": 346487
+    },
+    {
+      "global_header_offset": 654305792,
+      "global_payload_offset": 654306304,
+      "member_name": "./val/chunk_000624.npz",
+      "member_sha256": "e717651c1e1f8bd3cc65d01567a53f5b83c39b62e50846266fcc43bf4257a1f7",
+      "selected_rows": [
+        804
+      ],
+      "size_bytes": 387957
+    },
+    {
+      "global_header_offset": 730512384,
+      "global_payload_offset": 730512896,
+      "member_name": "./val/chunk_000629.npz",
+      "member_sha256": "19fd3ee772bd3bdeeb4017979d7ae15dcecd748b91cf9662bec4fe63add58e23",
+      "selected_rows": [
+        325
+      ],
+      "size_bytes": 373539
+    },
+    {
+      "global_header_offset": 830424576,
+      "global_payload_offset": 830425088,
+      "member_name": "./val/chunk_000633.npz",
+      "member_sha256": "118c80e92543bc376886115ac1c48931a3d356c033127961e09780e13a1d0894",
+      "selected_rows": [
+        956
+      ],
+      "size_bytes": 381825
+    },
+    {
+      "global_header_offset": 1004441600,
+      "global_payload_offset": 1004442112,
+      "member_name": "./val/chunk_000640.npz",
+      "member_sha256": "19458b5d1954a8b587c06e572eb90ecc8859d0b347c96c5e81a8b83c1f747c53",
+      "selected_rows": [
+        756
+      ],
+      "size_bytes": 393431
+    },
+    {
+      "global_header_offset": 798028288,
+      "global_payload_offset": 798028800,
+      "member_name": "./val/chunk_000647.npz",
+      "member_sha256": "e9af19282faee736d2b0c9a428436e3c325698c4036ca70bfcc18b3c11b33c5d",
+      "selected_rows": [
+        126
+      ],
+      "size_bytes": 385873
+    },
+    {
+      "global_header_offset": 696762368,
+      "global_payload_offset": 696762880,
+      "member_name": "./val/chunk_000665.npz",
+      "member_sha256": "38a109fd55dd8e34ae014220ef87f3ac9a4f14380a4a7eefba4aea6760de408f",
+      "selected_rows": [
+        234
+      ],
+      "size_bytes": 376955
+    },
+    {
+      "global_header_offset": 610034176,
+      "global_payload_offset": 610034688,
+      "member_name": "./val/chunk_000679.npz",
+      "member_sha256": "220e50c70ca5660c57d55b1fd2e719a90d1b5e0f9e82ed1e9b0a4f2a6f2ab51a",
+      "selected_rows": [
+        13
+      ],
+      "size_bytes": 372364
+    },
+    {
+      "global_header_offset": 792400384,
+      "global_payload_offset": 792400896,
+      "member_name": "./val/chunk_000693.npz",
+      "member_sha256": "fb024793aec2cadab495d0fd37c989e702b8a3057a91922d30dfb8cee3f6810d",
+      "selected_rows": [
+        739
+      ],
+      "size_bytes": 351852
+    },
+    {
+      "global_header_offset": 1104908800,
+      "global_payload_offset": 1104909312,
+      "member_name": "./val/chunk_000694.npz",
+      "member_sha256": "5709954bcad884fdd251a3025bac9097c88b06084335555a73b74fc1cc309c91",
+      "selected_rows": [
+        193
+      ],
+      "size_bytes": 378602
+    },
+    {
+      "global_header_offset": 1102671360,
+      "global_payload_offset": 1102671872,
+      "member_name": "./val/chunk_000713.npz",
+      "member_sha256": "c8e797f0bd2e0cb92b1766c5bb1d6ea658b2971e6490192b37f53e5a256fec27",
+      "selected_rows": [
+        783
+      ],
+      "size_bytes": 381079
+    },
+    {
+      "global_header_offset": 750832128,
+      "global_payload_offset": 750832640,
+      "member_name": "./val/chunk_000719.npz",
+      "member_sha256": "dd64b33133a3e2077a51a2584e4ca67f87389812a0c8994ae151965196e613f8",
+      "selected_rows": [
+        879
+      ],
+      "size_bytes": 369162
+    },
+    {
+      "global_header_offset": 1044765696,
+      "global_payload_offset": 1044766208,
+      "member_name": "./val/chunk_000743.npz",
+      "member_sha256": "d664a654e79fa7e0cba766e98b5d83681d5c5c9a0a715752e82f737bd4b946bf",
+      "selected_rows": [
+        691
+      ],
+      "size_bytes": 385595
+    },
+    {
+      "global_header_offset": 915659776,
+      "global_payload_offset": 915660288,
+      "member_name": "./val/chunk_000748.npz",
+      "member_sha256": "a92b7164b469552230b1dd5d2eef96848b2db88b3d41965d8695ed8bacb4b555",
+      "selected_rows": [
+        435
+      ],
+      "size_bytes": 367998
+    },
+    {
+      "global_header_offset": 1116618240,
+      "global_payload_offset": 1116618752,
+      "member_name": "./val/chunk_000764.npz",
+      "member_sha256": "7fdd84f5d043ae49c58adbac0fb007f9553e58eb640db6cf685a3223b9273794",
+      "selected_rows": [
+        885
+      ],
+      "size_bytes": 390652
+    },
+    {
+      "global_header_offset": 873259520,
+      "global_payload_offset": 873260032,
+      "member_name": "./val/chunk_000775.npz",
+      "member_sha256": "43b1baf97d5d385dbaa615d59e0441b958515c4e020c9cb15f51de2401fc8c6d",
+      "selected_rows": [
+        498
+      ],
+      "size_bytes": 382544
+    },
+    {
+      "global_header_offset": 990584832,
+      "global_payload_offset": 990585344,
+      "member_name": "./val/chunk_000776.npz",
+      "member_sha256": "6b08d1e935cc8f282519d9ee23151d9b373ed9b3e8d17c904df5fad5b758f889",
+      "selected_rows": [
+        774
+      ],
+      "size_bytes": 371119
+    },
+    {
+      "global_header_offset": 807083008,
+      "global_payload_offset": 807083520,
+      "member_name": "./val/chunk_000788.npz",
+      "member_sha256": "c9d3ed4cfe9841cfb4f60e013d16928bc87e9a25f184908878c5aaf678edee39",
+      "selected_rows": [
+        644
+      ],
+      "size_bytes": 380457
+    },
+    {
+      "global_header_offset": 592426496,
+      "global_payload_offset": 592427008,
+      "member_name": "./val/chunk_000789.npz",
+      "member_sha256": "53bfd823a15aed40642f0a7e92156c682a12fa95c8dc897b75b1e717bb148ffa",
+      "selected_rows": [
+        591
+      ],
+      "size_bytes": 390090
+    },
+    {
+      "global_header_offset": 756104192,
+      "global_payload_offset": 756104704,
+      "member_name": "./val/chunk_000794.npz",
+      "member_sha256": "10c6d7d4fba3ddeabfcadf228dc94558a37f0db24c9585fead7320ed98c09896",
+      "selected_rows": [
+        718
+      ],
+      "size_bytes": 371096
+    },
+    {
+      "global_header_offset": 997731840,
+      "global_payload_offset": 997732352,
+      "member_name": "./val/chunk_000813.npz",
+      "member_sha256": "9769da3fa28ea7f72ffe83e5fdb6d19a7a742fcf57c755d37ca39811d4669d74",
+      "selected_rows": [
+        442
+      ],
+      "size_bytes": 380198
+    },
+    {
+      "global_header_offset": 598051840,
+      "global_payload_offset": 598052352,
+      "member_name": "./val/chunk_000821.npz",
+      "member_sha256": "c9a4769d7481ea6f2dc38457a31ce338291b5609bfcff1746a37ed8dfcd4f1c5",
+      "selected_rows": [
+        535
+      ],
+      "size_bytes": 344891
+    },
+    {
+      "global_header_offset": 834953728,
+      "global_payload_offset": 834954240,
+      "member_name": "./val/chunk_000836.npz",
+      "member_sha256": "b76bf3252f97e1633fa090220eeab243e0978caca5990e0c27a42b39ab35b22a",
+      "selected_rows": [
+        940
+      ],
+      "size_bytes": 372451
+    },
+    {
+      "global_header_offset": 1030646784,
+      "global_payload_offset": 1030647296,
+      "member_name": "./val/chunk_000837.npz",
+      "member_sha256": "8a7159b39fc881f833648d94a48bdeb637c6d72bc56dc910a8cf541601648d71",
+      "selected_rows": [
+        1009
+      ],
+      "size_bytes": 357237
+    },
+    {
+      "global_header_offset": 622428672,
+      "global_payload_offset": 622429184,
+      "member_name": "./val/chunk_000840.npz",
+      "member_sha256": "362ad3a31e05e5a0fd36df02f3ddbc3e3a16b15cc9742c5db3c57e070cbac6a9",
+      "selected_rows": [
+        850
+      ],
+      "size_bytes": 374229
+    },
+    {
+      "global_header_offset": 886051840,
+      "global_payload_offset": 886052352,
+      "member_name": "./val/chunk_000851.npz",
+      "member_sha256": "feb276c7f6108feed7dcfb7ee53e360fa0a2a9d5025e821ecef17ae2587dc4a7",
+      "selected_rows": [
+        427
+      ],
+      "size_bytes": 383665
+    },
+    {
+      "global_header_offset": 1082000896,
+      "global_payload_offset": 1082001408,
+      "member_name": "./val/chunk_000859.npz",
+      "member_sha256": "66cf4ebbdb25542f9e62a1c61cc78a091106c33df26cd24c89aed9f9fcfde381",
+      "selected_rows": [
+        508
+      ],
+      "size_bytes": 379282
+    },
+    {
+      "global_header_offset": 807464448,
+      "global_payload_offset": 807464960,
+      "member_name": "./val/chunk_000861.npz",
+      "member_sha256": "75ff57e1771083006d67d1021220c9535562611079a61b9179e7f15c7de9255c",
+      "selected_rows": [
+        403
+      ],
+      "size_bytes": 387585
+    },
+    {
+      "global_header_offset": 801806848,
+      "global_payload_offset": 801807360,
+      "member_name": "./val/chunk_000864.npz",
+      "member_sha256": "826d469528362898731ea5fe6e59bbf4200df051e383de1318f4889e0f07b48b",
+      "selected_rows": [
+        364
+      ],
+      "size_bytes": 375084
+    },
+    {
+      "global_header_offset": 948760576,
+      "global_payload_offset": 948761088,
+      "member_name": "./val/chunk_000866.npz",
+      "member_sha256": "6ab58457c8b11e0291b483b323928a264b02bbe9b2bc21a459528e0a0089f703",
+      "selected_rows": [
+        801
+      ],
+      "size_bytes": 365447
+    },
+    {
+      "global_header_offset": 1111712768,
+      "global_payload_offset": 1111713280,
+      "member_name": "./val/chunk_000873.npz",
+      "member_sha256": "6713b087fddfd8a472b6a0a051a637a7c12b606158aea7f21441c0910aa8af82",
+      "selected_rows": [
+        937
+      ],
+      "size_bytes": 363110
+    },
+    {
+      "global_header_offset": 691859968,
+      "global_payload_offset": 691860480,
+      "member_name": "./val/chunk_000899.npz",
+      "member_sha256": "ee579eacb86f814eac44474ff64b7210e2ba4cc4c9e30a77b2af5dfed23a6780",
+      "selected_rows": [
+        765
+      ],
+      "size_bytes": 363980
+    },
+    {
+      "global_header_offset": 906329088,
+      "global_payload_offset": 906329600,
+      "member_name": "./val/chunk_000944.npz",
+      "member_sha256": "2497e085301a5d14eb5ff46ae524fe1df1975de2139329ec74b38eefe1ec72ad",
+      "selected_rows": [
+        557
+      ],
+      "size_bytes": 362705
+    },
+    {
+      "global_header_offset": 679050752,
+      "global_payload_offset": 679051264,
+      "member_name": "./val/chunk_000957.npz",
+      "member_sha256": "b6674171229a186e6b8371d12b553053d479c8f330881b360daaca2fd61f4479",
+      "selected_rows": [
+        227
+      ],
+      "size_bytes": 364243
+    },
+    {
+      "global_header_offset": 704667136,
+      "global_payload_offset": 704667648,
+      "member_name": "./val/chunk_000958.npz",
+      "member_sha256": "57b9668a4c337b9b29bdb591d0d24d1883cf4ebf08a371f7d351bb7684a4677f",
+      "selected_rows": [
+        375
+      ],
+      "size_bytes": 385179
+    },
+    {
+      "global_header_offset": 871028736,
+      "global_payload_offset": 871029248,
+      "member_name": "./val/chunk_000960.npz",
+      "member_sha256": "95b3203557bfa2c6ded9d004ee796226e2993a470fa15f0523015f5f49bd2217",
+      "selected_rows": [
+        490
+      ],
+      "size_bytes": 368804
+    },
+    {
+      "global_header_offset": 593951232,
+      "global_payload_offset": 593951744,
+      "member_name": "./val/chunk_000967.npz",
+      "member_sha256": "6cd76bd957c241809797ebe1378ad1eca70d06e935784201b48b4da7ebed61bb",
+      "selected_rows": [
+        89
+      ],
+      "size_bytes": 366104
+    },
+    {
+      "global_header_offset": 625029632,
+      "global_payload_offset": 625030144,
+      "member_name": "./val/chunk_000991.npz",
+      "member_sha256": "7d254a01447555d71aa46a6e4606e184dcf672d7053395746dbaa4b5ff1b8760",
+      "selected_rows": [
+        972
+      ],
+      "size_bytes": 379359
+    },
+    {
+      "global_header_offset": 739572224,
+      "global_payload_offset": 739572736,
+      "member_name": "./val/chunk_001001.npz",
+      "member_sha256": "ae24106df1d5eaaf2baf119d057dca6edf61b843db97a7c99360401ded972ef5",
+      "selected_rows": [
+        793
+      ],
+      "size_bytes": 364958
+    },
+    {
+      "global_header_offset": 1080091136,
+      "global_payload_offset": 1080091648,
+      "member_name": "./val/chunk_001002.npz",
+      "member_sha256": "ea7e87430b30f59ce530ffe112fd5117f63eef028acce6fc12887137cb96efa4",
+      "selected_rows": [
+        309
+      ],
+      "size_bytes": 380291
+    },
+    {
+      "global_header_offset": 785246720,
+      "global_payload_offset": 785247232,
+      "member_name": "./val/chunk_001018.npz",
+      "member_sha256": "8ca5b8d4396211e14c6f1a2b2483c7195432ef5d8e3d2b3a816efdb2c241a7d7",
+      "selected_rows": [
+        436
+      ],
+      "size_bytes": 366792
+    },
+    {
+      "global_header_offset": 879297536,
+      "global_payload_offset": 879298048,
+      "member_name": "./val/chunk_001020.npz",
+      "member_sha256": "76e612a9e6a7f37ca64884247ebe567ee028d95ba93d856ba3a732aaf3d53887",
+      "selected_rows": [
+        599
+      ],
+      "size_bytes": 368380
+    },
+    {
+      "global_header_offset": 827749376,
+      "global_payload_offset": 827749888,
+      "member_name": "./val/chunk_001042.npz",
+      "member_sha256": "c11d553cb2342239cd9854a3015032b0ebab64fcde54a8cecd3a74255650a9b7",
+      "selected_rows": [
+        611
+      ],
+      "size_bytes": 385210
+    },
+    {
+      "global_header_offset": 735396864,
+      "global_payload_offset": 735397376,
+      "member_name": "./val/chunk_001063.npz",
+      "member_sha256": "ff422f22a532cb775dc006bd67b045f31b407abc469182edde261e4572fb7b8a",
+      "selected_rows": [
+        286
+      ],
+      "size_bytes": 391611
+    },
+    {
+      "global_header_offset": 716707840,
+      "global_payload_offset": 716708352,
+      "member_name": "./val/chunk_001066.npz",
+      "member_sha256": "ac14df15528497ea1b019ba35cc3e6d7ec070baf7d8c8c6bf508bba3079c965d",
+      "selected_rows": [
+        124
+      ],
+      "size_bytes": 376275
+    },
+    {
+      "global_header_offset": 656925696,
+      "global_payload_offset": 656926208,
+      "member_name": "./val/chunk_001072.npz",
+      "member_sha256": "beaeca1960e8d763903e0e264a2fca93a3975f70cab78c64d648b9e922bc503f",
+      "selected_rows": [
+        877
+      ],
+      "size_bytes": 360568
+    },
+    {
+      "global_header_offset": 923549184,
+      "global_payload_offset": 923549696,
+      "member_name": "./val/chunk_001088.npz",
+      "member_sha256": "d9b69adfd7b228c96937a7276b87bb024d14191c439d156c9d345a781391ae3b",
+      "selected_rows": [
+        475,
+        801
+      ],
+      "size_bytes": 369406
+    },
+    {
+      "global_header_offset": 631753216,
+      "global_payload_offset": 631753728,
+      "member_name": "./val/chunk_001092.npz",
+      "member_sha256": "d8bc2ef17434b2681b47b41896a82957be3fe34fd6dada47804d92297e29073f",
+      "selected_rows": [
+        185
+      ],
+      "size_bytes": 376833
+    },
+    {
+      "global_header_offset": 689610240,
+      "global_payload_offset": 689610752,
+      "member_name": "./val/chunk_001095.npz",
+      "member_sha256": "30bcf0af78f9b354237a8a839fb1f149bf4b48b87caae79321a1fe3e2bea189d",
+      "selected_rows": [
+        811
+      ],
+      "size_bytes": 367279
+    },
+    {
+      "global_header_offset": 688476672,
+      "global_payload_offset": 688477184,
+      "member_name": "./val/chunk_001166.npz",
+      "member_sha256": "ca10a830b22fbf21159971a36ecc6bdbf722d2f0dc661273fd4dbcc252afd6c4",
+      "selected_rows": [
+        408
+      ],
+      "size_bytes": 369976
+    },
+    {
+      "global_header_offset": 696402944,
+      "global_payload_offset": 696403456,
+      "member_name": "./val/chunk_001195.npz",
+      "member_sha256": "cecb857439f59a9441be24256e267bb05fa03e64bd4848a2dcc3c6566374b257",
+      "selected_rows": [
+        28
+      ],
+      "size_bytes": 358722
+    },
+    {
+      "global_header_offset": 1092517888,
+      "global_payload_offset": 1092518400,
+      "member_name": "./val/chunk_001200.npz",
+      "member_sha256": "56386fef513f993cc47823ea0750ca17396a13197d1ffbbad37547a3c7ae9550",
+      "selected_rows": [
+        608
+      ],
+      "size_bytes": 381200
+    },
+    {
+      "global_header_offset": 850349568,
+      "global_payload_offset": 850350080,
+      "member_name": "./val/chunk_001205.npz",
+      "member_sha256": "8c495f73e9520220805efb681a0babee58dc2997bf12c7263e59abc7856108a5",
+      "selected_rows": [
+        823
+      ],
+      "size_bytes": 378425
+    },
+    {
+      "global_header_offset": 682415616,
+      "global_payload_offset": 682416128,
+      "member_name": "./val/chunk_001212.npz",
+      "member_sha256": "06d3d627b8da711e06418e8cb001df075e7775580bc5c2f1bcdd403d33dc1713",
+      "selected_rows": [
+        553
+      ],
+      "size_bytes": 369781
+    },
+    {
+      "global_header_offset": 616412672,
+      "global_payload_offset": 616413184,
+      "member_name": "./val/chunk_001215.npz",
+      "member_sha256": "6113ba98243de0ec11829a167c42cc094dbd56165fd8550cb9ad0a2cc2e86519",
+      "selected_rows": [
+        389,
+        806
+      ],
+      "size_bytes": 376928
+    },
+    {
+      "global_header_offset": 1005594624,
+      "global_payload_offset": 1005595136,
+      "member_name": "./val/chunk_001227.npz",
+      "member_sha256": "2a6bfc9fa73c977e6ff12eeaae3cd32201d98fd9f58a2b084ad060034c9323d6",
+      "selected_rows": [
+        677
+      ],
+      "size_bytes": 373260
+    },
+    {
+      "global_header_offset": 619033088,
+      "global_payload_offset": 619033600,
+      "member_name": "./val/chunk_001231.npz",
+      "member_sha256": "93c06df9c854d092782409503adcc2a9515e148df02395f373e39c0489ffcf28",
+      "selected_rows": [
+        621
+      ],
+      "size_bytes": 381937
+    },
+    {
+      "global_header_offset": 607002624,
+      "global_payload_offset": 607003136,
+      "member_name": "./val/chunk_001235.npz",
+      "member_sha256": "6db52c5ada450b99987bbea9a9a28c61d78e4861cd8490dacf948bae21f95eb6",
+      "selected_rows": [
+        318
+      ],
+      "size_bytes": 369899
+    },
+    {
+      "global_header_offset": 939359744,
+      "global_payload_offset": 939360256,
+      "member_name": "./val/chunk_001258.npz",
+      "member_sha256": "2c8dfdeffbc2127e1411cbeb8ff75ecb8c0cedf1b6741d15a84538e91c4b3e5f",
+      "selected_rows": [
+        727
+      ],
+      "size_bytes": 398791
+    },
+    {
+      "global_header_offset": 681286656,
+      "global_payload_offset": 681287168,
+      "member_name": "./val/chunk_001267.npz",
+      "member_sha256": "e208bc8d228b5e2ac2e74c4d6e171d23fe7586a31a5976373f1b7bf51b76b938",
+      "selected_rows": [
+        707
+      ],
+      "size_bytes": 376292
+    },
+    {
+      "global_header_offset": 649076224,
+      "global_payload_offset": 649076736,
+      "member_name": "./val/chunk_001291.npz",
+      "member_sha256": "2f4d1c2a9477767b8e314465c9957cb2081eb8d62d33259b8ac027315cccfe37",
+      "selected_rows": [
+        775
+      ],
+      "size_bytes": 366517
+    },
+    {
+      "global_header_offset": 695666688,
+      "global_payload_offset": 695667200,
+      "member_name": "./val/chunk_001312.npz",
+      "member_sha256": "2f679cb5839736028227560098d5c78c966de8e058a1d736139728aeee0017d7",
+      "selected_rows": [
+        398
+      ],
+      "size_bytes": 366231
+    },
+    {
+      "global_header_offset": 848888320,
+      "global_payload_offset": 848888832,
+      "member_name": "./val/chunk_001316.npz",
+      "member_sha256": "f2da4de4003ba6bd2223f3983cf3d023ddeebc45e0d5c42c9d874e6c31df925c",
+      "selected_rows": [
+        747
+      ],
+      "size_bytes": 374715
+    },
+    {
+      "global_header_offset": 1113232896,
+      "global_payload_offset": 1113233408,
+      "member_name": "./val/chunk_001326.npz",
+      "member_sha256": "a1f3cd89f7251cb9407227087ff51ff794007e5300d8b154b80134f14b765c95",
+      "selected_rows": [
+        107,
+        841
+      ],
+      "size_bytes": 352830
+    },
+    {
+      "global_header_offset": 709945856,
+      "global_payload_offset": 709946368,
+      "member_name": "./val/chunk_001335.npz",
+      "member_sha256": "e8ccb1cc30d59b2703481ef95c6845bdab3be394e3bc05710143d46ddc7107d4",
+      "selected_rows": [
+        950
+      ],
+      "size_bytes": 371753
+    },
+    {
+      "global_header_offset": 821373440,
+      "global_payload_offset": 821373952,
+      "member_name": "./val/chunk_001353.npz",
+      "member_sha256": "e7b278e38877cbe982e8e5f44e6ceb89e4ea7fbdda3f971eb2a3c00fd9a6ee80",
+      "selected_rows": [
+        823
+      ],
+      "size_bytes": 372995
+    },
+    {
+      "global_header_offset": 1133849600,
+      "global_payload_offset": 1133850112,
+      "member_name": "./val/chunk_001360.npz",
+      "member_sha256": "a95da24b63f92c60cd1e9942dba0612b1c92998b20fc2b81a9289d7ec6b23a4c",
+      "selected_rows": [
+        37
+      ],
+      "size_bytes": 360931
+    },
+    {
+      "global_header_offset": 1056401920,
+      "global_payload_offset": 1056402432,
+      "member_name": "./val/chunk_001365.npz",
+      "member_sha256": "04d52dc3abca4f99bc5ef3ea093cab4284f1241d18db9774c1237ee2ec60a67f",
+      "selected_rows": [
+        305
+      ],
+      "size_bytes": 369762
+    },
+    {
+      "global_header_offset": 904061952,
+      "global_payload_offset": 904062464,
+      "member_name": "./val/chunk_001391.npz",
+      "member_sha256": "3abf2418acaa241b71719d299db23c05a6aa6d4fadba5ada2cb2563cd9e4c47b",
+      "selected_rows": [
+        875
+      ],
+      "size_bytes": 385815
+    },
+    {
+      "global_header_offset": 683174400,
+      "global_payload_offset": 683174912,
+      "member_name": "./val/chunk_001393.npz",
+      "member_sha256": "93d382df94dae0e87b1ef6644db8e421940d4d1b29f336a2ecce3f9d4bfc1559",
+      "selected_rows": [
+        539,
+        755
+      ],
+      "size_bytes": 359055
+    },
+    {
+      "global_header_offset": 1026177024,
+      "global_payload_offset": 1026177536,
+      "member_name": "./val/chunk_001395.npz",
+      "member_sha256": "b2f97b4ec6a668f02fb1bc389ae0e91c43c481fcc1d36a1c93736224a168c1d2",
+      "selected_rows": [
+        659
+      ],
+      "size_bytes": 382932
+    },
+    {
+      "global_header_offset": 682028032,
+      "global_payload_offset": 682028544,
+      "member_name": "./val/chunk_001425.npz",
+      "member_sha256": "29b969c080e73e9373325fa0d03a5b961af0a47eaefb74c1582f153846ebd729",
+      "selected_rows": [
+        498
+      ],
+      "size_bytes": 386676
+    },
+    {
+      "global_header_offset": 834568704,
+      "global_payload_offset": 834569216,
+      "member_name": "./val/chunk_001426.npz",
+      "member_sha256": "b7440852052643616c24d14cc2212047c61d323515d02aaa26d5b3f739762b7e",
+      "selected_rows": [
+        28
+      ],
+      "size_bytes": 384131
+    },
+    {
+      "global_header_offset": 994354176,
+      "global_payload_offset": 994354688,
+      "member_name": "./val/chunk_001457.npz",
+      "member_sha256": "ed19e8bbd6163b25fb0e5c7ad88e8c7d70d83d83d653e8053f1a5e3048e3451c",
+      "selected_rows": [
+        9
+      ],
+      "size_bytes": 385189
+    },
+    {
+      "global_header_offset": 1109793792,
+      "global_payload_offset": 1109794304,
+      "member_name": "./val/chunk_001480.npz",
+      "member_sha256": "81e55e17533c34a2f7d88c7bb40e4b4839366d4601c403d387f80d7b06ea0a6b",
+      "selected_rows": [
+        420,
+        613
+      ],
+      "size_bytes": 382043
+    },
+    {
+      "global_header_offset": 983811072,
+      "global_payload_offset": 983811584,
+      "member_name": "./val/chunk_001520.npz",
+      "member_sha256": "e4efc722d95e06660035c19b8602962d72a587e93ac9c51e5b699da88867808a",
+      "selected_rows": [
+        151
+      ],
+      "size_bytes": 367269
+    },
+    {
+      "global_header_offset": 834188288,
+      "global_payload_offset": 834188800,
+      "member_name": "./val/chunk_001521.npz",
+      "member_sha256": "d69a056c7684c2eb4058d484e67dcbc9e3c35dc28a684d950ac63a7e5d381ced",
+      "selected_rows": [
+        13
+      ],
+      "size_bytes": 379675
+    }
+  ]
+}

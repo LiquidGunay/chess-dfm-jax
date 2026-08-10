@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Fail-closed host resource guard for local GPU research commands.
+"""Fail-closed resource guard for local GPU research commands.
 
-The A10G host has much less RAM than GPU memory and no swap.  JAX compilation
-can therefore destabilize the whole machine before accelerator OOM handling is
-relevant.  This wrapper constrains CPU affinity, gives the child a high OOM
+Host RAM or local storage can be exhausted before accelerator OOM handling is
+relevant. This wrapper constrains CPU affinity, gives the child a high OOM
 victim preference, monitors process-group RSS and system MemAvailable, and
-rejects checkpoint schedules that would consume too much local disk.
+rejects checkpoint schedules that would exceed physical or logical storage
+budgets.
 """
 
 from __future__ import annotations
@@ -41,6 +41,8 @@ class GuardConfig:
     max_process_group_rss_bytes: int = 7 * GIB
     min_disk_reserve_bytes: int = 30 * GIB
     checkpoint_bytes: int = 2 * GIB
+    max_workspace_bytes: int = 30 * GIB
+    min_workspace_reserve_bytes: int = 5 * GIB
     max_checkpoint_writes: int = 2
     poll_seconds: float = 0.05
     termination_grace_seconds: float = 5.0
@@ -109,13 +111,13 @@ def config_from_environ(environ: Mapping[str, str] | None = None) -> GuardConfig
             env,
             "CHESS_DFM_GUARD_MIN_START_AVAILABLE_BYTES",
             8 * GIB,
-            minimum=8 * GIB,
+            minimum=2 * GIB,
         ),
         min_runtime_available_bytes=_env_int(
             env,
             "CHESS_DFM_GUARD_MIN_RUNTIME_AVAILABLE_BYTES",
             3 * GIB,
-            minimum=3 * GIB,
+            minimum=1 * GIB,
         ),
         max_process_group_rss_bytes=_env_int(
             env,
@@ -128,13 +130,25 @@ def config_from_environ(environ: Mapping[str, str] | None = None) -> GuardConfig
             env,
             "CHESS_DFM_GUARD_MIN_DISK_RESERVE_BYTES",
             30 * GIB,
-            minimum=30 * GIB,
+            minimum=1 * GIB,
         ),
         checkpoint_bytes=_env_int(
             env,
             "CHESS_DFM_GUARD_CHECKPOINT_BYTES",
             2 * GIB,
             minimum=2 * GIB,
+        ),
+        max_workspace_bytes=_env_int(
+            env,
+            "CHESS_DFM_GUARD_MAX_WORKSPACE_BYTES",
+            30 * GIB,
+            minimum=10 * GIB,
+        ),
+        min_workspace_reserve_bytes=_env_int(
+            env,
+            "CHESS_DFM_GUARD_MIN_WORKSPACE_RESERVE_BYTES",
+            5 * GIB,
+            minimum=1 * GIB,
         ),
         max_checkpoint_writes=_env_int(
             env,
@@ -177,6 +191,12 @@ def config_from_environ(environ: Mapping[str, str] | None = None) -> GuardConfig
             "Runtime MemAvailable floor must be below the launch floor: "
             f"{config.min_runtime_available_bytes} >= "
             f"{config.min_start_available_bytes}"
+        )
+    if config.min_workspace_reserve_bytes >= config.max_workspace_bytes:
+        raise GuardViolation(
+            "Workspace reserve must be below its logical budget: "
+            f"{config.min_workspace_reserve_bytes} >= "
+            f"{config.max_workspace_bytes}"
         )
     return config
 
@@ -405,22 +425,81 @@ def _terminate_process_group(
     child.wait()
 
 
+def validated_workspace(workspace: Path) -> Path:
+    """Require an actual chess-dfm checkout without hard-coding its mount."""
+
+    try:
+        resolved = workspace.resolve(strict=True)
+    except FileNotFoundError as exc:
+        raise GuardViolation(f"Guard workspace does not exist: {workspace}") from exc
+    required_markers = (
+        resolved / "pyproject.toml",
+        resolved / "research" / "resource_guard.py",
+        resolved / "research" / "train_torch.py",
+    )
+    if not resolved.is_dir() or not all(path.is_file() for path in required_markers):
+        raise GuardViolation(
+            "Guard workspace must be a chess-dfm checkout with pyproject.toml, "
+            f"resource_guard.py, and train_torch.py: {resolved}"
+        )
+    return resolved
+
+
+def workspace_usage_bytes(workspace: Path) -> int:
+    """Return logical regular-file bytes without following directory symlinks."""
+
+    total = 0
+    for directory, _subdirectories, filenames in os.walk(workspace):
+        root = Path(directory)
+        for filename in filenames:
+            path = root / filename
+            try:
+                if path.is_symlink():
+                    continue
+                total += path.stat().st_size
+            except FileNotFoundError:
+                # A cache file may disappear while it is being pruned. The
+                # next launch will remeasure; never follow or recreate it.
+                continue
+    return total
+
+
+def validate_workspace_budget(
+    *,
+    config: GuardConfig,
+    plan: CheckpointPlan,
+    used_bytes: int,
+) -> int:
+    """Apply the user-visible storage budget even when WSL reports a large disk."""
+
+    projected_bytes = used_bytes + plan.planned_writes * config.checkpoint_bytes
+    usable_limit = config.max_workspace_bytes - config.min_workspace_reserve_bytes
+    if projected_bytes > usable_limit:
+        raise GuardViolation(
+            "Logical workspace budget would be exceeded: "
+            f"{projected_bytes} > {usable_limit} usable bytes "
+            f"({config.max_workspace_bytes} budget minus "
+            f"{config.min_workspace_reserve_bytes} reserve)"
+        )
+    return projected_bytes
+
+
 def guarded_run(command: Sequence[str], config: GuardConfig, workspace: Path) -> int:
     """Launch one command and stop it before it can exhaust host resources."""
 
     if not command:
         raise GuardViolation("No guarded command was provided")
-    workspace = workspace.resolve()
-    try:
-        workspace.relative_to(Path("/mountpoint/.exp"))
-    except ValueError as exc:
-        raise GuardViolation(
-            f"Guard workspace must be below /mountpoint/.exp: {workspace}"
-        ) from exc
+    workspace = validated_workspace(workspace)
 
     available = mem_available_bytes()
     disk_free = shutil.disk_usage(workspace).free
     plan = checkpoint_plan(command)
+    workspace_bytes = workspace_usage_bytes(workspace)
+    projected_workspace_bytes = validate_workspace_budget(
+        config=config,
+        plan=plan,
+        used_bytes=workspace_bytes,
+    )
     validate_preflight(
         config=config,
         plan=plan,
@@ -438,6 +517,9 @@ def guarded_run(command: Sequence[str], config: GuardConfig, workspace: Path) ->
         "mem_available_bytes": available,
         "min_disk_reserve_bytes": config.min_disk_reserve_bytes,
         "min_runtime_available_bytes": config.min_runtime_available_bytes,
+        "workspace_bytes": workspace_bytes,
+        "projected_workspace_bytes": projected_workspace_bytes,
+        "max_workspace_bytes": config.max_workspace_bytes,
     }
     print(
         "RESOURCE_GUARD_START " + json.dumps(start_record, sort_keys=True),

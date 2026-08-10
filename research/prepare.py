@@ -22,9 +22,23 @@ from pathlib import Path
 from typing import Any, Iterable
 
 
-WORKSPACE_ROOT = Path("/mountpoint/.exp")
 REPO_ROOT = Path(__file__).resolve().parents[1]
+_LEGACY_WORKSPACE_ROOT = Path("/mountpoint/.exp")
+_workspace_root_override = os.environ.get("CHESS_DFM_WORKSPACE_ROOT")
+if _workspace_root_override:
+    WORKSPACE_ROOT = Path(_workspace_root_override)
+elif REPO_ROOT.parent == _LEGACY_WORKSPACE_ROOT:
+    WORKSPACE_ROOT = _LEGACY_WORKSPACE_ROOT
+else:
+    WORKSPACE_ROOT = REPO_ROOT
 ASSET_MANIFEST_PATH = Path(__file__).with_name("assets.json")
+TRUSTED_WORKSPACE_ROOTS = tuple(
+    Path(value)
+    for value in os.environ.get("CHESS_DFM_TRUSTED_WORKSPACE_ROOTS", "").split(os.pathsep)
+    if value
+)
+if any(not root.is_absolute() for root in TRUSTED_WORKSPACE_ROOTS):
+    raise ValueError("CHESS_DFM_TRUSTED_WORKSPACE_ROOTS entries must be absolute")
 
 PATH_ENV_VARS = (
     "TMPDIR",
@@ -69,14 +83,17 @@ EXPECTED_RUNTIME_PACKAGES = {
 
 
 def require_within_workspace(path: str | os.PathLike[str]) -> Path:
-    """Return an absolute path or fail if it resolves outside the workspace."""
+    """Return an absolute path or fail if it resolves outside trusted roots."""
 
     resolved = Path(path).expanduser().resolve()
-    try:
-        resolved.relative_to(WORKSPACE_ROOT.resolve())
-    except ValueError as exc:
-        raise ValueError(f"Path escapes {WORKSPACE_ROOT}: {resolved}") from exc
-    return resolved
+    roots = (WORKSPACE_ROOT, *TRUSTED_WORKSPACE_ROOTS)
+    for root in roots:
+        try:
+            resolved.relative_to(root.resolve())
+            return resolved
+        except ValueError:
+            continue
+    raise ValueError(f"Path escapes trusted workspace roots {roots}: {resolved}")
 
 
 @dataclass(frozen=True)

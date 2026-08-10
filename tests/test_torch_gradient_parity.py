@@ -1,11 +1,21 @@
 import dataclasses
 from collections.abc import Mapping
 
-import jax
-import jax.numpy as jnp
 import numpy as np
+import pytest
 import torch
-from flax import nnx
+
+try:
+    import jax
+    import jax.numpy as jnp
+    from flax import nnx
+except ModuleNotFoundError as exc:
+    if (exc.name or "").split(".", 1)[0] not in {"flax", "jax", "optax"}:
+        raise
+    pytest.skip(
+        "legacy gradient-oracle parity requires the optional JAX/Flax stack",
+        allow_module_level=True,
+    )
 
 from research.evaluate_torch_migration_parity import _jax_sigreg
 from research.train import (
@@ -23,9 +33,7 @@ from research.train_torch import (
 
 
 def _name_path(name: str) -> tuple[str | int, ...]:
-    return tuple(
-        int(part) if part.isdigit() else part for part in name.split(".")
-    )
+    return tuple(int(part) if part.isdigit() else part for part in name.split("."))
 
 
 def _copy_jax_state_to_torch(
@@ -38,9 +46,7 @@ def _copy_jax_state_to_torch(
     assert set(flat) == expected
     with torch.no_grad():
         for name, parameter in named.items():
-            value = torch.from_numpy(
-                np.asarray(flat[_name_path(name)], dtype=np.float32).copy()
-            )
+            value = torch.from_numpy(np.asarray(flat[_name_path(name)], dtype=np.float32).copy())
             parameter.copy_(value)
 
 
@@ -57,8 +63,7 @@ def _assert_gradient_maps_close(
     torch_model: torch.nn.Module,
 ) -> None:
     torch_gradients = {
-        name: parameter.grad.detach().numpy()
-        for name, parameter in torch_model.named_parameters()
+        name: parameter.grad.detach().numpy() for name, parameter in torch_model.named_parameters()
     }
     assert set(torch_gradients) == set(jax_gradients)
     for name in sorted(jax_gradients):
@@ -199,12 +204,10 @@ def test_recurrent_transition_full_parameter_and_input_gradient_parity():
         output = candidate(z_value, condition_value)
         return jnp.sum(output * jnp.asarray(cotangent))
 
-    jax_loss, (jax_state_grad, jax_z_grad, jax_condition_grad) = (
-        jax.value_and_grad(
-            jax_objective,
-            argnums=(0, 1, 2),
-        )(state, jnp.asarray(z), jnp.asarray(condition))
-    )
+    jax_loss, (jax_state_grad, jax_z_grad, jax_condition_grad) = jax.value_and_grad(
+        jax_objective,
+        argnums=(0, 1, 2),
+    )(state, jnp.asarray(z), jnp.asarray(condition))
 
     torch_z = torch.tensor(z, requires_grad=True)
     torch_condition = torch.tensor(condition, requires_grad=True)

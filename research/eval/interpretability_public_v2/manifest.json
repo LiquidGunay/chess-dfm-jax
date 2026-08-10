@@ -1,0 +1,846 @@
+{
+  "action_codec": "lc0_canonical_1858",
+  "action_vocab_size": 1858,
+  "concept_labels": {
+    "attacked_undefended_definition": "occupied square has at least one enemy attacker and zero friendly attackers",
+    "engine_calls": false,
+    "material_values": {
+      "bishop": 3,
+      "king": 0,
+      "knight": 3,
+      "pawn": 1,
+      "queen": 9,
+      "rook": 5
+    },
+    "orientation": "BT4 side-to-move token frame; black-to-move squares are vertically mirrored",
+    "passed_pawn_definition": "no enemy pawn ahead on the same or adjacent file; rule-derived, not engine-derived",
+    "piece_code_names": [
+      "empty",
+      "our_pawn",
+      "our_knight",
+      "our_bishop",
+      "our_rook",
+      "our_queen",
+      "our_king",
+      "their_pawn",
+      "their_knight",
+      "their_bishop",
+      "their_rook",
+      "their_queen",
+      "their_king"
+    ],
+    "schema_version": "bt4-exact-chess-concepts-v1"
+  },
+  "engine_positions": {
+    "arrays": {
+      "engine_best_move_uci": {
+        "dtype": "<U5",
+        "shape": [
+          2048
+        ]
+      },
+      "engine_current_planes_u8": {
+        "dtype": "uint8",
+        "shape": [
+          2048,
+          112,
+          8,
+          8
+        ]
+      },
+      "engine_fen": {
+        "dtype": "<U73",
+        "shape": [
+          2048
+        ]
+      },
+      "engine_legal_count_u16": {
+        "dtype": "uint16",
+        "shape": [
+          2048
+        ]
+      },
+      "engine_legal_idx_u16": {
+        "dtype": "uint16",
+        "shape": [
+          2048,
+          218
+        ]
+      },
+      "engine_position_id": {
+        "dtype": "<U64",
+        "shape": [
+          2048
+        ]
+      },
+      "engine_target_action_u16": {
+        "dtype": "uint16",
+        "shape": [
+          2048
+        ]
+      },
+      "engine_win_probability_f64": {
+        "dtype": "float64",
+        "shape": [
+          2048,
+          218
+        ]
+      }
+    },
+    "data": {
+      "path": "engine_positions.npz",
+      "sha256": "a1f8f4b25aaa4b0576933f7aaa17885786c883816428b2f3edb64c091c4f7215",
+      "size_bytes": 671934
+    },
+    "history_contract": "FEN-only: current board is exact and seven unavailable history slots are zero. Use for engine agreement and matched model comparisons, not history-sensitive claims.",
+    "label": "Stockfish 16 per-legal-action win probability released with ChessBench",
+    "rejected": 190,
+    "selected_count": 2048,
+    "selection": "lowest SHA256(namespace + NUL + FEN) among positions whose recorded moves exactly equal python-chess legal moves",
+    "total_positions": 62561,
+    "total_records": 1838218,
+    "valid_positions": 62371
+  },
+  "immutable_after_creation": true,
+  "input_format": "INPUT_CLASSICAL_112_PLANE",
+  "manifest_integrity": {
+    "algorithm": "sha256-canonical-json-without-manifest_integrity",
+    "sha256": "9195f857f60ab123b353095b6b931c589ae69098750ea6b26e53e7d871f349d0"
+  },
+  "puzzles": {
+    "arrays": {
+      "attack_count_ours_u8": {
+        "dtype": "uint8",
+        "shape": [
+          10000,
+          64
+        ]
+      },
+      "attack_count_theirs_u8": {
+        "dtype": "uint8",
+        "shape": [
+          10000,
+          64
+        ]
+      },
+      "attacked_undefended_ours_u8": {
+        "dtype": "uint8",
+        "shape": [
+          10000,
+          64
+        ]
+      },
+      "attacked_undefended_theirs_u8": {
+        "dtype": "uint8",
+        "shape": [
+          10000,
+          64
+        ]
+      },
+      "capture_destination_u8": {
+        "dtype": "uint8",
+        "shape": [
+          10000,
+          64
+        ]
+      },
+      "checking_destination_u8": {
+        "dtype": "uint8",
+        "shape": [
+          10000,
+          64
+        ]
+      },
+      "concept_attacked_undefended_pieces_i16": {
+        "dtype": "int16",
+        "shape": [
+          10000
+        ]
+      },
+      "concept_capture_move_count_i16": {
+        "dtype": "int16",
+        "shape": [
+          10000
+        ]
+      },
+      "concept_checking_move_count_i16": {
+        "dtype": "int16",
+        "shape": [
+          10000
+        ]
+      },
+      "concept_fullmove_number_i16": {
+        "dtype": "int16",
+        "shape": [
+          10000
+        ]
+      },
+      "concept_halfmove_clock_i16": {
+        "dtype": "int16",
+        "shape": [
+          10000
+        ]
+      },
+      "concept_is_check_i16": {
+        "dtype": "int16",
+        "shape": [
+          10000
+        ]
+      },
+      "concept_is_checkmate_i16": {
+        "dtype": "int16",
+        "shape": [
+          10000
+        ]
+      },
+      "concept_is_stalemate_i16": {
+        "dtype": "int16",
+        "shape": [
+          10000
+        ]
+      },
+      "concept_legal_move_count_i16": {
+        "dtype": "int16",
+        "shape": [
+          10000
+        ]
+      },
+      "concept_material_balance_i16": {
+        "dtype": "int16",
+        "shape": [
+          10000
+        ]
+      },
+      "concept_our_center_attack_count_i16": {
+        "dtype": "int16",
+        "shape": [
+          10000
+        ]
+      },
+      "concept_our_material_i16": {
+        "dtype": "int16",
+        "shape": [
+          10000
+        ]
+      },
+      "concept_our_non_pawn_material_i16": {
+        "dtype": "int16",
+        "shape": [
+          10000
+        ]
+      },
+      "concept_our_passed_pawns_i16": {
+        "dtype": "int16",
+        "shape": [
+          10000
+        ]
+      },
+      "concept_our_pinned_pieces_i16": {
+        "dtype": "int16",
+        "shape": [
+          10000
+        ]
+      },
+      "concept_pressure_on_our_king_i16": {
+        "dtype": "int16",
+        "shape": [
+          10000
+        ]
+      },
+      "concept_pressure_on_their_king_i16": {
+        "dtype": "int16",
+        "shape": [
+          10000
+        ]
+      },
+      "concept_promotion_move_count_i16": {
+        "dtype": "int16",
+        "shape": [
+          10000
+        ]
+      },
+      "concept_side_to_move_is_white_i16": {
+        "dtype": "int16",
+        "shape": [
+          10000
+        ]
+      },
+      "concept_their_center_attack_count_i16": {
+        "dtype": "int16",
+        "shape": [
+          10000
+        ]
+      },
+      "concept_their_material_i16": {
+        "dtype": "int16",
+        "shape": [
+          10000
+        ]
+      },
+      "concept_their_non_pawn_material_i16": {
+        "dtype": "int16",
+        "shape": [
+          10000
+        ]
+      },
+      "concept_their_passed_pawns_i16": {
+        "dtype": "int16",
+        "shape": [
+          10000
+        ]
+      },
+      "concept_their_pinned_pieces_i16": {
+        "dtype": "int16",
+        "shape": [
+          10000
+        ]
+      },
+      "concept_total_material_i16": {
+        "dtype": "int16",
+        "shape": [
+          10000
+        ]
+      },
+      "concept_total_non_pawn_material_i16": {
+        "dtype": "int16",
+        "shape": [
+          10000
+        ]
+      },
+      "current_planes_u8": {
+        "dtype": "uint8",
+        "shape": [
+          10000,
+          112,
+          8,
+          8
+        ]
+      },
+      "future_action_u16": {
+        "dtype": "uint16",
+        "shape": [
+          10000,
+          7
+        ]
+      },
+      "future_destination_token_i16": {
+        "dtype": "int16",
+        "shape": [
+          10000,
+          7
+        ]
+      },
+      "future_destination_token_native_i16": {
+        "dtype": "int16",
+        "shape": [
+          10000,
+          7
+        ]
+      },
+      "future_destination_token_root_i16": {
+        "dtype": "int16",
+        "shape": [
+          10000,
+          7
+        ]
+      },
+      "future_origin_token_i16": {
+        "dtype": "int16",
+        "shape": [
+          10000,
+          7
+        ]
+      },
+      "future_origin_token_native_i16": {
+        "dtype": "int16",
+        "shape": [
+          10000,
+          7
+        ]
+      },
+      "future_origin_token_root_i16": {
+        "dtype": "int16",
+        "shape": [
+          10000,
+          7
+        ]
+      },
+      "future_valid_u8": {
+        "dtype": "uint8",
+        "shape": [
+          10000,
+          7
+        ]
+      },
+      "game_url": {
+        "dtype": "<U38",
+        "shape": [
+          10000
+        ]
+      },
+      "group_id": {
+        "dtype": "<U12",
+        "shape": [
+          10000
+        ]
+      },
+      "history_position_count_u16": {
+        "dtype": "uint16",
+        "shape": [
+          10000
+        ]
+      },
+      "legal_count_u16": {
+        "dtype": "uint16",
+        "shape": [
+          10000
+        ]
+      },
+      "legal_destination_u8": {
+        "dtype": "uint8",
+        "shape": [
+          10000,
+          64
+        ]
+      },
+      "legal_idx_u16": {
+        "dtype": "uint16",
+        "shape": [
+          10000,
+          218
+        ]
+      },
+      "legal_origin_u8": {
+        "dtype": "uint8",
+        "shape": [
+          10000,
+          64
+        ]
+      },
+      "lichess_rating_i16": {
+        "dtype": "int16",
+        "shape": [
+          10000
+        ]
+      },
+      "occupied_ours_u8": {
+        "dtype": "uint8",
+        "shape": [
+          10000,
+          64
+        ]
+      },
+      "occupied_theirs_u8": {
+        "dtype": "uint8",
+        "shape": [
+          10000,
+          64
+        ]
+      },
+      "opening_tags": {
+        "dtype": "<U90",
+        "shape": [
+          10000
+        ]
+      },
+      "our_king_zone_u8": {
+        "dtype": "uint8",
+        "shape": [
+          10000,
+          64
+        ]
+      },
+      "piece_code_i8": {
+        "dtype": "int8",
+        "shape": [
+          10000,
+          64
+        ]
+      },
+      "pinned_ours_u8": {
+        "dtype": "uint8",
+        "shape": [
+          10000,
+          64
+        ]
+      },
+      "pinned_theirs_u8": {
+        "dtype": "uint8",
+        "shape": [
+          10000,
+          64
+        ]
+      },
+      "plane_sha256": {
+        "dtype": "<U64",
+        "shape": [
+          10000
+        ]
+      },
+      "position_id": {
+        "dtype": "<U64",
+        "shape": [
+          10000
+        ]
+      },
+      "puzzle_id": {
+        "dtype": "<U5",
+        "shape": [
+          10000
+        ]
+      },
+      "rating_i16": {
+        "dtype": "int16",
+        "shape": [
+          10000
+        ]
+      },
+      "root_fen": {
+        "dtype": "<U72",
+        "shape": [
+          10000
+        ]
+      },
+      "solution_uci": {
+        "dtype": "<U126",
+        "shape": [
+          10000
+        ]
+      },
+      "split_u8": {
+        "dtype": "uint8",
+        "shape": [
+          10000
+        ]
+      },
+      "target_action_u16": {
+        "dtype": "uint16",
+        "shape": [
+          10000
+        ]
+      },
+      "target_captured_piece_type_i16": {
+        "dtype": "int16",
+        "shape": [
+          10000
+        ]
+      },
+      "target_destination_token_i16": {
+        "dtype": "int16",
+        "shape": [
+          10000
+        ]
+      },
+      "target_gives_check_i16": {
+        "dtype": "int16",
+        "shape": [
+          10000
+        ]
+      },
+      "target_gives_checkmate_i16": {
+        "dtype": "int16",
+        "shape": [
+          10000
+        ]
+      },
+      "target_is_capture_i16": {
+        "dtype": "int16",
+        "shape": [
+          10000
+        ]
+      },
+      "target_is_castling_i16": {
+        "dtype": "int16",
+        "shape": [
+          10000
+        ]
+      },
+      "target_is_en_passant_i16": {
+        "dtype": "int16",
+        "shape": [
+          10000
+        ]
+      },
+      "target_is_promotion_i16": {
+        "dtype": "int16",
+        "shape": [
+          10000
+        ]
+      },
+      "target_moving_piece_type_i16": {
+        "dtype": "int16",
+        "shape": [
+          10000
+        ]
+      },
+      "target_origin_token_i16": {
+        "dtype": "int16",
+        "shape": [
+          10000
+        ]
+      },
+      "target_promotion_piece_type_i16": {
+        "dtype": "int16",
+        "shape": [
+          10000
+        ]
+      },
+      "their_king_zone_u8": {
+        "dtype": "uint8",
+        "shape": [
+          10000,
+          64
+        ]
+      },
+      "theme_multi_hot_u8": {
+        "dtype": "uint8",
+        "shape": [
+          10000,
+          72
+        ]
+      },
+      "themes": {
+        "dtype": "<U117",
+        "shape": [
+          10000
+        ]
+      }
+    },
+    "count": 10000,
+    "data": {
+      "path": "puzzles.npz",
+      "sha256": "e9acdaadba3095938a4d97e07ece7bbcbf18fa532c9bd7f73352ec36bc198c47",
+      "size_bytes": 4422632
+    },
+    "group_disjoint": true,
+    "history_contract": "Full PGN reconstructed through the FEN, then the first Lichess setup move applied; all available boards feed the classical 112-plane encoder.",
+    "metadata_join": {
+      "decompressed_rows_scanned": 6100960,
+      "fen_or_line_mismatch": 0,
+      "matched": 9995,
+      "missing": 5
+    },
+    "split_codes": {
+      "development": 1,
+      "test": 2,
+      "train": 0
+    },
+    "split_counts": {
+      "development": 1982,
+      "test": 1968,
+      "train": 6050
+    },
+    "theme_counts": {
+      "advancedPawn": 714,
+      "advantage": 2969,
+      "anastasiaMate": 9,
+      "arabianMate": 11,
+      "attackingF2F7": 119,
+      "attraction": 376,
+      "backRankMate": 312,
+      "balestraMate": 4,
+      "bishopEndgame": 189,
+      "blindSwineMate": 10,
+      "bodenMate": 4,
+      "capturingDefender": 47,
+      "castling": 1,
+      "clearance": 136,
+      "collinearMove": 16,
+      "cornerMate": 23,
+      "crushing": 3520,
+      "defensiveMove": 665,
+      "deflection": 444,
+      "discoveredAttack": 456,
+      "discoveredCheck": 195,
+      "doubleBishopMate": 13,
+      "doubleCheck": 62,
+      "dovetailMate": 8,
+      "enPassant": 9,
+      "endgame": 5328,
+      "epauletteMate": 38,
+      "exposedKing": 319,
+      "fork": 1122,
+      "hangingPiece": 376,
+      "hookMate": 21,
+      "interference": 38,
+      "intermezzo": 106,
+      "killBoxMate": 4,
+      "kingsideAttack": 953,
+      "knightEndgame": 86,
+      "long": 2759,
+      "master": 1769,
+      "masterVsMaster": 231,
+      "mate": 3506,
+      "mateIn1": 1936,
+      "mateIn2": 1227,
+      "mateIn3": 286,
+      "mateIn4": 47,
+      "mateIn5": 10,
+      "middlegame": 4177,
+      "morphysMate": 15,
+      "oneMove": 1936,
+      "opening": 490,
+      "operaMate": 121,
+      "pawnEndgame": 485,
+      "pillsburysMate": 131,
+      "pin": 583,
+      "promotion": 306,
+      "queenEndgame": 137,
+      "queenRookEndgame": 81,
+      "queensideAttack": 167,
+      "quietMove": 511,
+      "rookEndgame": 629,
+      "sacrifice": 727,
+      "short": 4326,
+      "skewer": 233,
+      "smotheredMate": 48,
+      "superGM": 3,
+      "swallowstailMate": 12,
+      "trappedPiece": 80,
+      "triangleMate": 15,
+      "underPromotion": 2,
+      "veryLong": 974,
+      "vukovicMate": 4,
+      "xRayAttack": 39,
+      "zugzwang": 131
+    },
+    "theme_vocabulary": [
+      "advancedPawn",
+      "advantage",
+      "anastasiaMate",
+      "arabianMate",
+      "attackingF2F7",
+      "attraction",
+      "backRankMate",
+      "balestraMate",
+      "bishopEndgame",
+      "blindSwineMate",
+      "bodenMate",
+      "capturingDefender",
+      "castling",
+      "clearance",
+      "collinearMove",
+      "cornerMate",
+      "crushing",
+      "defensiveMove",
+      "deflection",
+      "discoveredAttack",
+      "discoveredCheck",
+      "doubleBishopMate",
+      "doubleCheck",
+      "dovetailMate",
+      "enPassant",
+      "endgame",
+      "epauletteMate",
+      "exposedKing",
+      "fork",
+      "hangingPiece",
+      "hookMate",
+      "interference",
+      "intermezzo",
+      "killBoxMate",
+      "kingsideAttack",
+      "knightEndgame",
+      "long",
+      "master",
+      "masterVsMaster",
+      "mate",
+      "mateIn1",
+      "mateIn2",
+      "mateIn3",
+      "mateIn4",
+      "mateIn5",
+      "middlegame",
+      "morphysMate",
+      "oneMove",
+      "opening",
+      "operaMate",
+      "pawnEndgame",
+      "pillsburysMate",
+      "pin",
+      "promotion",
+      "queenEndgame",
+      "queenRookEndgame",
+      "queensideAttack",
+      "quietMove",
+      "rookEndgame",
+      "sacrifice",
+      "short",
+      "skewer",
+      "smotheredMate",
+      "superGM",
+      "swallowstailMate",
+      "trappedPiece",
+      "triangleMate",
+      "underPromotion",
+      "veryLong",
+      "vukovicMate",
+      "xRayAttack",
+      "zugzwang"
+    ]
+  },
+  "schema_version": "bt4-public-interpretability-corpus-v2",
+  "scientific_use": {
+    "confirmatory": "test puzzle split and engine-position metrics are opened only after development choices are frozen",
+    "development": "train/development puzzle splits may select layers, probes, and thresholds",
+    "forbidden": "Treating FEN-only engine positions as in-distribution history-complete data",
+    "future_square_frames": {
+      "native": "Use future_*_token_native_i16 only with activations replayed to that ply",
+      "root": "Use future_*_token_root_i16 for lookahead probes over root activations"
+    }
+  },
+  "sources": {
+    "action_value_test": {
+      "md5": "bfe6a98f096b21ed836d2f4da157f704",
+      "path": "data/external/chessbench/test/action_value_data.bag",
+      "relative_path": "test/action_value_data.bag",
+      "sha256": "5f73aac8f60e31734cdbf276ba3fca8d5ba5cb6171ba600e31af4f36327986b0",
+      "size_bytes": 148297469,
+      "url": "https://storage.googleapis.com/searchless_chess/data/test/action_value_data.bag",
+      "verified": true
+    },
+    "behavioral_cloning_test": {
+      "md5": "5b311d2a8096f2bea3aa81c5278f36d1",
+      "path": "data/external/chessbench/test/behavioral_cloning_data.bag",
+      "relative_path": "test/behavioral_cloning_data.bag",
+      "sha256": "fc1d27fc98baae3a7f15fee85439b499f4a6f1815dffde26d047a77f02cc50b1",
+      "size_bytes": 4351421,
+      "url": "https://storage.googleapis.com/searchless_chess/data/test/behavioral_cloning_data.bag",
+      "verified": true
+    },
+    "lichess_puzzle_dump": {
+      "license": "CC0",
+      "path": "data/external/chessbench/lichess_db_puzzle_20260802.csv.zst",
+      "relative_path": "lichess_db_puzzle_20260802.csv.zst",
+      "sha256": "a0ea9129c6b6434dfb34a9ac4ec660c9cfff22b2de465e01854f018fc847f073",
+      "size_bytes": 304384407,
+      "url": "https://database.lichess.org/lichess_db_puzzle.csv.zst",
+      "verified": true
+    },
+    "searchless_puzzles": {
+      "md5": "25c0ed4842bd5ff5e507f00ca29b4d53",
+      "path": "data/external/chessbench/puzzles.csv",
+      "relative_path": "puzzles.csv",
+      "sha256": "099d54e681a07b9e82b4462aaf5436a6e833edc6f56b92ea7c2d2413f7efbe48",
+      "size_bytes": 4705735,
+      "url": "https://storage.googleapis.com/searchless_chess/data/puzzles.csv",
+      "verified": true
+    },
+    "state_value_test": {
+      "md5": "4f79a1e0183b7d6b83b37dea365cb38a",
+      "path": "data/external/chessbench/test/state_value_data.bag",
+      "relative_path": "test/state_value_data.bag",
+      "sha256": "2b132a207868cfb49eb1033b962a7688ab3987ce6d137142d2faf1a8cf312480",
+      "size_bytes": 4619413,
+      "url": "https://storage.googleapis.com/searchless_chess/data/test/state_value_data.bag",
+      "verified": true
+    }
+  },
+  "upstream": {
+    "lichess_dump_date": "2026-08-02",
+    "lichess_license": "CC0",
+    "searchless_chess_commit": "90ae0e6b121673fc3079aaeffa047580bb600c0a",
+    "searchless_code_license": "Apache-2.0",
+    "searchless_dataset_license": "CC0 and CC-BY as documented upstream"
+  }
+}

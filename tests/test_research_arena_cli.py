@@ -646,6 +646,9 @@ def test_torch_hero_model_config_accepts_missing_optional_architecture_defaults(
         "dfm_state_source",
         "wdl_include_current_state",
         "dfm_closed_loop_mode",
+        "policy_distill_coeff",
+        "policy_distill_teacher_mode",
+        "policy_distill_teacher_state_sha256",
     }
     for name in legacy_missing:
         config.pop(name)
@@ -844,6 +847,7 @@ def _contract(*, promotion: bool = False):
         },
         "run": {
             "pair_count": 1 if promotion else 2,
+            "opening_start_index": 0,
             "block_pairs": 1,
             "additional_ply_cap": 1,
             "policy_timeout_seconds": 30.0,
@@ -924,6 +928,34 @@ def test_history_sidecar_is_digest_checked_aligned_and_replayed(
             opening_pool=pool,
             expected_manifest_sha256=sidecar["manifest_sha256"],
         )
+
+
+def test_run_blocks_uses_content_bound_opening_offset(
+    workspace_tmp: Path,
+):
+    pool, _path, _sidecar, loaded = _fixture_assets(workspace_tmp)
+    contract = _contract()
+    contract["run"]["pair_count"] = 1
+    contract["run"]["opening_start_index"] = 1
+    output_dir = workspace_tmp / "offset-run"
+
+    state = run_blocks(
+        output_dir=output_dir,
+        contract=contract,
+        opening_pool=pool,
+        loaded_histories=loaded,
+        candidate_policy=_FirstLegalPolicy("candidate"),
+        opponent_policy=_FirstLegalPolicy("opponent"),
+        resume=False,
+        session_setup={"kind": "offset-fixture"},
+    )
+
+    block = json.loads(
+        Path(state["blocks"][0]["path"]).read_text(encoding="utf-8")
+    )
+    pair_id = block["gameplay"]["opening_histories"][0]["pair_id"]
+    assert pair_id.startswith("pair-00000001-")
+    assert state["contract"]["run"]["opening_start_index"] == 1
 
 
 def test_resumable_blocks_persist_relative_stats_and_verify_immutable_files(

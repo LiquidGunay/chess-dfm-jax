@@ -1,0 +1,63 @@
+{
+  "archived_attempts": [
+    "/workspace/training-results/runs/.attempts/hero-training-phase1-v2_fp32_1_30-l40s-c87f4c5157351182cbb4/attempt000"
+  ],
+  "arm": "v2_fp32_1_30",
+  "arm_config": {
+    "encoder_lr_ratio": 0.03333333333333333,
+    "main_lr_multiplier": 1.0,
+    "optimizer_precision": "fp32_master",
+    "recipe": "hero_v2",
+    "weight_decay_mode": "decoupled"
+  },
+  "compile_source_tree_sha256": "171ddfbf27729b88a8d44b0b2f2005ef502c3e8a543102449916754e48c08e59",
+  "compute_capability": [
+    8,
+    9
+  ],
+  "declared_attempt_upper_bound_dollars": "4.19227200",
+  "device_name": "NVIDIA L40S",
+  "device_total_memory_bytes": 47665709056,
+  "git_commit": "86ba0b37e3e188eab115b45a1460d079fac341f8",
+  "gpu": "L40S",
+  "profile": "phase1",
+  "profile_config": {
+    "log_every": 20,
+    "recovery_updates": [
+      100,
+      200,
+      300,
+      400,
+      500,
+      554
+    ],
+    "resume_from_profile": null,
+    "save_model": true,
+    "save_recovery": true,
+    "steps": 554,
+    "validation_updates": [
+      554
+    ]
+  },
+  "raw_bt4_sha256": "61e43e98d2c4cb747498c6bc13a5bbb3b07e985d3f5d87f0351a4db855fa0651",
+  "remote_function_seconds": 592.52814186,
+  "result_label": "hero-training-phase1-v2_fp32_1_30-l40s-c87f4c5157351182cbb4",
+  "resume_checkpoint": "/workspace/training-results/runs/.attempts/hero-training-phase1-v2_fp32_1_30-l40s-c87f4c5157351182cbb4/attempt000/checkpoints/update00000500",
+  "resume_update": 500,
+  "resumed_from_result_label": "hero-training-phase1-v2_fp32_1_30-l40s-c87f4c5157351182cbb4",
+  "runner_revision": "hero-v2-modal-training-v2",
+  "schema_version": "chess-dfm-modal-training-run-v1",
+  "source_tree_sha256": "4c1f86c5065c944d3affd729becb0902a087e7d3504ef18e357e2012924fdb3d",
+  "trajectory_stage": {
+    "archive_sha256": "d8feffa259580563c8097fa4a604ca415469dd80da66dabda170ac9ce929b968",
+    "archive_size_bytes": 11531386880,
+    "dataset_label": "trajectory-v3-lc0-test80-h8-sets1-3-20260430",
+    "drive_file_id": "14jgdmEZsBVMFtQ7Vvjm3PTWU2QlE45KV",
+    "eval_manifest": "/workspace/training-inputs/trajectory-v3-lc0-test80-h8-sets1-3-20260430/contracts/hero_epoch_v1/manifest.json",
+    "file_bytes": 11507849049,
+    "file_count": 30728,
+    "gpu_active": false,
+    "schema_version": "chess-dfm-modal-training-stage-v1",
+    "stage_seconds": 224.584403218
+  }
+}

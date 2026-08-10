@@ -1,0 +1,16 @@
+# Lean local interpretability environment, excluding the legacy JAX stack.
+# Install the Hero-compatible Torch wheel first:
+#
+# uv pip install --python .venv/bin/python \
+#   --index https://download.pytorch.org/whl/cu121 \
+#   'torch==2.5.1+cu121'
+#
+# Then install this file and the repository with --no-deps.
+ml-dtypes==0.5.3
+numpy==2.2.6
+protobuf==6.31.1
+pytest==8.4.2
+python-chess==1.999
+ruff==0.12.7
+safetensors==0.5.3
+zstandard==0.23.0

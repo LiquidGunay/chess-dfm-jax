@@ -1,0 +1,191 @@
+{
+  "bootstrap": {
+    "confidence_level": 0.95,
+    "confirmatory": false,
+    "method": "paired nonparametric percentile bootstrap over unique group_id",
+    "multiple_comparison_correction": null,
+    "quantile_method": "linear",
+    "replicates": 20000,
+    "rng": "numpy.random.Generator(PCG64)",
+    "seed": 20260808
+  },
+  "group_count": 512,
+  "interpretation": {
+    "causal_feature_claim": false,
+    "scope": "exploratory development split",
+    "test_split_opened": false,
+    "unit_of_resampling": "group_id (one retained position per unique group)",
+    "warning": "A confidence interval excluding zero describes this sampled replacement metric; it does not establish semantic feature equivalence or causal transfer."
+  },
+  "native_vs_lorsa_head_mean_pattern_js_mean_per_position": {
+    "bootstrap_seed": 20260811,
+    "delta_quantiles": {
+      "maximum": 0.0022421851754188538,
+      "median": -0.0006414223462343216,
+      "minimum": -0.0037466734647750854,
+      "p05": -0.001916459295898676,
+      "p25": -0.0011116503737866879,
+      "p75": -0.00021991226822137833,
+      "p95": 0.0006908537819981575
+    },
+    "equal_fraction": 0.0,
+    "estimand": "unweighted mean across paired positions",
+    "hero_greater_than_raw_fraction": 0.15625,
+    "hero_mean": 0.022955563177674776,
+    "hero_minus_raw_mean": -0.0006558005843544379,
+    "hero_minus_raw_mean_percentile_ci95": {
+      "lower": -0.0007243929943797411,
+      "upper": -0.0005879743143850649
+    },
+    "hero_minus_raw_median": -0.0006414223462343216,
+    "raw_mean": 0.023611363762029214
+  },
+  "policy_js_mean_per_position": {
+    "bootstrap_seed": 20260810,
+    "delta_quantiles": {
+      "maximum": 0.04475315287709236,
+      "median": 4.0310987969860435e-05,
+      "minimum": -0.018765650689601898,
+      "p05": -0.003646968305110931,
+      "p25": -0.00017144242156064138,
+      "p75": 0.0007508749840781093,
+      "p95": 0.00624265880323946
+    },
+    "equal_fraction": 0.0,
+    "estimand": "unweighted mean across paired positions",
+    "hero_greater_than_raw_fraction": 0.580078125,
+    "hero_mean": 0.0036416390571112345,
+    "hero_minus_raw_mean": 0.0006124618235645585,
+    "hero_minus_raw_mean_percentile_ci95": {
+      "lower": 0.0002608813788714137,
+      "upper": 0.0009988929082654248
+    },
+    "hero_minus_raw_median": 4.0310987969860435e-05,
+    "raw_mean": 0.003029177233546676
+  },
+  "policy_top1_contingency": {
+    "both_preserved": 498,
+    "hero_only_preserved": 4,
+    "hero_preserved": 502,
+    "hero_preserved_fraction": 0.98046875,
+    "interpretation": "The off-diagonal cells identify changed failures even when aggregate Raw and Hero preservation rates are equal.",
+    "neither_preserved": 6,
+    "paired_exact_test": {
+      "discordant_pairs": 8,
+      "exploratory": true,
+      "hero_only_successes": 4,
+      "method": "two-sided exact conditional binomial test (exact McNemar)",
+      "null_probability": 0.5,
+      "p_value": 1.0
+    },
+    "raw_only_preserved": 4,
+    "raw_preserved": 502,
+    "raw_preserved_fraction": 0.98046875,
+    "total": 512
+  },
+  "position_count": 512,
+  "raw_hero_matched_head_pattern_change": {
+    "lorsa_mean": 0.008900647149403085,
+    "lorsa_minus_native": {
+      "bootstrap_seed": 20260812,
+      "delta_quantiles": {
+        "maximum": 0.015357871539890766,
+        "median": 0.0006272511091083288,
+        "minimum": -0.009364832192659378,
+        "p05": -0.0012737087439745665,
+        "p25": -0.0002772238804027438,
+        "p75": 0.002077978802844882,
+        "p95": 0.005915153212845324
+      },
+      "equal_fraction": 0.0,
+      "estimand": "unweighted mean across paired positions",
+      "hero_greater_than_raw_fraction": 0.646484375,
+      "hero_mean": 0.008900647149403085,
+      "hero_minus_raw_mean": 0.001228392829943914,
+      "hero_minus_raw_mean_percentile_ci95": {
+        "lower": 0.0010182719549788998,
+        "upper": 0.0014502317436836164
+      },
+      "hero_minus_raw_median": 0.0006272511091083288,
+      "raw_mean": 0.007672254319459171
+    },
+    "native_mean": 0.007672254319459171
+  },
+  "reconstruction_cosine_mean_per_position": {
+    "bootstrap_seed": 20260809,
+    "delta_quantiles": {
+      "maximum": 0.011572431726364796,
+      "median": -9.502964912377898e-05,
+      "minimum": -0.005435905473596625,
+      "p05": -0.003347929641173336,
+      "p25": -0.0017417330653645702,
+      "p75": 0.0014278957289784733,
+      "p95": 0.00464647856759397
+    },
+    "equal_fraction": 0.0,
+    "estimand": "unweighted mean across paired positions",
+    "hero_greater_than_raw_fraction": 0.484375,
+    "hero_mean": 0.967503681392275,
+    "hero_minus_raw_mean": 0.00010399425267430774,
+    "hero_minus_raw_mean_percentile_ci95": {
+      "lower": -0.00010566549612728597,
+      "upper": 0.0003216990840372689
+    },
+    "hero_minus_raw_median": -9.502964912377898e-05,
+    "raw_mean": 0.9673996871396009
+  },
+  "reconstruction_normalized_mse": {
+    "estimands_are_not_interchangeable": true,
+    "global_energy_weighted": {
+      "bootstrap_ci": null,
+      "estimand": "sum squared error divided by sum squared target activation over all retained positions, tokens, and channels",
+      "hero": 0.06444307903714899,
+      "hero_minus_raw": -0.00030073121642817946,
+      "hero_over_raw": 0.9953550584179348,
+      "raw": 0.06474381025357717,
+      "reason_no_bootstrap_ci": "The retained per-position rows contain normalized ratios, not the per-position numerator and denominator needed to resample this ratio-of-sums."
+    },
+    "mean_per_position": {
+      "bootstrap_seed": 20260808,
+      "delta_quantiles": {
+        "maximum": 0.0108521793969951,
+        "median": 0.00033672517138117614,
+        "minimum": -0.02209944102710383,
+        "p05": -0.008895221917404324,
+        "p25": -0.002524968385762192,
+        "p75": 0.003430366447469975,
+        "p95": 0.006837737002427375
+      },
+      "equal_fraction": 0.0,
+      "estimand": "unweighted mean across paired positions",
+      "hero_greater_than_raw_fraction": 0.5390625,
+      "hero_mean": 0.06445161717915579,
+      "hero_minus_raw_mean": -7.770838326432659e-05,
+      "hero_minus_raw_mean_percentile_ci95": {
+        "lower": -0.0005080591239123433,
+        "upper": 0.0003483293609126134
+      },
+      "hero_minus_raw_median": 0.00033672517138117614,
+      "raw_mean": 0.06452932556242011
+    }
+  },
+  "schema_version": "bt4-published-lorsa-paired-bootstrap-metrics-v1",
+  "support_associations": {
+    "exploratory": true,
+    "support_jaccard_mean": 0.5836057135602459,
+    "support_jaccard_vs_absolute_policy_js_delta": {
+      "pearson": -0.19229832008849926,
+      "spearman": -0.3221391807143429
+    },
+    "support_jaccard_vs_signed_policy_js_delta": {
+      "pearson": -0.07194016775891038,
+      "spearman": -0.046058264239365536
+    }
+  },
+  "tail_examples": {
+    "count_per_direction": 10,
+    "retained_file": "examples.jsonl",
+    "selection_is_post_hoc": true,
+    "selection_metric": "hero policy_js minus raw policy_js"
+  }
+}

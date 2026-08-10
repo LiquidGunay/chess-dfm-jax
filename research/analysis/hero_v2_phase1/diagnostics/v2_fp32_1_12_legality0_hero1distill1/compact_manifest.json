@@ -1,0 +1,35 @@
+{
+  "checkpoint_files_downloaded": 0,
+  "environment": "chess-dfm-research",
+  "files": {
+    "loss_summary.json": {
+      "sha256": "312de801fb621bcd8bcc717b58a70cc293e7399ace2a9dfe9c33bab3a25418fa",
+      "size_bytes": 9655
+    },
+    "metrics.jsonl": {
+      "sha256": "47f0de5f991570095658ea443bd6c946922fb42c5d73ffe199b8708e8dda48bd",
+      "size_bytes": 36207
+    },
+    "modal_run.json": {
+      "sha256": "6a51b5ffdfa8f902e913df1812051f891ee00cb3805b0ab1113f2e4a432c55e4",
+      "size_bytes": 2565
+    },
+    "optimizer_partition.json": {
+      "sha256": "61247f172152e150064c7dbac9cfcc090c22a2d0324777f85c302a7a621c70ea",
+      "size_bytes": 172005
+    },
+    "report.json": {
+      "sha256": "ac2abbdd27ad16acd92b84417443fc89238761c89f380d312415456ed5d61864",
+      "size_bytes": 17228
+    },
+    "run_config.json": {
+      "sha256": "cd6a232da8e3b975524e69688267964dc7b6f67ff175eb4abd98ee1e477af296",
+      "size_bytes": 332960
+    }
+  },
+  "remote_root": "runs/hero-training-diagnostic-v2_fp32_1_12_legality0_hero1distill1-l40s-f33a630872936c9f5ef0",
+  "result_label": "hero-training-diagnostic-v2_fp32_1_12_legality0_hero1distill1-l40s-f33a630872936c9f5ef0",
+  "schema_version": "chess-dfm-modal-training-compact-pull-v1",
+  "total_size_bytes": 570620,
+  "volume": "chess-dfm-training-results"
+}

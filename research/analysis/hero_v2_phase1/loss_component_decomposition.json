@@ -1,0 +1,70 @@
+{
+  "schema_version": "chess-dfm-phase1-loss-component-decomposition-v1",
+  "created_utc": "2026-08-09T12:25:29Z",
+  "method": {
+    "comparison": "candidate minus exact Hero-1 control",
+    "matched_updates": [101, 554],
+    "matched_update_count": 454,
+    "summary": "arithmetic mean of paired per-update differences on the identical ordered example prefix",
+    "inferential_status": "descriptive decomposition; paired bootstrap inference remains in each formal comparison artifact"
+  },
+  "input_metrics_sha256": {
+    "hero1_exact": "64526c98c54944cbc67da0fbdf5bed665cdee169e165be8c46ccaab18ed2d503",
+    "v2_bf16_1_30": "a221824711b5808adddb93361b9b7107e0bbeee3b5159669ab2f3dca6a59a6ad",
+    "v2_fp32_1_30": "79e7a0ef503bbc97a6cab78c356046b3d6639945547b1fc217056d8b147793de",
+    "v2_fp32_1_12": "620204be38ee26129c90630b11dc704b00384290a99e045d026fcac4cac8a6ee",
+    "v2_fp32_1_10": "40ea06946ac8395176c6d965e626d5f628108c1fd17ec569173e955bb89adafe"
+  },
+  "arms": {
+    "v2_bf16_1_30": {
+      "loss": -0.011992797977598753,
+      "weighted_legality_loss": -0.006813619893027823,
+      "legality_share_of_total_loss_improvement": 0.5681426390868024,
+      "loss_without_weighted_legality_delta": -0.0051791780845709305,
+      "dfm_ce_loss": -0.00661753137731342,
+      "weighted_root_legal_conditional_ce": -0.0012189748856989823,
+      "root_legal_conditional_ce": -0.013998709061072262,
+      "first_legal_mass": 0.0034068098152261472,
+      "accuracy": 0.00032868784429743425
+    },
+    "v2_fp32_1_30": {
+      "loss": -0.5839109462788452,
+      "weighted_legality_loss": -0.3605621518148725,
+      "legality_share_of_total_loss_improvement": 0.6174951062532178,
+      "loss_without_weighted_legality_delta": -0.2233487944639727,
+      "dfm_ce_loss": -0.14677285517890024,
+      "weighted_root_legal_conditional_ce": -0.03737282477286419,
+      "root_legal_conditional_ce": -0.42918946249369483,
+      "first_legal_mass": 0.18028107534946325,
+      "accuracy": 0.013774360064417124
+    },
+    "v2_fp32_1_12": {
+      "loss": -1.0013666615087031,
+      "weighted_legality_loss": -0.7265363764592204,
+      "legality_share_of_total_loss_improvement": 0.7255448023050705,
+      "loss_without_weighted_legality_delta": -0.2748302850494827,
+      "dfm_ce_loss": -0.24053804989953398,
+      "weighted_root_legal_conditional_ce": -0.052679864517392566,
+      "root_legal_conditional_ce": -0.6049754879548161,
+      "first_legal_mass": 0.36326818896810387,
+      "accuracy": 0.019609275891441475
+    },
+    "v2_fp32_1_10": {
+      "loss": -1.0583919733106302,
+      "weighted_legality_loss": -0.7889405434483473,
+      "legality_share_of_total_loss_improvement": 0.7454143297974531,
+      "loss_without_weighted_legality_delta": -0.2694514298622829,
+      "dfm_ce_loss": -0.2522849784548587,
+      "weighted_root_legal_conditional_ce": -0.055234650666887014,
+      "root_legal_conditional_ce": -0.6343146444417307,
+      "first_legal_mass": 0.394470271560064,
+      "accuracy": 0.01989372831765185
+    }
+  },
+  "conclusions": [
+    "The weighted legality term explains 61.7% to 74.5% of whole-model FP32 total-loss improvement over Hero 1.",
+    "Removing the legality contribution descriptively leaves a 0.223 to 0.275 mean loss advantage, so the acceleration is not exclusively legality.",
+    "The full FP32 arms improve teacher-forced action accuracy and legal-conditional cross entropy while degrading frozen root top-1 and paired greedy play; loss and chess behavior must remain separate gates.",
+    "Because root arena inference has complete board-aware legal move coverage, additional root legal mass has no direct promotion value once it is safely maskable."
+  ]
+}

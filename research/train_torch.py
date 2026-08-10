@@ -63,7 +63,23 @@ from research.arena_history_trust import (  # noqa: E402
     verify_trusted_arena_history_endpoint,
 )
 
-_WORKSPACE_ROOT = Path("/mountpoint/.exp")
+_LEGACY_WORKSPACE_ROOT = Path("/mountpoint/.exp")
+_workspace_root_override = os.environ.get("CHESS_DFM_WORKSPACE_ROOT")
+if _workspace_root_override:
+    _WORKSPACE_ROOT = Path(_workspace_root_override)
+elif _REPO_ROOT.parent == _LEGACY_WORKSPACE_ROOT:
+    _WORKSPACE_ROOT = _LEGACY_WORKSPACE_ROOT
+else:
+    # Keep the path guard useful on ordinary clones instead of requiring the
+    # historical A10G mount to exist. External roots remain an explicit opt-in.
+    _WORKSPACE_ROOT = _REPO_ROOT
+_TRUSTED_WORKSPACE_ROOTS = tuple(
+    Path(value)
+    for value in os.environ.get("CHESS_DFM_TRUSTED_WORKSPACE_ROOTS", "").split(os.pathsep)
+    if value
+)
+if any(not root.is_absolute() for root in _TRUSTED_WORKSPACE_ROOTS):
+    raise ValueError("CHESS_DFM_TRUSTED_WORKSPACE_ROOTS entries must be absolute")
 _SOURCE_STATE = (
     _REPO_ROOT
     / "checkpoints"
@@ -74,12 +90,8 @@ _SOURCE_STATE = (
     / "state.npz"
 )
 _DATA_ROOT = _REPO_ROOT / "data" / "trajectory_v3"
-_RAW_BT4_PATH = (
-    _REPO_ROOT / "models" / "source" / "extracted" / "BT4_exported.pb.gz"
-)
-_HERO_EVAL_MANIFEST = (
-    _REPO_ROOT / "research" / "eval" / "hero_epoch_v1" / "manifest.json"
-)
+_RAW_BT4_PATH = _REPO_ROOT / "models" / "source" / "extracted" / "BT4_exported.pb.gz"
+_HERO_EVAL_MANIFEST = _REPO_ROOT / "research" / "eval" / "hero_epoch_v1" / "manifest.json"
 _HERO_FAST_VALIDATION_PERCENTAGES = tuple(range(10, 101, 10))
 _HERO_ARENA_PERCENTAGES = (25, 50, 75)
 _HERO_ARENA_PAIRS = 16
@@ -112,6 +124,18 @@ _LOSS_SUMMARY_METRICS = (
     "jepa_pred_sigreg_loss",
     "root_legal_conditional_ce",
     "weighted_root_legal_conditional_ce",
+    "base_policy_root_legal_conditional_ce",
+    "base_policy_dfm_root_legal_kl",
+    "weighted_base_policy_dfm_root_legal_kl",
+    "base_policy_root_legal_top1_accuracy",
+    "base_policy_dfm_root_legal_top1_agreement",
+    "policy_teacher_root_legal_conditional_ce",
+    "policy_teacher_dfm_root_legal_kl",
+    "weighted_policy_teacher_dfm_root_legal_kl",
+    "policy_teacher_root_legal_top1_accuracy",
+    "policy_teacher_dfm_root_legal_top1_agreement",
+    "policy_teacher_active",
+    "base_policy_active",
     "wdl_loss",
     "wdl_weighted_loss",
     "wdl_accuracy",
@@ -168,6 +192,9 @@ class Config:
     sigreg_reference_count: float = 1.0
     loss_clip_value: float = 20.0
     delta_rms_clip: float = 0.5
+    policy_distill_coeff: float = 0.0
+    policy_distill_teacher_mode: str = "online"
+    policy_distill_teacher_state_sha256: str = ""
     learning_rate: float = 3e-5
     bt4_learning_rate: float = 1e-6
     weight_decay: float = 1e-4
@@ -229,17 +256,56 @@ HERO_CONFIG = dataclasses.replace(
 )
 
 
+@dataclasses.dataclass(frozen=True)
+class OptimizerPolicy:
+    """State and update policy kept separate from the scientific model config.
+
+    ``HERO_CONFIG`` is part of the sealed Hero-v1 artifact contract. New
+    optimizer experiments therefore live in this separate, explicitly
+    serialized policy instead of adding fields to ``Config`` and silently
+    changing the historical recipe.
+    """
+
+    schedule_kind: str = "legacy_cosine"
+    wsd_decay_examples: int = 0
+    precision: str = "parameter"
+    weight_decay_mode: str = "decoupled"
+
+
+LEGACY_OPTIMIZER_POLICY = OptimizerPolicy()
+_HERO_V2_ENCODER_LR_RATIO = 1.0 / 10.0
+# At batch 1024, peak-matched 20%-cooldown WSD has 1.778457x the
+# Hero-v1 cosine LR area. Preserve Hero v1's planned 6.69% fresh-matrix
+# shrink in the standard-decay baseline rather than silently raising it.
+_HERO_V2_WEIGHT_DECAY = HERO_CONFIG.weight_decay / 1.7784570994812559
+HERO_V2_CONFIG = dataclasses.replace(
+    HERO_CONFIG,
+    bt4_learning_rate=HERO_CONFIG.learning_rate * _HERO_V2_ENCODER_LR_RATIO,
+    weight_decay=_HERO_V2_WEIGHT_DECAY,
+)
+HERO_V2_OPTIMIZER_POLICY = OptimizerPolicy(
+    schedule_kind="warmup_stable_linear_decay",
+    wsd_decay_examples=round(0.20 * _HERO_TRAIN_EXAMPLES),
+    precision="fp32_master",
+    weight_decay_mode="decoupled",
+)
+_HERO_RECIPES = frozenset(("hero", "hero_v2"))
+
+
 def _resolved_remat(specific: bool | None, fallback: bool) -> bool:
     return fallback if specific is None else specific
 
 
 def _require_workspace(path: str | os.PathLike[str], *, exists: bool = False) -> Path:
     resolved = Path(path).expanduser().resolve(strict=exists)
-    try:
-        resolved.relative_to(_WORKSPACE_ROOT.resolve(strict=True))
-    except ValueError as exc:
-        raise ValueError(f"Path escapes {_WORKSPACE_ROOT}: {resolved}") from exc
-    return resolved
+    roots = (_WORKSPACE_ROOT, *_TRUSTED_WORKSPACE_ROOTS)
+    for root in roots:
+        try:
+            resolved.relative_to(root.resolve(strict=True))
+            return resolved
+        except ValueError:
+            continue
+    raise ValueError(f"Path escapes trusted workspace roots {roots}: {resolved}")
 
 
 def _profile_scope(enabled: bool, name: str) -> Any:
@@ -316,17 +382,15 @@ class _ExactForwardNativeLayerNorm(torch.autograd.Function):
         grad_output: Tensor,
     ) -> tuple[Tensor, Tensor, Tensor, None, None]:
         stats, mean, rstd, scale_f32, bias_f32 = ctx.saved_tensors
-        grad_input, grad_scale, grad_bias = (
-            torch.ops.aten.native_layer_norm_backward.default(
-                grad_output.float(),
-                stats,
-                ctx.normalized_shape,
-                mean,
-                rstd,
-                scale_f32,
-                bias_f32,
-                (True, True, True),
-            )
+        grad_input, grad_scale, grad_bias = torch.ops.aten.native_layer_norm_backward.default(
+            grad_output.float(),
+            stats,
+            ctx.normalized_shape,
+            mean,
+            rstd,
+            scale_f32,
+            bias_f32,
+            (True, True, True),
         )
         return (
             grad_input.to(ctx.input_dtype),
@@ -353,9 +417,7 @@ class RawLayerNorm(nn.Module):
             "native-fp32",
             "native-bf16",
         }:
-            raise ValueError(
-                f"Unsupported raw LayerNorm implementation: {implementation!r}"
-            )
+            raise ValueError(f"Unsupported raw LayerNorm implementation: {implementation!r}")
         self.width = int(width)
         self.scale = _raw_parameter((width,), dtype)
         self.bias = _raw_parameter((width,), dtype)
@@ -363,10 +425,7 @@ class RawLayerNorm(nn.Module):
         self.implementation = implementation
 
     def forward(self, x: Tensor, compute_dtype: torch.dtype) -> Tensor:
-        if (
-            self.implementation == "eager-fused-backward"
-            and torch.is_grad_enabled()
-        ):
+        if self.implementation == "eager-fused-backward" and torch.is_grad_enabled():
             return _ExactForwardNativeLayerNorm.apply(
                 x,
                 self.scale,
@@ -490,6 +549,27 @@ class BT4Smolgen(nn.Module):
         return (value @ self.shared_w.to(compute_dtype)).reshape(batch, 32, 64, 64)
 
 
+class BT4EncoderLayerCapture(NamedTuple):
+    """The five frozen BT4 representation boundaries for one encoder layer."""
+
+    hook_attn_in: Tensor
+    hook_attn_out: Tensor
+    resid_mid_after_ln: Tensor
+    hook_mlp_out: Tensor
+    resid_post_after_ln: Tensor
+
+
+class BT4EncoderCapture(NamedTuple):
+    """Layer-major captures returned by :meth:`encode_current_with_captures`."""
+
+    layer_indices: tuple[int, ...]
+    hook_attn_in: Tensor
+    hook_attn_out: Tensor
+    resid_mid_after_ln: Tensor
+    hook_mlp_out: Tensor
+    resid_post_after_ln: Tensor
+
+
 class BT4EncoderLayer(nn.Module):
     def __init__(
         self,
@@ -521,15 +601,35 @@ class BT4EncoderLayer(nn.Module):
         )
         self.smolgen = BT4Smolgen(norm_impl=norm_impl)
 
-    def forward(self, x: Tensor, alpha: float, compute_dtype: torch.dtype) -> Tensor:
+    def _forward_impl(
+        self,
+        x: Tensor,
+        alpha: float,
+        compute_dtype: torch.dtype,
+        *,
+        capture: bool,
+        attention_input_override: Tensor | None = None,
+        attention_output_override: Tensor | None = None,
+        resid_mid_override: Tensor | None = None,
+        mlp_output_override: Tensor | None = None,
+        resid_post_override: Tensor | None = None,
+    ) -> tuple[Tensor, BT4EncoderLayerCapture | None]:
         batch, sequence, _ = x.shape
-        q = x @ self.wq.to(compute_dtype) + self.wq_b.to(compute_dtype)
-        k = x @ self.wk.to(compute_dtype) + self.wk_b.to(compute_dtype)
-        v = x @ self.wv.to(compute_dtype) + self.wv_b.to(compute_dtype)
+        hook_attn_in = x
+        if attention_input_override is not None:
+            self._validate_override(
+                "attention_input_override",
+                attention_input_override,
+                hook_attn_in,
+            )
+            hook_attn_in = attention_input_override
+        q = hook_attn_in @ self.wq.to(compute_dtype) + self.wq_b.to(compute_dtype)
+        k = hook_attn_in @ self.wk.to(compute_dtype) + self.wk_b.to(compute_dtype)
+        v = hook_attn_in @ self.wv.to(compute_dtype) + self.wv_b.to(compute_dtype)
         q = q.reshape(batch, sequence, 32, 32).transpose(1, 2)
         k = k.reshape(batch, sequence, 32, 32).transpose(1, 2)
         v = v.reshape(batch, sequence, 32, 32).transpose(1, 2)
-        smolgen_bias = self.smolgen(x, compute_dtype)
+        smolgen_bias = self.smolgen(hook_attn_in, compute_dtype)
         if self.use_sdpa:
             out = F.scaled_dot_product_attention(
                 q,
@@ -543,14 +643,119 @@ class BT4EncoderLayer(nn.Module):
             attention = F.softmax(logits + smolgen_bias, dim=-1)
             out = attention @ v
         out = out.transpose(1, 2).reshape(batch * sequence, 1024)
-        out = self.wo(out, compute_dtype).reshape(batch, sequence, 1024)
-        x = self.ln_attn(out * alpha + x, compute_dtype)
-        flat = x.reshape(batch * sequence, 1024)
-        ffn = self.ffn2(F.mish(self.ffn1(flat, compute_dtype)), compute_dtype)
-        return self.ln_ffn(
-            ffn.reshape(batch, sequence, 1024) * alpha + x,
+        hook_attn_out = self.wo(out, compute_dtype).reshape(
+            batch,
+            sequence,
+            1024,
+        )
+        if attention_output_override is not None:
+            self._validate_override(
+                "attention_output_override",
+                attention_output_override,
+                hook_attn_out,
+            )
+            hook_attn_out = attention_output_override
+        resid_mid_after_ln = self.ln_attn(
+            hook_attn_out * alpha + hook_attn_in,
             compute_dtype,
         )
+        if resid_mid_override is not None:
+            self._validate_override(
+                "resid_mid_override",
+                resid_mid_override,
+                resid_mid_after_ln,
+            )
+            resid_mid_after_ln = resid_mid_override
+        flat = resid_mid_after_ln.reshape(batch * sequence, 1024)
+        ffn = self.ffn2(F.mish(self.ffn1(flat, compute_dtype)), compute_dtype)
+        hook_mlp_out = ffn.reshape(batch, sequence, 1024)
+        if mlp_output_override is not None:
+            self._validate_override(
+                "mlp_output_override",
+                mlp_output_override,
+                hook_mlp_out,
+            )
+            hook_mlp_out = mlp_output_override
+        resid_post_after_ln = self.ln_ffn(
+            hook_mlp_out * alpha + resid_mid_after_ln,
+            compute_dtype,
+        )
+        if resid_post_override is not None:
+            self._validate_override(
+                "resid_post_override",
+                resid_post_override,
+                resid_post_after_ln,
+            )
+            resid_post_after_ln = resid_post_override
+        if not capture:
+            return resid_post_after_ln, None
+        return resid_post_after_ln, BT4EncoderLayerCapture(
+            hook_attn_in=hook_attn_in,
+            hook_attn_out=hook_attn_out,
+            resid_mid_after_ln=resid_mid_after_ln,
+            hook_mlp_out=hook_mlp_out,
+            resid_post_after_ln=resid_post_after_ln,
+        )
+
+    @staticmethod
+    def _validate_override(name: str, override: Tensor, native: Tensor) -> None:
+        if not isinstance(override, Tensor):
+            raise TypeError(f"{name} must be a torch.Tensor")
+        if override.shape != native.shape:
+            raise ValueError(
+                f"{name} must have shape {tuple(native.shape)}, got {tuple(override.shape)}"
+            )
+        if override.dtype != native.dtype:
+            raise ValueError(f"{name} must have dtype {native.dtype}, got {override.dtype}")
+        if override.device != native.device:
+            raise ValueError(f"{name} must be on {native.device}, got {override.device}")
+
+    def forward(self, x: Tensor, alpha: float, compute_dtype: torch.dtype) -> Tensor:
+        output, layer_capture = self._forward_impl(
+            x,
+            alpha,
+            compute_dtype,
+            capture=False,
+        )
+        if layer_capture is not None:  # pragma: no cover - internal invariant
+            raise AssertionError("ordinary BT4 forward unexpectedly captured tensors")
+        return output
+
+    def forward_with_capture(
+        self,
+        x: Tensor,
+        alpha: float,
+        compute_dtype: torch.dtype,
+        *,
+        attention_input_override: Tensor | None = None,
+        attention_output_override: Tensor | None = None,
+        resid_mid_override: Tensor | None = None,
+        mlp_output_override: Tensor | None = None,
+        resid_post_override: Tensor | None = None,
+    ) -> tuple[Tensor, BT4EncoderLayerCapture]:
+        """Expose and optionally replace any boundary in the frozen hook ABI.
+
+        Branch overrides are applied after the native branch projection and
+        before ``alpha``, residual addition, and layer normalization. Residual
+        overrides replace the named post-normalization boundary. Captures
+        reflect the intervened value and remain attached to autograd; callers
+        choose ``inference_mode`` or detach when streaming bounded statistics.
+        """
+
+        output, layer_capture = self._forward_impl(
+            x,
+            alpha,
+            compute_dtype,
+            capture=True,
+            attention_input_override=attention_input_override,
+            attention_output_override=attention_output_override,
+            resid_mid_override=resid_mid_override,
+            mlp_output_override=mlp_output_override,
+            resid_post_override=resid_post_override,
+        )
+        if layer_capture is None:  # pragma: no cover - internal invariant
+            raise AssertionError("BT4 capture path did not return captures")
+        return output, layer_capture
 
 
 class BT4PolicyHead(nn.Module):
@@ -641,9 +846,7 @@ class BT4Encoder(nn.Module):
         if future_policy_head_count < 0:
             raise ValueError("future_policy_head_count must be non-negative")
         if future_policy_head_count and not include_policy_head:
-            raise ValueError(
-                "Future policy heads require the native root policy head"
-            )
+            raise ValueError("Future policy heads require the native root policy head")
         self.future_policy_heads = nn.ModuleList(
             BT4PolicyHead() for _ in range(future_policy_head_count)
         )
@@ -669,6 +872,117 @@ class BT4Encoder(nn.Module):
             else:
                 x = layer(x, self.alpha, compute_dtype)
         return x
+
+    def encode_current_with_captures(
+        self,
+        planes: Tensor,
+        *,
+        compute_dtype: torch.dtype,
+        capture_layers: Sequence[int] | None = None,
+        attention_input_overrides: Mapping[int, Tensor] | None = None,
+        attention_output_overrides: Mapping[int, Tensor] | None = None,
+        resid_mid_overrides: Mapping[int, Tensor] | None = None,
+        mlp_output_overrides: Mapping[int, Tensor] | None = None,
+        resid_post_overrides: Mapping[int, Tensor] | None = None,
+    ) -> tuple[Tensor, BT4EncoderCapture]:
+        """Encode current boards while retaining only requested layer hooks.
+
+        The capture tensors are layer-major ``[L, B, 64, 1024]`` arrays where
+        ``L`` follows ``layer_indices``. Overrides may target captured or
+        uncaptured layers. Branch replacements use the exact pre-alpha
+        boundaries, while residual replacements use the named
+        post-normalization boundaries exposed by
+        :meth:`BT4EncoderLayer.forward_with_capture`. This analysis path does not
+        use activation checkpointing; callers must stream each batch into
+        bounded statistics instead of accumulating a corpus on the GPU.
+        """
+
+        layer_count = len(self.layers)
+        selected = tuple(range(layer_count)) if capture_layers is None else tuple(capture_layers)
+        if not selected:
+            raise ValueError("capture_layers must select at least one layer")
+        if any(type(index) is not int for index in selected):
+            raise TypeError("capture_layers must contain integer layer indices")
+        if tuple(sorted(set(selected))) != selected:
+            raise ValueError("capture_layers must be unique and increasing")
+        if selected[0] < 0 or selected[-1] >= layer_count:
+            raise ValueError(f"capture_layers must be within [0, {layer_count - 1}]")
+
+        def validated_overrides(
+            name: str,
+            values: Mapping[int, Tensor] | None,
+        ) -> dict[int, Tensor]:
+            result = {} if values is None else dict(values)
+            for index, value in result.items():
+                if type(index) is not int or not 0 <= index < layer_count:
+                    raise ValueError(
+                        f"{name} keys must be integer layers within "
+                        f"[0, {layer_count - 1}], got {index!r}"
+                    )
+                if not isinstance(value, Tensor):
+                    raise TypeError(f"{name}[{index}] must be a torch.Tensor")
+            return result
+
+        attention_input_values = validated_overrides(
+            "attention_input_overrides",
+            attention_input_overrides,
+        )
+        attention_overrides = validated_overrides(
+            "attention_output_overrides",
+            attention_output_overrides,
+        )
+        resid_mid_values = validated_overrides(
+            "resid_mid_overrides",
+            resid_mid_overrides,
+        )
+        mlp_overrides = validated_overrides(
+            "mlp_output_overrides",
+            mlp_output_overrides,
+        )
+        resid_post_values = validated_overrides(
+            "resid_post_overrides",
+            resid_post_overrides,
+        )
+        selected_set = set(selected)
+        captures: list[BT4EncoderLayerCapture] = []
+        x = self.embedding(planes, self.alpha, compute_dtype)
+        for index, layer in enumerate(self.layers):
+            needs_analysis_path = index in selected_set or any(
+                index in values
+                for values in (
+                    attention_input_values,
+                    attention_overrides,
+                    resid_mid_values,
+                    mlp_overrides,
+                    resid_post_values,
+                )
+            )
+            if needs_analysis_path:
+                x, layer_capture = layer.forward_with_capture(
+                    x,
+                    self.alpha,
+                    compute_dtype,
+                    attention_input_override=attention_input_values.get(index),
+                    attention_output_override=attention_overrides.get(index),
+                    resid_mid_override=resid_mid_values.get(index),
+                    mlp_output_override=mlp_overrides.get(index),
+                    resid_post_override=resid_post_values.get(index),
+                )
+                if index in selected_set:
+                    captures.append(layer_capture)
+            else:
+                x = layer(x, self.alpha, compute_dtype)
+
+        if len(captures) != len(selected):  # pragma: no cover - invariant
+            raise AssertionError("BT4 encoder returned an incomplete capture set")
+        return x, BT4EncoderCapture(
+            layer_indices=selected,
+            hook_attn_in=torch.stack([value.hook_attn_in for value in captures]),
+            hook_attn_out=torch.stack([value.hook_attn_out for value in captures]),
+            resid_mid_after_ln=torch.stack([value.resid_mid_after_ln for value in captures]),
+            hook_mlp_out=torch.stack([value.hook_mlp_out for value in captures]),
+            resid_post_after_ln=torch.stack([value.resid_post_after_ln for value in captures]),
+        )
 
     def encode_future_tail(
         self,
@@ -915,10 +1229,7 @@ class ValueWDLHead(nn.Module):
         z: Tensor,
         compute_dtype: torch.dtype,
     ) -> tuple[Tensor, Tensor]:
-        hidden = F.mish(
-            z.to(compute_dtype) @ self.w1.to(compute_dtype)
-            + self.b1.to(compute_dtype)
-        )
+        hidden = F.mish(z.to(compute_dtype) @ self.w1.to(compute_dtype) + self.b1.to(compute_dtype))
         value = hidden @ self.value_w.to(compute_dtype) + self.value_b.to(compute_dtype)
         wdl = hidden @ self.wdl_w.to(compute_dtype) + self.wdl_b.to(compute_dtype)
         return value.squeeze(-1), wdl
@@ -947,48 +1258,44 @@ class DFMJepaConditioningResult(NamedTuple):
 
 
 def _validate_hero_architecture_config(config: Config) -> None:
+    if config.policy_distill_teacher_mode not in {"online", "checkpoint"}:
+        raise ValueError(
+            "policy_distill_teacher_mode must be online or checkpoint"
+        )
+    teacher_sha256 = config.policy_distill_teacher_state_sha256
+    valid_teacher_sha256 = (
+        len(teacher_sha256) == 64
+        and all(character in "0123456789abcdef" for character in teacher_sha256)
+    )
+    if config.policy_distill_teacher_mode == "checkpoint":
+        if config.policy_distill_coeff <= 0.0:
+            raise ValueError("Checkpoint policy teacher requires positive distillation")
+        if not valid_teacher_sha256:
+            raise ValueError("Checkpoint policy teacher requires a lowercase SHA-256")
+    elif teacher_sha256:
+        raise ValueError("Online policy teacher cannot carry a checkpoint SHA-256")
     if config.policy_passthrough_mode not in {
         "root_only",
         "all_horizon_heads",
     }:
-        raise ValueError(
-            "policy_passthrough_mode must be 'root_only' or "
-            "'all_horizon_heads'"
-        )
+        raise ValueError("policy_passthrough_mode must be 'root_only' or 'all_horizon_heads'")
     if config.dfm_state_source not in {"trunk", "policy_prelogit"}:
-        raise ValueError(
-            "dfm_state_source must be 'trunk' or 'policy_prelogit'"
-        )
+        raise ValueError("dfm_state_source must be 'trunk' or 'policy_prelogit'")
     if config.dfm_jepa_fusion_mode not in {"none", "normalized_add"}:
-        raise ValueError(
-            "dfm_jepa_fusion_mode must be 'none' or 'normalized_add'"
-        )
+        raise ValueError("dfm_jepa_fusion_mode must be 'none' or 'normalized_add'")
     if config.dfm_closed_loop_mode not in {
         "none",
         "predicted_jepa_tokens",
     }:
-        raise ValueError(
-            "dfm_closed_loop_mode must be 'none' or "
-            "'predicted_jepa_tokens'"
-        )
+        raise ValueError("dfm_closed_loop_mode must be 'none' or 'predicted_jepa_tokens'")
     if type(config.wdl_include_current_state) is not bool:
         raise TypeError("wdl_include_current_state must be boolean")
-    if (
-        config.dfm_condition_on_current_jepa_state
-        and config.dfm_jepa_fusion_mode != "none"
-    ):
+    if config.dfm_condition_on_current_jepa_state and config.dfm_jepa_fusion_mode != "none":
         raise ValueError(
-            "Legacy DFM/JEPA conditioning and normalized fusion are "
-            "mutually exclusive"
+            "Legacy DFM/JEPA conditioning and normalized fusion are mutually exclusive"
         )
-    if (
-        config.jepa_feedback_mode != "none"
-        and config.dfm_closed_loop_mode != "none"
-    ):
-        raise ValueError(
-            "Legacy final-pass feedback and DFM closed loop are "
-            "mutually exclusive"
-        )
+    if config.jepa_feedback_mode != "none" and config.dfm_closed_loop_mode != "none":
+        raise ValueError("Legacy final-pass feedback and DFM closed loop are mutually exclusive")
 
 
 class JointModel(nn.Module):
@@ -1006,10 +1313,7 @@ class JointModel(nn.Module):
         self.encoder = BT4Encoder(
             include_policy_head=config.use_bt4_policy_residual,
             future_policy_head_count=(
-                config.horizon - 1
-                if config.policy_passthrough_mode
-                == "all_horizon_heads"
-                else 0
+                config.horizon - 1 if config.policy_passthrough_mode == "all_horizon_heads" else 0
             ),
             use_sdpa=config.use_bt4_sdpa,
             norm_impl=bt4_norm_impl,
@@ -1023,10 +1327,7 @@ class JointModel(nn.Module):
                 dtype=dtype,
                 bias=False,
             )
-            if (
-                config.dfm_condition_on_current_jepa_state
-                or config.dfm_jepa_fusion_mode != "none"
-            )
+            if (config.dfm_condition_on_current_jepa_state or config.dfm_jepa_fusion_mode != "none")
             else None
         )
         self.dfm_jepa_rollout_adapter = (
@@ -1074,9 +1375,7 @@ class JointModel(nn.Module):
         policy_head = self.encoder.policy_head
         if policy_head is None:
             if self.encoder.future_policy_heads:
-                raise ValueError(
-                    "Future policy heads exist without a root policy head"
-                )
+                raise ValueError("Future policy heads exist without a root policy head")
             return None, None
         root_logits, policy_features = policy_head.forward_with_features(
             current,
@@ -1084,22 +1383,12 @@ class JointModel(nn.Module):
         )
         if self.config.policy_passthrough_mode == "root_only":
             if self.encoder.future_policy_heads:
-                raise ValueError(
-                    "Root-only passthrough unexpectedly has future heads"
-                )
+                raise ValueError("Root-only passthrough unexpectedly has future heads")
             return root_logits, policy_features
-        if (
-            len(self.encoder.future_policy_heads)
-            != self.config.horizon - 1
-        ):
-            raise ValueError(
-                "All-horizon passthrough has the wrong number of policy heads"
-            )
+        if len(self.encoder.future_policy_heads) != self.config.horizon - 1:
+            raise ValueError("All-horizon passthrough has the wrong number of policy heads")
         future_logits = torch.stack(
-            tuple(
-                head(current, compute_dtype)
-                for head in self.encoder.future_policy_heads
-            ),
+            tuple(head(current, compute_dtype) for head in self.encoder.future_policy_heads),
             dim=1,
         )
         return (
@@ -1148,9 +1437,7 @@ class JointModel(nn.Module):
         dfm_source = current
         if self.config.dfm_state_source == "policy_prelogit":
             if policy_features is None:
-                raise ValueError(
-                    "Policy-prelogit DFM state requires a BT4 policy head"
-                )
+                raise ValueError("Policy-prelogit DFM state requires a BT4 policy head")
             dfm_source = policy_features
         with _profile_scope(profile_regions, "region::dfm_state_projector"):
             z_dfm = self.dfm_state_projector(dfm_source, compute_dtype)
@@ -1204,10 +1491,9 @@ class JointModel(nn.Module):
             normalized_context = context_f32 * torch.rsqrt(
                 context_f32.square().mean(dim=-1, keepdim=True) + 1e-6
             )
-            action = (
-                (normalized_action + normalized_context)
-                * (1.0 / math.sqrt(2.0))
-            ).to(compute_dtype)
+            action = ((normalized_action + normalized_context) * (1.0 / math.sqrt(2.0))).to(
+                compute_dtype
+            )
         sequence = torch.cat((z_dfm.to(compute_dtype), action), dim=1)
         sequence = self.dfm_blocks(sequence, compute_dtype)
         action_hidden = sequence[:, 64:, :]
@@ -1216,22 +1502,15 @@ class JointModel(nn.Module):
         if base_root_logits is not None:
             if not self.config.use_bt4_policy_residual:
                 raise ValueError("Base root logits require the BT4 residual-policy recipe")
-            if (
-                base_root_logits.ndim == 2
-                and base_root_logits.shape == logits[:, 0].shape
-            ):
+            if base_root_logits.ndim == 2 and base_root_logits.shape == logits[:, 0].shape:
                 logits = torch.cat(
                     (
-                        logits[:, :1]
-                        + base_root_logits.to(logits.dtype).unsqueeze(1),
+                        logits[:, :1] + base_root_logits.to(logits.dtype).unsqueeze(1),
                         logits[:, 1:],
                     ),
                     dim=1,
                 )
-            elif (
-                base_root_logits.ndim == 3
-                and base_root_logits.shape == logits.shape
-            ):
+            elif base_root_logits.ndim == 3 and base_root_logits.shape == logits.shape:
                 logits = logits + base_root_logits.to(logits.dtype)
             else:
                 raise ValueError(
@@ -1273,8 +1552,7 @@ class JointModel(nn.Module):
         expected_hidden_shape = (z0.shape[0], self.config.token_dim)
         if action.shape != (z0.shape[0],):
             raise ValueError(
-                f"action must have shape {(z0.shape[0],)}, "
-                f"found {tuple(action.shape)}"
+                f"action must have shape {(z0.shape[0],)}, found {tuple(action.shape)}"
             )
         if action_hidden.shape != expected_hidden_shape:
             raise ValueError(
@@ -1300,8 +1578,7 @@ class JointModel(nn.Module):
         )
         if self.config.dfm_closed_loop_mode != "predicted_jepa_tokens":
             raise ValueError(
-                "JEPA rollout action context requires the active "
-                "predicted-state closed loop"
+                "JEPA rollout action context requires the active predicted-state closed loop"
             )
         if adapter is None:
             raise ValueError("Active DFM closed loop has no rollout adapter")
@@ -1329,13 +1606,11 @@ class JointModel(nn.Module):
         expected_jepa_shape = (batch_size, self.config.z_dim)
         if z_dfm.shape != expected_dfm_shape:
             raise ValueError(
-                f"z_dfm must have shape {expected_dfm_shape}, "
-                f"found {tuple(z_dfm.shape)}"
+                f"z_dfm must have shape {expected_dfm_shape}, found {tuple(z_dfm.shape)}"
             )
         if z_jepa is not None and z_jepa.shape != expected_jepa_shape:
             raise ValueError(
-                f"z_jepa must have shape {expected_jepa_shape}, "
-                f"found {tuple(z_jepa.shape)}"
+                f"z_jepa must have shape {expected_jepa_shape}, found {tuple(z_jepa.shape)}"
             )
         adapter = self.dfm_jepa_state_adapter
         fusion_mode = getattr(
@@ -1344,15 +1619,11 @@ class JointModel(nn.Module):
             "none",
         )
         conditioning_active = (
-            self.config.dfm_condition_on_current_jepa_state
-            or fusion_mode != "none"
+            self.config.dfm_condition_on_current_jepa_state or fusion_mode != "none"
         )
         if not conditioning_active:
             if adapter is not None:
-                raise ValueError(
-                    "Disabled DFM/JEPA conditioning unexpectedly has an "
-                    "adapter"
-                )
+                raise ValueError("Disabled DFM/JEPA conditioning unexpectedly has an adapter")
             zeros = torch.zeros(
                 (batch_size,),
                 device=z_dfm.device,
@@ -1369,24 +1640,14 @@ class JointModel(nn.Module):
                 ),
             )
         if adapter is None:
-            raise ValueError(
-                "Active DFM/JEPA conditioning has no adapter"
-            )
+            raise ValueError("Active DFM/JEPA conditioning has no adapter")
         if z_jepa is None:
-            raise ValueError(
-                "Active DFM/JEPA conditioning requires z_jepa"
-            )
-        state_rms = torch.sqrt(
-            z_dfm.float().square().mean(dim=(1, 2))
-        )
+            raise ValueError("Active DFM/JEPA conditioning requires z_jepa")
+        state_rms = torch.sqrt(z_dfm.float().square().mean(dim=(1, 2)))
         residual = adapter(z_jepa, compute_dtype).float()
         if residual.shape != (batch_size, self.config.token_dim):
-            raise RuntimeError(
-                "DFM/JEPA conditioning adapter returned the wrong shape"
-            )
-        residual_rms = torch.sqrt(
-            residual.square().mean(dim=-1)
-        )
+            raise RuntimeError("DFM/JEPA conditioning adapter returned the wrong shape")
+        residual_rms = torch.sqrt(residual.square().mean(dim=-1))
         if fusion_mode == "normalized_add":
             state_f32 = z_dfm.float()
             normalized_state = state_f32 * torch.rsqrt(
@@ -1396,19 +1657,11 @@ class JointModel(nn.Module):
                 residual.square().mean(dim=-1, keepdim=True) + 1e-6
             )
             latents = (
-                (
-                    normalized_state
-                    + normalized_residual.unsqueeze(1)
-                )
-                * (1.0 / math.sqrt(2.0))
+                (normalized_state + normalized_residual.unsqueeze(1)) * (1.0 / math.sqrt(2.0))
             ).to(compute_dtype)
         else:
-            latents = (
-                z_dfm.float() + residual.unsqueeze(1)
-            ).to(compute_dtype)
-        weight_rms = torch.sqrt(
-            adapter.w.float().square().mean()
-        )
+            latents = (z_dfm.float() + residual.unsqueeze(1)).to(compute_dtype)
+        weight_rms = torch.sqrt(adapter.w.float().square().mean())
         return DFMJepaConditioningResult(
             latents=latents,
             residual_rms=residual_rms,
@@ -1427,26 +1680,20 @@ class JointModel(nn.Module):
         """Apply the frozen capped adjoint JEPA residual to DFM state tokens."""
 
         if self.config.jepa_feedback_mode != "final_pass_adjoint":
-            raise ValueError(
-                "JEPA feedback requires "
-                "jepa_feedback_mode='final_pass_adjoint'"
-            )
+            raise ValueError("JEPA feedback requires jepa_feedback_mode='final_pass_adjoint'")
         batch_size = z_dfm.shape[0]
         expected_jepa_shape = (batch_size, self.config.z_dim)
         if z0_jepa.shape != expected_jepa_shape:
             raise ValueError(
-                f"z0_jepa must have shape {expected_jepa_shape}, "
-                f"found {tuple(z0_jepa.shape)}"
+                f"z0_jepa must have shape {expected_jepa_shape}, found {tuple(z0_jepa.shape)}"
             )
         if z1_jepa.shape != expected_jepa_shape:
             raise ValueError(
-                f"z1_jepa must have shape {expected_jepa_shape}, "
-                f"found {tuple(z1_jepa.shape)}"
+                f"z1_jepa must have shape {expected_jepa_shape}, found {tuple(z1_jepa.shape)}"
             )
         if feedback_gate.shape != (batch_size,):
             raise ValueError(
-                f"feedback_gate must have shape {(batch_size,)}, "
-                f"found {tuple(feedback_gate.shape)}"
+                f"feedback_gate must have shape {(batch_size,)}, found {tuple(feedback_gate.shape)}"
             )
 
         adapter_w = self.jepa_hidden_adapter.w.float()
@@ -1456,35 +1703,20 @@ class JointModel(nn.Module):
                 f"feedback: {tuple(adapter_w.shape)}"
             )
         delta = z1_jepa.float() - z0_jepa.float()
-        variance_correction = math.sqrt(
-            self.config.token_dim / self.config.z_dim
-        )
+        variance_correction = math.sqrt(self.config.token_dim / self.config.z_dim)
         raw_feedback = (delta @ adapter_w.transpose(0, 1)) * variance_correction
         delta_rms = torch.sqrt(delta.square().mean(dim=-1))
-        raw_feedback_rms = torch.sqrt(
-            raw_feedback.square().mean(dim=-1)
-        )
-        state_rms = torch.sqrt(
-            z_dfm.float().square().mean(dim=(1, 2))
-        )
-        max_feedback_rms = (
-            _JEPA_FEEDBACK_MAX_STATE_RMS_RATIO * state_rms
-        )
+        raw_feedback_rms = torch.sqrt(raw_feedback.square().mean(dim=-1))
+        state_rms = torch.sqrt(z_dfm.float().square().mean(dim=(1, 2)))
+        max_feedback_rms = _JEPA_FEEDBACK_MAX_STATE_RMS_RATIO * state_rms
         cap_scale = torch.minimum(
             torch.ones_like(raw_feedback_rms),
-            max_feedback_rms
-            / raw_feedback_rms.clamp_min(_JEPA_FEEDBACK_RMS_EPSILON),
+            max_feedback_rms / raw_feedback_rms.clamp_min(_JEPA_FEEDBACK_RMS_EPSILON),
         )
         gate = feedback_gate.float().clamp(0.0, 1.0)
-        applied_feedback = (
-            raw_feedback * cap_scale.unsqueeze(1) * gate.unsqueeze(1)
-        )
-        applied_feedback_rms = torch.sqrt(
-            applied_feedback.square().mean(dim=-1)
-        )
-        latents = (
-            z_dfm.float() + applied_feedback.unsqueeze(1)
-        ).to(compute_dtype)
+        applied_feedback = raw_feedback * cap_scale.unsqueeze(1) * gate.unsqueeze(1)
+        applied_feedback_rms = torch.sqrt(applied_feedback.square().mean(dim=-1))
+        latents = (z_dfm.float() + applied_feedback.unsqueeze(1)).to(compute_dtype)
         return JepaFeedbackResult(
             latents=latents,
             delta_rms=delta_rms,
@@ -1552,25 +1784,15 @@ def _validate_torch_arena_history(
         try:
             endpoint = verify_trusted_arena_history_endpoint(history)
         except (TypeError, ValueError) as exc:
-            raise ValueError(
-                f"trusted arena endpoint for row {row} is invalid"
-            ) from exc
+            raise ValueError(f"trusted arena endpoint for row {row} is invalid") from exc
         if original_board.move_stack:
-            raise ValueError(
-                f"boards[{row}] must be a stackless trusted arena copy"
-            )
+            raise ValueError(f"boards[{row}] must be a stackless trusted arena copy")
         if endpoint.current_fen != _canonical_arena_fen(checked_board):
-            raise ValueError(
-                f"trusted arena endpoint must match boards[{row}]"
-            )
+            raise ValueError(f"trusted arena endpoint must match boards[{row}]")
         if endpoint.authoritative_move_stack_length != checked_board.ply():
-            raise ValueError(
-                f"trusted arena endpoint ply must match boards[{row}]"
-            )
+            raise ValueError(f"trusted arena endpoint ply must match boards[{row}]")
         if endpoint.position_count != checked_board.ply() + 1:
-            raise ValueError(
-                f"trusted arena endpoint position count must match boards[{row}]"
-            )
+            raise ValueError(f"trusted arena endpoint position count must match boards[{row}]")
         return
     if mode != HISTORY_VALIDATION_FULL_REPLAY:
         raise ValueError(f"Unsupported arena history mode: {mode!r}")
@@ -1582,15 +1804,10 @@ def _validate_torch_arena_history(
         raise TypeError(f"histories[{row}] must be iterable") from exc
     if not positions:
         raise ValueError(f"histories[{row}] must not be empty")
-    checked_positions = tuple(
-        _checked_arena_board(position, row=row)
-        for position in positions
-    )
+    checked_positions = tuple(_checked_arena_board(position, row=row) for position in positions)
     replay = chess.Board()
     if _canonical_arena_fen(checked_positions[0]) != _canonical_arena_fen(replay):
-        raise ValueError(
-            f"histories[{row}] must start at the standard initial position"
-        )
+        raise ValueError(f"histories[{row}] must start at the standard initial position")
     for history_index, target in enumerate(checked_positions[1:], start=1):
         replay.push(
             _matching_arena_transition(
@@ -1734,16 +1951,9 @@ def _validate_torch_refinement_passes(
         "none",
         "final_pass_adjoint",
     }:
-        raise ValueError(
-            f"Unsupported jepa_feedback_mode: {feedback_mode!r}"
-        )
-    if feedback_mode == "final_pass_adjoint" and (
-        refinement_passes != 8
-        or config.horizon != 8
-    ):
-        raise ValueError(
-            "final_pass_adjoint inference requires horizon/pass count 8"
-        )
+        raise ValueError(f"Unsupported jepa_feedback_mode: {feedback_mode!r}")
+    if feedback_mode == "final_pass_adjoint" and (refinement_passes != 8 or config.horizon != 8):
+        raise ValueError("final_pass_adjoint inference requires horizon/pass count 8")
 
 
 def _torch_refine_dfm_actions(
@@ -1777,16 +1987,12 @@ def _torch_refine_dfm_actions(
     )
     feedback_active = feedback_mode == "final_pass_adjoint"
     closed_loop_active = (
-        getattr(model.config, "dfm_closed_loop_mode", "none")
-        == "predicted_jepa_tokens"
+        getattr(model.config, "dfm_closed_loop_mode", "none") == "predicted_jepa_tokens"
     )
     if (feedback_active or closed_loop_active) and (
-        z_jepa is None
-        or z_jepa.shape != (batch_size, model.config.z_dim)
+        z_jepa is None or z_jepa.shape != (batch_size, model.config.z_dim)
     ):
-        raise ValueError(
-            "JEPA-coupled DFM inference requires current JEPA state"
-        )
+        raise ValueError("JEPA-coupled DFM inference requires current JEPA state")
     planner_latents = z_dfm
     jepa_action_context: Tensor | None = None
     action_tokens = torch.full(
@@ -1803,13 +2009,8 @@ def _torch_refine_dfm_actions(
             device=z_dfm.device,
         )
         capture_legacy_hidden = feedback_active and pass_index == 6
-        capture_closed_loop_hidden = (
-            closed_loop_active
-            and pass_index + 1 < refinement_passes
-        )
-        capture_hidden = (
-            capture_legacy_hidden or capture_closed_loop_hidden
-        )
+        capture_closed_loop_hidden = closed_loop_active and pass_index + 1 < refinement_passes
+        capture_hidden = capture_legacy_hidden or capture_closed_loop_hidden
         planner_kwargs: dict[str, Any] = {
             "base_root_logits": base_root_logits,
             "return_hidden": capture_hidden,
@@ -1832,9 +2033,7 @@ def _torch_refine_dfm_actions(
             action_hidden = None
         logits_f32 = logits.float()
         if not bool(torch.all(torch.isfinite(logits_f32))):
-            raise FloatingPointError(
-                f"DFM arena logits are non-finite at pass {pass_index}"
-            )
+            raise FloatingPointError(f"DFM arena logits are non-finite at pass {pass_index}")
         root_logits = torch.where(
             root_legal_mask,
             logits_f32[:, 0],
@@ -1854,9 +2053,7 @@ def _torch_refine_dfm_actions(
             confidence,
             torch.full_like(confidence, torch.inf),
         )
-        target_unmasked = (
-            horizon * (pass_index + 1)
-        ) // refinement_passes
+        target_unmasked = (horizon * (pass_index + 1)) // refinement_passes
         position_order = torch.argsort(
             -confidence,
             dim=-1,
@@ -1917,9 +2114,7 @@ def _torch_refine_dfm_actions(
                 compute_dtype,
             )
     if bool(torch.any(action_tokens == _MASK_TOKEN)):
-        raise RuntimeError(
-            "Refinement passes did not unmask every action position"
-        )
+        raise RuntimeError("Refinement passes did not unmask every action position")
     root_actions = action_tokens[:, 0]
     if not bool(
         torch.all(
@@ -1968,13 +2163,8 @@ class TorchHeroArenaPolicy:
         if not isinstance(self.model_id, str) or not self.model_id.strip():
             raise ValueError("model_id must be non-empty")
         if self.policy_mode not in {"dfm", "policy_only", "raw_bt4"}:
-            raise ValueError(
-                "policy_mode must be 'dfm', 'policy_only', or 'raw_bt4'"
-            )
-        if (
-            isinstance(self.inference_batch_size, bool)
-            or self.inference_batch_size < 1
-        ):
+            raise ValueError("policy_mode must be 'dfm', 'policy_only', or 'raw_bt4'")
+        if isinstance(self.inference_batch_size, bool) or self.inference_batch_size < 1:
             raise ValueError("inference_batch_size must be positive")
         if self.model.config.action_codec != ACTION_CODEC_LC0_CANONICAL_1858:
             raise ValueError("Torch arena policy requires the canonical codec")
@@ -2027,8 +2217,7 @@ class TorchHeroArenaPolicy:
                 f"{self.inference_batch_size}"
             )
         checked_boards = tuple(
-            _checked_arena_board(board, row=row)
-            for row, board in enumerate(board_items)
+            _checked_arena_board(board, row=row) for row, board in enumerate(board_items)
         )
         for row, (original, checked, history) in enumerate(
             zip(board_items, checked_boards, history_items, strict=True)
@@ -2053,15 +2242,9 @@ class TorchHeroArenaPolicy:
                 )
             )
             if planes.shape != (TOTAL_PLANES, 8, 8):
-                raise ValueError(
-                    f"encoded planes for row {row} have shape {planes.shape}"
-                )
-            if planes.dtype != np.dtype(np.float32) or not np.all(
-                np.isfinite(planes)
-            ):
-                raise ValueError(
-                    f"encoded planes for row {row} are not finite float32"
-                )
+                raise ValueError(f"encoded planes for row {row} have shape {planes.shape}")
+            if planes.dtype != np.dtype(np.float32) or not np.all(np.isfinite(planes)):
+                raise ValueError(f"encoded planes for row {row} are not finite float32")
             try:
                 mask = np.asarray(
                     legal_action_mask(
@@ -2077,18 +2260,14 @@ class TorchHeroArenaPolicy:
                 TypeError,
                 ValueError,
             ) as exc:
-                raise ValueError(
-                    f"could not construct root legality mask for row {row}"
-                ) from exc
+                raise ValueError(f"could not construct root legality mask for row {row}") from exc
             if (
                 mask.shape != (ACTION_VOCAB_SIZE,)
                 or mask.dtype != np.dtype(np.bool_)
                 or int(mask.sum()) != board.legal_moves.count()
                 or not bool(mask.any())
             ):
-                raise ValueError(
-                    f"canonical legality mask failed coverage for row {row}"
-                )
+                raise ValueError(f"canonical legality mask failed coverage for row {row}")
             plane_rows.append(planes)
             mask_rows.append(mask)
 
@@ -2112,12 +2291,8 @@ class TorchHeroArenaPolicy:
             )
 
         device = next(self.model.parameters()).device
-        planes_tensor = torch.from_numpy(
-            np.ascontiguousarray(current_planes)
-        ).to(device)
-        legal_tensor = torch.from_numpy(
-            np.ascontiguousarray(root_legal_mask)
-        ).to(device)
+        planes_tensor = torch.from_numpy(np.ascontiguousarray(current_planes)).to(device)
+        legal_tensor = torch.from_numpy(np.ascontiguousarray(root_legal_mask)).to(device)
         with torch.inference_mode():
             tokens = self.model.encoder.encode_current(
                 planes_tensor,
@@ -2132,15 +2307,11 @@ class TorchHeroArenaPolicy:
             )
             assert base_policy_logits is not None
             root_policy_logits = (
-                base_policy_logits
-                if base_policy_logits.ndim == 2
-                else base_policy_logits[:, 0]
+                base_policy_logits if base_policy_logits.ndim == 2 else base_policy_logits[:, 0]
             )
             if self.policy_mode in {"policy_only", "raw_bt4"}:
                 if not bool(torch.all(torch.isfinite(root_policy_logits.float()))):
-                    raise FloatingPointError(
-                        f"{self.policy_mode} arena logits are non-finite"
-                    )
+                    raise FloatingPointError(f"{self.policy_mode} arena logits are non-finite")
                 selected = torch.where(
                     legal_tensor,
                     root_policy_logits.float(),
@@ -2150,9 +2321,7 @@ class TorchHeroArenaPolicy:
                 dfm_source = tokens
                 if self.model.config.dfm_state_source == "policy_prelogit":
                     if policy_features is None:
-                        raise RuntimeError(
-                            "Policy-prelogit Arena path has no features"
-                        )
+                        raise RuntimeError("Policy-prelogit Arena path has no features")
                     dfm_source = policy_features
                 z_dfm = self.model.dfm_state_projector(
                     dfm_source,
@@ -2161,14 +2330,10 @@ class TorchHeroArenaPolicy:
                 z_jepa = (
                     self.model.state_projector(tokens, torch.bfloat16)
                     if (
-                        self.model.config.jepa_feedback_mode
-                        == "final_pass_adjoint"
-                        or self.model.config
-                        .dfm_condition_on_current_jepa_state
-                        or self.model.config.dfm_jepa_fusion_mode
-                        != "none"
-                        or self.model.config.dfm_closed_loop_mode
-                        != "none"
+                        self.model.config.jepa_feedback_mode == "final_pass_adjoint"
+                        or self.model.config.dfm_condition_on_current_jepa_state
+                        or self.model.config.dfm_jepa_fusion_mode != "none"
+                        or self.model.config.dfm_closed_loop_mode != "none"
                     )
                     else None
                 )
@@ -2188,19 +2353,12 @@ class TorchHeroArenaPolicy:
                 )
             if device.type == "cuda":
                 torch.cuda.synchronize(device)
-            actions = (
-                selected[:active_batch_size]
-                .to(dtype=torch.int32)
-                .cpu()
-                .numpy()
-            )
+            actions = selected[:active_batch_size].to(dtype=torch.int32).cpu().numpy()
         if actions.shape != (active_batch_size,):
             raise RuntimeError("Torch arena adapter returned the wrong shape")
         for row, action in enumerate(actions):
             if not root_legal_mask[row, int(action)]:
-                raise RuntimeError(
-                    f"Torch arena adapter selected an illegal action for row {row}"
-                )
+                raise RuntimeError(f"Torch arena adapter selected an illegal action for row {row}")
         actions.flags.writeable = False
         return TorchArenaSelection(action_indices=actions)
 
@@ -2294,6 +2452,136 @@ def _legal_conditional_ce(
     return torch.where(legal_count > 0, result, torch.zeros_like(result))
 
 
+def _base_policy_root_diagnostics(
+    base_root_logits: Tensor | None,
+    dfm_root_logits: Tensor,
+    targets: Tensor,
+    legal_idx: Tensor,
+    legal_count: Tensor,
+    weight: Tensor,
+    *,
+    policy_teacher_root_logits: Tensor | None = None,
+) -> dict[str, Tensor]:
+    """Compare current, teacher, and final policies on the exact legal set."""
+
+    zero = torch.zeros((), device=dfm_root_logits.device, dtype=torch.float32)
+    metric_names = (
+        "base_policy_active",
+        "base_policy_root_legal_conditional_ce",
+        "base_policy_dfm_root_legal_kl",
+        "base_policy_root_legal_top1_accuracy",
+        "base_policy_dfm_root_legal_top1_agreement",
+        "policy_teacher_active",
+        "policy_teacher_root_legal_conditional_ce",
+        "policy_teacher_dfm_root_legal_kl",
+        "policy_teacher_root_legal_top1_accuracy",
+        "policy_teacher_dfm_root_legal_top1_agreement",
+    )
+    if base_root_logits is None:
+        if policy_teacher_root_logits is not None:
+            raise ValueError("A fixed policy teacher requires a current BT4 policy head")
+        return {name: zero for name in metric_names}
+    if base_root_logits.shape != dfm_root_logits.shape or dfm_root_logits.ndim != 2:
+        raise ValueError(
+            "Base and DFM root logits must have identical [batch, action] shape: "
+            f"{tuple(base_root_logits.shape)} != {tuple(dfm_root_logits.shape)}"
+        )
+    if targets.shape != (dfm_root_logits.shape[0],):
+        raise ValueError("Root targets must have shape [batch]")
+    teacher_logits = (
+        base_root_logits
+        if policy_teacher_root_logits is None
+        else policy_teacher_root_logits
+    )
+    if teacher_logits.shape != dfm_root_logits.shape:
+        raise ValueError(
+            "Policy teacher and DFM root logits must have identical shape: "
+            f"{tuple(teacher_logits.shape)} != {tuple(dfm_root_logits.shape)}"
+        )
+    legal_mask = _root_legal_mask_from_indices(
+        legal_idx,
+        legal_count,
+        action_vocab_size=dfm_root_logits.shape[-1],
+    )
+    legal_valid = legal_count > 0
+    safe_legal_mask = legal_mask | ~legal_valid.unsqueeze(-1)
+    base_f32 = base_root_logits.float()
+    dfm_f32 = dfm_root_logits.float()
+    base_log_probabilities = F.log_softmax(
+        base_f32.detach().masked_fill(~safe_legal_mask, -torch.inf),
+        dim=-1,
+    )
+    # The online teacher shares the current encoder and head. Preserve the
+    # exact final-root forward value while canceling that shared path in
+    # backward. A separate checkpoint teacher is already immutable, so its
+    # student must retain gradients through the current base head and encoder.
+    online_student_logits = dfm_f32 + (base_f32.detach() - base_f32)
+    online_student_log_probabilities = F.log_softmax(
+        online_student_logits.masked_fill(~safe_legal_mask, -torch.inf),
+        dim=-1,
+    )
+    base_sample_kl = (
+        base_log_probabilities.exp()
+        * (base_log_probabilities - online_student_log_probabilities)
+    ).masked_fill(~safe_legal_mask, 0.0).sum(dim=-1)
+
+    teacher_f32 = teacher_logits.float().detach()
+    teacher_log_probabilities = F.log_softmax(
+        teacher_f32.masked_fill(~safe_legal_mask, -torch.inf),
+        dim=-1,
+    )
+    teacher_student_logits = (
+        online_student_logits
+        if policy_teacher_root_logits is None
+        else dfm_f32
+    )
+    teacher_student_log_probabilities = F.log_softmax(
+        teacher_student_logits.masked_fill(~safe_legal_mask, -torch.inf),
+        dim=-1,
+    )
+    teacher_sample_kl = (
+        teacher_log_probabilities.exp()
+        * (teacher_log_probabilities - teacher_student_log_probabilities)
+    ).masked_fill(~safe_legal_mask, 0.0).sum(dim=-1)
+
+    distill_weight = weight.float() * legal_valid.float()
+    base_action = base_f32.masked_fill(~legal_mask, -torch.inf).argmax(dim=-1)
+    dfm_action = dfm_f32.masked_fill(~legal_mask, -torch.inf).argmax(dim=-1)
+    teacher_action = teacher_f32.masked_fill(~legal_mask, -torch.inf).argmax(dim=-1)
+    return {
+        "base_policy_active": torch.ones_like(zero),
+        "base_policy_root_legal_conditional_ce": _weighted_mean(
+            _legal_conditional_ce(base_root_logits, targets, legal_idx, legal_count),
+            weight,
+        ),
+        "base_policy_dfm_root_legal_kl": _weighted_mean(
+            base_sample_kl,
+            distill_weight,
+        ),
+        "base_policy_root_legal_top1_accuracy": _weighted_mean(
+            (base_action == targets).float(), weight
+        ),
+        "base_policy_dfm_root_legal_top1_agreement": _weighted_mean(
+            (base_action == dfm_action).float(), weight
+        ),
+        "policy_teacher_active": torch.ones_like(zero),
+        "policy_teacher_root_legal_conditional_ce": _weighted_mean(
+            _legal_conditional_ce(teacher_f32, targets, legal_idx, legal_count),
+            weight,
+        ),
+        "policy_teacher_dfm_root_legal_kl": _weighted_mean(
+            teacher_sample_kl,
+            distill_weight,
+        ),
+        "policy_teacher_root_legal_top1_accuracy": _weighted_mean(
+            (teacher_action == targets).float(), weight
+        ),
+        "policy_teacher_dfm_root_legal_top1_agreement": _weighted_mean(
+            (teacher_action == dfm_action).float(), weight
+        ),
+    }
+
+
 def _uniform_horizon_mean(values: Tensor, weight: Tensor) -> Tensor:
     denominator = weight.sum(dim=0)
     means = (values * weight).sum(dim=0) / denominator.clamp_min(1.0)
@@ -2309,13 +2597,12 @@ def _prepare_wdl_supervision(
     future_valid: Tensor,
     *,
     include_current_state: bool,
+    current_target: Tensor | None = None,
 ) -> tuple[Tensor, Tensor, Tensor]:
     """Build parity-correct shared WDL-head inputs, targets, and weights."""
 
     if predicted_states.ndim != 3:
-        raise ValueError(
-            "Predicted WDL states must have shape [batch, horizon, dim]"
-        )
+        raise ValueError("Predicted WDL states must have shape [batch, horizon, dim]")
     batch_size, horizon, state_dim = predicted_states.shape
     if current_state.shape != (batch_size, state_dim):
         raise ValueError("Current WDL state has the wrong shape")
@@ -2330,9 +2617,15 @@ def _prepare_wdl_supervision(
     raw_targets = raw_future_targets.float()
     state_valid = future_valid.float()
     if include_current_state:
-        # Stored labels use the side to move *after* each played action.
-        # Moving back across H1 swaps win and loss while preserving draw.
-        current_targets = torch.flip(raw_targets[:, :1], dims=(-1,))
+        if current_target is None:
+            # Legacy trajectory-v3 has no search value at s0. Its game-result
+            # labels use the side to move after the first played action, so
+            # moving back across H1 swaps win and loss while preserving draw.
+            current_targets = torch.flip(raw_targets[:, :1], dims=(-1,))
+        else:
+            if current_target.shape != (batch_size, 3):
+                raise ValueError("Current WDL target must have shape [batch, 3]")
+            current_targets = current_target.float().unsqueeze(1)
         states = torch.cat((current_state.unsqueeze(1), states), dim=1)
         raw_targets = torch.cat((current_targets, raw_targets), dim=1)
         state_valid = torch.cat(
@@ -2342,11 +2635,7 @@ def _prepare_wdl_supervision(
 
     target_sum = raw_targets.sum(dim=-1, keepdim=True)
     targets = raw_targets / target_sum.clamp_min(1e-12)
-    weight = (
-        valid.float().unsqueeze(1)
-        * state_valid
-        * (target_sum[..., 0] > 0).float()
-    )
+    weight = valid.float().unsqueeze(1) * state_valid * (target_sum[..., 0] > 0).float()
     return states, targets, weight
 
 
@@ -2386,12 +2675,18 @@ def loss_and_aux(
     choices: StepChoices,
     *,
     compute_dtype: torch.dtype,
+    policy_teacher_root_logits: Tensor | None = None,
     capture: dict[str, Any] | None = None,
     profile_regions: bool = False,
 ) -> tuple[Tensor, dict[str, Tensor]]:
     """Accepted no-norm, target/pred-SIGReg objective."""
 
     config = model.config
+    expects_fixed_teacher = config.policy_distill_teacher_mode == "checkpoint"
+    if expects_fixed_teacher != (policy_teacher_root_logits is not None):
+        raise ValueError(
+            "Policy teacher logits do not match the serialized teacher mode"
+        )
     actions = batch["action_indices"][:, : config.horizon].long()
     valid = batch["valid"].float()
     future_valid = batch["future_valid"][:, : config.horizon].float()
@@ -2419,13 +2714,9 @@ def loss_and_aux(
     noisy_actions = torch.where(is_masked, torch.full_like(actions, _MASK_TOKEN), actions)
     feedback_mode = config.jepa_feedback_mode
     if feedback_mode not in {"none", "final_pass_adjoint"}:
-        raise ValueError(
-            f"Unsupported jepa_feedback_mode: {feedback_mode!r}"
-        )
+        raise ValueError(f"Unsupported jepa_feedback_mode: {feedback_mode!r}")
     feedback_active = feedback_mode == "final_pass_adjoint"
-    closed_loop_active = (
-        config.dfm_closed_loop_mode == "predicted_jepa_tokens"
-    )
+    closed_loop_active = config.dfm_closed_loop_mode == "predicted_jepa_tokens"
     preliminary_logits: Tensor | None = None
     feedback_result: JepaFeedbackResult | None = None
     root_proposal: RootProposal | None = None
@@ -2447,13 +2738,9 @@ def loss_and_aux(
                 batch["legal_idx"][:, 0],
                 batch["legal_count"][:, 0],
             )
-            root_legal_valid = (
-                batch["legal_count"][:, 0].long() > 0
-            ) & (valid > 0)
+            root_legal_valid = (batch["legal_count"][:, 0].long() > 0) & (valid > 0)
             if "legal_masks_valid" in batch:
-                root_legal_valid = root_legal_valid & (
-                    batch["legal_masks_valid"][:, 0] > 0
-                )
+                root_legal_valid = root_legal_valid & (batch["legal_masks_valid"][:, 0] > 0)
             root_proposal = _proposal_from_root_logits(
                 preliminary_logits[:, 0],
                 noisy_actions[:, 0],
@@ -2553,9 +2840,9 @@ def loss_and_aux(
             -1,
             actions.unsqueeze(-1),
         ).squeeze(-1)
-        preliminary_ce_by_horizon = (
-            preliminary_ce * ce_weight
-        ).sum(dim=0) / ce_den_horizon.clamp_min(1.0)
+        preliminary_ce_by_horizon = (preliminary_ce * ce_weight).sum(
+            dim=0
+        ) / ce_den_horizon.clamp_min(1.0)
         feedback_preliminary_dfm_ce = (
             preliminary_ce_by_horizon * active_horizon
         ).sum() / active_horizon.sum().clamp_min(1.0)
@@ -2579,6 +2866,20 @@ def loss_and_aux(
             batch["legal_count"][:, 0],
         ),
         legal_gate,
+    )
+    base_root_logits = (
+        None
+        if base_policy_logits is None
+        else (
+            base_policy_logits
+            if base_policy_logits.ndim == 2
+            else base_policy_logits[:, 0]
+        )
+    )
+    base_policy_diagnostics = _base_policy_root_diagnostics(
+        base_root_logits, logits[:, 0], actions[:, 0],
+        batch["legal_idx"][:, 0], batch["legal_count"][:, 0], legal_gate,
+        policy_teacher_root_logits=policy_teacher_root_logits,
     )
     clean_t = torch.ones(batch_size, device=actions.device, dtype=torch.float32)
     with _profile_scope(profile_regions, "region::dfm_clean_planner"):
@@ -2631,9 +2932,7 @@ def loss_and_aux(
         )
     if capture is not None and capture.get("capture_sigreg_inputs") is True:
         full_target_future_weight = (
-            valid.unsqueeze(1)
-            * selected_valid
-            * float(config.horizon / config.target_sample_count)
+            valid.unsqueeze(1) * selected_valid * float(config.horizon / config.target_sample_count)
         )
         capture["sigreg_inputs"] = {
             "target_z": z_all.detach(),
@@ -2642,9 +2941,7 @@ def loss_and_aux(
                 dim=1,
             ).detach(),
             "prediction_z": pred_z.detach(),
-            "prediction_weight": (
-                future_valid * valid.unsqueeze(1)
-            ).detach(),
+            "prediction_weight": (future_valid * valid.unsqueeze(1)).detach(),
             "directions": choices.sigreg_directions.detach(),
         }
 
@@ -2657,18 +2954,19 @@ def loss_and_aux(
     if config.wdl_coeff != 0.0:
         if "wdl_targets" not in batch:
             raise ValueError("Nonzero wdl_coeff requires per-horizon wdl_targets")
-        raw_wdl_targets = batch[
-            "wdl_targets"
-        ][:, : config.horizon].float()
-        wdl_states, wdl_targets, wdl_weight = (
-            _prepare_wdl_supervision(
-                pred_z,
-                z_jepa,
-                raw_wdl_targets,
-                valid,
-                future_valid,
-                include_current_state=config.wdl_include_current_state,
-            )
+        raw_wdl_targets = batch["wdl_targets"][:, : config.horizon].float()
+        wdl_states, wdl_targets, wdl_weight = _prepare_wdl_supervision(
+            pred_z,
+            z_jepa,
+            raw_wdl_targets,
+            valid,
+            future_valid,
+            include_current_state=config.wdl_include_current_state,
+            current_target=(
+                batch["current_wdl_target"].float()
+                if "current_wdl_target" in batch
+                else None
+            ),
         )
         with _profile_scope(profile_regions, "region::wdl_head"):
             _, wdl_logits = model.value_wdl_head(
@@ -2701,10 +2999,7 @@ def loss_and_aux(
                 wdl_weight[:, 0],
             )
             wdl_current_accuracy = _weighted_mean(
-                (
-                    wdl_logits[:, 0].argmax(dim=-1)
-                    == wdl_targets[:, 0].argmax(dim=-1)
-                ).float(),
+                (wdl_logits[:, 0].argmax(dim=-1) == wdl_targets[:, 0].argmax(dim=-1)).float(),
                 wdl_weight[:, 0],
             )
 
@@ -2712,6 +3007,8 @@ def loss_and_aux(
         capture["loss_components"] = {
             "dfm_ce": dfm_ce,
             "root_legal_conditional_ce": root_legal_ce,
+            "base_policy_dfm_root_legal_kl": base_policy_diagnostics["base_policy_dfm_root_legal_kl"],
+            "policy_teacher_dfm_root_legal_kl": base_policy_diagnostics["policy_teacher_dfm_root_legal_kl"],
             "root_illegal_mass": legality,
             "jepa_raw_mse": jepa_positive,
             "target_sigreg": target_sigreg,
@@ -2722,6 +3019,7 @@ def loss_and_aux(
     unclipped = (
         config.dfm_ce_coeff * dfm_ce
         + config.root_legal_ce_coeff * root_legal_ce
+        + config.policy_distill_coeff * base_policy_diagnostics["policy_teacher_dfm_root_legal_kl"]
         + config.legality_coeff * legality
         + config.jepa_positive_coeff * jepa_positive
         + config.target_sigreg_coeff * target_sigreg
@@ -2745,9 +3043,7 @@ def loss_and_aux(
     accuracy = _weighted_mean((logits.argmax(dim=-1) == actions).float(), ce_weight)
     feedback_zero = torch.zeros_like(dfm_ce)
     feedback_gate_mean = (
-        root_proposal.feedback_gate.float().mean()
-        if root_proposal is not None
-        else feedback_zero
+        root_proposal.feedback_gate.float().mean() if root_proposal is not None else feedback_zero
     )
     aux = {
         "loss": loss.detach(),
@@ -2755,9 +3051,19 @@ def loss_and_aux(
         "loss_clip_scale": clip_scale.detach(),
         "dfm_ce_loss": dfm_ce.detach(),
         "root_legal_conditional_ce": root_legal_ce.detach(),
-        "weighted_root_legal_conditional_ce": (
-            config.root_legal_ce_coeff * root_legal_ce
-        ).detach(),
+        "weighted_root_legal_conditional_ce": (config.root_legal_ce_coeff * root_legal_ce).detach(),
+        "base_policy_active": base_policy_diagnostics["base_policy_active"].detach(),
+        "base_policy_root_legal_conditional_ce": base_policy_diagnostics["base_policy_root_legal_conditional_ce"].detach(),
+        "base_policy_dfm_root_legal_kl": base_policy_diagnostics["base_policy_dfm_root_legal_kl"].detach(),
+        "weighted_base_policy_dfm_root_legal_kl": (config.policy_distill_coeff * base_policy_diagnostics["base_policy_dfm_root_legal_kl"]).detach(),
+        "base_policy_root_legal_top1_accuracy": base_policy_diagnostics["base_policy_root_legal_top1_accuracy"].detach(),
+        "base_policy_dfm_root_legal_top1_agreement": base_policy_diagnostics["base_policy_dfm_root_legal_top1_agreement"].detach(),
+        "policy_teacher_active": base_policy_diagnostics["policy_teacher_active"].detach(),
+        "policy_teacher_root_legal_conditional_ce": base_policy_diagnostics["policy_teacher_root_legal_conditional_ce"].detach(),
+        "policy_teacher_dfm_root_legal_kl": base_policy_diagnostics["policy_teacher_dfm_root_legal_kl"].detach(),
+        "weighted_policy_teacher_dfm_root_legal_kl": (config.policy_distill_coeff * base_policy_diagnostics["policy_teacher_dfm_root_legal_kl"]).detach(),
+        "policy_teacher_root_legal_top1_accuracy": base_policy_diagnostics["policy_teacher_root_legal_top1_accuracy"].detach(),
+        "policy_teacher_dfm_root_legal_top1_agreement": base_policy_diagnostics["policy_teacher_dfm_root_legal_top1_agreement"].detach(),
         "first_legality_loss": legality.detach(),
         "first_legal_mass": (1.0 - legality).detach(),
         "weighted_legality_loss": (config.legality_coeff * legality).detach(),
@@ -2793,13 +3099,9 @@ def loss_and_aux(
             float(feedback_active),
             device=actions.device,
         ),
-        "jepa_feedback_preliminary_dfm_ce_loss": (
-            feedback_preliminary_dfm_ce.detach()
-        ),
+        "jepa_feedback_preliminary_dfm_ce_loss": (feedback_preliminary_dfm_ce.detach()),
         "jepa_feedback_dfm_ce_improvement": (
-            (feedback_preliminary_dfm_ce - dfm_ce).detach()
-            if feedback_active
-            else feedback_zero
+            (feedback_preliminary_dfm_ce - dfm_ce).detach() if feedback_active else feedback_zero
         ),
         "jepa_feedback_gate": feedback_gate_mean.detach(),
         "jepa_feedback_delta_rms": (
@@ -2823,39 +3125,26 @@ def loss_and_aux(
             else feedback_zero
         ),
         "jepa_feedback_cap_fraction": (
-            feedback_result.cap_fraction.detach()
-            if feedback_result is not None
-            else feedback_zero
+            feedback_result.cap_fraction.detach() if feedback_result is not None else feedback_zero
         ),
         "dfm_closed_loop_active": torch.as_tensor(
             float(closed_loop_active),
             device=actions.device,
         ),
         "dfm_closed_loop_context_rms": (
-            torch.sqrt(
-                closed_loop_context.float().square().mean()
-            ).detach()
+            torch.sqrt(closed_loop_context.float().square().mean()).detach()
             if closed_loop_context is not None
             else feedback_zero
         ),
         "dfm_closed_loop_dfm_ce_improvement": (
-            (feedback_preliminary_dfm_ce - dfm_ce).detach()
-            if closed_loop_active
-            else feedback_zero
+            (feedback_preliminary_dfm_ce - dfm_ce).detach() if closed_loop_active else feedback_zero
         ),
-        "dfm_jepa_conditioning_rms": (
-            dfm_conditioning.residual_rms.mean().detach()
-        ),
-        "dfm_jepa_conditioning_state_rms": (
-            dfm_conditioning.state_rms.mean().detach()
-        ),
+        "dfm_jepa_conditioning_rms": (dfm_conditioning.residual_rms.mean().detach()),
+        "dfm_jepa_conditioning_state_rms": (dfm_conditioning.state_rms.mean().detach()),
         "dfm_jepa_conditioning_ratio": (
-            dfm_conditioning.residual_rms.mean()
-            / dfm_conditioning.state_rms.mean().clamp_min(1e-6)
+            dfm_conditioning.residual_rms.mean() / dfm_conditioning.state_rms.mean().clamp_min(1e-6)
         ).detach(),
-        "dfm_jepa_conditioning_weight_rms": (
-            dfm_conditioning.weight_rms.detach()
-        ),
+        "dfm_jepa_conditioning_weight_rms": (dfm_conditioning.weight_rms.detach()),
     }
     return loss, aux
 
@@ -2867,31 +3156,22 @@ def _latent_spectrum_metrics(
     """Per-horizon centered spectrum diagnostics in the sample Gram space."""
 
     if values.ndim != 3:
-        raise ValueError(
-            "Latent spectrum values must have shape [batch, horizon, dim]"
-        )
+        raise ValueError("Latent spectrum values must have shape [batch, horizon, dim]")
     if sample_weight.shape != values.shape[:2]:
-        raise ValueError(
-            "Latent spectrum weights must match the batch and horizon dimensions"
-        )
+        raise ValueError("Latent spectrum weights must match the batch and horizon dimensions")
     weights = sample_weight.float()
     denominator = weights.sum(dim=0)
     safe_denominator = denominator.clamp_min(1.0)
-    mean = (
-        values.float() * weights.unsqueeze(-1)
-    ).sum(dim=0) / safe_denominator.unsqueeze(-1)
+    mean = (values.float() * weights.unsqueeze(-1)).sum(dim=0) / safe_denominator.unsqueeze(-1)
     centered = values.float() - mean.unsqueeze(0)
-    variance = (
-        centered.square() * weights.unsqueeze(-1)
-    ).sum(dim=0) / safe_denominator.unsqueeze(-1)
+    variance = (centered.square() * weights.unsqueeze(-1)).sum(dim=0) / safe_denominator.unsqueeze(
+        -1
+    )
     feature_std = torch.sqrt(variance.clamp_min(0.0) + 1e-12)
     centered_rms = torch.sqrt(variance.mean(dim=-1).clamp_min(0.0))
 
     weighted_centered = centered.permute(1, 0, 2)
-    weighted_centered = (
-        weighted_centered
-        * weights.transpose(0, 1).sqrt().unsqueeze(-1)
-    )
+    weighted_centered = weighted_centered * weights.transpose(0, 1).sqrt().unsqueeze(-1)
     covariance_denominator = (denominator - 1.0).clamp_min(1.0)
     gram = weighted_centered @ weighted_centered.transpose(-2, -1)
     gram = gram / covariance_denominator[:, None, None]
@@ -2940,6 +3220,7 @@ def full_horizon_evaluation_aux(
     target_shuffle: Tensor,
     action_shuffle: Tensor,
     compute_dtype: torch.dtype,
+    policy_teacher_root_logits: Tensor | None = None,
 ) -> dict[str, Tensor]:
     """Frozen full-horizon validation and collapse diagnostics.
 
@@ -2950,6 +3231,11 @@ def full_horizon_evaluation_aux(
     """
 
     config = model.config
+    expects_fixed_teacher = config.policy_distill_teacher_mode == "checkpoint"
+    if expects_fixed_teacher != (policy_teacher_root_logits is not None):
+        raise ValueError(
+            "Policy teacher logits do not match the serialized teacher mode"
+        )
     actions = batch["action_indices"][:, : config.horizon].long()
     valid = batch["valid"].float()
     future_valid = batch["future_valid"][:, : config.horizon].float()
@@ -2986,9 +3272,7 @@ def full_horizon_evaluation_aux(
     dfm_source = current_tokens
     if config.dfm_state_source == "policy_prelogit":
         if policy_features is None:
-            raise ValueError(
-                "Policy-prelogit validation requires policy features"
-            )
+            raise ValueError("Policy-prelogit validation requires policy features")
         dfm_source = policy_features
     z_dfm = model.dfm_state_projector(dfm_source, compute_dtype)
     current_z = z_all[:, 0]
@@ -3004,13 +3288,9 @@ def full_horizon_evaluation_aux(
     noisy_actions = torch.full_like(actions, _MASK_TOKEN)
     feedback_mode = config.jepa_feedback_mode
     if feedback_mode not in {"none", "final_pass_adjoint"}:
-        raise ValueError(
-            f"Unsupported jepa_feedback_mode: {feedback_mode!r}"
-        )
+        raise ValueError(f"Unsupported jepa_feedback_mode: {feedback_mode!r}")
     feedback_active = feedback_mode == "final_pass_adjoint"
-    closed_loop_active = (
-        config.dfm_closed_loop_mode == "predicted_jepa_tokens"
-    )
+    closed_loop_active = config.dfm_closed_loop_mode == "predicted_jepa_tokens"
     planner_result = model.planner(
         z_dfm,
         noisy_actions,
@@ -3030,13 +3310,9 @@ def full_horizon_evaluation_aux(
             batch["legal_idx"][:, 0],
             batch["legal_count"][:, 0],
         )
-        root_legal_valid = (
-            batch["legal_count"][:, 0].long() > 0
-        ) & (valid > 0)
+        root_legal_valid = (batch["legal_count"][:, 0].long() > 0) & (valid > 0)
         if "legal_masks_valid" in batch:
-            root_legal_valid = root_legal_valid & (
-                batch["legal_masks_valid"][:, 0] > 0
-            )
+            root_legal_valid = root_legal_valid & (batch["legal_masks_valid"][:, 0] > 0)
         root_proposal = _proposal_from_root_logits(
             preliminary_logits[:, 0],
             noisy_actions[:, 0],
@@ -3119,9 +3395,9 @@ def full_horizon_evaluation_aux(
             -1,
             actions.unsqueeze(-1),
         ).squeeze(-1)
-        preliminary_ce_by_horizon = (
-            preliminary_ce * ce_weight
-        ).sum(dim=0) / ce_den_horizon.clamp_min(1.0)
+        preliminary_ce_by_horizon = (preliminary_ce * ce_weight).sum(
+            dim=0
+        ) / ce_den_horizon.clamp_min(1.0)
         feedback_preliminary_dfm_ce = _weighted_mean(
             preliminary_ce_by_horizon,
             active_horizon,
@@ -3175,13 +3451,31 @@ def full_horizon_evaluation_aux(
         batch["legal_idx"][:, 0],
         batch["legal_count"][:, 0],
     )
-    root_legal_action = logits[:, 0].masked_fill(
-        ~root_legal_mask_counts,
-        -torch.inf,
-    ).argmax(dim=-1)
+    root_legal_action = (
+        logits[:, 0]
+        .masked_fill(
+            ~root_legal_mask_counts,
+            -torch.inf,
+        )
+        .argmax(dim=-1)
+    )
     root_legal_top1_accuracy = _weighted_mean(
         (root_legal_action == actions[:, 0]).float(),
         legal_gate,
+    )
+    base_root_logits = (
+        None
+        if base_policy_logits is None
+        else (
+            base_policy_logits
+            if base_policy_logits.ndim == 2
+            else base_policy_logits[:, 0]
+        )
+    )
+    base_policy_diagnostics = _base_policy_root_diagnostics(
+        base_root_logits, logits[:, 0], actions[:, 0],
+        batch["legal_idx"][:, 0], batch["legal_count"][:, 0], legal_gate,
+        policy_teacher_root_logits=policy_teacher_root_logits,
     )
 
     clean_t = torch.ones(batch_size, device=actions.device, dtype=torch.float32)
@@ -3250,15 +3544,18 @@ def full_horizon_evaluation_aux(
         if "wdl_targets" not in batch:
             raise ValueError("Nonzero wdl_coeff requires per-horizon wdl_targets")
         raw_wdl_targets = batch["wdl_targets"][:, : config.horizon].float()
-        wdl_states, wdl_targets, wdl_weight = (
-            _prepare_wdl_supervision(
-                pred_z,
-                current_z,
-                raw_wdl_targets,
-                valid,
-                future_valid,
-                include_current_state=config.wdl_include_current_state,
-            )
+        wdl_states, wdl_targets, wdl_weight = _prepare_wdl_supervision(
+            pred_z,
+            current_z,
+            raw_wdl_targets,
+            valid,
+            future_valid,
+            include_current_state=config.wdl_include_current_state,
+            current_target=(
+                batch["current_wdl_target"].float()
+                if "current_wdl_target" in batch
+                else None
+            ),
         )
         _, wdl_logits = model.value_wdl_head(
             wdl_states,
@@ -3297,9 +3594,7 @@ def full_horizon_evaluation_aux(
             wdl_weight,
         )
         confidence, predicted_class = wdl_probabilities.max(dim=-1)
-        correctness = (
-            predicted_class == wdl_targets.argmax(dim=-1)
-        ).float()
+        correctness = (predicted_class == wdl_targets.argmax(dim=-1)).float()
         calibration_bin = torch.clamp(
             (confidence * 15.0).long(),
             min=0,
@@ -3309,12 +3604,8 @@ def full_horizon_evaluation_aux(
         for bin_index in range(15):
             bin_weight = wdl_weight * (calibration_bin == bin_index).float()
             bin_count = bin_weight.sum()
-            bin_accuracy = (correctness * bin_weight).sum() / bin_count.clamp_min(
-                1.0
-            )
-            bin_confidence = (confidence * bin_weight).sum() / bin_count.clamp_min(
-                1.0
-            )
+            bin_accuracy = (correctness * bin_weight).sum() / bin_count.clamp_min(1.0)
+            bin_confidence = (confidence * bin_weight).sum() / bin_count.clamp_min(1.0)
             calibration_error_sum = calibration_error_sum + bin_count * torch.abs(
                 bin_accuracy - bin_confidence
             )
@@ -3325,16 +3616,14 @@ def full_horizon_evaluation_aux(
                 wdl_weight[:, 0],
             )
             wdl_current_accuracy = _weighted_mean(
-                (
-                    wdl_logits[:, 0].argmax(dim=-1)
-                    == wdl_targets[:, 0].argmax(dim=-1)
-                ).float(),
+                (wdl_logits[:, 0].argmax(dim=-1) == wdl_targets[:, 0].argmax(dim=-1)).float(),
                 wdl_weight[:, 0],
             )
 
     unclipped = (
         config.dfm_ce_coeff * dfm_ce
         + config.root_legal_ce_coeff * root_legal_ce
+        + config.policy_distill_coeff * base_policy_diagnostics["policy_teacher_dfm_root_legal_kl"]
         + config.legality_coeff * legality
         + config.jepa_positive_coeff * jepa_positive
         + config.target_sigreg_coeff * target_sigreg
@@ -3377,22 +3666,16 @@ def full_horizon_evaluation_aux(
         target_f32,
         latent_weight,
     )
-    pred_rms_by_horizon = torch.sqrt(
-        horizon_mean(pred_f32.square().mean(dim=-1))
-    )
-    target_rms_by_horizon = torch.sqrt(
-        horizon_mean(target_f32.square().mean(dim=-1))
-    )
+    pred_rms_by_horizon = torch.sqrt(horizon_mean(pred_f32.square().mean(dim=-1)))
+    target_rms_by_horizon = torch.sqrt(horizon_mean(target_f32.square().mean(dim=-1)))
     pred_target_rank_ratio = torch.where(
         target_spectrum["effective_rank"] > 1e-12,
-        pred_spectrum["effective_rank"]
-        / target_spectrum["effective_rank"].clamp_min(1e-12),
+        pred_spectrum["effective_rank"] / target_spectrum["effective_rank"].clamp_min(1e-12),
         torch.zeros_like(target_spectrum["effective_rank"]),
     )
     pred_target_centered_rms_ratio = torch.where(
         target_spectrum["centered_rms"] > 1e-12,
-        pred_spectrum["centered_rms"]
-        / target_spectrum["centered_rms"].clamp_min(1e-12),
+        pred_spectrum["centered_rms"] / target_spectrum["centered_rms"].clamp_min(1e-12),
         torch.zeros_like(target_spectrum["centered_rms"]),
     )
 
@@ -3405,9 +3688,7 @@ def full_horizon_evaluation_aux(
     action_shuffled_mse = (action_shuffled_pred - target_f32).square().mean(dim=-1)
     feedback_zero = torch.zeros_like(dfm_ce)
     feedback_gate_mean = (
-        root_proposal.feedback_gate.float().mean()
-        if root_proposal is not None
-        else feedback_zero
+        root_proposal.feedback_gate.float().mean() if root_proposal is not None else feedback_zero
     )
 
     return {
@@ -3418,29 +3699,31 @@ def full_horizon_evaluation_aux(
         "dfm_ce_loss_by_horizon": ce_by_horizon,
         "root_legal_conditional_ce": root_legal_ce,
         "root_legal_top1_accuracy": root_legal_top1_accuracy,
+        "base_policy_active": base_policy_diagnostics["base_policy_active"],
+        "base_policy_root_legal_conditional_ce": base_policy_diagnostics["base_policy_root_legal_conditional_ce"],
+        "base_policy_dfm_root_legal_kl": base_policy_diagnostics["base_policy_dfm_root_legal_kl"],
+        "weighted_base_policy_dfm_root_legal_kl": config.policy_distill_coeff * base_policy_diagnostics["base_policy_dfm_root_legal_kl"],
+        "base_policy_root_legal_top1_accuracy": base_policy_diagnostics["base_policy_root_legal_top1_accuracy"],
+        "base_policy_dfm_root_legal_top1_agreement": base_policy_diagnostics["base_policy_dfm_root_legal_top1_agreement"],
+        "policy_teacher_active": base_policy_diagnostics["policy_teacher_active"],
+        "policy_teacher_root_legal_conditional_ce": base_policy_diagnostics["policy_teacher_root_legal_conditional_ce"],
+        "policy_teacher_dfm_root_legal_kl": base_policy_diagnostics["policy_teacher_dfm_root_legal_kl"],
+        "weighted_policy_teacher_dfm_root_legal_kl": config.policy_distill_coeff * base_policy_diagnostics["policy_teacher_dfm_root_legal_kl"],
+        "policy_teacher_root_legal_top1_accuracy": base_policy_diagnostics["policy_teacher_root_legal_top1_accuracy"],
+        "policy_teacher_dfm_root_legal_top1_agreement": base_policy_diagnostics["policy_teacher_dfm_root_legal_top1_agreement"],
         "jepa_feedback_active": torch.as_tensor(
             float(feedback_active),
             device=actions.device,
         ),
-        "jepa_feedback_preliminary_dfm_ce_loss": (
-            feedback_preliminary_dfm_ce
-        ),
+        "jepa_feedback_preliminary_dfm_ce_loss": (feedback_preliminary_dfm_ce),
         "jepa_feedback_dfm_ce_improvement": (
-            feedback_preliminary_dfm_ce - dfm_ce
-            if feedback_active
-            else feedback_zero
+            feedback_preliminary_dfm_ce - dfm_ce if feedback_active else feedback_zero
         ),
-        "jepa_feedback_preliminary_root_legal_conditional_ce": (
-            feedback_preliminary_root_legal_ce
-        ),
-        "jepa_feedback_preliminary_first_legal_mass": (
-            feedback_preliminary_legal_mass
-        ),
+        "jepa_feedback_preliminary_root_legal_conditional_ce": (feedback_preliminary_root_legal_ce),
+        "jepa_feedback_preliminary_first_legal_mass": (feedback_preliminary_legal_mass),
         "jepa_feedback_gate": feedback_gate_mean,
         "jepa_feedback_delta_rms": (
-            feedback_result.delta_rms.mean()
-            if feedback_result is not None
-            else feedback_zero
+            feedback_result.delta_rms.mean() if feedback_result is not None else feedback_zero
         ),
         "jepa_feedback_raw_rms": (
             feedback_result.raw_feedback_rms.mean()
@@ -3453,47 +3736,30 @@ def full_horizon_evaluation_aux(
             else feedback_zero
         ),
         "jepa_feedback_state_rms": (
-            feedback_result.state_rms.mean()
-            if feedback_result is not None
-            else feedback_zero
+            feedback_result.state_rms.mean() if feedback_result is not None else feedback_zero
         ),
         "jepa_feedback_cap_fraction": (
-            feedback_result.cap_fraction
-            if feedback_result is not None
-            else feedback_zero
+            feedback_result.cap_fraction if feedback_result is not None else feedback_zero
         ),
         "dfm_closed_loop_active": torch.as_tensor(
             float(closed_loop_active),
             device=actions.device,
         ),
         "dfm_closed_loop_context_rms": (
-            torch.sqrt(
-                closed_loop_context.float().square().mean()
-            )
+            torch.sqrt(closed_loop_context.float().square().mean())
             if closed_loop_context is not None
             else feedback_zero
         ),
         "dfm_closed_loop_dfm_ce_improvement": (
-            feedback_preliminary_dfm_ce - dfm_ce
-            if closed_loop_active
-            else feedback_zero
+            feedback_preliminary_dfm_ce - dfm_ce if closed_loop_active else feedback_zero
         ),
-        "dfm_jepa_conditioning_rms": (
-            dfm_conditioning.residual_rms.mean()
-        ),
-        "dfm_jepa_conditioning_state_rms": (
-            dfm_conditioning.state_rms.mean()
-        ),
+        "dfm_jepa_conditioning_rms": (dfm_conditioning.residual_rms.mean()),
+        "dfm_jepa_conditioning_state_rms": (dfm_conditioning.state_rms.mean()),
         "dfm_jepa_conditioning_ratio": (
-            dfm_conditioning.residual_rms.mean()
-            / dfm_conditioning.state_rms.mean().clamp_min(1e-6)
+            dfm_conditioning.residual_rms.mean() / dfm_conditioning.state_rms.mean().clamp_min(1e-6)
         ),
-        "dfm_jepa_conditioning_weight_rms": (
-            dfm_conditioning.weight_rms
-        ),
-        "weighted_root_legal_conditional_ce": (
-            config.root_legal_ce_coeff * root_legal_ce
-        ),
+        "dfm_jepa_conditioning_weight_rms": (dfm_conditioning.weight_rms),
+        "weighted_root_legal_conditional_ce": (config.root_legal_ce_coeff * root_legal_ce),
         "first_legality_loss": legality,
         "first_legal_mass": 1.0 - legality,
         "weighted_legality_loss": config.legality_coeff * legality,
@@ -3534,20 +3800,14 @@ def full_horizon_evaluation_aux(
         ),
         "pred_centered_rms_by_horizon": pred_spectrum["centered_rms"],
         "target_centered_rms_by_horizon": target_spectrum["centered_rms"],
-        "pred_target_centered_rms_ratio_by_horizon": (
-            pred_target_centered_rms_ratio
-        ),
-        "pred_feature_std_mean_by_horizon": pred_spectrum[
-            "feature_std"
-        ].mean(dim=-1),
+        "pred_target_centered_rms_ratio_by_horizon": (pred_target_centered_rms_ratio),
+        "pred_feature_std_mean_by_horizon": pred_spectrum["feature_std"].mean(dim=-1),
         "pred_feature_std_p05_by_horizon": torch.quantile(
             pred_spectrum["feature_std"],
             0.05,
             dim=-1,
         ),
-        "target_feature_std_mean_by_horizon": target_spectrum[
-            "feature_std"
-        ].mean(dim=-1),
+        "target_feature_std_mean_by_horizon": target_spectrum["feature_std"].mean(dim=-1),
         "target_feature_std_p05_by_horizon": torch.quantile(
             target_spectrum["feature_std"],
             0.05,
@@ -3558,30 +3818,14 @@ def full_horizon_evaluation_aux(
         "pred_target_effective_rank_ratio_by_horizon": pred_target_rank_ratio,
         "pred_stable_rank_by_horizon": pred_spectrum["stable_rank"],
         "target_stable_rank_by_horizon": target_spectrum["stable_rank"],
-        "pred_explained_variance_top1_by_horizon": pred_spectrum[
-            "explained_variance_top1"
-        ],
-        "pred_explained_variance_top8_by_horizon": pred_spectrum[
-            "explained_variance_top8"
-        ],
-        "pred_explained_variance_top16_by_horizon": pred_spectrum[
-            "explained_variance_top16"
-        ],
-        "pred_explained_variance_top32_by_horizon": pred_spectrum[
-            "explained_variance_top32"
-        ],
-        "target_explained_variance_top1_by_horizon": target_spectrum[
-            "explained_variance_top1"
-        ],
-        "target_explained_variance_top8_by_horizon": target_spectrum[
-            "explained_variance_top8"
-        ],
-        "target_explained_variance_top16_by_horizon": target_spectrum[
-            "explained_variance_top16"
-        ],
-        "target_explained_variance_top32_by_horizon": target_spectrum[
-            "explained_variance_top32"
-        ],
+        "pred_explained_variance_top1_by_horizon": pred_spectrum["explained_variance_top1"],
+        "pred_explained_variance_top8_by_horizon": pred_spectrum["explained_variance_top8"],
+        "pred_explained_variance_top16_by_horizon": pred_spectrum["explained_variance_top16"],
+        "pred_explained_variance_top32_by_horizon": pred_spectrum["explained_variance_top32"],
+        "target_explained_variance_top1_by_horizon": target_spectrum["explained_variance_top1"],
+        "target_explained_variance_top8_by_horizon": target_spectrum["explained_variance_top8"],
+        "target_explained_variance_top16_by_horizon": target_spectrum["explained_variance_top16"],
+        "target_explained_variance_top32_by_horizon": target_spectrum["explained_variance_top32"],
         "valid_count_by_horizon": latent_denom,
     }
 
@@ -3590,6 +3834,7 @@ def full_horizon_evaluation_aux(
 class _OptimizerLeaf:
     name: str
     parameter: nn.Parameter
+    master_parameter: Tensor | None
     learning_rate_kind: str
     use_muon: bool
     apply_weight_decay: bool
@@ -3610,37 +3855,83 @@ class MuonAdamW:
         model: nn.Module,
         config: Config = CONFIG,
         *,
+        policy: OptimizerPolicy = LEGACY_OPTIMIZER_POLICY,
         examples_per_update: int | None = None,
     ):
         self.config = config
+        self.policy = policy
         self.update = 0
         self.examples_seen = 0
         self._main_learning_rate_override: float | None = None
         self._bt4_learning_rate_override: float | None = None
-        self.examples_per_update = (
-            None if examples_per_update is None else int(examples_per_update)
-        )
+        self.examples_per_update = None if examples_per_update is None else int(examples_per_update)
         if self.config.lr_schedule_unit == "examples":
             if self.examples_per_update is None or self.examples_per_update < 1:
                 raise ValueError(
                     "Example-based LR scheduling requires a positive examples_per_update"
                 )
-            if not (
-                0 < self.config.lr_warmup_examples < self.config.lr_total_examples
-            ):
+            if not (0 < self.config.lr_warmup_examples < self.config.lr_total_examples):
                 raise ValueError("Invalid example-based warmup/total schedule")
         elif self.config.lr_schedule_unit != "updates":
+            raise ValueError(f"Unsupported lr_schedule_unit: {self.config.lr_schedule_unit!r}")
+        if self.policy.schedule_kind not in {
+            "legacy_cosine",
+            "warmup_stable_linear_decay",
+        }:
+            raise ValueError(f"Unsupported LR schedule: {self.policy.schedule_kind!r}")
+        if self.policy.precision not in {
+            "parameter",
+            "fp32_master",
+            "encoder_fp32_master",
+            "encoder_trunk_fp32_master",
+            "main_fp32_master",
+        }:
+            raise ValueError(f"Unsupported optimizer precision: {self.policy.precision!r}")
+        if self.policy.weight_decay_mode not in {"decoupled", "cautious"}:
             raise ValueError(
-                f"Unsupported lr_schedule_unit: {self.config.lr_schedule_unit!r}"
+                f"Unsupported weight-decay mode: {self.policy.weight_decay_mode!r}"
             )
+        if self.policy.schedule_kind == "warmup_stable_linear_decay":
+            stable_examples = (
+                self.config.lr_total_examples - self.policy.wsd_decay_examples
+            )
+            if (
+                self.config.lr_schedule_unit != "examples"
+                or self.policy.wsd_decay_examples <= 0
+                or stable_examples <= self.config.lr_warmup_examples
+            ):
+                raise ValueError("Invalid example-based WSD schedule")
+        elif self.policy.wsd_decay_examples != 0:
+            raise ValueError("Legacy cosine schedule cannot define WSD decay examples")
         self.leaves: list[_OptimizerLeaf] = []
         for name, parameter in model.named_parameters():
             use_muon = self._use_muon(name, parameter)
             learning_rate_kind = "bt4" if name.startswith("encoder.") else "main"
+            use_fp32_state = self.policy.precision == "fp32_master" or (
+                self.policy.precision == "encoder_fp32_master"
+                and learning_rate_kind == "bt4"
+            )
+            use_fp32_state = use_fp32_state or (
+                self.policy.precision == "encoder_trunk_fp32_master"
+                and learning_rate_kind == "bt4"
+                and not name.startswith("encoder.policy_head.")
+            )
+            use_fp32_state = use_fp32_state or (
+                self.policy.precision == "main_fp32_master"
+                and learning_rate_kind == "main"
+            )
+            state_dtype = torch.float32 if use_fp32_state else parameter.dtype
+            master_parameter = (
+                parameter.detach().float().clone()
+                if use_fp32_state
+                and parameter.dtype in (torch.float16, torch.bfloat16)
+                else None
+            )
             self.leaves.append(
                 _OptimizerLeaf(
                     name=name,
                     parameter=parameter,
+                    master_parameter=master_parameter,
                     learning_rate_kind=learning_rate_kind,
                     use_muon=use_muon,
                     apply_weight_decay=self._apply_weight_decay(
@@ -3648,10 +3939,15 @@ class MuonAdamW:
                         parameter,
                         learning_rate_kind=learning_rate_kind,
                     ),
-                    first_moment=torch.zeros_like(parameter),
-                    second_moment=(None if use_muon else torch.zeros_like(parameter)),
+                    first_moment=torch.zeros_like(parameter, dtype=state_dtype),
+                    second_moment=(
+                        None
+                        if use_muon
+                        else torch.zeros_like(parameter, dtype=state_dtype)
+                    ),
                 )
             )
+
     @staticmethod
     def _use_muon(name: str, parameter: Tensor) -> bool:
         if parameter.ndim < 2:
@@ -3709,13 +4005,20 @@ class MuonAdamW:
             )
             if position <= self.config.lr_warmup_examples:
                 return position / self.config.lr_warmup_examples
-            progress = (
-                (position - self.config.lr_warmup_examples)
-                / (self.config.lr_total_examples - self.config.lr_warmup_examples)
+            if self.policy.schedule_kind == "warmup_stable_linear_decay":
+                decay_start = (
+                    self.config.lr_total_examples - self.policy.wsd_decay_examples
+                )
+                if position <= decay_start:
+                    return 1.0
+                decay_progress = (position - decay_start) / self.policy.wsd_decay_examples
+                return 1.0 - (1.0 - self.config.lr_min_ratio) * decay_progress
+            progress = (position - self.config.lr_warmup_examples) / (
+                self.config.lr_total_examples - self.config.lr_warmup_examples
             )
-            return self.config.lr_min_ratio + (
-                1.0 - self.config.lr_min_ratio
-            ) * 0.5 * (1.0 + math.cos(math.pi * progress))
+            return self.config.lr_min_ratio + (1.0 - self.config.lr_min_ratio) * 0.5 * (
+                1.0 + math.cos(math.pi * progress)
+            )
         relative = min(
             max(self.update - self.config.lr_decay_start, 0),
             self.config.lr_decay_steps,
@@ -3727,9 +4030,7 @@ class MuonAdamW:
 
     def _learning_rate(self, kind: str) -> float:
         override = (
-            self._bt4_learning_rate_override
-            if kind == "bt4"
-            else self._main_learning_rate_override
+            self._bt4_learning_rate_override if kind == "bt4" else self._main_learning_rate_override
         )
         if override is not None:
             return override
@@ -3801,20 +4102,32 @@ class MuonAdamW:
         beta_muon = 0.95
         beta1 = 0.9
         beta2 = 0.999
+        decay_total_coordinates = 0
+        cautious_active_coordinates = (
+            torch.zeros((), device=gradient_norm.device, dtype=torch.int64)
+            if self.policy.weight_decay_mode == "cautious"
+            else None
+        )
         for leaf in self.leaves:
             parameter = leaf.parameter
             gradient = parameter.grad
             if gradient is None:
-                gradient = torch.zeros_like(parameter)
+                gradient = torch.zeros_like(leaf.first_moment)
             else:
                 gradient = gradient * clip_scale.to(gradient.dtype)
+            use_fp32_state = leaf.first_moment.dtype == torch.float32
+            if use_fp32_state:
+                gradient = gradient.float()
 
             if leaf.use_muon:
                 leaf.first_moment.mul_(beta_muon).add_(gradient, alpha=1.0 - beta_muon)
                 corrected_moment = leaf.first_moment / (1.0 - beta_muon ** (count + 1))
                 corrected_gradient = gradient / (1.0 - beta_muon**count)
                 update = beta_muon * corrected_moment + (1.0 - beta_muon) * corrected_gradient
-                update = self._orthogonalize(update)
+                if use_fp32_state:
+                    update = self._orthogonalize(update.to(parameter.dtype)).float()
+                else:
+                    update = self._orthogonalize(update)
                 rows, columns = parameter.shape[-2:]
                 update = update * math.sqrt(max(1.0, columns / rows))
             else:
@@ -3827,10 +4140,39 @@ class MuonAdamW:
                 corrected_variance = leaf.second_moment / (1.0 - beta2**count)
                 update = nesterov / (torch.sqrt(corrected_variance) + 1e-8)
 
+            optimization_parameter = (
+                leaf.master_parameter
+                if leaf.master_parameter is not None
+                else parameter
+            )
             if leaf.apply_weight_decay:
-                update = update + self.config.weight_decay * parameter
-            parameter.add_(update, alpha=-self._learning_rate(leaf.learning_rate_kind))
+                decay_total_coordinates += parameter.numel()
+                if self.policy.weight_decay_mode == "cautious":
+                    mask = (update * optimization_parameter) >= 0
+                    assert cautious_active_coordinates is not None
+                    cautious_active_coordinates.add_(mask.count_nonzero())
+                    update = (
+                        update
+                        + self.config.weight_decay * optimization_parameter * mask
+                    )
+                else:
+                    update = update + self.config.weight_decay * optimization_parameter
+            optimization_parameter.add_(
+                update,
+                alpha=-self._learning_rate(leaf.learning_rate_kind),
+            )
+            if leaf.master_parameter is not None:
+                parameter.copy_(optimization_parameter.to(parameter.dtype))
 
+        if self.policy.weight_decay_mode == "cautious":
+            assert cautious_active_coordinates is not None
+            weight_decay_active_fraction = (
+                float(cautious_active_coordinates.cpu()) / decay_total_coordinates
+                if decay_total_coordinates
+                else 0.0
+            )
+        else:
+            weight_decay_active_fraction = 1.0 if decay_total_coordinates else 0.0
         main_lr = self._learning_rate("main")
         bt4_lr = self._learning_rate("bt4")
         completed_update = self.update
@@ -3845,6 +4187,7 @@ class MuonAdamW:
             "gradient_clip_scale": float(clip_scale.cpu()),
             "learning_rate": main_lr,
             "bt4_learning_rate": bt4_lr,
+            "weight_decay_active_fraction": weight_decay_active_fraction,
         }
 
     def zero_grad(self) -> None:
@@ -3863,8 +4206,26 @@ class MuonAdamW:
             }
             for leaf in self.leaves
         ]
-        return {
-            "schema_version": "torch-muon-adamw-partition-v1",
+        legacy = self.policy == LEGACY_OPTIMIZER_POLICY
+        if not legacy:
+            for row, leaf in zip(rows, self.leaves, strict=True):
+                row.update(
+                    {
+                        "optimizer_state_dtype": str(leaf.first_moment.dtype),
+                        "has_master_parameter": leaf.master_parameter is not None,
+                        "master_parameter_dtype": (
+                            None
+                            if leaf.master_parameter is None
+                            else str(leaf.master_parameter.dtype)
+                        ),
+                    }
+                )
+        manifest = {
+            "schema_version": (
+                "torch-muon-adamw-partition-v1"
+                if legacy
+                else "torch-muon-adamw-partition-v2"
+            ),
             "leaf_count": len(rows),
             "muon_leaf_count": sum(row["optimizer"] == "muon" for row in rows),
             "adamw_leaf_count": sum(row["optimizer"] == "nesterov_adamw" for row in rows),
@@ -3872,6 +4233,22 @@ class MuonAdamW:
             "main_leaf_count": sum(row["learning_rate_kind"] == "main" for row in rows),
             "leaves": rows,
         }
+        if not legacy:
+            manifest.update(
+                {
+                    "optimizer_policy": dataclasses.asdict(self.policy),
+                    "master_parameter_count": sum(
+                        leaf.master_parameter is not None for leaf in self.leaves
+                    ),
+                    "master_parameter_nbytes": sum(
+                        leaf.master_parameter.numel() * leaf.master_parameter.element_size()
+                        for leaf in self.leaves
+                        if leaf.master_parameter is not None
+                    ),
+                }
+            )
+        return manifest
+
 
 
 _ALLOWED_PICKLE_GLOBALS = {
@@ -4084,8 +4461,7 @@ def _copy_parameter_array(
     array = np.asarray(value)
     if tuple(parameter.shape) != tuple(array.shape):
         raise ValueError(
-            f"Raw BT4 shape mismatch at {name}: "
-            f"{tuple(parameter.shape)} != {tuple(array.shape)}"
+            f"Raw BT4 shape mismatch at {name}: {tuple(parameter.shape)} != {tuple(array.shape)}"
         )
     array_f32 = np.ascontiguousarray(array.astype(np.float32, copy=False))
     with torch.no_grad():
@@ -4156,8 +4532,7 @@ def bind_raw_bt4(
     source_layers = mapped["encoder"]
     if len(source_layers) != len(model.encoder.layers):
         raise ValueError(
-            f"Raw BT4 encoder depth drift: {len(source_layers)} != "
-            f"{len(model.encoder.layers)}"
+            f"Raw BT4 encoder depth drift: {len(source_layers)} != {len(model.encoder.layers)}"
         )
     for index, (layer, source_layer) in enumerate(
         zip(model.encoder.layers, source_layers, strict=True)
@@ -4218,9 +4593,7 @@ def bind_raw_bt4(
     policy = model.encoder.policy_head
     assert policy is not None
     bind_policy(policy, "encoder.policy_head")
-    for index, future_policy in enumerate(
-        model.encoder.future_policy_heads
-    ):
+    for index, future_policy in enumerate(model.encoder.future_policy_heads):
         bind_policy(
             future_policy,
             f"encoder.future_policy_heads.{index}",
@@ -4268,13 +4641,9 @@ def initialize_fresh_modules(model: JointModel, *, seed: int) -> dict[str, Any]:
     ) -> None:
         # Optional experiment-only leaves must not advance the accepted
         # Hero initializer stream for parameters shared with the control.
-        digest = hashlib.sha256(
-            f"{int(seed)}:{name}".encode("utf-8")
-        ).digest()
+        digest = hashlib.sha256(f"{int(seed)}:{name}".encode("utf-8")).digest()
         optional_generator = torch.Generator(device="cpu")
-        optional_generator.manual_seed(
-            int.from_bytes(digest[:8], "little") % (2**63 - 1)
-        )
+        optional_generator.manual_seed(int.from_bytes(digest[:8], "little") % (2**63 - 1))
         fill_normal(
             parameter,
             standard_deviation,
@@ -4287,24 +4656,18 @@ def initialize_fresh_modules(model: JointModel, *, seed: int) -> dict[str, Any]:
                 continue
             leaf = name.rsplit(".", 1)[-1]
             model_config = getattr(model, "config", None)
-            legacy_zero_bridge = (
-                model_config is None
-                or bool(
-                    getattr(
-                        model_config,
-                        "dfm_condition_on_current_jepa_state",
-                        False,
-                    )
+            legacy_zero_bridge = model_config is None or bool(
+                getattr(
+                    model_config,
+                    "dfm_condition_on_current_jepa_state",
+                    False,
                 )
             )
             zero_initialized = name in {
                 "out_proj",
                 "out_bias",
                 "state_projector.cls",
-            } or (
-                name == "dfm_jepa_state_adapter.w"
-                and legacy_zero_bridge
-            )
+            } or (name == "dfm_jepa_state_adapter.w" and legacy_zero_bridge)
             if zero_initialized:
                 parameter.zero_()
             elif name.startswith("jepa_transition.cond_"):
@@ -4347,9 +4710,7 @@ def initialize_fresh_modules(model: JointModel, *, seed: int) -> dict[str, Any]:
             else:
                 raise ValueError(f"No fresh initialization rule for {name}")
             initialized.append(name)
-    expected = [
-        name for name, _ in model.named_parameters() if not name.startswith("encoder.")
-    ]
+    expected = [name for name, _ in model.named_parameters() if not name.startswith("encoder.")]
     if initialized != expected:
         raise RuntimeError("Fresh initialization did not cover every non-BT4 parameter")
     return {
@@ -4373,9 +4734,7 @@ def load_raw_bt4_hero_model(
     source_path = _require_workspace(raw_bt4_path, exists=True)
     source_stat = source_path.stat()
     if source_stat.st_size != _RAW_BT4_SIZE_BYTES:
-        raise ValueError(
-            f"Raw BT4 size drift: {source_stat.st_size} != {_RAW_BT4_SIZE_BYTES}"
-        )
+        raise ValueError(f"Raw BT4 size drift: {source_stat.st_size} != {_RAW_BT4_SIZE_BYTES}")
     with source_path.open("rb") as handle:
         digest = _sha256_open_file(handle)
     if not hmac.compare_digest(digest, _RAW_BT4_SHA256):
@@ -4443,15 +4802,12 @@ def _canonicalize_trajectory_batch_reference(
     missing = sorted(required - set(batch))
     if missing:
         raise KeyError(f"Canonical trajectory conversion requires metadata: {missing}")
-    result = {
-        key: value for key, value in batch.items() if key not in _TRAJECTORY_METADATA_KEYS
-    }
+    result = {key: value for key, value in batch.items() if key not in _TRAJECTORY_METADATA_KEYS}
     future_valid = np.asarray(batch["future_valid"], dtype=np.float32)
     actions_uci = np.asarray(batch["actions_uci"])
     if actions_uci.shape != future_valid.shape:
         raise ValueError(
-            f"actions_uci/future_valid shape drift: "
-            f"{actions_uci.shape} != {future_valid.shape}"
+            f"actions_uci/future_valid shape drift: {actions_uci.shape} != {future_valid.shape}"
         )
     batch_size, horizon = future_valid.shape
     source_legal = np.asarray(batch["legal_idx"])
@@ -4473,9 +4829,7 @@ def _canonicalize_trajectory_batch_reference(
             input_formats if input_formats.ndim == 0 else input_formats[row]
         )
         if input_format != LC0_CANONICAL_1858_INPUT_FORMAT:
-            raise ValueError(
-                f"Unsupported canonical input format at row {row}: {input_format!r}"
-            )
+            raise ValueError(f"Unsupported canonical input format at row {row}: {input_format!r}")
         fen = _metadata_text(fens if fens.ndim == 0 else fens[row])
         candidate_records: list[tuple[int, np.ndarray]] | None = None
         for chess960 in (False, True):
@@ -4486,9 +4840,9 @@ def _canonicalize_trajectory_batch_reference(
             for offset in range(horizon):
                 if future_valid[row, offset] <= 0.0:
                     continue
-                observed_source_legal = np.flatnonzero(
-                    legal_move_mask(board, "lc0_1858")
-                ).astype(np.int32, copy=False)
+                observed_source_legal = np.flatnonzero(legal_move_mask(board, "lc0_1858")).astype(
+                    np.int32, copy=False
+                )
                 stored_count = int(source_legal_count[row, offset])
                 stored_source_legal = np.sort(
                     source_legal[row, offset, :stored_count].astype(
@@ -4588,15 +4942,12 @@ def canonicalize_trajectory_batch(
     missing = sorted(required - set(batch))
     if missing:
         raise KeyError(f"Canonical trajectory conversion requires metadata: {missing}")
-    result = {
-        key: value for key, value in batch.items() if key not in _TRAJECTORY_METADATA_KEYS
-    }
+    result = {key: value for key, value in batch.items() if key not in _TRAJECTORY_METADATA_KEYS}
     future_valid = np.asarray(batch["future_valid"], dtype=np.float32)
     actions_uci = np.asarray(batch["actions_uci"])
     if actions_uci.shape != future_valid.shape:
         raise ValueError(
-            f"actions_uci/future_valid shape drift: "
-            f"{actions_uci.shape} != {future_valid.shape}"
+            f"actions_uci/future_valid shape drift: {actions_uci.shape} != {future_valid.shape}"
         )
     batch_size, horizon = future_valid.shape
     source_legal = np.asarray(batch["legal_idx"])
@@ -4608,8 +4959,7 @@ def canonicalize_trajectory_batch(
         )
     if source_legal_count.shape != future_valid.shape:
         raise ValueError(
-            f"legal_count shape drift: "
-            f"{source_legal_count.shape} != {future_valid.shape}"
+            f"legal_count shape drift: {source_legal_count.shape} != {future_valid.shape}"
         )
     legal_capacity = int(source_legal.shape[-1])
     canonical_actions = np.zeros((batch_size, horizon), dtype=np.int32)
@@ -4623,12 +4973,8 @@ def canonicalize_trajectory_batch(
     fens = np.asarray(batch["fen_t"])
     input_formats = np.asarray(batch["input_format"])
     index_maps = {
-        chess.WHITE: legacy_to_lc0_canonical_1858_index_map(
-            black_to_move=False
-        ),
-        chess.BLACK: legacy_to_lc0_canonical_1858_index_map(
-            black_to_move=True
-        ),
+        chess.WHITE: legacy_to_lc0_canonical_1858_index_map(black_to_move=False),
+        chess.BLACK: legacy_to_lc0_canonical_1858_index_map(black_to_move=True),
     }
 
     for row in range(batch_size):
@@ -4636,9 +4982,7 @@ def canonicalize_trajectory_batch(
             input_formats if input_formats.ndim == 0 else input_formats[row]
         )
         if input_format != LC0_CANONICAL_1858_INPUT_FORMAT:
-            raise ValueError(
-                f"Unsupported canonical input format at row {row}: {input_format!r}"
-            )
+            raise ValueError(f"Unsupported canonical input format at row {row}: {input_format!r}")
         fen = _metadata_text(fens if fens.ndim == 0 else fens[row])
         candidate_records: list[tuple[int, np.ndarray]] | None = None
         for chess960 in (False, True):
@@ -4652,40 +4996,29 @@ def canonicalize_trajectory_batch(
                 stored_count = int(source_legal_count[row, offset])
                 if not 0 <= stored_count <= legal_capacity:
                     raise ValueError(
-                        f"Invalid legal_count at row {row}, horizon "
-                        f"{offset + 1}: {stored_count}"
+                        f"Invalid legal_count at row {row}, horizon {offset + 1}: {stored_count}"
                     )
                 stored_source_legal = source_legal[
                     row,
                     offset,
                     :stored_count,
                 ].astype(np.int32, copy=False)
-                if (
-                    np.any(stored_source_legal < 0)
-                    or np.any(stored_source_legal >= _VOCAB_SIZE)
-                ):
+                if np.any(stored_source_legal < 0) or np.any(stored_source_legal >= _VOCAB_SIZE):
                     raise ValueError(
-                        f"Out-of-range legacy legal index at row {row}, "
-                        f"horizon {offset + 1}"
+                        f"Out-of-range legacy legal index at row {row}, horizon {offset + 1}"
                     )
                 if np.unique(stored_source_legal).size != stored_source_legal.size:
                     raise ValueError(
-                        f"Duplicate legacy legal index at row {row}, "
-                        f"horizon {offset + 1}"
+                        f"Duplicate legacy legal index at row {row}, horizon {offset + 1}"
                     )
                 legal = index_maps[board.turn][stored_source_legal]
                 if np.any(legal < 0):
                     raise ValueError(
-                        f"Unmappable legacy legal index at row {row}, "
-                        f"horizon {offset + 1}"
+                        f"Unmappable legacy legal index at row {row}, horizon {offset + 1}"
                     )
                 legal = np.sort(legal.astype(np.int32, copy=False))
 
-                promotion_rank = (
-                    chess.BB_RANK_7
-                    if board.turn == chess.WHITE
-                    else chess.BB_RANK_2
-                )
+                promotion_rank = chess.BB_RANK_7 if board.turn == chess.WHITE else chess.BB_RANK_2
                 if board.pieces_mask(chess.PAWN, board.turn) & promotion_rank:
                     promotion_indices = np.asarray(
                         [
@@ -4700,9 +5033,9 @@ def canonicalize_trajectory_batch(
                         dtype=np.int32,
                     )
                     if promotion_indices.size:
-                        legal = np.unique(
-                            np.concatenate((legal, promotion_indices))
-                        ).astype(np.int32, copy=False)
+                        legal = np.unique(np.concatenate((legal, promotion_indices))).astype(
+                            np.int32, copy=False
+                        )
 
                 move_text = _metadata_text(actions_uci[row, offset])
                 try:
@@ -4805,9 +5138,7 @@ def _normalize_frozen_indices(
     if result.ndim != 1 or result.size == 0:
         raise ValueError("Frozen indices must be a non-empty rank-1 array")
     if result.size % batch_size != 0:
-        raise ValueError(
-            f"Frozen index count {result.size} is not divisible by batch {batch_size}"
-        )
+        raise ValueError(f"Frozen index count {result.size} is not divisible by batch {batch_size}")
     if np.any(result < 0) or np.any(result >= total_examples):
         raise ValueError("Frozen indices contain an out-of-range global index")
     result = np.sort(result)
@@ -4835,9 +5166,7 @@ class FrozenIndexTrajectoryBatches:
             raise FileNotFoundError(f"No trajectory shards under {self.split_dir}")
         self.batch_size = int(batch_size)
         self.horizon = int(horizon)
-        self.samples_per_shard = _FixedTrajectoryBatches._read_sample_count(
-            self.paths[0]
-        )
+        self.samples_per_shard = _FixedTrajectoryBatches._read_sample_count(self.paths[0])
         self.global_indices = _normalize_frozen_indices(
             global_indices,
             total_examples=len(self.paths) * self.samples_per_shard,
@@ -4893,15 +5222,9 @@ class FrozenIndexTrajectoryBatches:
                     include_metadata=True,
                 )
             )
-            compact = {
-                key: value
-                for key, value in decoded.items()
-                if key in _TRAIN_BATCH_KEYS
-            }
+            compact = {key: value for key, value in decoded.items() if key in _TRAIN_BATCH_KEYS}
         except Exception as exc:
-            raise RuntimeError(
-                f"Failed frozen-index decode for shard {path}"
-            ) from exc
+            raise RuntimeError(f"Failed frozen-index decode for shard {path}") from exc
         self._cache[shard_index] = compact
         self._cache.move_to_end(shard_index)
         while len(self._cache) > 2:
@@ -4910,9 +5233,7 @@ class FrozenIndexTrajectoryBatches:
 
     def batch_at(self, step: int) -> dict[str, Any]:
         if not 0 <= step < self.steps_per_epoch:
-            raise IndexError(
-                f"Frozen pool step {step} is outside [0, {self.steps_per_epoch})"
-            )
+            raise IndexError(f"Frozen pool step {step} is outside [0, {self.steps_per_epoch})")
         start = step * self.batch_size
         requested = self.global_indices[start : start + self.batch_size]
         requested_shards = requested // self.samples_per_shard
@@ -4925,28 +5246,19 @@ class FrozenIndexTrajectoryBatches:
             if not np.array_equal(selected_rows[positions], rows):
                 raise RuntimeError("Frozen-index shard lookup drift")
             decoded = self._decode_selected_shard(int(shard_index))
-            pieces.append(
-                {
-                    key: np.asarray(value)[positions]
-                    for key, value in decoded.items()
-                }
-            )
+            pieces.append({key: np.asarray(value)[positions] for key, value in decoded.items()})
         keys = set(pieces[0])
         if any(set(piece) != keys for piece in pieces):
             raise RuntimeError("Frozen-index batch leaf drift across shards")
         result = {
-            key: np.concatenate([piece[key] for piece in pieces], axis=0)
-            for key in sorted(keys)
+            key: np.concatenate([piece[key] for piece in pieces], axis=0) for key in sorted(keys)
         }
         if any(np.asarray(value).shape[0] != self.batch_size for value in result.values()):
             raise RuntimeError("Frozen-index batch did not materialize exactly one batch")
         return result
 
     def provenance(self) -> dict[str, Any]:
-        entries = [
-            f"{path.name}\t{path.stat().st_size}"
-            for path in self.paths
-        ]
+        entries = [f"{path.name}\t{path.stat().st_size}" for path in self.paths]
         return {
             "pool_name": self.pool_name,
             "split_dir": str(self.split_dir),
@@ -4957,9 +5269,7 @@ class FrozenIndexTrajectoryBatches:
             "batch_count": self.steps_per_epoch,
             "global_index_order": "ascending",
             "indices_sha256": self.indices_sha256,
-            "file_manifest_sha256": hashlib.sha256(
-                "\n".join(entries).encode("utf-8")
-            ).hexdigest(),
+            "file_manifest_sha256": hashlib.sha256("\n".join(entries).encode("utf-8")).hexdigest(),
         }
 
 
@@ -5050,8 +5360,7 @@ def _summarize_training_records(
         "first_window": first_window,
         "last_window": last_window,
         "last_minus_first": {
-            key: float(last_window[key] - first_window[key])
-            for key in _LOSS_SUMMARY_METRICS
+            key: float(last_window[key] - first_window[key]) for key in _LOSS_SUMMARY_METRICS
         },
         "plot_contract": {
             "training_curve_source": "metrics.jsonl",
@@ -5124,6 +5433,12 @@ def _sha256_file(path: Path) -> str:
 
 
 def _git_commit() -> str:
+    override = os.environ.get("CHESS_DFM_GIT_COMMIT")
+    if override is not None:
+        if len(override) != 40 or any(character not in "0123456789abcdef" for character in override):
+            raise ValueError("CHESS_DFM_GIT_COMMIT must be a lowercase SHA-1")
+        return override
+
     return subprocess.run(
         ["git", "rev-parse", "HEAD"],
         cwd=_REPO_ROOT,
@@ -5258,12 +5573,9 @@ def save_training_checkpoint(
         raise ValueError("Recovery checkpoint counters must be non-negative")
     if (
         optimizer.examples_per_update is not None
-        and optimizer_examples_seen
-        != optimizer_update * optimizer.examples_per_update
+        and optimizer_examples_seen != optimizer_update * optimizer.examples_per_update
     ):
-        raise ValueError(
-            "Optimizer examples_seen is inconsistent with update and batch size"
-        )
+        raise ValueError("Optimizer examples_seen is inconsistent with update and batch size")
 
     checkpoint_root = _require_workspace(output_dir / "checkpoints")
     checkpoint_root.mkdir(parents=True, exist_ok=True)
@@ -5289,17 +5601,26 @@ def save_training_checkpoint(
                 tensors[f"optimizer.second.{leaf.name}"] = (
                     leaf.second_moment.detach().cpu().contiguous()
                 )
+            if leaf.master_parameter is not None:
+                tensors[f"optimizer.master.{leaf.name}"] = (
+                    leaf.master_parameter.detach().cpu().contiguous()
+                )
 
         normalized_contract = dict(resume_contract)
         resume_contract_sha256 = _json_sha256(normalized_contract)
         partition = optimizer.partition_manifest()
         partition_sha256 = _json_sha256(partition)
+        checkpoint_format = (
+            "chess-dfm-torch-training-v2"
+            if any(leaf.master_parameter is not None for leaf in optimizer.leaves)
+            else "chess-dfm-torch-training-v1"
+        )
         state_path = temporary_dir / "state.safetensors"
         save_file(
             tensors,
             str(state_path),
             metadata={
-                "format": "chess-dfm-torch-training-v1",
+                "format": checkpoint_format,
                 "optimizer_update": str(optimizer_update),
                 "optimizer_examples_seen": str(optimizer_examples_seen),
                 "next_data_cursor": str(next_data_cursor),
@@ -5311,7 +5632,7 @@ def save_training_checkpoint(
         del tensors
         _fsync_path(state_path)
         manifest = {
-            "format": "chess-dfm-torch-training-v1",
+            "format": checkpoint_format,
             "created_utc": datetime.now(UTC).isoformat(),
             "model_only": False,
             "optimizer_resume_supported": True,
@@ -5331,6 +5652,9 @@ def save_training_checkpoint(
                 "first_moment_count": len(optimizer.leaves),
                 "second_moment_count": sum(
                     leaf.second_moment is not None for leaf in optimizer.leaves
+                ),
+                "master_parameter_count": sum(
+                    leaf.master_parameter is not None for leaf in optimizer.leaves
                 ),
             },
         }
@@ -5354,10 +5678,11 @@ def _verified_training_checkpoint(
     root = _require_workspace(checkpoint_dir, exists=True)
     manifest_path = _require_workspace(root / "manifest.json", exists=True)
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    if manifest.get("format") != "chess-dfm-torch-training-v1":
-        raise ValueError(
-            f"Unsupported torch training checkpoint format: {manifest.get('format')}"
-        )
+    if manifest.get("format") not in {
+        "chess-dfm-torch-training-v1",
+        "chess-dfm-torch-training-v2",
+    }:
+        raise ValueError(f"Unsupported torch training checkpoint format: {manifest.get('format')}")
     if manifest.get("model_only") is not False:
         raise ValueError("Training checkpoint must declare model_only=false")
     if manifest.get("optimizer_resume_supported") is not True:
@@ -5370,14 +5695,12 @@ def _verified_training_checkpoint(
         raise ValueError("Training checkpoint resume-contract checksum mismatch")
     if expected_resume_contract is not None:
         expected_contract = dict(expected_resume_contract)
-        if (
-            _json_sha256(expected_contract) != observed_contract_sha256
-            and _resume_contract_comparison_payload(expected_contract)
-            != _resume_contract_comparison_payload(contract)
-        ):
-            raise ValueError(
-                "Training checkpoint resume contract does not match this run"
-            )
+        if _json_sha256(
+            expected_contract
+        ) != observed_contract_sha256 and _resume_contract_comparison_payload(
+            expected_contract
+        ) != _resume_contract_comparison_payload(contract):
+            raise ValueError("Training checkpoint resume contract does not match this run")
     state_path = _require_workspace(root / manifest["state"]["path"], exists=True)
     if state_path.stat().st_size != int(manifest["state"]["size_bytes"]):
         raise ValueError(f"Training checkpoint size mismatch: {state_path}")
@@ -5407,6 +5730,12 @@ def _resume_contract_comparison_payload(
     schedule = payload.get("schedule")
     if isinstance(schedule, dict):
         schedule.pop("target_updates", None)
+    # Hero-v2 checkpoints pin the exact scientific source tree by content.
+    # A Git commit is useful provenance, but it is not a compatibility input
+    # once that stronger digest is present: committing an unchanged dirty
+    # tree or editing orchestration-only files must not force paid replay.
+    if payload.get("source_tree_sha256") is not None:
+        payload.pop("git_commit", None)
     return payload
 
 
@@ -5443,6 +5772,11 @@ def load_training_checkpoint(
         for name, leaf in leaves.items()
         if leaf.second_moment is not None
     )
+    expected_keys.update(
+        f"optimizer.master.{name}"
+        for name, leaf in leaves.items()
+        if leaf.master_parameter is not None
+    )
     loaded = load_file(str(state_path), device="cpu")
     if set(loaded) != expected_keys:
         raise ValueError(
@@ -5476,6 +5810,19 @@ def load_training_checkpoint(
                     loaded[f"optimizer.second.{name}"],
                     f"optimizer.second.{name}",
                 )
+            if leaf.master_parameter is not None:
+                copy_exact(
+                    leaf.master_parameter,
+                    loaded[f"optimizer.master.{name}"],
+                    f"optimizer.master.{name}",
+                )
+                if not torch.equal(
+                    leaf.parameter,
+                    leaf.master_parameter.to(leaf.parameter.dtype),
+                ):
+                    raise ValueError(
+                        f"Training checkpoint model/master mismatch at {name}"
+                    )
 
     optimizer.update = int(manifest["optimizer_update"])
     optimizer.examples_seen = int(manifest["optimizer_examples_seen"])
@@ -5484,8 +5831,7 @@ def load_training_checkpoint(
         raise ValueError("Restored training counters must be non-negative")
     if (
         optimizer.examples_per_update is not None
-        and optimizer.examples_seen
-        != optimizer.update * optimizer.examples_per_update
+        and optimizer.examples_seen != optimizer.update * optimizer.examples_per_update
     ):
         raise ValueError("Restored optimizer example counter is inconsistent")
     return manifest
@@ -5557,10 +5903,7 @@ def load_checkpoint_model_for_evaluation(
             model=model,
         )
     if checkpoint_format != "chess-dfm-torch-training-v1":
-        raise ValueError(
-            "Unsupported evaluation checkpoint format: "
-            f"{checkpoint_format!r}"
-        )
+        raise ValueError(f"Unsupported evaluation checkpoint format: {checkpoint_format!r}")
 
     from safetensors import safe_open
 
@@ -5570,9 +5913,7 @@ def load_checkpoint_model_for_evaluation(
         loaded_keys = set(payload.keys())
         model_prefix = "model."
         loaded_model_names = {
-            key[len(model_prefix) :]
-            for key in loaded_keys
-            if key.startswith(model_prefix)
+            key[len(model_prefix) :] for key in loaded_keys if key.startswith(model_prefix)
         }
         if loaded_model_names != set(named):
             raise ValueError(
@@ -5581,16 +5922,11 @@ def load_checkpoint_model_for_evaluation(
                 f"extra={sorted(loaded_model_names - set(named))[:10]}"
             )
         if int(verified_manifest["state"]["model_leaf_count"]) != len(named):
-            raise ValueError(
-                "Training checkpoint model leaf count does not match"
-            )
+            raise ValueError("Training checkpoint model leaf count does not match")
         with torch.no_grad():
             for name, parameter in named.items():
                 value = payload.get_tensor(f"{model_prefix}{name}")
-                if (
-                    value.shape != parameter.shape
-                    or value.dtype != parameter.dtype
-                ):
+                if value.shape != parameter.shape or value.dtype != parameter.dtype:
                     raise ValueError(
                         f"Training checkpoint model ABI mismatch at {name}: "
                         f"{value.shape}/{value.dtype} != "
@@ -5599,6 +5935,121 @@ def load_checkpoint_model_for_evaluation(
                 parameter.copy_(value.to(parameter.device))
                 del value
     return verified_manifest
+
+
+def _load_policy_distill_teacher_encoder(
+    *,
+    checkpoint_dir: Path,
+    expected_state_sha256: str,
+    raw_bt4_path: Path,
+    device: torch.device,
+    bt4_norm_impl: str,
+) -> tuple[BT4Encoder, dict[str, Any]]:
+    """Load only a frozen, content-bound policy encoder from a checkpoint."""
+
+    if (
+        len(expected_state_sha256) != 64
+        or any(
+            character not in "0123456789abcdef"
+            for character in expected_state_sha256
+        )
+    ):
+        raise ValueError("Policy teacher state must be a lowercase SHA-256")
+    checkpoint_root = _require_workspace(checkpoint_dir, exists=True)
+    run_config_path = _require_workspace(
+        checkpoint_root.parent / "run_config.json",
+        exists=True,
+    )
+    run_config = json.loads(run_config_path.read_text(encoding="utf-8"))
+    teacher_config_payload = run_config.get("config")
+    if (
+        run_config.get("framework") != "torch"
+        or not isinstance(teacher_config_payload, dict)
+    ):
+        raise ValueError("Policy teacher has no trusted Torch run configuration")
+    teacher_config = Config(**teacher_config_payload)
+    if (
+        teacher_config.action_codec != ACTION_CODEC_LC0_CANONICAL_1858
+        or not teacher_config.use_bt4_policy_residual
+    ):
+        raise ValueError("Policy teacher must expose the canonical BT4 policy head")
+    teacher_model, source_mapping = load_raw_bt4_hero_model(
+        device=device,
+        raw_bt4_path=raw_bt4_path,
+        config=teacher_config,
+        bt4_norm_impl=bt4_norm_impl,
+    )
+    manifest = load_checkpoint_model_for_evaluation(
+        checkpoint_dir=checkpoint_root,
+        model=teacher_model,
+    )
+    observed_state_sha256 = str(manifest.get("state", {}).get("sha256", ""))
+    if observed_state_sha256 != expected_state_sha256:
+        raise ValueError(
+            "Policy teacher checkpoint state drift: "
+            f"{observed_state_sha256} != {expected_state_sha256}"
+        )
+    if manifest.get("source_mapping_sha256") != source_mapping["combined_sha256"]:
+        raise ValueError("Policy teacher raw-BT4 source mapping drift")
+    teacher_encoder = teacher_model._modules.pop("encoder")
+    if not isinstance(teacher_encoder, BT4Encoder):
+        raise TypeError("Policy teacher checkpoint did not yield a BT4 encoder")
+    del teacher_model
+    gc.collect()
+    if device.type == "cuda":
+        torch.cuda.empty_cache()
+    teacher_encoder.requires_grad_(False)
+    teacher_encoder.eval()
+    if teacher_encoder.policy_head is None:
+        raise ValueError("Policy teacher encoder has no root policy head")
+    record = {
+        "schema_version": "torch-policy-distill-checkpoint-teacher-v1",
+        "mode": "checkpoint",
+        "checkpoint_dir": str(checkpoint_root),
+        "checkpoint_manifest_sha256": _sha256_file(
+            checkpoint_root / "manifest.json"
+        ),
+        "checkpoint_state_sha256": observed_state_sha256,
+        "run_config_path": str(run_config_path),
+        "run_config_sha256": _sha256_file(run_config_path),
+        "source_mapping_sha256": source_mapping["combined_sha256"],
+        "parameter_count": sum(
+            parameter.numel() for parameter in teacher_encoder.parameters()
+        ),
+        "trainable_parameter_count": sum(
+            parameter.numel()
+            for parameter in teacher_encoder.parameters()
+            if parameter.requires_grad
+        ),
+    }
+    return teacher_encoder, record
+
+
+def _policy_distill_teacher_root_logits(
+    teacher_encoder: BT4Encoder,
+    current_planes: Tensor,
+    *,
+    compute_dtype: torch.dtype,
+) -> Tensor:
+    """Run a frozen policy teacher without creating an autograd graph."""
+
+    with torch.no_grad():
+        tokens = teacher_encoder.encode_current(
+            current_planes,
+            compute_dtype=compute_dtype,
+            remat=False,
+        )
+        policy_head = teacher_encoder.policy_head
+        if policy_head is None:
+            raise RuntimeError("Policy teacher lost its root policy head")
+        logits, _ = policy_head.forward_with_features(tokens, compute_dtype)
+        if logits.ndim != 2 or logits.shape[-1] != _VOCAB_SIZE:
+            raise ValueError(
+                f"Policy teacher returned invalid logits shape {tuple(logits.shape)}"
+            )
+        if not bool(torch.all(torch.isfinite(logits.float()))):
+            raise FloatingPointError("Policy teacher returned non-finite logits")
+        return logits.detach()
 
 
 def load_model_checkpoint_numpy_tree(
@@ -5687,10 +6138,7 @@ def load_checkpoint_numpy_tree_for_evaluation(
             model=model,
         )
     if checkpoint_format != "chess-dfm-torch-training-v1":
-        raise ValueError(
-            "Unsupported evaluation checkpoint format: "
-            f"{checkpoint_format!r}"
-        )
+        raise ValueError(f"Unsupported evaluation checkpoint format: {checkpoint_format!r}")
 
     from safetensors import safe_open
 
@@ -5703,9 +6151,7 @@ def load_checkpoint_numpy_tree_for_evaluation(
     with safe_open(state_path, framework="pt", device="cpu") as payload:
         loaded_keys = set(payload.keys())
         loaded_model_names = {
-            key[len(model_prefix) :]
-            for key in loaded_keys
-            if key.startswith(model_prefix)
+            key[len(model_prefix) :] for key in loaded_keys if key.startswith(model_prefix)
         }
         if loaded_model_names != set(named):
             raise ValueError(
@@ -5713,13 +6159,8 @@ def load_checkpoint_numpy_tree_for_evaluation(
                 f"missing={sorted(set(named) - loaded_model_names)[:10]}, "
                 f"extra={sorted(loaded_model_names - set(named))[:10]}"
             )
-        if (
-            int(verified_manifest["state"]["model_leaf_count"])
-            != len(loaded_model_names)
-        ):
-            raise ValueError(
-                "Training checkpoint model leaf count does not match"
-            )
+        if int(verified_manifest["state"]["model_leaf_count"]) != len(loaded_model_names):
+            raise ValueError("Training checkpoint model leaf count does not match")
         for name, parameter in named.items():
             value = payload.get_tensor(f"{model_prefix}{name}").contiguous()
             if value.shape != parameter.shape or value.dtype != parameter.dtype:
@@ -5729,34 +6170,25 @@ def load_checkpoint_numpy_tree_for_evaluation(
                     f"{parameter.shape}/{parameter.dtype}"
                 )
             if value.dtype == torch.bfloat16:
-                array = value.view(torch.uint16).numpy().view(
-                    ml_dtypes.bfloat16
-                )
+                array = value.view(torch.uint16).numpy().view(ml_dtypes.bfloat16)
             elif value.dtype == torch.float32:
                 array = value.numpy()
             else:
-                raise TypeError(
-                    f"Unsupported checkpoint dtype at {name}: {value.dtype}"
-                )
-            leaf_digest = hashlib.sha256(
-                array.tobytes(order="C")
-            ).hexdigest()
+                raise TypeError(f"Unsupported checkpoint dtype at {name}: {value.dtype}")
+            leaf_digest = hashlib.sha256(array.tobytes(order="C")).hexdigest()
             combined.update(name.encode("utf-8"))
             combined.update(b"\0")
             combined.update(leaf_digest.encode("ascii"))
             total_bytes += int(array.nbytes)
 
             parts: tuple[str | int, ...] = tuple(
-                int(part) if part.isdigit() else part
-                for part in name.split(".")
+                int(part) if part.isdigit() else part for part in name.split(".")
             )
             cursor = tree
             for part in parts[:-1]:
                 child = cursor.setdefault(part, {})
                 if not isinstance(child, dict):
-                    raise ValueError(
-                        f"Checkpoint tree path collision at {name}"
-                    )
+                    raise ValueError(f"Checkpoint tree path collision at {name}")
                 cursor = child
             if parts[-1] in cursor:
                 raise ValueError(f"Duplicate checkpoint tree leaf: {name}")
@@ -5792,9 +6224,7 @@ def _start_gpu_monitor(
     if local_nvml:
         nvml_dir = _require_workspace(Path(local_nvml), exists=True)
         if not (nvml_dir / "libnvidia-ml.so.1").is_file():
-            raise FileNotFoundError(
-                f"Workspace-local NVML library is missing from {nvml_dir}"
-            )
+            raise FileNotFoundError(f"Workspace-local NVML library is missing from {nvml_dir}")
         existing_library_path = monitor_env.get("LD_LIBRARY_PATH")
         monitor_env["LD_LIBRARY_PATH"] = (
             str(nvml_dir)
@@ -5917,9 +6347,7 @@ def _apply_compile_regions(model: JointModel, regions: str) -> list[str]:
         compiled.append(
             {
                 "fresh-bt4-smolgen": "bt4_smolgen_modules",
-                "fresh-bt4-smolgen-eager-numerics": (
-                    "bt4_smolgen_modules_eager_numerics"
-                ),
+                "fresh-bt4-smolgen-eager-numerics": ("bt4_smolgen_modules_eager_numerics"),
             }[regions]
         )
     elif regions in {
@@ -5944,9 +6372,7 @@ def _apply_compile_regions(model: JointModel, regions: str) -> list[str]:
                 bt4_compile_kwargs["options"] = {
                     "emulate_precision_casts": True,
                     **(
-                        {"epilogue_fusion": False}
-                        if regions == "fresh-bt4-strict-numerics"
-                        else {}
+                        {"epilogue_fusion": False} if regions == "fresh-bt4-strict-numerics" else {}
                     ),
                 }
             else:
@@ -6022,11 +6448,7 @@ def _write_profiler_artifacts(
         reverse=True,
     )[:50]
     regions = sorted(
-        (
-            row
-            for row in rows
-            if str(row["name"]).startswith("region::")
-        ),
+        (row for row in rows if str(row["name"]).startswith("region::")),
         key=lambda row: str(row["name"]),
     )
     table = profiler.key_averages().table(
@@ -6039,11 +6461,14 @@ def _write_profiler_artifacts(
     raw_trace = _require_workspace(output_dir / ".profile_trace.json.partial")
     compressed_trace = _require_workspace(output_dir / "profile_trace.json.gz")
     profiler.export_chrome_trace(str(raw_trace))
-    with raw_trace.open("rb") as source, gzip.open(
-        compressed_trace,
-        "wb",
-        compresslevel=6,
-    ) as target:
+    with (
+        raw_trace.open("rb") as source,
+        gzip.open(
+            compressed_trace,
+            "wb",
+            compresslevel=6,
+        ) as target,
+    ):
         shutil.copyfileobj(source, target, length=_HASH_CHUNK_BYTES)
     raw_trace.unlink()
 
@@ -6081,10 +6506,7 @@ def _compile_counter_snapshot() -> dict[str, dict[str, int]]:
     except (ImportError, AttributeError):
         return {}
     return {
-        str(category): {
-            str(key): int(value)
-            for key, value in values.items()
-        }
+        str(category): {str(key): int(value) for key, value in values.items()}
         for category, values in counters.items()
         if values
     }
@@ -6099,10 +6521,12 @@ def _training_resume_contract(
     data_provenance: Mapping[str, Any],
     compiled_regions: Sequence[str],
     git_commit: str,
+    optimizer_policy: OptimizerPolicy = LEGACY_OPTIMIZER_POLICY,
+    policy_distill_teacher: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Pin every state-independent input needed for exact stateless resume."""
 
-    return {
+    contract = {
         "schema_version": "torch-training-resume-contract-v1",
         "git_commit": git_commit,
         "framework": "torch",
@@ -6112,6 +6536,11 @@ def _training_resume_contract(
         "recipe": args.recipe,
         "config": dataclasses.asdict(config),
         "source_mapping_sha256": source_mapping_sha256,
+        "policy_distill_teacher": (
+            dict(policy_distill_teacher)
+            if policy_distill_teacher is not None
+            else {"mode": "online"}
+        ),
         "optimizer_partition": dict(optimizer_partition),
         "data": dict(data_provenance),
         "schedule": {
@@ -6134,9 +6563,7 @@ def _training_resume_contract(
             ),
             "hero_milestones": _hero_milestone_contract(
                 args,
-                enabled=bool(
-                    getattr(args, "hero_milestones", False)
-                ),
+                enabled=bool(getattr(args, "hero_milestones", False)),
             ),
         },
         "stochastic_state": (
@@ -6144,6 +6571,16 @@ def _training_resume_contract(
             "seed/data_cursor; no mutable RNG state"
         ),
     }
+    if optimizer_policy != LEGACY_OPTIMIZER_POLICY:
+        contract["optimizer_policy"] = dataclasses.asdict(optimizer_policy)
+        source_tree_sha256 = os.environ.get("CHESS_DFM_SOURCE_TREE_SHA256")
+        if source_tree_sha256 is not None:
+            if len(source_tree_sha256) != 64 or any(
+                character not in "0123456789abcdef" for character in source_tree_sha256
+            ):
+                raise ValueError("CHESS_DFM_SOURCE_TREE_SHA256 must be lowercase SHA-256")
+            contract["source_tree_sha256"] = source_tree_sha256
+    return contract
 
 
 def _apply_sigreg_sample_override(
@@ -6156,14 +6593,9 @@ def _apply_sigreg_sample_override(
 
     if sigreg_example_count is None:
         return config
-    if recipe != "hero":
-        raise ValueError(
-            "--sigreg-example-count is currently a hero-only experiment"
-        )
-    if (
-        isinstance(sigreg_example_count, bool)
-        or sigreg_example_count < 1
-    ):
+    if recipe not in _HERO_RECIPES:
+        raise ValueError("--sigreg-example-count is currently a hero-only experiment")
+    if isinstance(sigreg_example_count, bool) or sigreg_example_count < 1:
         raise ValueError("--sigreg-example-count must be a positive integer")
     return dataclasses.replace(
         config,
@@ -6181,15 +6613,94 @@ def _apply_hero_wdl_override(
 
     if wdl_coeff is None:
         return config
-    if recipe != "hero":
+    if recipe not in _HERO_RECIPES:
         raise ValueError("--wdl-coeff is currently a hero-only experiment")
-    if (
-        isinstance(wdl_coeff, bool)
-        or not math.isfinite(wdl_coeff)
-        or wdl_coeff < 0.0
-    ):
+    if isinstance(wdl_coeff, bool) or not math.isfinite(wdl_coeff) or wdl_coeff < 0.0:
         raise ValueError("--wdl-coeff must be finite and non-negative")
     return dataclasses.replace(config, wdl_coeff=float(wdl_coeff))
+
+
+def _apply_hero_legality_override(
+    config: Config,
+    *,
+    recipe: str,
+    legality_coeff: float | None,
+) -> Config:
+    """Resolve an explicit hero root-illegal-mass objective ablation."""
+
+    if legality_coeff is None:
+        return config
+    if recipe not in _HERO_RECIPES:
+        raise ValueError("--legality-coeff is currently a hero-only experiment")
+    if (
+        isinstance(legality_coeff, bool)
+        or not math.isfinite(legality_coeff)
+        or legality_coeff < 0.0
+    ):
+        raise ValueError("--legality-coeff must be finite and non-negative")
+    return dataclasses.replace(config, legality_coeff=float(legality_coeff))
+
+
+def _apply_hero_policy_distill_override(
+    config: Config,
+    *,
+    recipe: str,
+    policy_distill_coeff: float | None,
+    policy_distill_teacher_mode: str | None = None,
+    policy_distill_teacher_state_sha256: str | None = None,
+) -> Config:
+    """Resolve online or immutable-checkpoint policy distillation."""
+
+    requested = (
+        policy_distill_coeff is not None
+        or policy_distill_teacher_mode is not None
+        or policy_distill_teacher_state_sha256 is not None
+    )
+    if not requested:
+        return config
+    if recipe not in _HERO_RECIPES:
+        raise ValueError("Policy distillation is currently a hero-only experiment")
+    coefficient = (
+        config.policy_distill_coeff
+        if policy_distill_coeff is None
+        else policy_distill_coeff
+    )
+    if (
+        isinstance(coefficient, bool)
+        or not math.isfinite(coefficient)
+        or coefficient < 0.0
+    ):
+        raise ValueError("--policy-distill-coeff must be finite and non-negative")
+    if coefficient > 0.0 and not config.use_bt4_policy_residual:
+        raise ValueError("Policy distillation requires the native BT4 policy residual")
+    teacher_mode = policy_distill_teacher_mode or config.policy_distill_teacher_mode
+    if teacher_mode not in {"online", "checkpoint"}:
+        raise ValueError("--policy-distill-teacher must be online or checkpoint")
+    teacher_sha256 = (
+        config.policy_distill_teacher_state_sha256
+        if policy_distill_teacher_state_sha256 is None
+        else policy_distill_teacher_state_sha256
+    )
+    if teacher_mode == "checkpoint":
+        valid_sha256 = (
+            isinstance(teacher_sha256, str)
+            and len(teacher_sha256) == 64
+            and all(character in "0123456789abcdef" for character in teacher_sha256)
+        )
+        if coefficient <= 0.0:
+            raise ValueError("Checkpoint policy teacher requires positive distillation")
+        if not valid_sha256:
+            raise ValueError(
+                "--policy-distill-teacher-state-sha256 must be a lowercase SHA-256"
+            )
+    elif teacher_sha256:
+        raise ValueError("Online policy teacher cannot carry a checkpoint SHA-256")
+    return dataclasses.replace(
+        config,
+        policy_distill_coeff=float(coefficient),
+        policy_distill_teacher_mode=teacher_mode,
+        policy_distill_teacher_state_sha256=str(teacher_sha256),
+    )
 
 
 def _apply_hero_feedback_override(
@@ -6202,15 +6713,10 @@ def _apply_hero_feedback_override(
 
     if jepa_feedback_mode is None:
         return config
-    if recipe != "hero":
-        raise ValueError(
-            "--jepa-feedback-mode is currently a hero-only experiment"
-        )
+    if recipe not in _HERO_RECIPES:
+        raise ValueError("--jepa-feedback-mode is currently a hero-only experiment")
     if jepa_feedback_mode not in {"none", "final_pass_adjoint"}:
-        raise ValueError(
-            "--jepa-feedback-mode must be 'none' or "
-            "'final_pass_adjoint'"
-        )
+        raise ValueError("--jepa-feedback-mode must be 'none' or 'final_pass_adjoint'")
     return dataclasses.replace(
         config,
         jepa_feedback_mode=jepa_feedback_mode,
@@ -6227,15 +6733,12 @@ def _apply_hero_dfm_jepa_conditioning_override(
 
     if enabled is None:
         return config
-    if recipe != "hero":
+    if recipe not in _HERO_RECIPES:
         raise ValueError(
-            "--dfm-condition-on-current-jepa-state is currently a "
-            "hero-only experiment"
+            "--dfm-condition-on-current-jepa-state is currently a hero-only experiment"
         )
     if type(enabled) is not bool:
-        raise ValueError(
-            "--dfm-condition-on-current-jepa-state must be boolean"
-        )
+        raise ValueError("--dfm-condition-on-current-jepa-state must be boolean")
     return dataclasses.replace(
         config,
         dfm_condition_on_current_jepa_state=enabled,
@@ -6263,22 +6766,105 @@ def _apply_hero_architecture_overrides(
     }
     if all(value is None for value in requested.values()):
         return config
-    if recipe != "hero":
-        raise ValueError(
-            "Post-Hero architecture overrides require recipe='hero'"
-        )
-    replacements = {
-        name: value
-        for name, value in requested.items()
-        if value is not None
-    }
+    if recipe not in _HERO_RECIPES:
+        raise ValueError("Post-Hero architecture overrides require recipe='hero'")
+    replacements = {name: value for name, value in requested.items() if value is not None}
     resolved = dataclasses.replace(config, **replacements)
     _validate_hero_architecture_config(resolved)
     return resolved
 
 
+def _resolve_training_recipe(
+    args: argparse.Namespace,
+) -> tuple[Config, OptimizerPolicy]:
+    if args.recipe == "continuation":
+        config = CONFIG
+        policy = LEGACY_OPTIMIZER_POLICY
+    elif args.recipe == "hero":
+        config = HERO_CONFIG
+        policy = LEGACY_OPTIMIZER_POLICY
+    elif args.recipe == "hero_v2":
+        config = HERO_V2_CONFIG
+        policy = HERO_V2_OPTIMIZER_POLICY
+    else:  # pragma: no cover - argparse owns the public boundary
+        raise ValueError(f"Unsupported training recipe: {args.recipe!r}")
+
+    override_values = {
+        "main_lr_multiplier": getattr(args, "main_lr_multiplier", None),
+        "encoder_lr_ratio": getattr(args, "encoder_lr_ratio", None),
+        "lr_schedule_kind": getattr(args, "lr_schedule_kind", None),
+        "wsd_decay_fraction": getattr(args, "wsd_decay_fraction", None),
+        "optimizer_precision": getattr(args, "optimizer_precision", None),
+        "weight_decay_mode": getattr(args, "weight_decay_mode", None),
+    }
+    if args.recipe != "hero_v2":
+        requested = [name for name, value in override_values.items() if value is not None]
+        if requested:
+            raise ValueError(
+                "Hero-v2 optimizer overrides require --recipe hero_v2: "
+                + ", ".join(requested)
+            )
+        return config, policy
+
+    main_lr_multiplier = override_values["main_lr_multiplier"]
+    if main_lr_multiplier is not None:
+        if (
+            isinstance(main_lr_multiplier, bool)
+            or not math.isfinite(main_lr_multiplier)
+            or not 0.0 < main_lr_multiplier <= 4.0
+        ):
+            raise ValueError("--main-lr-multiplier must be finite and in (0, 4]")
+        multiplier = float(main_lr_multiplier)
+        config = dataclasses.replace(
+            config,
+            learning_rate=config.learning_rate * multiplier,
+            bt4_learning_rate=config.bt4_learning_rate * multiplier,
+            weight_decay=config.weight_decay / multiplier,
+        )
+
+    encoder_lr_ratio = override_values["encoder_lr_ratio"]
+    if encoder_lr_ratio is not None:
+        if (
+            isinstance(encoder_lr_ratio, bool)
+            or not math.isfinite(encoder_lr_ratio)
+            or not 0.0 < encoder_lr_ratio <= 1.0
+        ):
+            raise ValueError("--encoder-lr-ratio must be finite and in (0, 1]")
+        config = dataclasses.replace(
+            config,
+            bt4_learning_rate=config.learning_rate * float(encoder_lr_ratio),
+        )
+
+    schedule_kind = override_values["lr_schedule_kind"] or policy.schedule_kind
+    decay_fraction = override_values["wsd_decay_fraction"]
+    if schedule_kind == "legacy_cosine":
+        if decay_fraction is not None:
+            raise ValueError("--wsd-decay-fraction requires the WSD schedule")
+        decay_examples = 0
+    else:
+        if decay_fraction is None:
+            decay_fraction = policy.wsd_decay_examples / config.lr_total_examples
+        if (
+            isinstance(decay_fraction, bool)
+            or not math.isfinite(decay_fraction)
+            or not 0.0 < decay_fraction < 1.0
+        ):
+            raise ValueError("--wsd-decay-fraction must be finite and in (0, 1)")
+        decay_examples = round(float(decay_fraction) * config.lr_total_examples)
+    policy = dataclasses.replace(
+        policy,
+        schedule_kind=schedule_kind,
+        wsd_decay_examples=decay_examples,
+        precision=override_values["optimizer_precision"] or policy.precision,
+        weight_decay_mode=(
+            override_values["weight_decay_mode"] or policy.weight_decay_mode
+        ),
+    )
+    return config, policy
+
+
 def train(args: argparse.Namespace) -> int:
-    config = HERO_CONFIG if args.recipe == "hero" else CONFIG
+    config, optimizer_policy = _resolve_training_recipe(args)
     config = _apply_sigreg_sample_override(
         config,
         recipe=args.recipe,
@@ -6288,6 +6874,22 @@ def train(args: argparse.Namespace) -> int:
         config,
         recipe=args.recipe,
         wdl_coeff=getattr(args, "wdl_coeff", None),
+    )
+    config = _apply_hero_legality_override(
+        config,
+        recipe=args.recipe,
+        legality_coeff=getattr(args, "legality_coeff", None),
+    )
+    config = _apply_hero_policy_distill_override(
+        config,
+        recipe=args.recipe,
+        policy_distill_coeff=getattr(args, "policy_distill_coeff", None),
+        policy_distill_teacher_mode=getattr(
+            args, "policy_distill_teacher", None
+        ),
+        policy_distill_teacher_state_sha256=getattr(
+            args, "policy_distill_teacher_state_sha256", None
+        ),
     )
     config = _apply_hero_feedback_override(
         config,
@@ -6333,16 +6935,24 @@ def train(args: argparse.Namespace) -> int:
         ),
     )
     bt4_norm_impl = getattr(args, "bt4_norm_impl", "eager")
+    policy_teacher_checkpoint_dir = getattr(
+        args, "policy_distill_teacher_checkpoint_dir", None
+    )
+    if config.policy_distill_teacher_mode == "checkpoint":
+        if policy_teacher_checkpoint_dir is None:
+            raise ValueError(
+                "Checkpoint policy teacher requires "
+                "--policy-distill-teacher-checkpoint-dir"
+            )
+    elif policy_teacher_checkpoint_dir is not None:
+        raise ValueError(
+            "Online policy teacher cannot use a teacher checkpoint directory"
+        )
     prefetch_launch = getattr(args, "prefetch_launch", "step-start")
-    if args.recipe != "hero" and bt4_norm_impl != "eager":
+    if args.recipe not in _HERO_RECIPES and bt4_norm_impl != "eager":
         raise ValueError("Fused BT4 LayerNorm is currently a hero-only runtime")
-    hero_milestones_enabled = bool(
-        getattr(args, "hero_milestones", False)
-    )
-    validation_updates = tuple(
-        int(value)
-        for value in getattr(args, "validation_updates", ())
-    )
+    hero_milestones_enabled = bool(getattr(args, "hero_milestones", False))
+    validation_updates = tuple(int(value) for value in getattr(args, "validation_updates", ()))
     live_validation_enabled = bool(validation_updates)
     lr_range_start = getattr(args, "lr_range_start", None)
     lr_range_end = getattr(args, "lr_range_end", None)
@@ -6376,8 +6986,7 @@ def train(args: argparse.Namespace) -> int:
         raise ValueError("Set --steps or --train-seconds")
     if args.batch_size < config.sigreg_example_count:
         raise ValueError(
-            "The selected SIGReg estimator requires --batch-size >= "
-            f"{config.sigreg_example_count}"
+            f"The selected SIGReg estimator requires --batch-size >= {config.sigreg_example_count}"
         )
     if args.log_every < 1:
         raise ValueError("--log-every must be positive")
@@ -6393,19 +7002,21 @@ def train(args: argparse.Namespace) -> int:
         raise ValueError("--profile-update cannot exceed --steps")
     save_updates = tuple(int(value) for value in args.save_updates)
     if args.save_every != 0:
-        raise ValueError(
-            "Periodic checkpoints are disabled; use one explicit --save-updates value"
-        )
-    if len(save_updates) > 1 or len(set(save_updates)) != len(save_updates):
-        raise ValueError("Use at most one unique sparse recovery checkpoint")
+        raise ValueError("Periodic checkpoints are disabled; use one explicit --save-updates value")
+    if (
+        len(save_updates) > 63
+        or len(set(save_updates)) != len(save_updates)
+        or tuple(sorted(save_updates)) != save_updates
+    ):
+        raise ValueError("Use at most 63 unique, strictly increasing recovery checkpoints")
     if save_updates and (
         args.steps <= 0
         or save_updates[0] <= 0
-        or save_updates[0] > args.steps
+        or save_updates[-1] > args.steps
     ):
         raise ValueError("Sparse checkpoint update must be in [1, --steps]")
-    if args.max_checkpoints not in (0, 1, 2):
-        raise ValueError("--max-checkpoints must be 0, 1, or 2")
+    if not 0 <= args.max_checkpoints <= 64:
+        raise ValueError("--max-checkpoints must be in [0, 64]")
     planned_checkpoints = len(save_updates) + int(args.save_final)
     if planned_checkpoints > args.max_checkpoints:
         raise ValueError(
@@ -6416,80 +7027,47 @@ def train(args: argparse.Namespace) -> int:
         raise ValueError("LR-range calibration cannot resume")
     if live_validation_enabled:
         if hero_milestones_enabled:
-            raise ValueError(
-                "Use either --hero-milestones or --validation-updates, not both"
-            )
+            raise ValueError("Use either --hero-milestones or --validation-updates, not both")
         if (
             len(set(validation_updates)) != len(validation_updates)
             or tuple(sorted(validation_updates)) != validation_updates
         ):
-            raise ValueError(
-                "Validation updates must be unique and strictly increasing"
-            )
-        if (
-            args.steps <= 0
-            or validation_updates[0] <= 0
-            or validation_updates[-1] > args.steps
-        ):
-            raise ValueError(
-                "Validation updates must be in [1, --steps]"
-            )
-        if args.recipe != "hero" or lr_range_enabled:
-            raise ValueError(
-                "Frozen live validation currently requires the hero recipe"
-            )
+            raise ValueError("Validation updates must be unique and strictly increasing")
+        if args.steps <= 0 or validation_updates[0] <= 0 or validation_updates[-1] > args.steps:
+            raise ValueError("Validation updates must be in [1, --steps]")
+        if args.recipe not in _HERO_RECIPES or lr_range_enabled:
+            raise ValueError("Frozen live validation currently requires the hero recipe")
         if args.batch_size != 1024 or args.train_seconds != 0.0:
-            raise ValueError(
-                "Frozen live validation requires batch size 1024 and no time limit"
-            )
+            raise ValueError("Frozen live validation requires batch size 1024 and no time limit")
         if (
             args.remat_mode != "bt4-projector"
             or args.attention_impl != "sdpa-all"
             or args.compile_regions != "fresh"
             or args.prefetch_depth != 1
         ):
-            raise ValueError(
-                "Frozen live validation requires the compiled Hero runtime"
-            )
+            raise ValueError("Frozen live validation requires the compiled Hero runtime")
         if args.data_start != 0 or args.seed != 0:
-            raise ValueError(
-                "Frozen live validation requires data-start 0 and seed 0"
-            )
+            raise ValueError("Frozen live validation requires data-start 0 and seed 0")
     if hero_milestones_enabled:
-        if args.recipe != "hero" or lr_range_enabled:
-            raise ValueError(
-                "Hero milestone instrumentation requires the clean hero recipe"
-            )
+        if args.recipe not in _HERO_RECIPES or lr_range_enabled:
+            raise ValueError("Hero milestone instrumentation requires the clean hero recipe")
         if args.batch_size != 1024:
-            raise ValueError(
-                "The frozen hero milestone run requires batch size 1024"
-            )
-        if (
-            args.steps * args.batch_size != _HERO_TRAIN_EXAMPLES
-            or args.train_seconds != 0.0
-        ):
-            raise ValueError(
-                "Hero milestones require exactly one example-count epoch"
-            )
+            raise ValueError("The frozen hero milestone run requires batch size 1024")
+        if args.steps * args.batch_size != _HERO_TRAIN_EXAMPLES or args.train_seconds != 0.0:
+            raise ValueError("Hero milestones require exactly one example-count epoch")
         if (
             args.remat_mode != "bt4-projector"
             or args.attention_impl != "sdpa-all"
             or args.compile_regions != "fresh"
             or args.prefetch_depth != 1
         ):
-            raise ValueError(
-                "Hero milestones require the frozen compiled Torch runtime"
-            )
+            raise ValueError("Hero milestones require the frozen compiled Torch runtime")
         if args.data_start != 0 or args.seed != 0:
-            raise ValueError(
-                "The frozen hero milestone run requires data-start 0 and seed 0"
-            )
+            raise ValueError("The frozen hero milestone run requires data-start 0 and seed 0")
         if (
             args.hero_arena_pairs != _HERO_ARENA_PAIRS
-            or args.hero_arena_additional_ply_cap
-            != _HERO_ARENA_ADDITIONAL_PLY_CAP
-            or args.hero_arena_inference_batch_size
-            != _HERO_ARENA_INFERENCE_BATCH_SIZE
+            or args.hero_arena_additional_ply_cap != _HERO_ARENA_ADDITIONAL_PLY_CAP
+            or args.hero_arena_inference_batch_size != _HERO_ARENA_INFERENCE_BATCH_SIZE
         ):
             raise ValueError("Hero arena milestone contract drift")
         halfway_update = _hero_milestone_update(
@@ -6507,14 +7085,8 @@ def train(args: argparse.Namespace) -> int:
                     "A fresh hero epoch requires one halfway recovery state "
                     "and one terminal checkpoint"
                 )
-        elif (
-            save_updates
-            or not args.save_final
-            or args.max_checkpoints not in (1, 2)
-        ):
-            raise ValueError(
-                "A resumed hero epoch must write only the terminal checkpoint"
-            )
+        elif save_updates or not args.save_final or args.max_checkpoints not in (1, 2):
+            raise ValueError("A resumed hero epoch must write only the terminal checkpoint")
     if lr_range_enabled:
         assert lr_range_start is not None and lr_range_end is not None
         if args.recipe != "hero":
@@ -6541,7 +7113,7 @@ def train(args: argparse.Namespace) -> int:
     torch.set_float32_matmul_precision("high")
 
     restore_started = time.perf_counter()
-    if args.recipe == "hero":
+    if args.recipe in _HERO_RECIPES:
         model, source_mapping = load_raw_bt4_hero_model(
             device=device,
             raw_bt4_path=args.raw_bt4_path,
@@ -6566,11 +7138,31 @@ def train(args: argparse.Namespace) -> int:
             "init": "model-only",
             "optimizer": "fresh",
         }
+    policy_teacher_encoder: BT4Encoder | None = None
+    policy_teacher_record: dict[str, Any] = {
+        "schema_version": "torch-policy-distill-online-teacher-v1",
+        "mode": "online",
+        "checkpoint_state_sha256": None,
+    }
+    if config.policy_distill_teacher_mode == "checkpoint":
+        assert policy_teacher_checkpoint_dir is not None
+        policy_teacher_encoder, policy_teacher_record = (
+            _load_policy_distill_teacher_encoder(
+                checkpoint_dir=policy_teacher_checkpoint_dir,
+                expected_state_sha256=(
+                    config.policy_distill_teacher_state_sha256
+                ),
+                raw_bt4_path=args.raw_bt4_path,
+                device=device,
+                bt4_norm_impl=bt4_norm_impl,
+            )
+        )
     model.train()
     compiled_regions = _apply_compile_regions(model, args.compile_regions)
     optimizer = MuonAdamW(
         model,
         config,
+        policy=optimizer_policy,
         examples_per_update=(
             args.batch_size if config.lr_schedule_unit == "examples" else None
         ),
@@ -6578,19 +7170,38 @@ def train(args: argparse.Namespace) -> int:
     partition = optimizer.partition_manifest()
     _write_json(output_dir / "optimizer_partition.json", partition)
 
-    batches_class = (
-        CanonicalTrajectoryBatches
-        if config.action_codec == "lc0_canonical_1858"
-        else _FixedTrajectoryBatches
-    )
-    batches = batches_class(
-        _require_workspace(args.data_root) / "train",
-        batch_size=args.batch_size,
-        horizon=config.horizon,
-        seed=args.seed,
-        shuffle_files=True,
-        batch_schedule="global_permutation",
-    )
+    data_format = getattr(args, "data_format", "trajectory_v3")
+    if data_format == "lc0_sequential":
+        if config.action_codec != "lc0_canonical_1858":
+            raise ValueError(
+                "LC0 sequential data requires the canonical 1,858-action codec"
+            )
+        from chess_dfm_jax.data.lc0_sequential import SequentialBatches
+
+        batches = SequentialBatches(
+            _require_workspace(args.data_root),
+            split="train",
+            batch_size=args.batch_size,
+            horizon=config.horizon,
+            seed=args.seed,
+            shuffle_batches=True,
+        )
+    elif data_format == "trajectory_v3":
+        batches_class = (
+            CanonicalTrajectoryBatches
+            if config.action_codec == "lc0_canonical_1858"
+            else _FixedTrajectoryBatches
+        )
+        batches = batches_class(
+            _require_workspace(args.data_root) / "train",
+            batch_size=args.batch_size,
+            horizon=config.horizon,
+            seed=args.seed,
+            shuffle_files=True,
+            batch_schedule="global_permutation",
+        )
+    else:
+        raise ValueError(f"Unsupported training data format: {data_format!r}")
     git_commit = _git_commit()
     data_provenance = batches.provenance()
     hero_milestone_contract = _hero_milestone_contract(
@@ -6624,6 +7235,8 @@ def train(args: argparse.Namespace) -> int:
         data_provenance=data_provenance,
         compiled_regions=compiled_regions,
         git_commit=git_commit,
+        optimizer_policy=optimizer_policy,
+        policy_distill_teacher=policy_teacher_record,
     )
     resume_manifest = None
     if args.resume_checkpoint is not None:
@@ -6641,10 +7254,8 @@ def train(args: argparse.Namespace) -> int:
                 "Resume checkpoint is already at or beyond --steps: "
                 f"{initial_update} >= {args.steps}"
             )
-        if save_updates and save_updates[0] <= initial_update:
-            raise ValueError(
-                "Sparse checkpoint update must be after the restored update"
-            )
+        if any(checkpoint_update <= initial_update for checkpoint_update in save_updates):
+            raise ValueError("Sparse checkpoint update must be after the restored update")
     else:
         initial_update = 0
         initial_data_cursor = args.data_start
@@ -6654,9 +7265,7 @@ def train(args: argparse.Namespace) -> int:
         "created_utc": datetime.now(UTC).isoformat(),
         "git_commit": git_commit,
         "framework": "torch",
-        "execution": (
-            "eager" if args.compile_regions == "none" else "regional-compile"
-        ),
+        "execution": ("eager" if args.compile_regions == "none" else "regional-compile"),
         "torch_compile": args.compile_regions != "none",
         "compile_regions": compiled_regions,
         "compile_settings": {
@@ -6674,12 +7283,18 @@ def train(args: argparse.Namespace) -> int:
         "device": torch.cuda.get_device_name(device),
         "recipe": args.recipe,
         "config": dataclasses.asdict(config),
+        **(
+            {"optimizer_policy": dataclasses.asdict(optimizer_policy)}
+            if optimizer_policy != LEGACY_OPTIMIZER_POLICY
+            else {}
+        ),
         "args": {
             key: str(value) if isinstance(value, Path) else value
             for key, value in vars(args).items()
             if key != "handler"
         },
         "source": source_record,
+        "policy_distill_teacher": policy_teacher_record,
         "optimizer_partition": {key: value for key, value in partition.items() if key != "leaves"},
         "data": data_provenance,
         "resume_contract": resume_contract,
@@ -6687,9 +7302,7 @@ def train(args: argparse.Namespace) -> int:
         "resume": (
             {
                 "enabled": True,
-                "checkpoint_dir": str(
-                    _require_workspace(args.resume_checkpoint, exists=True)
-                ),
+                "checkpoint_dir": str(_require_workspace(args.resume_checkpoint, exists=True)),
                 "optimizer_update": initial_update,
                 "next_data_cursor": initial_data_cursor,
                 "checkpoint_state_sha256": resume_manifest["state"]["sha256"],
@@ -6707,9 +7320,7 @@ def train(args: argparse.Namespace) -> int:
             {
                 **hero_milestone_contract,
                 "fast_pool": hero_milestone_resources.fast_pool,
-                "paired_arena_provenance": (
-                    hero_milestone_resources.arena_provenance
-                ),
+                "paired_arena_provenance": (hero_milestone_resources.arena_provenance),
             }
             if hero_milestone_resources is not None
             else hero_milestone_contract
@@ -6727,9 +7338,7 @@ def train(args: argparse.Namespace) -> int:
                 "enabled": True,
                 "start_main_learning_rate": lr_range_start,
                 "end_main_learning_rate": lr_range_end,
-                "main_to_bt4_ratio": (
-                    HERO_CONFIG.learning_rate / HERO_CONFIG.bt4_learning_rate
-                ),
+                "main_to_bt4_ratio": (HERO_CONFIG.learning_rate / HERO_CONFIG.bt4_learning_rate),
                 "spacing": "exponential_per_update",
                 "weight_decay": 0.0,
                 "model_state_retained": False,
@@ -6796,23 +7405,13 @@ def train(args: argparse.Namespace) -> int:
         restart_monitor: bool,
     ) -> None:
         nonlocal monitor, milestone_evaluation_seconds
-        validation_percentage = validation_milestones_by_update.get(
-            milestone_update
-        )
+        validation_percentage = validation_milestones_by_update.get(milestone_update)
         arena_percentage = arena_milestones_by_update.get(milestone_update)
-        is_live_validation_update = (
-            milestone_update in live_validation_updates_set
-        )
-        if (
-            (
-                hero_milestone_resources is None
-                and live_validation_resources is None
-            )
-            or (
-                validation_percentage is None
-                and arena_percentage is None
-                and not is_live_validation_update
-            )
+        is_live_validation_update = milestone_update in live_validation_updates_set
+        if (hero_milestone_resources is None and live_validation_resources is None) or (
+            validation_percentage is None
+            and arena_percentage is None
+            and not is_live_validation_update
         ):
             return
         milestone_started = time.perf_counter()
@@ -6826,6 +7425,7 @@ def train(args: argparse.Namespace) -> int:
                     _run_hero_validation_milestone(
                         model,
                         hero_milestone_resources,
+                        policy_teacher_encoder=policy_teacher_encoder,
                         output_dir=output_dir,
                         update=milestone_update,
                         batch_size=args.batch_size,
@@ -6839,6 +7439,7 @@ def train(args: argparse.Namespace) -> int:
                     _run_frozen_validation_milestone(
                         model,
                         live_validation_resources,
+                        policy_teacher_encoder=policy_teacher_encoder,
                         output_dir=output_dir,
                         update=milestone_update,
                         batch_size=args.batch_size,
@@ -6857,32 +7458,22 @@ def train(args: argparse.Namespace) -> int:
                         batch_size=args.batch_size,
                         percentage=arena_percentage,
                         arena_pairs=args.hero_arena_pairs,
-                        additional_ply_cap=(
-                            args.hero_arena_additional_ply_cap
-                        ),
-                        inference_batch_size=(
-                            args.hero_arena_inference_batch_size
-                        ),
+                        additional_ply_cap=(args.hero_arena_additional_ply_cap),
+                        inference_batch_size=(args.hero_arena_inference_batch_size),
                         device=device,
                     )
                 )
             milestone_succeeded = True
         finally:
             try:
-                if (
-                    milestone_succeeded
-                    and restart_monitor
-                    and args.gpu_monitor_interval_ms > 0
-                ):
+                if milestone_succeeded and restart_monitor and args.gpu_monitor_interval_ms > 0:
                     monitor = _start_gpu_monitor(
                         output_dir,
                         interval_ms=args.gpu_monitor_interval_ms,
                         append=True,
                     )
             finally:
-                milestone_evaluation_seconds += (
-                    time.perf_counter() - milestone_started
-                )
+                milestone_evaluation_seconds += time.perf_counter() - milestone_started
 
     if (
         (hero_milestones_enabled or live_validation_enabled)
@@ -6895,9 +7486,7 @@ def train(args: argparse.Namespace) -> int:
     ):
         run_live_milestones(
             initial_update,
-            restart_monitor=(
-                args.steps == 0 or initial_update < args.steps
-            ),
+            restart_monitor=(args.steps == 0 or initial_update < args.steps),
         )
 
     prefetch_executor = (
@@ -6948,11 +7537,7 @@ def train(args: argparse.Namespace) -> int:
 
             more_steps = args.steps == 0 or update + 1 < args.steps
             before_deadline = deadline is None or time.perf_counter() < deadline
-            launch_next_prefetch = (
-                prefetch_executor is not None
-                and more_steps
-                and before_deadline
-            )
+            launch_next_prefetch = prefetch_executor is not None and more_steps and before_deadline
             if launch_next_prefetch and prefetch_launch == "step-start":
                 prepared_future = prefetch_executor.submit(
                     _prepare_training_step,
@@ -6972,8 +7557,7 @@ def train(args: argparse.Namespace) -> int:
                 lr_range_position = update / (args.steps - 1)
                 main_learning_rate = math.exp(
                     math.log(lr_range_start)
-                    + lr_range_position
-                    * (math.log(lr_range_end) - math.log(lr_range_start))
+                    + lr_range_position * (math.log(lr_range_end) - math.log(lr_range_start))
                 )
                 optimizer.set_learning_rates(
                     main=main_learning_rate,
@@ -7010,11 +7594,21 @@ def train(args: argparse.Namespace) -> int:
             event_backward = torch.cuda.Event(enable_timing=True)
             event_optimizer = torch.cuda.Event(enable_timing=True)
             event_start.record()
+            policy_teacher_root_logits = (
+                _policy_distill_teacher_root_logits(
+                    policy_teacher_encoder,
+                    batch["current_planes"],
+                    compute_dtype=torch.bfloat16,
+                )
+                if policy_teacher_encoder is not None
+                else None
+            )
             loss, aux = loss_and_aux(
                 model,
                 batch,
                 choices,
                 compute_dtype=torch.bfloat16,
+                policy_teacher_root_logits=policy_teacher_root_logits,
                 profile_regions=profile_this_update,
             )
             event_forward.record()
@@ -7032,6 +7626,7 @@ def train(args: argparse.Namespace) -> int:
             with _profile_scope(profile_this_update, "region::backward"):
                 loss.backward()
             event_backward.record()
+            del policy_teacher_root_logits
             with _profile_scope(profile_this_update, "region::optimizer"):
                 optimizer_metrics = optimizer.step()
             event_optimizer.record()
@@ -7050,10 +7645,7 @@ def train(args: argparse.Namespace) -> int:
             update += 1
             data_cursor += 1
             if optimizer.update != update:
-                raise RuntimeError(
-                    "Optimizer/local update drift: "
-                    f"{optimizer.update} != {update}"
-                )
+                raise RuntimeError(f"Optimizer/local update drift: {optimizer.update} != {update}")
             checkpoint_write_seconds = 0.0
             recovery_checkpoint_path = None
             if update in save_updates:
@@ -7068,9 +7660,7 @@ def train(args: argparse.Namespace) -> int:
                 )
                 checkpoint_write_seconds = time.perf_counter() - checkpoint_started
                 checkpoint_save_seconds += checkpoint_write_seconds
-                recovery_checkpoint_path = str(
-                    output_dir / "checkpoints" / f"update{update:08d}"
-                )
+                recovery_checkpoint_path = str(output_dir / "checkpoints" / f"update{update:08d}")
                 saved_recovery_checkpoints.append(
                     {
                         "path": recovery_checkpoint_path,
@@ -7080,11 +7670,7 @@ def train(args: argparse.Namespace) -> int:
                         "write_seconds": checkpoint_write_seconds,
                     }
                 )
-            elapsed = (
-                time.perf_counter()
-                - run_started
-                - milestone_evaluation_seconds
-            )
+            elapsed = time.perf_counter() - run_started - milestone_evaluation_seconds
             segment_updates = update - segment_start_update
             record = {
                 "schema_version": "torch-eager-train-metrics-v1",
@@ -7115,9 +7701,7 @@ def train(args: argparse.Namespace) -> int:
                     0.0,
                 ),
                 "examples_per_second_step": args.batch_size / step_seconds,
-                "examples_per_second_end_to_end": (
-                    segment_updates * args.batch_size / elapsed
-                ),
+                "examples_per_second_end_to_end": (segment_updates * args.batch_size / elapsed),
                 "checkpoint_write_seconds": checkpoint_write_seconds,
                 "recovery_checkpoint_path": recovery_checkpoint_path,
                 "gpu_memory_allocated_bytes": torch.cuda.memory_allocated(),
@@ -7132,7 +7716,11 @@ def train(args: argparse.Namespace) -> int:
             records.append(record)
             with metrics_path.open("a", encoding="utf-8") as handle:
                 handle.write(json.dumps(record, sort_keys=True) + "\n")
-            if update == 1 or update % args.log_every == 0:
+            if (
+                update == 1
+                or update % args.log_every == 0
+                or recovery_checkpoint_path is not None
+            ):
                 print(json.dumps(record, sort_keys=True), flush=True)
             del (
                 prepared,
@@ -7147,9 +7735,7 @@ def train(args: argparse.Namespace) -> int:
                 raise FloatingPointError(f"Non-finite update at {update}")
             run_live_milestones(
                 update,
-                restart_monitor=(
-                    args.steps == 0 or update < args.steps
-                ),
+                restart_monitor=(args.steps == 0 or update < args.steps),
             )
     finally:
         if prepared_future is not None:
@@ -7186,9 +7772,7 @@ def train(args: argparse.Namespace) -> int:
         "train_seconds": train_seconds,
         "train_wall_seconds": train_wall_seconds,
         "milestone_evaluation_seconds": milestone_evaluation_seconds,
-        "examples_per_second_end_to_end": (
-            completed_segment_examples / max(train_seconds, 1e-12)
-        ),
+        "examples_per_second_end_to_end": (completed_segment_examples / max(train_seconds, 1e-12)),
         "checkpoint_save_seconds": checkpoint_save_seconds,
         "recovery_checkpoints": saved_recovery_checkpoints,
         "resumed_from": (
@@ -7284,10 +7868,7 @@ def _analyze_lr_range_records(
     for index in range(regression_radius, len(records) - regression_radius):
         region = slice(index - regression_radius, index + regression_radius + 1)
         centered_x = log_learning_rates[region] - log_learning_rates[index]
-        slopes[index] = float(
-            np.dot(centered_x, smoothed[region])
-            / np.dot(centered_x, centered_x)
-        )
+        slopes[index] = float(np.dot(centered_x, smoothed[region]) / np.dot(centered_x, centered_x))
 
     eligible_start = max(regression_radius, 10, len(records) // 10)
     eligible_stop = len(records) - regression_radius
@@ -7374,9 +7955,7 @@ def _analyze_lr_range_records(
                 "heuristic_only": True,
             },
         },
-        "divergence": (
-            None if divergence_index is None else candidate(divergence_index)
-        ),
+        "divergence": (None if divergence_index is None else candidate(divergence_index)),
         "curve": curve,
     }
 
@@ -7491,9 +8070,7 @@ def runtime_parity(args: argparse.Namespace) -> int:
     if not torch.cuda.is_available():
         raise RuntimeError("runtime-parity requires CUDA")
     if args.batch_size < HERO_CONFIG.sigreg_example_count:
-        raise ValueError(
-            f"--batch-size must be at least {HERO_CONFIG.sigreg_example_count}"
-        )
+        raise ValueError(f"--batch-size must be at least {HERO_CONFIG.sigreg_example_count}")
     if args.threads not in (1, 2):
         raise ValueError("--threads must be 1 or 2 under the resource guard")
     output = _require_workspace(args.output)
@@ -7692,8 +8269,7 @@ def runtime_parity(args: argparse.Namespace) -> int:
                 "norm_ratio": candidate_norm / max(reference_norm, 1e-30),
                 "cosine": dot / max(reference_norm * candidate_norm, 1e-30),
                 "relative_l2": (
-                    math.sqrt(max(difference_squared_norm, 0.0))
-                    / max(reference_norm, 1e-30)
+                    math.sqrt(max(difference_squared_norm, 0.0)) / max(reference_norm, 1e-30)
                 ),
                 "max_absolute_difference": max_absolute_difference,
                 "finite": finite,
@@ -7705,29 +8281,18 @@ def runtime_parity(args: argparse.Namespace) -> int:
 
     gradient_groups: dict[str, dict[str, Any]] = {}
     for name, accumulator in accumulators.items():
-        reference_norm = math.sqrt(
-            max(float(accumulator["reference_squared_norm"]), 0.0)
-        )
-        candidate_norm = math.sqrt(
-            max(float(accumulator["candidate_squared_norm"]), 0.0)
-        )
-        difference_norm = math.sqrt(
-            max(float(accumulator["difference_squared_norm"]), 0.0)
-        )
+        reference_norm = math.sqrt(max(float(accumulator["reference_squared_norm"]), 0.0))
+        candidate_norm = math.sqrt(max(float(accumulator["candidate_squared_norm"]), 0.0))
+        difference_norm = math.sqrt(max(float(accumulator["difference_squared_norm"]), 0.0))
         gradient_groups[name] = {
             "element_count": int(accumulator["element_count"]),
             "parameter_count": int(accumulator["parameter_count"]),
             "reference_norm": reference_norm,
             "candidate_norm": candidate_norm,
             "norm_ratio": candidate_norm / max(reference_norm, 1e-30),
-            "cosine": (
-                float(accumulator["dot"])
-                / max(reference_norm * candidate_norm, 1e-30)
-            ),
+            "cosine": (float(accumulator["dot"]) / max(reference_norm * candidate_norm, 1e-30)),
             "relative_l2": difference_norm / max(reference_norm, 1e-30),
-            "max_absolute_difference": float(
-                accumulator["max_absolute_difference"]
-            ),
+            "max_absolute_difference": float(accumulator["max_absolute_difference"]),
             "finite": bool(accumulator["finite"]),
         }
 
@@ -7752,12 +8317,11 @@ def runtime_parity(args: argparse.Namespace) -> int:
     )
     valid_count = int(legal_valid.sum())
     legal_action_agreement = float(
-        ((reference_actions == candidate_actions) & legal_valid).sum()
-        / max(valid_count, 1)
+        ((reference_actions == candidate_actions) & legal_valid).sum() / max(valid_count, 1)
     )
-    loss_relative_difference = abs(
-        candidate_metrics["loss"] - reference_metrics["loss"]
-    ) / max(abs(reference_metrics["loss"]), 1e-30)
+    loss_relative_difference = abs(candidate_metrics["loss"] - reference_metrics["loss"]) / max(
+        abs(reference_metrics["loss"]), 1e-30
+    )
     nontrivial_groups = [
         value
         for key, value in gradient_groups.items()
@@ -7813,8 +8377,7 @@ def runtime_parity(args: argparse.Namespace) -> int:
             "candidate_norm": candidate_logit_norm,
             "cosine": logit_cosine,
             "relative_l2": (
-                float(torch.linalg.vector_norm(logit_difference))
-                / max(reference_logit_norm, 1e-30)
+                float(torch.linalg.vector_norm(logit_difference)) / max(reference_logit_norm, 1e-30)
             ),
             "max_absolute_difference": float(logit_difference.abs().max()),
             "legal_valid_count": valid_count,
@@ -7852,14 +8415,12 @@ _LOSS_AUDIT_GROUPS = (
 def _gradient_norms_by_group(model: nn.Module) -> dict[str, dict[str, Any]]:
     device = next(model.parameters()).device
     squared_norms = {
-        group: torch.zeros((), device=device, dtype=torch.float32)
-        for group in _LOSS_AUDIT_GROUPS
+        group: torch.zeros((), device=device, dtype=torch.float32) for group in _LOSS_AUDIT_GROUPS
     }
     parameter_counts = {group: 0 for group in _LOSS_AUDIT_GROUPS}
     element_counts = {group: 0 for group in _LOSS_AUDIT_GROUPS}
     finite = {
-        group: torch.ones((), device=device, dtype=torch.bool)
-        for group in _LOSS_AUDIT_GROUPS
+        group: torch.ones((), device=device, dtype=torch.bool) for group in _LOSS_AUDIT_GROUPS
     }
     for name, parameter in model.named_parameters():
         gradient = parameter.grad
@@ -7907,11 +8468,7 @@ def _polarized_gradient_cosines(
         denominator = math.sqrt(max(left_squared * right_squared, 0.0))
         result[group] = {
             "dot": dot,
-            "cosine": (
-                max(-1.0, min(1.0, dot / denominator))
-                if denominator > 1e-30
-                else None
-            ),
+            "cosine": (max(-1.0, min(1.0, dot / denominator)) if denominator > 1e-30 else None),
         }
     return result
 
@@ -7941,9 +8498,7 @@ def _shared_sigreg_gradient_projection(
                 records["policy_total"]["gradient_groups"][group]["squared_norm"]
             )
             non_sigreg_squared = float(
-                records["non_sigreg_representation"]["gradient_groups"][group][
-                    "squared_norm"
-                ]
+                records["non_sigreg_representation"]["gradient_groups"][group]["squared_norm"]
             )
             sigreg_squared = float(
                 records["sigreg_total"]["gradient_groups"][group]["squared_norm"]
@@ -7951,49 +8506,31 @@ def _shared_sigreg_gradient_projection(
             policy_dot_representation = float(
                 interactions["policy_vs_representation"][group]["dot"]
             )
-            policy_dot_sigreg = float(
-                interactions["policy_vs_sigreg"][group]["dot"]
-            )
-            non_sigreg_dot_sigreg = float(
-                interactions["non_sigreg_vs_sigreg"][group]["dot"]
-            )
-            policy_dot_non_sigreg = (
-                policy_dot_representation - policy_dot_sigreg
-            )
+            policy_dot_sigreg = float(interactions["policy_vs_sigreg"][group]["dot"])
+            non_sigreg_dot_sigreg = float(interactions["non_sigreg_vs_sigreg"][group]["dot"])
+            policy_dot_non_sigreg = policy_dot_representation - policy_dot_sigreg
             representation_squared = (
                 non_sigreg_squared
                 + scale * scale * sigreg_squared
                 + 2.0 * scale * non_sigreg_dot_sigreg
             )
-            policy_dot_scaled_representation = (
-                policy_dot_non_sigreg + scale * policy_dot_sigreg
-            )
+            policy_dot_scaled_representation = policy_dot_non_sigreg + scale * policy_dot_sigreg
             total_squared = (
-                policy_squared
-                + representation_squared
-                + 2.0 * policy_dot_scaled_representation
+                policy_squared + representation_squared + 2.0 * policy_dot_scaled_representation
             )
-            cosine_denominator = math.sqrt(
-                max(policy_squared * representation_squared, 0.0)
-            )
+            cosine_denominator = math.sqrt(max(policy_squared * representation_squared, 0.0))
             groups[group] = {
                 "policy_norm": math.sqrt(max(policy_squared, 0.0)),
-                "non_sigreg_representation_norm": math.sqrt(
-                    max(non_sigreg_squared, 0.0)
-                ),
-                "scaled_sigreg_norm": abs(scale)
-                * math.sqrt(max(sigreg_squared, 0.0)),
-                "representation_norm": math.sqrt(
-                    max(representation_squared, 0.0)
-                ),
+                "non_sigreg_representation_norm": math.sqrt(max(non_sigreg_squared, 0.0)),
+                "scaled_sigreg_norm": abs(scale) * math.sqrt(max(sigreg_squared, 0.0)),
+                "representation_norm": math.sqrt(max(representation_squared, 0.0)),
                 "total_norm": math.sqrt(max(total_squared, 0.0)),
                 "policy_vs_representation_cosine": (
                     max(
                         -1.0,
                         min(
                             1.0,
-                            policy_dot_scaled_representation
-                            / cosine_denominator,
+                            policy_dot_scaled_representation / cosine_denominator,
                         ),
                     )
                     if cosine_denominator > 1e-30
@@ -8014,14 +8551,10 @@ def loss_gradient_audit(args: argparse.Namespace) -> int:
     if not torch.cuda.is_available():
         raise RuntimeError("loss-audit requires CUDA")
     if args.batch_size < HERO_CONFIG.sigreg_example_count:
-        raise ValueError(
-            f"--batch-size must be at least {HERO_CONFIG.sigreg_example_count}"
-        )
+        raise ValueError(f"--batch-size must be at least {HERO_CONFIG.sigreg_example_count}")
     if args.threads not in (1, 2):
         raise ValueError("--threads must be 1 or 2 under the resource guard")
-    if not math.isfinite(args.root_target_contribution) or (
-        args.root_target_contribution <= 0.0
-    ):
+    if not math.isfinite(args.root_target_contribution) or (args.root_target_contribution <= 0.0):
         raise ValueError("--root-target-contribution must be finite and positive")
     output = _require_workspace(args.output)
     if output.exists():
@@ -8080,21 +8613,13 @@ def loss_gradient_audit(args: argparse.Namespace) -> int:
             for line in metrics_path.read_text(encoding="utf-8").splitlines()
             if line.strip()
         ]
-        matches = [
-            row
-            for row in calibration_rows
-            if int(row.get("update", -1)) == 1
-        ]
+        matches = [row for row in calibration_rows if int(row.get("update", -1)) == 1]
         if len(matches) != 1:
-            raise ValueError(
-                f"Expected exactly one update-1 calibration row in {metrics_path}"
-            )
+            raise ValueError(f"Expected exactly one update-1 calibration row in {metrics_path}")
         calibration_row = matches[0]
         run_config_path = metrics_path.with_name("run_config.json")
         run_config = json.loads(
-            _require_workspace(run_config_path, exists=True).read_text(
-                encoding="utf-8"
-            )
+            _require_workspace(run_config_path, exists=True).read_text(encoding="utf-8")
         )
         run_args = run_config["args"]
         expected_lineage = {
@@ -8103,9 +8628,7 @@ def loss_gradient_audit(args: argparse.Namespace) -> int:
             "seed": args.seed,
             "data_start": args.data_step,
         }
-        observed_lineage = {
-            key: run_args[key] for key in expected_lineage
-        }
+        observed_lineage = {key: run_args[key] for key in expected_lineage}
         if observed_lineage != expected_lineage:
             raise ValueError(
                 "Root-calibration run lineage does not match this audit: "
@@ -8134,8 +8657,7 @@ def loss_gradient_audit(args: argparse.Namespace) -> int:
             )
         initial_components = initial_capture["loss_components"]
         scalar_components = {
-            name: float(value.detach().float().cpu())
-            for name, value in initial_components.items()
+            name: float(value.detach().float().cpu()) for name, value in initial_components.items()
         }
         root_value = scalar_components["root_legal_conditional_ce"]
         calibration_source = {"kind": "inline_no_grad_forward"}
@@ -8161,9 +8683,7 @@ def loss_gradient_audit(args: argparse.Namespace) -> int:
         "prediction_sigreg": calibrated_config.pred_sigreg_coeff,
         "wdl_ce": calibrated_config.wdl_coeff,
     }
-    specifications: dict[str, tuple[str, ...]] = {
-        name: (name,) for name in weights
-    }
+    specifications: dict[str, tuple[str, ...]] = {name: (name,) for name in weights}
     specifications.update(
         {
             "sigreg_total": ("target_sigreg", "prediction_sigreg"),
@@ -8213,8 +8733,7 @@ def loss_gradient_audit(args: argparse.Namespace) -> int:
         torch.cuda.synchronize()
         elapsed = time.perf_counter() - started
         replay_components = {
-            name: float(value.detach().float().cpu())
-            for name, value in components.items()
+            name: float(value.detach().float().cpu()) for name, value in components.items()
         }
         if scalar_components is None:
             scalar_components = replay_components
@@ -8236,12 +8755,8 @@ def loss_gradient_audit(args: argparse.Namespace) -> int:
     torch.cuda.synchronize()
     audit_seconds = time.perf_counter() - audit_started
     assert scalar_components is not None
-    calibration_replay_difference = abs(
-        scalar_components["root_legal_conditional_ce"] - root_value
-    )
-    calibration_batch_matches_audit = (
-        calibration_batch_size == args.batch_size
-    )
+    calibration_replay_difference = abs(scalar_components["root_legal_conditional_ce"] - root_value)
+    calibration_batch_matches_audit = calibration_batch_size == args.batch_size
 
     interactions = {
         "target_vs_prediction_sigreg": _polarized_gradient_cosines(
@@ -8280,30 +8795,21 @@ def loss_gradient_audit(args: argparse.Namespace) -> int:
         for group in record["gradient_groups"].values()
     )
     nonzero_atomic_gradients = all(
-        records[name]["gradient_groups"]["all"]["norm"] > 1e-8
-        for name in weights
+        records[name]["gradient_groups"]["all"]["norm"] > 1e-8 for name in weights
     )
     gate_checks = {
-        "finite_root_coefficient": (
-            math.isfinite(root_coefficient) and root_coefficient > 0.0
-        ),
+        "finite_root_coefficient": (math.isfinite(root_coefficient) and root_coefficient > 0.0),
         "root_weighted_scalar_matches_target": (
-            abs(
-                root_coefficient * root_value
-                - args.root_target_contribution
-            )
-            <= 1e-6
+            abs(root_coefficient * root_value - args.root_target_contribution) <= 1e-6
         ),
         "equal_sigreg_coefficients": (
-            calibrated_config.target_sigreg_coeff
-            == calibrated_config.pred_sigreg_coeff
+            calibrated_config.target_sigreg_coeff == calibrated_config.pred_sigreg_coeff
         ),
         "finite_component_gradients": finite_gradients,
         "nonzero_atomic_global_gradients": nonzero_atomic_gradients,
         "deterministic_scalar_replay": max_scalar_replay_difference <= 1e-6,
         "matched_batch_calibration_scalar_reproduced": (
-            not calibration_batch_matches_audit
-            or calibration_replay_difference <= 1e-6
+            not calibration_batch_matches_audit or calibration_replay_difference <= 1e-6
         ),
     }
     report = {
@@ -8377,13 +8883,9 @@ def _gradient_cosines_against_cpu_reference(
     reference_norms: Mapping[str, Mapping[str, Any]],
     candidate_norms: Mapping[str, Mapping[str, Any]],
 ) -> dict[str, Any]:
-    dot_by_group = {
-        group: 0.0 for group in (*_LOSS_AUDIT_GROUPS, "all")
-    }
+    dot_by_group = {group: 0.0 for group in (*_LOSS_AUDIT_GROUPS, "all")}
     candidate_names = {
-        name
-        for name, parameter in model.named_parameters()
-        if parameter.grad is not None
+        name for name, parameter in model.named_parameters() if parameter.grad is not None
     }
     reference_names = set(reference)
     for name, parameter in model.named_parameters():
@@ -8420,9 +8922,7 @@ def _gradient_cosines_against_cpu_reference(
                 else None
             ),
             "candidate_to_reference_norm_ratio": (
-                candidate_norm / reference_norm
-                if reference_norm > 1e-30
-                else None
+                candidate_norm / reference_norm if reference_norm > 1e-30 else None
             ),
         }
     return {
@@ -8445,8 +8945,7 @@ def sigreg_sample_audit(args: argparse.Namespace) -> int:
         or counts[-1] > args.batch_size
     ):
         raise ValueError(
-            "--sample-counts must be unique, increasing, positive, and no "
-            "larger than --batch-size"
+            "--sample-counts must be unique, increasing, positive, and no larger than --batch-size"
         )
     if args.replicates < 2:
         raise ValueError("--replicates must be at least 2")
@@ -8542,10 +9041,7 @@ def sigreg_sample_audit(args: argparse.Namespace) -> int:
             checkpoint_dir=args.checkpoint_dir,
             model=model,
         )
-        if (
-            checkpoint_manifest["source_mapping_sha256"]
-            != mapping["combined_sha256"]
-        ):
+        if checkpoint_manifest["source_mapping_sha256"] != mapping["combined_sha256"]:
             raise ValueError("Checkpoint source mapping differs from raw BT4")
     model.train()
     compiled_regions = _apply_compile_regions(model, args.compile_regions)
@@ -8577,8 +9073,7 @@ def sigreg_sample_audit(args: argparse.Namespace) -> int:
     warm_prediction_sigreg = warm_components["prediction_sigreg"]
     warm_objective = (
         base_config.target_sigreg_coeff * warm_target_sigreg
-        + base_config.pred_sigreg_coeff
-        * warm_prediction_sigreg
+        + base_config.pred_sigreg_coeff * warm_prediction_sigreg
     )
     baseline_capture.pop("loss_components")
     del warm_loss, warm_aux, warm_components
@@ -8626,14 +9121,10 @@ def sigreg_sample_audit(args: argparse.Namespace) -> int:
             target_sigreg = components["target_sigreg"]
             prediction_sigreg = components["prediction_sigreg"]
             target_valid_count = aux["jepa_sigreg_valid_count"]
-            prediction_valid_count = aux[
-                "jepa_pred_sigreg_valid_count"
-            ]
+            prediction_valid_count = aux["jepa_pred_sigreg_valid_count"]
             objective = (
-                base_config.target_sigreg_coeff
-                * target_sigreg
-                + base_config.pred_sigreg_coeff
-                * prediction_sigreg
+                base_config.target_sigreg_coeff * target_sigreg
+                + base_config.pred_sigreg_coeff * prediction_sigreg
             )
             capture.pop("loss_components")
             del full_loss, aux, components
@@ -8667,9 +9158,7 @@ def sigreg_sample_audit(args: argparse.Namespace) -> int:
         cosine_to_baseline: dict[str, Any] | None
         gradient_copy_started = time.perf_counter()
         if count == baseline_count:
-            reference_gradients, reference_gradient_bytes = (
-                _copy_parameter_gradients_to_cpu(model)
-            )
+            reference_gradients, reference_gradient_bytes = _copy_parameter_gradients_to_cpu(model)
             reference_norms = gradient_norms
             cosine_to_baseline = {
                 "groups": {
@@ -8677,15 +9166,9 @@ def sigreg_sample_audit(args: argparse.Namespace) -> int:
                         "dot": float(gradient_norms[group]["squared_norm"]),
                         "reference_norm": float(gradient_norms[group]["norm"]),
                         "candidate_norm": float(gradient_norms[group]["norm"]),
-                        "cosine": (
-                            1.0
-                            if float(gradient_norms[group]["norm"]) > 1e-30
-                            else None
-                        ),
+                        "cosine": (1.0 if float(gradient_norms[group]["norm"]) > 1e-30 else None),
                         "candidate_to_reference_norm_ratio": (
-                            1.0
-                            if float(gradient_norms[group]["norm"]) > 1e-30
-                            else None
+                            1.0 if float(gradient_norms[group]["norm"]) > 1e-30 else None
                         ),
                     }
                     for group in (*_LOSS_AUDIT_GROUPS, "all")
@@ -8705,27 +9188,13 @@ def sigreg_sample_audit(args: argparse.Namespace) -> int:
         gradient_copy_seconds = time.perf_counter() - gradient_copy_started
         records[str(count)] = {
             "status": "complete",
-            "target_sigreg": float(
-                target_sigreg.detach().float().cpu()
-            ),
-            "prediction_sigreg": float(
-                prediction_sigreg.detach().float().cpu()
-            ),
-            "weighted_shared_sigreg": float(
-                objective.detach().float().cpu()
-            ),
-            "target_valid_count": float(
-                target_valid_count.float().cpu()
-            ),
-            "prediction_valid_count": float(
-                prediction_valid_count.float().cpu()
-            ),
-            "forward_cuda_seconds": (
-                forward_start.elapsed_time(forward_end) / 1000.0
-            ),
-            "backward_cuda_seconds": (
-                forward_end.elapsed_time(backward_end) / 1000.0
-            ),
+            "target_sigreg": float(target_sigreg.detach().float().cpu()),
+            "prediction_sigreg": float(prediction_sigreg.detach().float().cpu()),
+            "weighted_shared_sigreg": float(objective.detach().float().cpu()),
+            "target_valid_count": float(target_valid_count.float().cpu()),
+            "prediction_valid_count": float(prediction_valid_count.float().cpu()),
+            "forward_cuda_seconds": (forward_start.elapsed_time(forward_end) / 1000.0),
+            "backward_cuda_seconds": (forward_end.elapsed_time(backward_end) / 1000.0),
             "forward_backward_wall_seconds": wall_seconds,
             "gradient_copy_and_cosine_seconds": gradient_copy_seconds,
             "peak_allocated_bytes": torch.cuda.max_memory_allocated(),
@@ -8738,15 +9207,9 @@ def sigreg_sample_audit(args: argparse.Namespace) -> int:
                 {
                     "sigreg_sample_audit_count": count,
                     "status": "complete",
-                    "forward_cuda_seconds": records[str(count)][
-                        "forward_cuda_seconds"
-                    ],
-                    "backward_cuda_seconds": records[str(count)][
-                        "backward_cuda_seconds"
-                    ],
-                    "peak_allocated_bytes": records[str(count)][
-                        "peak_allocated_bytes"
-                    ],
+                    "forward_cuda_seconds": records[str(count)]["forward_cuda_seconds"],
+                    "backward_cuda_seconds": records[str(count)]["backward_cuda_seconds"],
+                    "peak_allocated_bytes": records[str(count)]["peak_allocated_bytes"],
                 },
                 sort_keys=True,
             ),
@@ -8819,12 +9282,7 @@ def sigreg_sample_audit(args: argparse.Namespace) -> int:
                 subset_sha256: list[str] = []
                 for replicate in range(args.replicates):
                     if replicate == 0:
-                        indices = (
-                            choices_by_count[count]
-                            .sigreg_indices.detach()
-                            .cpu()
-                            .numpy()
-                        )
+                        indices = choices_by_count[count].sigreg_indices.detach().cpu().numpy()
                     else:
                         sequence = np.random.SeedSequence(
                             [
@@ -8839,15 +9297,15 @@ def sigreg_sample_audit(args: argparse.Namespace) -> int:
                         rng = np.random.Generator(np.random.PCG64(sequence))
                         indices = rng.permutation(args.batch_size)[:count]
                     indices = np.asarray(indices, dtype=np.int64)
-                    subset_sha256.append(
-                        hashlib.sha256(indices.tobytes()).hexdigest()
-                    )
+                    subset_sha256.append(hashlib.sha256(indices.tobytes()).hexdigest())
                     rows = torch.from_numpy(indices).to(device)
                     start = torch.cuda.Event(enable_timing=True)
                     end = torch.cuda.Event(enable_timing=True)
                     start.record()
                     target_value, _ = _sigreg_v_stat(
-                        target_z[rows].float().reshape(
+                        target_z[rows]
+                        .float()
+                        .reshape(
                             -1,
                             base_config.z_dim,
                         ),
@@ -8856,7 +9314,9 @@ def sigreg_sample_audit(args: argparse.Namespace) -> int:
                         reference_count=base_config.sigreg_reference_count,
                     )
                     prediction_value, _ = _sigreg_v_stat(
-                        prediction_z[rows].float().reshape(
+                        prediction_z[rows]
+                        .float()
+                        .reshape(
                             -1,
                             base_config.z_dim,
                         ),
@@ -8874,12 +9334,8 @@ def sigreg_sample_audit(args: argparse.Namespace) -> int:
                     array = np.asarray(values, dtype=np.float64)
                     return {
                         "mean": float(array.mean()),
-                        "sample_standard_deviation": float(
-                            array.std(ddof=1)
-                        ),
-                        "standard_error": float(
-                            array.std(ddof=1) / math.sqrt(len(array))
-                        ),
+                        "sample_standard_deviation": float(array.std(ddof=1)),
+                        "standard_error": float(array.std(ddof=1) / math.sqrt(len(array))),
                         "minimum": float(array.min()),
                         "maximum": float(array.max()),
                     }
@@ -8898,9 +9354,7 @@ def sigreg_sample_audit(args: argparse.Namespace) -> int:
                     "target": summarize(target_values),
                     "prediction": summarize(prediction_values),
                     "weighted_shared": summarize(weighted),
-                    "mean_statistic_cuda_seconds": float(
-                        np.mean(cuda_seconds)
-                    ),
+                    "mean_statistic_cuda_seconds": float(np.mean(cuda_seconds)),
                     "subset_sha256": subset_sha256,
                 }
         scalar_peak_allocated = torch.cuda.max_memory_allocated()
@@ -8910,9 +9364,7 @@ def sigreg_sample_audit(args: argparse.Namespace) -> int:
         scalar_peak_reserved = None
 
     completed_counts = [
-        count
-        for count in counts
-        if records.get(str(count), {}).get("status") == "complete"
+        count for count in counts if records.get(str(count), {}).get("status") == "complete"
     ]
     gate_checks = {
         "all_requested_counts_complete": completed_counts == list(counts),
@@ -8932,12 +9384,8 @@ def sigreg_sample_audit(args: argparse.Namespace) -> int:
             for group in records[str(count)]["gradient_groups"].values()
         ),
         "gradient_support_matches_baseline": all(
-            not records[str(count)]["gradient_vs_baseline"][
-                "missing_from_candidate"
-            ]
-            and not records[str(count)]["gradient_vs_baseline"][
-                "missing_from_reference"
-            ]
+            not records[str(count)]["gradient_vs_baseline"]["missing_from_candidate"]
+            and not records[str(count)]["gradient_vs_baseline"]["missing_from_reference"]
             for count in completed_counts
         ),
     }
@@ -8963,10 +9411,7 @@ def sigreg_sample_audit(args: argparse.Namespace) -> int:
         "bt4_norm_impl": "eager-fused-backward",
         "compile_regions": compiled_regions,
         "shared_sigreg_coefficient": base_config.target_sigreg_coeff,
-        "coefficients_equal": (
-            base_config.target_sigreg_coeff
-            == base_config.pred_sigreg_coeff
-        ),
+        "coefficients_equal": (base_config.target_sigreg_coeff == base_config.pred_sigreg_coeff),
         "representative_records": records,
         "scalar_dispersion": scalar_dispersion,
         "scalar_phase_peak_allocated_bytes": scalar_peak_allocated,
@@ -9014,6 +9459,7 @@ def _evaluate_validation_pool(
     count: int,
     seed: int,
     device: torch.device,
+    policy_teacher_encoder: BT4Encoder | None = None,
 ) -> tuple[dict[str, float], float]:
     totals: dict[str, float] = {}
     started = time.perf_counter()
@@ -9045,11 +9491,7 @@ def _evaluate_validation_pool(
                     device=device,
                 )
                 permutation_rng = np.random.Generator(
-                    np.random.PCG64(
-                        np.random.SeedSequence(
-                            [int(seed), int(index), 0xC011A95E]
-                        )
-                    )
+                    np.random.PCG64(np.random.SeedSequence([int(seed), int(index), 0xC011A95E]))
                 )
                 target_shuffle = torch.from_numpy(
                     permutation_rng.permutation(batches.batch_size).astype(
@@ -9063,6 +9505,15 @@ def _evaluate_validation_pool(
                         copy=False,
                     )
                 ).to(device)
+                policy_teacher_root_logits = (
+                    _policy_distill_teacher_root_logits(
+                        policy_teacher_encoder,
+                        batch["current_planes"],
+                        compute_dtype=torch.bfloat16,
+                    )
+                    if policy_teacher_encoder is not None
+                    else None
+                )
                 metrics = full_horizon_evaluation_aux(
                     model,
                     batch,
@@ -9070,6 +9521,7 @@ def _evaluate_validation_pool(
                     target_shuffle=target_shuffle,
                     action_shuffle=action_shuffle,
                     compute_dtype=torch.bfloat16,
+                    policy_teacher_root_logits=policy_teacher_root_logits,
                 )
                 torch.cuda.synchronize()
                 row = _flatten_torch_metrics(metrics)
@@ -9086,6 +9538,7 @@ def _evaluate_validation_pool(
                     choices,
                     target_shuffle,
                     action_shuffle,
+                    policy_teacher_root_logits,
                     metrics,
                 )
     finally:
@@ -9136,9 +9589,7 @@ def _load_hero_frozen_pool(
             "blind_test_global_index",
         }
         if set(payload.files) != expected_arrays:
-            raise ValueError(
-                f"Frozen hero index arrays drift: {sorted(payload.files)}"
-            )
+            raise ValueError(f"Frozen hero index arrays drift: {sorted(payload.files)}")
         indices = np.asarray(payload[definition["array"]]).copy()
     if indices.size != int(definition["count"]):
         raise ValueError("Frozen hero pool count drift")
@@ -9153,10 +9604,7 @@ def _load_hero_frozen_pool(
         pool_name=pool_name,
     )
     provenance = batches.provenance()
-    if (
-        provenance["file_manifest_sha256"]
-        != split_record["filename_size_manifest_sha256"]
-    ):
+    if provenance["file_manifest_sha256"] != split_record["filename_size_manifest_sha256"]:
         raise ValueError("Frozen hero split inventory drift")
     return batches, {
         "manifest_path": str(manifest_path),
@@ -9192,9 +9640,7 @@ def _hero_milestone_update(
         raise ValueError("percentage must be in [1, 100]")
     if total_examples < 1 or batch_size < 1:
         raise ValueError("total_examples and batch_size must be positive")
-    return (
-        percentage * total_examples + 100 * batch_size - 1
-    ) // (100 * batch_size)
+    return (percentage * total_examples + 100 * batch_size - 1) // (100 * batch_size)
 
 
 def _hero_milestone_contract(
@@ -9236,14 +9682,10 @@ def _hero_milestone_contract(
             "pair_count": int(args.hero_arena_pairs),
             "additional_ply_cap": int(args.hero_arena_additional_ply_cap),
             "refinement_passes": HERO_CONFIG.horizon,
-            "inference_batch_size": int(
-                args.hero_arena_inference_batch_size
-            ),
+            "inference_batch_size": int(args.hero_arena_inference_batch_size),
             "opponent": "raw_bt4",
         },
-        "manifest_path": str(
-            _require_workspace(args.hero_eval_manifest, exists=True)
-        ),
+        "manifest_path": str(_require_workspace(args.hero_eval_manifest, exists=True)),
         "resume_boundary_policy": (
             "a milestone exactly equal to the restored update is repeated; "
             "earlier milestones are skipped"
@@ -9275,16 +9717,12 @@ def _live_validation_contract(
             "batch_size": HERO_CONFIG.sigreg_example_count,
             "pool": "fast",
         },
-        "manifest_path": str(
-            _require_workspace(args.hero_eval_manifest, exists=True)
-        ),
+        "manifest_path": str(_require_workspace(args.hero_eval_manifest, exists=True)),
         "resume_boundary_policy": (
             "a milestone exactly equal to the restored update is repeated; "
             "earlier milestones are skipped"
         ),
-        "checkpoint_policy": (
-            "validation uses the live model and serializes no model state"
-        ),
+        "checkpoint_policy": ("validation uses the live model and serializes no model state"),
     }
 
 
@@ -9357,18 +9795,12 @@ def _load_hero_milestone_resources(
     )
     opening_pool = load_opening_pool(pool_path)
     openings = opening_pool.get("openings")
-    if not isinstance(openings, list) or len(openings) != int(
-        paired["opening_count"]
-    ):
+    if not isinstance(openings, list) or len(openings) != int(paired["opening_count"]):
         raise ValueError("Hero arena opening count drift")
     if arena_pairs > len(openings):
-        raise ValueError(
-            f"Requested {arena_pairs} arena pairs from {len(openings)} openings"
-        )
+        raise ValueError(f"Requested {arena_pairs} arena pairs from {len(openings)} openings")
     sidecar_payload = json.loads(history_path.read_text(encoding="utf-8"))
-    expected_sidecar_manifest = str(
-        sidecar_payload.get("manifest_sha256", "")
-    )
+    expected_sidecar_manifest = str(sidecar_payload.get("manifest_sha256", ""))
     loaded_histories = load_opening_history_sidecar(
         history_path,
         opening_pool=opening_pool,
@@ -9420,6 +9852,7 @@ def _run_hero_validation_milestone(
     model: JointModel,
     resources: _HeroMilestoneResources,
     *,
+    policy_teacher_encoder: BT4Encoder | None = None,
     output_dir: Path,
     update: int,
     batch_size: int,
@@ -9434,6 +9867,7 @@ def _run_hero_validation_milestone(
             count=resources.fast_batches.steps_per_epoch,
             seed=int(resources.fast_pool["pool_definition"]["seed"]),
             device=device,
+            policy_teacher_encoder=policy_teacher_encoder,
         )
     finally:
         model.train(was_training)
@@ -9444,13 +9878,9 @@ def _run_hero_validation_milestone(
         "update": update,
         "examples": update * batch_size,
         "target_percentage": percentage,
-        "observed_fraction": (
-            update * batch_size / _HERO_TRAIN_EXAMPLES
-        ),
+        "observed_fraction": (update * batch_size / _HERO_TRAIN_EXAMPLES),
         "pool": resources.fast_pool,
-        "evaluation_examples": int(
-            resources.fast_batches.global_indices.size
-        ),
+        "evaluation_examples": int(resources.fast_batches.global_indices.size),
         "evaluation_seconds": evaluation_seconds,
         "metrics": metrics,
         "serialized_model_state": False,
@@ -9478,6 +9908,7 @@ def _run_frozen_validation_milestone(
     model: JointModel,
     resources: _HeroValidationResources,
     *,
+    policy_teacher_encoder: BT4Encoder | None = None,
     output_dir: Path,
     update: int,
     batch_size: int,
@@ -9493,12 +9924,11 @@ def _run_frozen_validation_milestone(
             count=resources.fast_batches.steps_per_epoch,
             seed=int(resources.fast_pool["pool_definition"]["seed"]),
             device=device,
+            policy_teacher_encoder=policy_teacher_encoder,
         )
     finally:
         model.train(was_training)
-    observed_fraction = (
-        update * batch_size / _HERO_TRAIN_EXAMPLES
-    )
+    observed_fraction = update * batch_size / _HERO_TRAIN_EXAMPLES
     record = {
         "schema_version": "torch-live-frozen-validation-milestone-v1",
         "created_utc": datetime.now(UTC).isoformat(),
@@ -9508,9 +9938,7 @@ def _run_frozen_validation_milestone(
         "observed_fraction": observed_fraction,
         "observed_percentage": 100.0 * observed_fraction,
         "pool": resources.fast_pool,
-        "evaluation_examples": int(
-            resources.fast_batches.global_indices.size
-        ),
+        "evaluation_examples": int(resources.fast_batches.global_indices.size),
         "evaluation_seconds": evaluation_seconds,
         "metrics": metrics,
         "serialized_model_state": False,
@@ -9605,10 +10033,7 @@ def _run_hero_arena_milestone(
         opponent_policy.select_actions(warm_boards, warm_histories)
         warmup_seconds = time.perf_counter() - warm_started
 
-        fens = [
-            str(opening["fen"])
-            for opening in resources.opening_pool["openings"][:arena_pairs]
-        ]
+        fens = [str(opening["fen"]) for opening in resources.opening_pool["openings"][:arena_pairs]]
         pairs = make_color_reversed_pairs(
             fens,
             model_a=candidate_id,
@@ -9649,9 +10074,7 @@ def _run_hero_arena_milestone(
             "update": update,
             "examples": update * batch_size,
             "target_percentage": percentage,
-            "observed_fraction": (
-                update * batch_size / _HERO_TRAIN_EXAMPLES
-            ),
+            "observed_fraction": (update * batch_size / _HERO_TRAIN_EXAMPLES),
             "candidate_model_id": candidate_id,
             "opponent_model_id": opponent_id,
             "action_codec": ACTION_CODEC_LC0_CANONICAL_1858,
@@ -9666,19 +10089,13 @@ def _run_hero_arena_milestone(
             "gameplay": gameplay_payload,
             "arena_provenance": resources.arena_provenance,
             "opponent_initialization": {
-                "combined_sha256": opponent_initialization[
-                    "combined_sha256"
-                ],
+                "combined_sha256": opponent_initialization["combined_sha256"],
                 "leaf_count": opponent_initialization["leaf_count"],
                 "raw_asset": opponent_initialization["raw_asset"],
             },
             "serialized_model_state": False,
         }
-        report_path = (
-            output_dir
-            / "hero_arena_milestones"
-            / f"update{update:08d}.json"
-        )
+        report_path = output_dir / "hero_arena_milestones" / f"update{update:08d}.json"
         _write_json(report_path, report)
         summary = {
             key: value
@@ -9686,9 +10103,7 @@ def _run_hero_arena_milestone(
             if key not in {"gameplay", "pair_scores", "arena_provenance"}
         }
         summary["report_path"] = str(report_path)
-        summary["gameplay_payload_sha256"] = gameplay_payload[
-            "payload_sha256"
-        ]
+        summary["gameplay_payload_sha256"] = gameplay_payload["payload_sha256"]
         summary["gameplay_stats"] = gameplay_payload["stats"]
         _append_jsonl(
             output_dir / "hero_arena_metrics.jsonl",
@@ -9705,9 +10120,7 @@ def _run_hero_arena_milestone(
                     "elo_lower": interval.elo_lower,
                     "elo_upper": interval.elo_upper,
                     "arena_seconds": arena_seconds,
-                    "fault_counts": gameplay_payload["stats"][
-                        "fault_counts"
-                    ],
+                    "fault_counts": gameplay_payload["stats"]["fault_counts"],
                 },
                 sort_keys=True,
             ),
@@ -9735,9 +10148,7 @@ def hero_milestone_smoke(args: argparse.Namespace) -> int:
         raise ValueError("--gpu-monitor-interval-ms must be at least 50")
     output_dir = _require_workspace(args.output_dir)
     if output_dir.exists():
-        raise FileExistsError(
-            f"Hero milestone smoke output already exists: {output_dir}"
-        )
+        raise FileExistsError(f"Hero milestone smoke output already exists: {output_dir}")
     resources = _load_hero_milestone_resources(
         manifest_path=args.eval_manifest,
         arena_pairs=1,
@@ -9821,13 +10232,10 @@ def hero_milestone_smoke(args: argparse.Namespace) -> int:
     )
     gate_checks = {
         "validation_metrics_finite": all(
-            math.isfinite(value)
-            for value in validation_metrics.values()
+            math.isfinite(value) for value in validation_metrics.values()
         ),
         "zero_initialized_dfm_residual": residual_zero,
-        "arena_has_no_faults": not bool(
-            arena_summary["gameplay_stats"]["fault_counts"]
-        ),
+        "arena_has_no_faults": not bool(arena_summary["gameplay_stats"]["fault_counts"]),
         "arena_update_zero_score_is_half": math.isclose(
             float(arena_summary["pentanomial"]["score"]),
             0.5,
@@ -9841,15 +10249,9 @@ def hero_milestone_smoke(args: argparse.Namespace) -> int:
         "validation_seconds": validation_seconds,
         "validation_metrics": validation_metrics,
         "arena": arena_summary,
-        "gpu_monitor": _summarize_gpu_samples(
-            output_dir / "gpu_samples.csv"
-        ),
-        "gpu_peak_memory_allocated_bytes": (
-            torch.cuda.max_memory_allocated()
-        ),
-        "gpu_peak_memory_reserved_bytes": (
-            torch.cuda.max_memory_reserved()
-        ),
+        "gpu_monitor": _summarize_gpu_samples(output_dir / "gpu_samples.csv"),
+        "gpu_peak_memory_allocated_bytes": (torch.cuda.max_memory_allocated()),
+        "gpu_peak_memory_reserved_bytes": (torch.cuda.max_memory_reserved()),
         "compile_counters": _compile_counter_snapshot(),
         "gate_checks": gate_checks,
         "gate_pass": all(gate_checks.values()),
@@ -9868,17 +10270,13 @@ def evaluate_hero_pool(args: argparse.Namespace) -> int:
         raise RuntimeError("hero-evaluate requires CUDA")
     if args.eval_batch_size != HERO_CONFIG.sigreg_example_count:
         raise ValueError(
-            "Frozen hero evaluation requires batch "
-            f"{HERO_CONFIG.sigreg_example_count}"
+            f"Frozen hero evaluation requires batch {HERO_CONFIG.sigreg_example_count}"
         )
     if args.threads not in (1, 2):
         raise ValueError("--threads must be 1 or 2 under the resource guard")
-    if args.pool == "blind" and (
-        args.checkpoint_dir is None or not args.allow_blind_terminal
-    ):
+    if args.pool == "blind" and (args.checkpoint_dir is None or not args.allow_blind_terminal):
         raise ValueError(
-            "Blind evaluation requires a terminal checkpoint and "
-            "--allow-blind-terminal"
+            "Blind evaluation requires a terminal checkpoint and --allow-blind-terminal"
         )
     output_dir = _require_workspace(args.output_dir)
     if output_dir.exists():
@@ -9946,14 +10344,9 @@ def evaluate_hero_pool(args: argparse.Namespace) -> int:
             checkpoint_dir=args.checkpoint_dir,
             model=model,
         )
-        if (
-            checkpoint_manifest["source_mapping_sha256"]
-            != initialization["combined_sha256"]
-        ):
+        if checkpoint_manifest["source_mapping_sha256"] != initialization["combined_sha256"]:
             raise ValueError("Hero checkpoint raw-BT4 mapping drift")
-        state_label = (
-            f"hero_checkpoint_u{checkpoint_manifest['optimizer_update']}"
-        )
+        state_label = f"hero_checkpoint_u{checkpoint_manifest['optimizer_update']}"
     else:
         state_label = "hero_initialization"
     output_dir.mkdir(parents=True)
@@ -9967,9 +10360,7 @@ def evaluate_hero_pool(args: argparse.Namespace) -> int:
         "eval_batches": batches.steps_per_epoch,
         "evaluation_examples": int(batches.global_indices.size),
         "global_index_order": "ascending",
-        "stochastic_choices": (
-            "PCG64 keyed by the frozen pool seed and ascending batch index"
-        ),
+        "stochastic_choices": ("PCG64 keyed by the frozen pool seed and ascending batch index"),
         "prefetch": {
             "depth": 1,
             "workers": 1,
@@ -10019,19 +10410,12 @@ def evaluate_hero_pool(args: argparse.Namespace) -> int:
     )
     gate_checks = {
         "frozen_pool_count_reproduced": (
-            batches.global_indices.size
-            == int(frozen_pool["pool_definition"]["count"])
+            batches.global_indices.size == int(frozen_pool["pool_definition"]["count"])
         ),
         "all_metrics_finite": all(math.isfinite(value) for value in metrics.values()),
-        "initial_residual_is_zero": (
-            checkpoint_manifest is not None or residual_zero
-        ),
+        "initial_residual_is_zero": (checkpoint_manifest is not None or residual_zero),
         "blind_terminal_authorized": (
-            args.pool != "blind"
-            or (
-                checkpoint_manifest is not None
-                and args.allow_blind_terminal
-            )
+            args.pool != "blind" or (checkpoint_manifest is not None and args.allow_blind_terminal)
         ),
     }
     report = {
@@ -10371,9 +10755,7 @@ def verify_hero_init(args: argparse.Namespace) -> int:
         config=HERO_CONFIG,
     )
     model.eval()
-    planes = torch.from_numpy(
-        np.ascontiguousarray(numpy_batch["current_planes"])
-    ).to(device)
+    planes = torch.from_numpy(np.ascontiguousarray(numpy_batch["current_planes"])).to(device)
     with torch.inference_mode():
         tokens = model.encoder.encode_current(
             planes,
@@ -10381,12 +10763,7 @@ def verify_hero_init(args: argparse.Namespace) -> int:
             remat=False,
         )
         assert model.encoder.policy_head is not None
-        torch_logits = (
-            model.encoder.policy_head(tokens, torch.bfloat16)
-            .float()
-            .cpu()
-            .numpy()
-        )
+        torch_logits = model.encoder.policy_head(tokens, torch.bfloat16).float().cpu().numpy()
     residual_zero = bool(
         torch.count_nonzero(model.out_proj).item() == 0
         and torch.count_nonzero(model.out_bias).item() == 0
@@ -10450,8 +10827,56 @@ def build_parser() -> argparse.ArgumentParser:
     train_parser = subparsers.add_parser("train")
     train_parser.add_argument(
         "--recipe",
-        choices=("continuation", "hero"),
+        choices=("continuation", "hero", "hero_v2"),
         default="continuation",
+    )
+    train_parser.add_argument(
+        "--main-lr-multiplier",
+        type=float,
+        help=(
+            "Hero-v2 multiplier on both peak rates. Weight decay is divided "
+            "by the same factor to preserve planned integrated shrink."
+        ),
+    )
+    train_parser.add_argument(
+        "--encoder-lr-ratio",
+        type=float,
+        help=(
+            "Hero-v2 BT4/main peak learning-rate ratio. Recorded in the "
+            "resume contract; intended values are 1/30, 1/10, and 1/3."
+        ),
+    )
+    train_parser.add_argument(
+        "--lr-schedule-kind",
+        choices=("legacy_cosine", "warmup_stable_linear_decay"),
+        help="Hero-v2 schedule ablation; defaults to WSD.",
+    )
+    train_parser.add_argument(
+        "--wsd-decay-fraction",
+        type=float,
+        help="Fraction of the example horizon assigned to linear WSD cooldown.",
+    )
+    train_parser.add_argument(
+        "--optimizer-precision",
+        choices=(
+            "parameter",
+            "fp32_master",
+            "encoder_fp32_master",
+            "encoder_trunk_fp32_master",
+            "main_fp32_master",
+        ),
+        help=(
+            "Hero-v2 optimizer-state/master-weight precision ablation; "
+            "encoder_fp32_master applies FP32 state and master weights only "
+            "to encoder.* parameters, while encoder_trunk_fp32_master excludes "
+            "encoder.policy_head.* from that FP32 scope and main_fp32_master "
+            "applies FP32 only outside encoder.*."
+        ),
+    )
+    train_parser.add_argument(
+        "--weight-decay-mode",
+        choices=("decoupled", "cautious"),
+        help="Hero-v2 decoupled or coordinatewise cautious weight decay.",
     )
     train_parser.add_argument(
         "--remat-mode",
@@ -10493,6 +10918,15 @@ def build_parser() -> argparse.ArgumentParser:
     train_parser.add_argument("--source-state", type=Path, default=_SOURCE_STATE)
     train_parser.add_argument("--raw-bt4-path", type=Path, default=_RAW_BT4_PATH)
     train_parser.add_argument("--data-root", type=Path, default=_DATA_ROOT)
+    train_parser.add_argument(
+        "--data-format",
+        choices=("trajectory_v3", "lc0_sequential"),
+        default="trajectory_v3",
+        help=(
+            "Read legacy duplicated trajectory-v3 shards or value-rich "
+            "memory-mapped sequential LC0 shards."
+        ),
+    )
     train_parser.add_argument("--resume-checkpoint", type=Path)
     train_parser.add_argument("--output-dir", type=Path, required=True)
     train_parser.add_argument("--batch-size", type=int, default=64)
@@ -10511,6 +10945,39 @@ def build_parser() -> argparse.ArgumentParser:
             "Override the hero predicted-state WDL coefficient; this is an "
             "objective ablation and is recorded in the resume contract."
         ),
+    )
+    train_parser.add_argument(
+        "--legality-coeff",
+        type=float,
+        help=(
+            "Override the hero root illegal-mass coefficient; this is an "
+            "objective ablation and is recorded in the model and resume contracts."
+        ),
+    )
+    train_parser.add_argument(
+        "--policy-distill-coeff",
+        type=float,
+        help=(
+            "Weight a training-only legal KL from the stopped online BT4 "
+            "policy head into the DFM root; recorded in resume contracts."
+        ),
+    )
+    train_parser.add_argument(
+        "--policy-distill-teacher",
+        choices=("online", "checkpoint"),
+        help=(
+            "Use the stopped current policy head or an immutable checkpoint "
+            "teacher for legal-support distillation."
+        ),
+    )
+    train_parser.add_argument(
+        "--policy-distill-teacher-checkpoint-dir",
+        type=Path,
+        help="Model-only or recovery checkpoint for a fixed policy teacher.",
+    )
+    train_parser.add_argument(
+        "--policy-distill-teacher-state-sha256",
+        help="Expected safetensors SHA-256 for the fixed policy teacher.",
     )
     train_parser.add_argument(
         "--jepa-feedback-mode",
@@ -10666,9 +11133,7 @@ def build_parser() -> argparse.ArgumentParser:
         max_checkpoints=0,
     )
 
-    hero_milestone_smoke_parser = subparsers.add_parser(
-        "hero-milestone-smoke"
-    )
+    hero_milestone_smoke_parser = subparsers.add_parser("hero-milestone-smoke")
     hero_milestone_smoke_parser.add_argument(
         "--raw-bt4-path",
         type=Path,
@@ -10694,9 +11159,7 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=100,
     )
-    hero_milestone_smoke_parser.set_defaults(
-        handler=hero_milestone_smoke
-    )
+    hero_milestone_smoke_parser.set_defaults(handler=hero_milestone_smoke)
 
     hero_evaluate_parser = subparsers.add_parser("hero-evaluate")
     hero_evaluate_parser.add_argument(
@@ -10727,10 +11190,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--dfm-condition-on-current-jepa-state",
         action=argparse.BooleanOptionalAction,
         default=None,
-        help=(
-            "Evaluate a checkpoint with its active current-JEPA-state DFM "
-            "conditioning bridge."
-        ),
+        help=("Evaluate a checkpoint with its active current-JEPA-state DFM conditioning bridge."),
     )
     hero_evaluate_parser.add_argument(
         "--dfm-jepa-fusion-mode",
@@ -10855,12 +11315,7 @@ def build_parser() -> argparse.ArgumentParser:
     loss_audit_parser.add_argument(
         "--output",
         type=Path,
-        default=(
-            _REPO_ROOT
-            / "artifacts"
-            / "profiles"
-            / "hero_loss_gradient_audit_b512.json"
-        ),
+        default=(_REPO_ROOT / "artifacts" / "profiles" / "hero_loss_gradient_audit_b512.json"),
     )
     loss_audit_parser.set_defaults(handler=loss_gradient_audit)
 

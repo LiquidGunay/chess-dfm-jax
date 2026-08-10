@@ -1,0 +1,28 @@
+{
+  "arena_label": "hero-arena-16p-pass1-9efb238bdc3578a2ce12",
+  "arena_source_tree_sha256": "b6e7813091ce059e6427733d60d3cf4f2473a58f20513fe7f730428f7c966e7a",
+  "candidate": {
+    "arm": "v2_fp32_1_30",
+    "label": "hero-training-phase1-v2_fp32_1_30-l40s-c87f4c5157351182cbb4",
+    "optimizer_update": 554,
+    "profile": "phase1",
+    "root": "/workspace/training-results/runs/hero-training-phase1-v2_fp32_1_30-l40s-c87f4c5157351182cbb4",
+    "state_sha256": "e7dd27f5eb31ce2c7adc42b4c51c958a659d4a7171d493b396b0285802a1ed2b"
+  },
+  "declared_attempt_upper_bound_dollars": "0.92976000",
+  "device_name": "NVIDIA L4",
+  "git_commit": "86ba0b37e3e188eab115b45a1460d079fac341f8",
+  "opponent": {
+    "arm": "hero1_exact",
+    "label": "hero-training-phase1-hero1_exact-l40s-fae7b0ccef5ca3668ed5",
+    "optimizer_update": 554,
+    "profile": "phase1",
+    "root": "/workspace/training-results/runs/hero-training-phase1-hero1_exact-l40s-fae7b0ccef5ca3668ed5",
+    "state_sha256": "e518083ee5476e7ff15e7c34caf9c0505f8fb7d330ea5a6882e4e9e5c1ef1912"
+  },
+  "pair_count": 16,
+  "raw_bt4_sha256": "61e43e98d2c4cb747498c6bc13a5bbb3b07e985d3f5d87f0351a4db855fa0651",
+  "refinement_passes": 1,
+  "remote_function_seconds": 120.743446389,
+  "schema_version": "chess-dfm-modal-torch-arena-wrapper-v1"
+}

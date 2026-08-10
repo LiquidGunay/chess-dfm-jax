@@ -1,0 +1,1545 @@
+{
+  "planes_persisted": false,
+  "position_count": 256,
+  "positions": [
+    {
+      "group_id": "19MhC7uq",
+      "position_id": "ccd3467048e6ea4548d0a232166a36ee84627738adf63fa1bd85ae8f7d2b0968",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "Dzm83eXq",
+      "position_id": "dcb2ba7817ef8a34419c6f9aa84894d2cf4b5dc4fef64e5ac57e0dce2213d79a",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "5dL8RAEd",
+      "position_id": "c30043ce4799b8813b3ba33ce983fb23804b95048cc5ad8cc5033c970f3d5f82",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "4twWU6b9",
+      "position_id": "3548151e9fbd06196dec6a8ce0c1cf210d187ab353046dd602c6d93ee53498a8",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "eclSREex",
+      "position_id": "47dd7fb8e9cbdc2b11edc3ead30be1e126252a35a5eab9062651b76856de53a4",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "XdJQHnfb",
+      "position_id": "fba7b33df4c216b2eeea97e882cc371121251adcb0f1654379994427a68aca4d",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "KWGE4R6Q",
+      "position_id": "fa9137e077889ea2a87f5ee8d9dda6716aa204c7cd91c017ec9054fed2be0ceb",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "y2WmauCI",
+      "position_id": "f2655e814e4872cd31688c08f00d6e9a3ac336267a63a338d332012b9d9a42ee",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "g5GTjA4g",
+      "position_id": "e08504a1f824d43a23e6dac6075a8811c02cc2241f6299d179a85eb38ae426b1",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "XJrgFVMO",
+      "position_id": "434911e9df21baf93e5cfa06fcf7cdba87a23e1871ab0f38e49e5c2337c37205",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "w0mxvqpp",
+      "position_id": "35af21f8cbf473a8c0ec93a1bec773f085ffc82186a38f3717be171a07abe27c",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "G21ZUzmG",
+      "position_id": "b762517bae8b57d7e661edfcc6604767a2e1655efcfd19557222c04cd522c2fc",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "qGWCV6Ou",
+      "position_id": "209edcd5a2fe389dfc5baf357380362d79d1b28b1d9a4f50ed13beee25908218",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "RAb3ouNq",
+      "position_id": "95416d1e752b4abbd8022b8abf2a3694ee942cf8d81c5a42c58e9e03cb3938f6",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "nKicGfcA",
+      "position_id": "95e139cc718f719a78d05424131ef98efcd5cb24b2ceb001fccc0b0f7047ea3f",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "is14ZBZO",
+      "position_id": "1d712a7da7cbb55ed40df4d2f62787f25a0d926b71a7f4329cd4d7df096a66fe",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "bHxdc27g",
+      "position_id": "dedafa20faf01e2dbe240cad373821cd444571406d99e14009631f123437a8d0",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "LvCc86Dw",
+      "position_id": "4e29e12632bac8faa943e4993621794ca56a5ad0fc41ec4c63b7d70a8400d1f1",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "JYt0Zg1L",
+      "position_id": "ea5c049c9adce7345bf8b2feeab3b28fee5b43ec459a03f47271356c268fda85",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "H3KKjq51",
+      "position_id": "9acdd0041e66249fc465b32fa014c9ddf3f161b194f0927bf621af1b0ce3cddb",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "YHb42SJp",
+      "position_id": "b32750781177f926ed6686c8e8427fecf6866182ff2a83a4dd8a4bf8f21ba9dd",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "Y15XppF3",
+      "position_id": "0ebd11eef8d5f0990174f97bcd53dd7d89768e61872d56cc91f8246796eb5b2b",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "tZop57Nr",
+      "position_id": "69c9bed1f0f0332221f7b36f7ced9418c23961fd5076aad21a622efdb7d7ac18",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "6nEnLTDY",
+      "position_id": "9d051ba16578fc8f83bd521c5d054f4bd9dbcfff7ac28d5b8228e0100b6f9094",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "tgHjOdXV",
+      "position_id": "92f3601b592515a01c82a44f43fa45c4d2b6f157f9b28396674e71b6b8e640b7",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "IQjN6EEs",
+      "position_id": "3155577af1325d423e3ecc96bce855caab28c41872543378a8e899718b0f2f12",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "ts6gTC4Z",
+      "position_id": "a7d80288df140ae98e7f079b697e3980409fd1ce826d6bc1a1fc5cb8474ef9e8",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "yju9h4Bz",
+      "position_id": "8978a7ce2129dfac7de2fce1709698eeb10322c8501d88d0ef9982e63d235c69",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "7NbIYfAe",
+      "position_id": "0d54ca10572f873388549c15a9aa8603c8b21eb544c48f362dadebfea3729a66",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "EqjXUr16",
+      "position_id": "92522205de7b046d33fa9fcdff87c914f504e9e7288d90692956c064570c3da3",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "fjYYHlKy",
+      "position_id": "15edc41b8c33255e470e90272cf48d22343cd911dd0ac255b55b12ba5252b1cf",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "IA9qG0bv",
+      "position_id": "980d245b6446abb7c7f0a5d0d2662fc9ea052bd4162aba91c3870157e81578c5",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "AAnH4kCJ",
+      "position_id": "91416f372a6022ec8a41a5e703e9efcee443a72c55fda6f007ba39909c3a529c",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "irS4Oazx",
+      "position_id": "894744fc337f96df02b5bacc2c3cdcbcdf4c969e4c09d450b2ca984af9a2bb33",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "T4NgImVl",
+      "position_id": "1bf04269ff585969e74d15ee9a8d5d94b04f2b26822752b89581b05c8906894b",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "3epOjgn6",
+      "position_id": "97bf220567a4ecbc1eb79371eb0fe83858b9259d2073c797cd833dd0d1e0e150",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "Cxa9NgYj",
+      "position_id": "d16056cf646c2de90c8727848c858d540cd5aa11f021f931eac5e21c19b08fd1",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "FB0lDsI0",
+      "position_id": "ed79ab084a2a461152bbc85368cb0522255c12d8ca853c604cfbbd409fe98886",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "yJmSNS6g",
+      "position_id": "ee9cff2498d0245367003ab2faa14c883c7c480789c808e98f2cbb03c284d10c",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "RIAEPitk",
+      "position_id": "df173ea7782d9c718d357732ed7de960a5241282eae40d3c540b8228840c7621",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "BJ5HEyHc",
+      "position_id": "c92b71b5318353c36d61088d5c719c04b78e9142d229faf0acdd2024386e7a7f",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "YYNYIvO6",
+      "position_id": "c9944c1f57ea03638c35a1221f49d068900a1cd0b0f25ed0e3eb4a67844c14c0",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "1V3GoUs4",
+      "position_id": "54ff31bd9c0af006dcfac4ad9934e3d1fee6ea8d3b4c12b4e56310e4a86b8453",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "5kSRAz4R",
+      "position_id": "c518d6be82a5e879e7d42af8964c9c639fe35885a8cac8f3f2b12296b06a8c37",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "LixY08UW",
+      "position_id": "c61654a6ffbfd45e79870396261cbe93d9e7ae0d88ef86e6aca342cbf11a2ee3",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "iJwydE1C",
+      "position_id": "a09e7802bcf948313c973c0c126b85164796fbf00a7847cb79bd6e726ea6b307",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "xVIBpvLF",
+      "position_id": "d9bd2ae458d4579e77bb3c171c67c53fdfbbe27063b0b0c81477b83336d17dae",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "ZhSfCMUF",
+      "position_id": "718e4bb090351975bee13759cf4fe3f9292f2194c5d48d077616b47ef1dc9386",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "ulFy6bBK",
+      "position_id": "3200b9c294b846c7e8a9f000407d2ccea6c9035a79ac897872751e60f19c4e86",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "wTHm4ilf",
+      "position_id": "2873e8adbe5a3d1d72b026ad0b2111de02a21a75d8507627f037ae776c28fa10",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "snZ5SmBC",
+      "position_id": "4f073173f07dacb09c4586bef09394b0554e2761084350e61d75b427860d81fa",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "vmNzCsGO",
+      "position_id": "6ecc39f74d5f3ee06cce29367efd45baade96e660c1b5183b95b8ba03209680f",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "5Z2zrahV",
+      "position_id": "7192336c8fb170f0883d39b2aae53383fb4295a5fa88eea7567cf85a485f7e06",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "KHbkAnN3",
+      "position_id": "3424da5a73156a55cffb1c6a81bfbd3fb84a48683c7c428847888a3438c6f99b",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "V4CgJjqJ",
+      "position_id": "674b533e6c09294f0c211ba41c05d7d941e2576763d3cdf03ef4efebece3eb80",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "VlESLQyM",
+      "position_id": "2d5105db814f6a4b6018514c2f05547fcb1e5910d2ca0fea055d57d70b375643",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "m8seZK1A",
+      "position_id": "5cc7023b28380643a44ae42fa964c84d474ab3b653b28eaff3e9f9de24bd1ace",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "FDHGJNcF",
+      "position_id": "ef01bb9a11e6efdce3362102176df046ecfe218228994bcf787c6f0bc2ae0c6a",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "m4kjLAj7",
+      "position_id": "e69eae94be758ce8f35e79eac053c3dcaeee666427ccaf843f770501396adcfc",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "GmFaWTp7",
+      "position_id": "737aae69689f54ed577c1a25df95b1e11b04a70b84c5290b65882b3657ea598c",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "ku13W0pZ",
+      "position_id": "59cb8e9fa5f108fdbcef80c6d53003fe85c3cb719919569e4f726e1fccf32d97",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "SpS1FlQr",
+      "position_id": "810e686570803bf0c7c3a6449761244215c94cb96db0f92ac27b154f5074b843",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "Sv1S6BeW",
+      "position_id": "353dbf7ecf3778cb76640e05b8d9e622640c9b217fcdeb3f189c8a65046e638d",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "4U7UfeOd",
+      "position_id": "37e42244cd2b9ac6e4a08b0de17780cb370c067accaa448b12ab915a95fab5b5",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "H3w3whVk",
+      "position_id": "ebbf29501ef6eb3a5779eb97493985b0a90e7f1a22fde39f7a9b00ed1a018a06",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "YnILX1U0",
+      "position_id": "3503ad8b493340859aa4a9e2a9e3de7b49d5417514556c05c2ee70ee60067d9a",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "vYl3yFLJ",
+      "position_id": "89ae2cc8b05ddd5dd9642ad6229d103b7cde5412cd14dede22c0f15a59a50abe",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "5FhmubYo",
+      "position_id": "9263829b3f91acc07f1a9c8008e75de6297f3cf21e7f31a674e3072c4f22e1e4",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "b25qKKeZ",
+      "position_id": "895afcfcc206180ee79807a7ecfaa1e3682ab2b41e28ba25fd37ac0ea7c6b7ed",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "8nQLLs0v",
+      "position_id": "d5e7589426c1fdb982d3bfa575ad033c571aad9831c40965294a93cf9fba6312",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "gfXLiNLv",
+      "position_id": "12d028140f65216e585e309f6942683ff4316261b5c6dfad21e795bae3cebfb5",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "oV2GeAK4",
+      "position_id": "b150b1711c421a40e192cb737a0d66e83d763cb7c47368ec14408b1aff5dd832",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "GtQ53sVy",
+      "position_id": "7c63750d82bb4fcd43ea05a2c3b482948a614b024acba970032cc3bfc449b030",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "hFchco0f",
+      "position_id": "114bd7b9dfc82ee4e922594517c24c164db261c587e8fb8c491bd72a1c8714b4",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "sxL0u72a",
+      "position_id": "56b113531207dfa26f1f2d0feaa6f7a1f740f08c18d6324ab12b22e9eaa704cd",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "cYR0G5Gk",
+      "position_id": "9276d9f1963628e0852cb20c21b896b632df618f67634a8bf1f61e87715427a4",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "YuquR7GJ",
+      "position_id": "7478481eb3d4120d0cb23c0027b7419db4540f1c6d83fd9c78af13d5fed102a7",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "jqwVnpxI",
+      "position_id": "f52dd58d25c92555835ebc202cda4c33de7f4a5bd78967e67d5c3557204bab86",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "qYaRMUhu",
+      "position_id": "10315b2b1dce5035935317d56796ce20ce4fcfcea02c48cb9ac226b1f76aba10",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "0znPJSug",
+      "position_id": "deedf1fac45fa4d04f90f653d622c1062cee2dd7cf88e9ef39d872618251e9c5",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "Rdi70qj4",
+      "position_id": "f269fe2a3ad03f3dc64f845265ba376a6316e7a1c9dda76d3eb1e41f6a74a929",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "pvW9lzio",
+      "position_id": "3b86d4ce443170a6371387b13947e26b698ac520df054f15db2f563cbac18649",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "4hPCwHlF",
+      "position_id": "c2717664caee6654969ded7c9311d649a67e927c2e082996e361f83ff1ac1f6e",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "B5fd5LVo",
+      "position_id": "5468d2f850f4005588eddd61e945a0192c5178dad64d3a3172e7b85541151bbc",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "niUSYmhA",
+      "position_id": "94b0c0e0b98cd7ff0aca64320626c6bdcc3556b6d9cdc1c81b78360141f8df3b",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "qQi7TlBX",
+      "position_id": "28c8c6dfb0b3c2fcf5aebf3b874b7dd55f2ae93bf378e5eb6b7226bc3a10429d",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "pis9R5R5",
+      "position_id": "1c487066a706b7a1a6d93b3d872ac47b37bddc11b6507b9cceb1770ab7830e92",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "HqONzaAu",
+      "position_id": "1671aa76fa82818d5c274ca405c29ff73777ff71e9961e2ae4163428381e3b93",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "7i2S424g",
+      "position_id": "06669a1a586c5f6d03c73ef62dca4568a4ea7f2c6df74d92b9f5e1c579da47c6",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "P1kgFYlM",
+      "position_id": "875e03caab93f736776e79ff94b93eccf308bbaa96dff132cc408de229695072",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "rjPnvPEk",
+      "position_id": "b9a5bc4c1b22360917939779599b66142f046f61fc32265ee0f3a1910ce9cb99",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "criSku3c",
+      "position_id": "ef55ef7fc0c978aa3bd7c2d76404cb61f6fe86254a7a7266736dede38bbed033",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "dw8Ba9Ln",
+      "position_id": "c2fd9c03ced395cb76acaf5f940eb9bbb9797cb29f40861d61fd7e15b92be173",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "YQLVlIg4",
+      "position_id": "102b30806e1adfd78472f5c08f7e9f2613e68586d0d5e4b739929c75adc1ae58",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "6872qKI1",
+      "position_id": "6a793f3075074d59735673fbf92db9730978fefc13e69810baf4d7fc6e62cab8",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "swz9BSBw",
+      "position_id": "aada981b547da488363369547c5b5191937121cb465cb95939cd8fd293bbc1be",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "r5DFrFnR",
+      "position_id": "32e19e76f3300027100a618eb35ca1cdbe529aa02fdd412754569d80ac12f276",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "oATXVJar",
+      "position_id": "775c70bd94bea3311af1b8a2ef3aac4fef091c2d1cc7898e43af1216c2e0a61b",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "ioj1b4th",
+      "position_id": "3974bc0c28fd09a31890fab5d93d5a88795d91158161f1899019b732d681c385",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "f5ZihzIF",
+      "position_id": "e20437f3cf74c38f706fdd345fbdc1e88aa14c5ba59459374dcfad506df8b73f",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "63Y3PAEl",
+      "position_id": "53c0df9362f1eb2bece4ef72c0811f24df6e8529aa5f9c7cb0047129e6c8233b",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "nJfVAjXv",
+      "position_id": "8a547910f4f9dbb1f54032d08bc159ebc14881db349f4c9603d815f9b338aab3",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "9N6D60Xx",
+      "position_id": "b10e6b34a66c22bf154d53ecff1b3fdceb4d6badd048127a20f569fa740e951b",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "KS86emoV",
+      "position_id": "ef5ddd761dfc07577ba961d79803ce859635a1e3e2adb99e6142da03e61ac011",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "1WPCJgmQ",
+      "position_id": "1f081576a66c2f065483677637a3f4628d47a039591800132f9fe584a4dbc68b",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "QwNDBWrl",
+      "position_id": "d596bb6a0b7bd980158e60c66fb5a899ee9562cc0297c132d611070d2a1cc381",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "D8ofmhEd",
+      "position_id": "9fc86b8a8efba628e2ecb8b33108d81c16b6fb201b6437f106386fcfcb5baf8e",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "ebbz9DlF",
+      "position_id": "78a3ea26058cb5a0abfe717346426f418b8afbe5b465665eefb46eb2944b3497",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "Sfh4urUz",
+      "position_id": "9843bde5abd71c1b68e4c664c1b77c0482699c3357761cb917d897ca93fc5272",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "sI8u4T1q",
+      "position_id": "2c30f28ab11d9ea916487f575725ed47670df6569ceed792d66c31a80138990d",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "0LmQyjmP",
+      "position_id": "bc8b18da8e85e356adb57c8ae85e374350dc708dbff8ac6e4ca512269344d6a9",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "FrOyP3yP",
+      "position_id": "73f051f6ee57ddf4a922765b17a858f3729df9c53407162ff50719119570b486",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "YJMdRdfB",
+      "position_id": "22dc1118b8bc781b3a8bb6e83437604f3c71e9928eff98436238ed48aba3e8cc",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "TNLcE9NK",
+      "position_id": "54f8221056ea485c6c4912af444b342d2af731414d64d7db52ce606de744a9b6",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "hDeK9QnO",
+      "position_id": "cc228d07ff47c47d3090af29dd7487835a01df2a4756fb43e1728497608fb154",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "KjdkZVKk",
+      "position_id": "bbcebdf76846634feda925a5534fcf76aaf874976a09ec0427e6c6d501d72d2f",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "PuHKBTGo",
+      "position_id": "2d72df8514c708e34fed73340db3e5c1ea9b5c88e94b3006fbdf902137189b28",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "cikq61CZ",
+      "position_id": "ebcd173edafd94e0a6e76b737c4ab5ec99a09204785496d657401b501f82a934",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "JmFIyIwP",
+      "position_id": "65676997f9523299ffbba7149e8fa323c0ac1994b5ba2efd3c894b1c05740696",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "UNUgAW3r",
+      "position_id": "816416a3b29d2b7142b1ca5938af8aef47617d12880ae07a53c4df33fa7b68a3",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "603xEBfS",
+      "position_id": "b94bcf26643f5ab37260b2ba384f745d8936f00df25f4b0dc009b27a38e2735a",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "SAIODv2l",
+      "position_id": "acafc748503274c3d7e5f441b4c3e85cfee349d27b66b01a7d7bad420ad47d44",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "m6pI2oUf",
+      "position_id": "eb1e45963afc2fec371c4e249c9a05de4ae7bb4909d07283f5c9f549fb815889",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "XtGupQFR",
+      "position_id": "a5bdaad3710666dd931aa1e20cff4186959814bfada1e932ccee0c3196b50ae8",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "1C7zviGF",
+      "position_id": "f293a475b4a7a7b3639c4630fd563afe8c79468121d618ea7db05824a504af96",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "15Wq1O8S",
+      "position_id": "1fbbd805257f39423090cf66f863f6e0a951417df273a3c4b7e55b5705213f36",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "SJ4QwCXa",
+      "position_id": "1cdf415db72f10b26913bbfb5a6cab1a4ca425561c39fb5c3972d5a79697a4d5",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "Zvj67J0p",
+      "position_id": "4e1e3968b973244540bf9af116d66f5d7eb2bb11bcdd6fb0cb6135bc2a5f63d6",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "4W0Zu9px",
+      "position_id": "0762c33ff2c6ca33ed73bac5a2c6e89a0b18963abaf335cf34322c6630cb492b",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "wrvtZjHL",
+      "position_id": "be660a0c888e09d0b9eed9dde170cba5cd5bf049e6c32d7f3f204c20094bfa0d",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "bgCQWnyW",
+      "position_id": "b4cdfbf336608511d894b8ca5a4ac8d56eafc0c8911a1dd1c2fe85826dd80d60",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "RhrEQh6b",
+      "position_id": "938bfa356430eede4051e903e4fa38753acfafbeca84e703e1856e543d00ca36",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "PfTHUVZK",
+      "position_id": "6c5ce3c3d7beff813d9a71c17c91a25f73889ca798f80b23cfa673f3a8cc704e",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "5pnLffQl",
+      "position_id": "fb8831faf642ef19345f14f2271ac4ab2a0c8fbae22da09cc99f7868041846da",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "9kMmZDfY",
+      "position_id": "77a3e960847c6f20640984c5da312a6a497d32e70ab04a471a3858da23e582bd",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "pk8KASr0",
+      "position_id": "d21ed5953d0240efe94f233dbaa7a6a20d8c6ff5f7befdb48aa0f88a332c55d8",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "R1nkgwzP",
+      "position_id": "1b60320c578615a8e10ce68ea9c7611d9b58deb6abb74e14be775cd4e4eb9178",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "jROTegMt",
+      "position_id": "30858da14ed0630e41290f2c083c358de2e01bb6895d442e014623845a95cc58",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "Jc14Erub",
+      "position_id": "a85d30c9b75bca62763588c5b5a529952ab0e8a0e30560e969b44306928afb99",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "kLVjOGEb",
+      "position_id": "a0cf5151ce4c810d33c6155d6d16185048f86bf0dee298412f0cc557f3bb7659",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "zleYtiDY",
+      "position_id": "c23fc6307c95a3601e48fb5af7b291c54fee132101e08eb853633b46c54d760c",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "MdlLRLkL",
+      "position_id": "e0a3e3bca79b50d192b0407b3a9d53746563668521d957af639532284fe6d6f1",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "ZSVZVoS3",
+      "position_id": "41825598654624f6227cc4c4882aa05eb12a3e781a7b52e38ec710578124cfa0",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "ERgXmBVf",
+      "position_id": "abef4b8d2d2243f0a3f26afde11cc3ce91fc7166d61e0852fd99d554e0c6fefd",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "y7CwpqaO",
+      "position_id": "7b00bed602020cac15d3e5f81f0d92097ad95a1783ab72739a55c20bcedea5a4",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "Rb9tUQO3",
+      "position_id": "8c9d4c524b98824330ee8c2fa09d066bf969a4f427a4d99e5abd0ec6e2e28f13",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "w7ogruYA",
+      "position_id": "f50b3ac61db16f8ee53aa605f659b939ace7a43c8f71c9fb1d68ced3424d057c",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "gB6XSrPs",
+      "position_id": "666104ede84e2b5b45cf200e33af11ab669cc700d72d573d2bcbf8de9d5664f9",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "GrTEz4a7",
+      "position_id": "5d0565dde7038c9fdb18566182511cc5b31d6f07e1c2daf891c88cf9b9267468",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "TlqCWVpj",
+      "position_id": "76b84def83a431bb6a215e05b7219d724d7ff8bcf47e96597ddc0b65e3e5e61c",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "iPHc209S",
+      "position_id": "0dca57ff79d9e8c3eb9304488d7e1959b47300e65568be32c2331b61430e9737",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "kJxjsCdb",
+      "position_id": "f4200fd6316a16c88d0cafe76ef4f94925829836f4ac7e830b5772af61777fae",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "OsFhZhJJ",
+      "position_id": "7c9f88d128caeb8aa2ac99cffac746beec0a34b47329518d920308f561c1e66d",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "QqfsfVho",
+      "position_id": "e0c999b942b0204014d97a8eb3f84c44b8d0fdaa1b0a14f0d2aa140f4e36aeb7",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "GdRdwcNR",
+      "position_id": "cba8d098a8488a9e488649bb6e487998d0cfe8040f57c0fd17b48b667065f65a",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "VAsI71Rz",
+      "position_id": "6e1849acdc15ca820f5769c1769fc8930074538160e94bffbc921a3f544ed573",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "Br5ikcJg",
+      "position_id": "21a4124a36caafb94d3463b62501563fbff5ce840573a3e4a9b076f37291b04a",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "tGTCx9Dd",
+      "position_id": "e8f75c4dd5430c30bc2f436cf3e7f86bac15ae37840d475ae7d479d631d8b3ed",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "1lig4De4",
+      "position_id": "361f04fb3af0ac71dfefe95ea841ca7b979444a09d43cc3a33f874dfd3bae146",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "fdlOkHxG",
+      "position_id": "4cfc170e85cd094df5652a2fd48b9d9355d47b34f89dfbedde63df909a868747",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "E99SbF9d",
+      "position_id": "5da745499f6838ab9d55f6360d9d41d995fd3552177d142a07b55bebcc8bc3c9",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "8jTxJ9Nm",
+      "position_id": "7866d54ca49f19935deae9d0e7c6dc5283964e67d062c8b01aaf27593649b610",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "pYrGDGcD",
+      "position_id": "64773fb12f2b795a689b39c2aecf59b4043369711a37d750d6d6c4796498041e",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "4tmr6ndd",
+      "position_id": "2bda659589861290f1adb9ea776c617db2d704a3980158aaa3596d426c9ebf6b",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "w8vBQABM",
+      "position_id": "21d442d3ed14c59588c0d0030b3b8e866d90f16a813ae702f655dde6e8740422",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "o0G9XBfZ",
+      "position_id": "445e610f513c9f4b05585e4aeceea87ee67c53f02991980b9c5618161fb1a0e1",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "DUxDJFLW",
+      "position_id": "ae088ffe7d298ad7c54f94696f0c04d69c170f1931c9ea677439a295e24ede64",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "sZphloqB",
+      "position_id": "bebe10307009c0713cb51a94ff8b8c9835f055533fcee3335eb7d28e29299939",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "1vh5uORX",
+      "position_id": "40fc07bcb91cf7be2be38f4a3c2b11ab3c0f4e2ec4d1503c762947e646854022",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "9ulXULKf",
+      "position_id": "2343024968df028981314f1ffeef74860056ef0e59260d7dda9d614be64aaf2f",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "7AdVpk3q",
+      "position_id": "986c4dc54ff0312be1dbd3dd7e2f9896674703ec468bbb29ed1537fddb282bd3",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "xpKtqz7g",
+      "position_id": "2d4cd76f2c40dca58ce664b60d43061a5f596f74a0fecf475509b4cc1d149b6a",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "9uNoSrNS",
+      "position_id": "cce3872609b6f1ae73eac41af10975dee6acf3ea260f2d8005a1fb76074c434f",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "moCBW6Tz",
+      "position_id": "30f090a329e9c94ea16ca49453816c10c9a84b712e66bd87723c22d29bdc637f",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "H0HtPTe7",
+      "position_id": "c2ce02c15dddf19b0b3d4f83f32d69b8557bec942ef45f4896d579ddb6348549",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "vBqwweSU",
+      "position_id": "3b85b6ead9689debbfbba3e1fdb151fc26d0244f31bdea732f5c9f62718060be",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "sGsqSd02",
+      "position_id": "ac3137b4dfecd89fbf8eb5486591e45815e55bbffbae792fcc09b831043e82f8",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "Lx5V75zO",
+      "position_id": "c607fdcc9a2a76715e63922cf9ea9c35cae43522f80c78bf3f93a3ad71fb3346",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "ZZgc3f06",
+      "position_id": "d1a70482c62e2aa9aa7ed6932cf32313b8d56abe6dc66aeca997c4ccb9e6bf0c",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "JxVHQGIq",
+      "position_id": "388586f0947e097427e0e5d14b06b86855680e1ca2f2556eb564a1d1519c7760",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "PLKDz9zD",
+      "position_id": "e4c80330e4d27211a7503b8a4e41e50cc8bb82752d29eeacb3efe306bcaa668d",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "tJSP2IZD",
+      "position_id": "fdf7705ae94f08f3094e262ce17e16cf3b66401f0904ac0bd2fbd54779278398",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "4GdiKEN0",
+      "position_id": "04263962ef3865388740f4d745ebb7369321ad21ed4931296a778ca7e3145d74",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "BCwt5UZI",
+      "position_id": "029e2ce36c03ba3eb41b2a9fd3fea0d8dabd9bcda747f122990ba4b1de7befd1",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "F1Lc8dRX",
+      "position_id": "9d401f69f474be045483b62c6b538ce45a2557d48afc950d062048469ff2101c",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "AFNUSkUS",
+      "position_id": "5c67caa6f8f35597e79fd72673e27a75e687c59141827fc8fa9f44f76cc2229d",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "KMxRD6t8",
+      "position_id": "aa685e1e83afcbad057c0e5ebe1553e634e1e75db9ab2ce2d8c7507163afbaa6",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "sVJAqnTS",
+      "position_id": "8babf8cd180cab3a5c62f9b49d3c04bf1fd495e8f0d77aac58ff1370182d43e4",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "FDY0ESoi",
+      "position_id": "f3cc5e555aa1aaeeabe9dd18c5fbacba9aa145a597e149ba6462f78b55b727c2",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "voVeCjKX",
+      "position_id": "7c3967b7e25af560250d3bc6c511bdedc05b499f8f492eee6e5e07ea25997804",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "wIUCz7qB",
+      "position_id": "e71c5a94a40257cc959a40af8c75a884e3b05b3019f3da20ed2d1652e3b6a66e",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "PfOxLmUP",
+      "position_id": "4c010628adb6479617cea52c273642a44c16725a79af1fa58ca0851de8fc2c96",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "XdunxMQn",
+      "position_id": "1013d941607a6b0b4d6ed8b29ab653c0bdfacb6fd8ac26447841752d20258146",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "cupYbyCf",
+      "position_id": "fe7aafc992f00e0e0c8da8752829f9c38cebe2da706d133d53ebfd211c0fd6af",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "H7tH8hJk",
+      "position_id": "bd16eb177d81938d0c425fa223100b2459b2f95dd3f04165a986363cdbdf13cc",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "Dit6wqPI",
+      "position_id": "e859ab4147d3304c86c2891aa48de3c6d08100b831e703aeae09178ff13bfc31",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "o4Q7eEh0",
+      "position_id": "32c0c8e05df75cee9268232f6bc41e2292b6eaf08921f1c7e196d10865e8d154",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "eJj3yX5I",
+      "position_id": "d9a5fd1d6c25dec0e7447c6a9931d3afed07e0725d51853d05e4d72a55294e48",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "IaU597vI",
+      "position_id": "b2ba6c46eb5559751698faedffcf6adc4057e66e60d6af41f551fbb79cda086a",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "WOjUaY6w",
+      "position_id": "6f3c8e6458c9192cd673fce666fb89c952a729c8a22edfd41e56122f92d7a2eb",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "exTjE4Wl",
+      "position_id": "324492fa14f77da07d7d9fd6dedaa802dedc96c46aa319012ea7423a648be198",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "F9GIzHIE",
+      "position_id": "a55694d16b8fd786e1c947d9b0c4c91539ca6bcd18cd66ce184e19f7db62ed0c",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "slt8dzB9",
+      "position_id": "e01b4f7ac50a60a34504f2c917dfe1f9215ae7184ddfda8a5cbe32b2d6ce0d04",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "nmUcmW2E",
+      "position_id": "459911d1f744e7f4330365fe21ee3ca35d19e86ae36bd2cbb42d90476538c0f0",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "4Myw6uVn",
+      "position_id": "4a9a95593cbb9edad5755cd1dbbceddee8d7143b5f42b54d7530285bc849cd17",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "NAlmFwgS",
+      "position_id": "96d4c889f292e0dfb09e1ae1d4a24bc2da4855f9d253d36bd5c226654f22a303",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "odRbO51s",
+      "position_id": "32d2c614aa6f22267bf66e6ac8d5bf76c9c374c02444265a09900596e0848951",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "3zCFJm9m",
+      "position_id": "c0e6fcb5acd8699ac7cd26a1456b04f125e6fb7344eceb8f879ca172eae5404e",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "czr1rF69",
+      "position_id": "306ef8d2df1c3d4fe0a09ae23306c8b8c758f3549a7729538a33c03aa8bd410e",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "r2Aemvxn",
+      "position_id": "22a1432f2319bcd73c08613ecd99c23675567d9831b3f2c4a20753e19b96c317",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "hCaIlOcG",
+      "position_id": "0965256efeffc33be0c03c302f790cec2d10eae8ecf6c613104249bd30d5f72e",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "nnzn2GZt",
+      "position_id": "d63ae6c3ce44fa461e1b0348d75c9878169113deacdaf307d4aa7579a44ac1b8",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "q1mMH4MA",
+      "position_id": "4a6f8d9134275071ad547d7d262f91aa03c5675e3a31615e14775525f465ecad",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "ppiYPrDY",
+      "position_id": "b556702410c33e40f1e426496aba2667f23602b629b96415625e699106be8fee",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "T0HbVfqQ",
+      "position_id": "35856e7819519049cebdf37b5b82e4785b0375884bdbce6ffb5b8e9e6367018d",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "JfZ2zrys",
+      "position_id": "6d1c1d8f9e1f55a1facfa3bc39cd6c5797aa19287918c4f4494f659617667cf1",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "tRa90SOf",
+      "position_id": "a2233b08974e082b9ed6f57e9a974509bd43700906cbe169ddfef9d6ac9fa55f",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "tNSOzjrX",
+      "position_id": "0f9cbfc5161d1010cb94eedef22b6a08312096068adb8ba4856246b65077ecd8",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "yvyLoCyN",
+      "position_id": "c2160e44c6fcbd9acdad94dcb8221ba2fad53984cd6b9275a7b508d2628bd870",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "ol67pwqA",
+      "position_id": "94df2dc42393706d30f6ecc3ce4b5cecb86519adf0925e900c6fe46982993efb",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "4ZH5lWwN",
+      "position_id": "1de561357eecaf7ce982ebe2f5c4a1b31113bc2161c687b98316f7866317c352",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "1EBDe8QO",
+      "position_id": "631752accd28f86cba680e2867be0121901b6e29ad384476f20e0484c4adae08",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "XBJRcDVx",
+      "position_id": "3339480cf68fd9d10d5ea616521274851edcd2ed6e585518ed555a1b552614de",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "rBMlj3e7",
+      "position_id": "0f2c0b759ac7472ed9f65e59f533b405422a31d51e44a34fdd1076b7539ff282",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "qLJVPAEo",
+      "position_id": "2acb789295ca8eac4556fb648508fa7675c26183df6b104794ba8a770fd38aa9",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "Kq732Lly",
+      "position_id": "ed6247ea2b5f274596ad81fb8eeaccbef5ec2a2288950444b219093fa3ea6dcb",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "RM97utWc",
+      "position_id": "d046360dbd09cfdcae613adb297633a97b37d65b9d967c573f5e85ec16f876c0",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "lH9MVUCR",
+      "position_id": "81119dcbf0c75b4a25bb4aa1a28f1f30f6f0ad16bb1a73c894fc02b91458408f",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "LdYiv4j0",
+      "position_id": "30a77daf47fe0b5c8e4cbc06f166f302a845ee486cb2f4201e38988c7338e35e",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "NkKxDLtu",
+      "position_id": "dab2195fcc1857291c99753fdd071964d4b794022fe3360a2e383537f739321f",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "8fegD5dq",
+      "position_id": "539ae16153c63a23611b371996caa7712517cae349ca86578aa762081e661358",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "kHks7ECS",
+      "position_id": "6fbaf97cbf46e5a0924ef0fa8b34b07043863923497d516fc62d9cf0bcfb0f40",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "emrJ3cg5",
+      "position_id": "061421bd25e0f46cc10a318e0554ca8f542a95685a54ff2883ff4db4293c6eb5",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "UDTISfl5",
+      "position_id": "beda317a577f806b1ca80a0c53e6f79faa2d6cbbf0e6863539d2108b66d1565f",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "eDPMT0fs",
+      "position_id": "0e540972fe167f193a0b2eb645480a6d6cbe3bc93accd950520f6ae320faae26",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "f8HHGjeI",
+      "position_id": "36d7d907fd627ab2bf0640a9b7453b73d84f8c2493e6dea2705452af710e5805",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "gZNKrtWR",
+      "position_id": "ec66ea653d5097248d5e9277ce312c1241723a75ed3c0072100ae9e740cb8416",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "HkYaWzqo",
+      "position_id": "80c5bb26f7bb5849aa340b90e89eb3b688615ca8ac5446811daf3b958d5ca04b",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "TErqLflq",
+      "position_id": "d7d5519493515f8345418c993687d6eae5ebd5d7d54d8596b7eeed422bd1232a",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "WblpJVFS",
+      "position_id": "5852faf93c27e1b37c94218a858267341697be301a6ed72ecb1c6627c9dad544",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "KUB6w2Uv",
+      "position_id": "e96979402650382460c17d5cb9ff38df7024011db54e9a3e53a60feb0f183ece",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "PyF9atnf",
+      "position_id": "55c612694f08c2f17ce9b072b24f15221c97a08b85f4b22476ca9a383704c55f",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "LfxWfFP9",
+      "position_id": "4aea1088b522041e223ad04ef0a92b759bd6227d353c89b0ffaa53c606fe4fe3",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "glxZdisl",
+      "position_id": "8ad77a853132a40801ed739b806ceaad155b572a9cfa7c8fd43384995ce54463",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "e3Vffe4a",
+      "position_id": "e111b31f681846de7b4a9faf23a45c863773d7a051b804cf8a30e07c898a487c",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "EXx5JijQ",
+      "position_id": "04c635677eb40df0495a183bf3fab8a0078fb6b339f9844b1078675f18974aa9",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "OK8EEYhj",
+      "position_id": "0d6623ebbfbded274bba196df4416b2eea7ff32a1f6c943c2fe235b1e2ff36a5",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "C8EINUV2",
+      "position_id": "a5f0131da8005fa4e557ae107176a52d1eb3ce50eeb57cffb2471f0508ce41bd",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "AK4rCJB9",
+      "position_id": "90510df4f006b58888ef43d80d47cc8f12a52edb851ff45c6c70dfa06a49bcb9",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "7BvewjFm",
+      "position_id": "72a6ab7719c848379e3b5e23566f9d816152e10f1e1598b913fd6d82e94a442f",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "1hafNuDT",
+      "position_id": "b6621e13baca54d5a83c5e17bbf40232ac29f2992e2e55563c972c3c1abeab3b",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "SjCMycAJ",
+      "position_id": "0d08fe4ccc7249a749d8f2e0ea9df3dcd43a0af6e2609f6a64c5106cb08f238d",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "5F2EXsMV",
+      "position_id": "e50c8c243ff1df490026d585468298f94a6956f5eb352589e9feff2563ddba10",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "kIvPbHwR",
+      "position_id": "94523e260bd967f95207cf979bce384da6cbaf75de6f5b1a4a5e9eb60bf3c5ab",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "ZVf8nXQ6",
+      "position_id": "9f655d21d2cd9df0ab58478bbc71ae1daf280cde9a4b6068e0634df6dc11cf89",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    },
+    {
+      "group_id": "G8gq7mEV",
+      "position_id": "d7b18c6a42ec79c4c47092bb4cd6442636015d0b725d7a4c5e17833eb7610e02",
+      "public_split": "development",
+      "role": "heldout_raw_and_hero"
+    }
+  ],
+  "schema_version": "bt4-lorsa-causal-validation-positions-v1",
+  "source_semantic_positions_identity": "dc3dc26a8239a9d78fdcd13efef7b56f0c7696c878ccb3482be57b1c7e520724",
+  "test_positions": []
+}

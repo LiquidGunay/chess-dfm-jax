@@ -1,0 +1,55 @@
+{
+  "schema_version": "chess-dfm-fixed-policy-teacher-diagnostic-decision-v1",
+  "created_utc": "2026-08-09T18:26:45Z",
+  "preregister": {
+    "path": "research/analysis/hero_v2_phase1/v2_fp32_1_12_legality0_hero1distill1-preregister.json",
+    "sha256": "42405f66f38c0616f6ab5c37c29028bf93f5a89efe110af4cfe898048045aba6"
+  },
+  "diagnostic": {
+    "result_label": "hero-training-diagnostic-v2_fp32_1_12_legality0_hero1distill1-l40s-f33a630872936c9f5ef0",
+    "compact_path": "research/analysis/hero_v2_phase1/diagnostics/v2_fp32_1_12_legality0_hero1distill1",
+    "compact_manifest_sha256": "ee27e3da024725ecd5cd5755e0b17552a874191984c77381e17273398c255e6a",
+    "run_config_sha256": "cd6a232da8e3b975524e69688267964dc7b6f67ff175eb4abd98ee1e477af296",
+    "report_sha256": "ac2abbdd27ad16acd92b84417443fc89238761c89f380d312415456ed5d61864",
+    "metrics_sha256": "47f0de5f991570095658ea443bd6c946922fb42c5d73ffe199b8708e8dda48bd",
+    "checkpoint_files_downloaded": 0
+  },
+  "gates": {
+    "completed_updates": {"required": 10, "observed": 10, "passed": true},
+    "contiguous_updates_1_to_10": {"required": true, "observed": true, "passed": true},
+    "optimizer_skipped_nonfinite_count": {"required": 0, "observed": 0, "passed": true},
+    "all_reported_losses_finite": {"required": true, "observed": true, "passed": true},
+    "policy_teacher_active_every_update": {"required": true, "observed": true, "passed": true},
+    "gradient_global_norm_positive_every_update": {"required": true, "observed": true, "passed": true},
+    "gpu_peak_memory_reserved_bytes": {"maximum": 46000000000, "observed": 30203183104, "headroom_bytes": 15796816896, "passed": true},
+    "median_examples_per_second_step_updates_3_to_10": {"minimum": 180.0, "observed": 334.223741484363, "passed": true},
+    "teacher_trainable_parameter_count": {"required": 0, "observed": 0, "passed": true},
+    "teacher_checkpoint_state_sha256": {
+      "required": "e518083ee5476e7ff15e7c34caf9c0505f8fb7d330ea5a6882e4e9e5c1ef1912",
+      "observed": "e518083ee5476e7ff15e7c34caf9c0505f8fb7d330ea5a6882e4e9e5c1ef1912",
+      "passed": true
+    },
+    "teacher_checkpoint_manifest_sha256": {
+      "required": "61276cee7db1871b3071fa39b31356b42744df213d00113bd62b372984b9a6fa",
+      "observed": "61276cee7db1871b3071fa39b31356b42744df213d00113bd62b372984b9a6fa",
+      "passed": true
+    },
+    "teacher_source_mapping_sha256": "c7a22e25a74e959357f294dfdda4a8f47372d79c96ada49131967bec75b2d93c",
+    "teacher_parameter_count": 198458624
+  },
+  "source_identity": {
+    "source_tree_sha256": "76ef39aa6f2c7b5adb52b3322d4d638a4e8a5725513c7f9c266a7b17a018d04d",
+    "compile_source_tree_sha256": "0446c726a5b667154224f8c54783d33d493f77dc266a7c5a0d97b9d12efd1f37",
+    "phase1_result_label": "hero-training-phase1-v2_fp32_1_12_legality0_hero1distill1-l40s-1712d50db9d0a488031b"
+  },
+  "cost": {
+    "metered_spend_before_diagnostic_usd": 19.0855654,
+    "metered_spend_after_diagnostic_usd": 19.19603357,
+    "diagnostic_increment_usd": 0.11046817
+  },
+  "decision": {
+    "all_preregistered_gates_passed": true,
+    "phase1_launch_authorized": true,
+    "reason": "The immutable Hero1 teacher loaded with exact provenance, remained frozen, produced finite active gradients for the student, fit comfortably in L40S memory, and sustained throughput above the preregistered floor."
+  }
+}

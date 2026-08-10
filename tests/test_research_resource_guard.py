@@ -19,6 +19,7 @@ from research.resource_guard import (
     parse_mem_available_bytes,
     selected_cpu_affinity,
     validate_preflight,
+    validate_workspace_budget,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -160,6 +161,28 @@ def test_environment_contract_fails_closed() -> None:
         config_from_environ({"CHESS_DFM_GUARD_CPU_COUNT": "3"})
 
 
+def test_local_memory_and_workspace_budget_overrides_remain_bounded() -> None:
+    config = config_from_environ(
+        {
+            "CHESS_DFM_GUARD_MIN_START_AVAILABLE_BYTES": str(4 * GIB),
+            "CHESS_DFM_GUARD_MIN_RUNTIME_AVAILABLE_BYTES": str(GIB),
+            "CHESS_DFM_GUARD_MAX_PROCESS_RSS_BYTES": str(5 * GIB),
+            "CHESS_DFM_GUARD_MIN_DISK_RESERVE_BYTES": str(5 * GIB),
+            "CHESS_DFM_GUARD_MAX_WORKSPACE_BYTES": str(30 * GIB),
+            "CHESS_DFM_GUARD_MIN_WORKSPACE_RESERVE_BYTES": str(5 * GIB),
+        }
+    )
+    plan = CheckpointPlan(planned_writes=2, save_every=0, max_retained=2)
+
+    assert validate_workspace_budget(config=config, plan=plan, used_bytes=21 * GIB) == 25 * GIB
+    with pytest.raises(GuardViolation, match="Logical workspace budget"):
+        validate_workspace_budget(
+            config=config,
+            plan=plan,
+            used_bytes=21 * GIB + 1,
+        )
+
+
 def test_custom_checkpoint_limit_is_enforced() -> None:
     config = dataclasses.replace(GuardConfig(), max_checkpoint_writes=1)
     with pytest.raises(GuardViolation, match="requests 2 writes"):
@@ -218,7 +241,7 @@ def test_gpu_launcher_refuses_a_second_host_visible_lock() -> None:
     with (lock_dir / "gpu-workload.lock").open("w") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         result = subprocess.run(
-            ["bash", "research/run_gpu.sh", "/bin/true"],
+            ["bash", "research/run_torch_gpu.sh", "/bin/true"],
             cwd=REPO_ROOT,
             capture_output=True,
             text=True,

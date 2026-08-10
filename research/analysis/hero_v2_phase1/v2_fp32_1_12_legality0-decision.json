@@ -1,0 +1,41 @@
+{
+  "schema_version": "chess-dfm-hero-v2-phase1-decision-v1",
+  "created_utc": "2026-08-09T16:06:20Z",
+  "arm": "v2_fp32_1_12_legality0",
+  "status": "rejected_for_promotion_after_preregistered_behavior_gate",
+  "preregistered_evidence": {
+    "comparison_path": "research/analysis/hero_v2_phase1/v2_fp32_1_12_legality0-comparison.json",
+    "comparison_sha256": "ba75e806328db8feee1d80faf75055e2e0851000e702785b5a7f0a142d4f8eda",
+    "canonical_nonlegality_mean_delta": -0.236923,
+    "canonical_nonlegality_interval_95pct": [-0.322222, -0.147549],
+    "predictive_validation_passed": true,
+    "candidate_root_legal_top1_accuracy": 0.43603515625,
+    "hero1_root_legal_top1_accuracy": 0.455078125,
+    "noninferiority_floor": 0.445078125,
+    "behavior_gate_passed": false,
+    "phase2_authorized": false
+  },
+  "exploratory_post_rejection_arena": {
+    "promotion_effect": false,
+    "reason": "The user authorized an arena after the preregistered frozen top-1 gate had already failed; it cannot retroactively promote the arm.",
+    "state_path": "research/analysis/hero_v2_phase1/arena/v2_fp32_1_12_legality0_vs_hero1/128p/state.json",
+    "state_sha256": "095a54c2c5f95359c6622fdf0c6295cfa896321ed2e1abcdde23212900dc66e3",
+    "pair_count": 128,
+    "game_count": 256,
+    "candidate_wins_draws_losses": [28, 166, 62],
+    "candidate_score": 0.43359375,
+    "pair_aware_score_interval_95pct": [0.31355340108500995, 0.55363409891499],
+    "paired_logistic_elo": -46.41800937932699,
+    "paired_logistic_elo_interval_95pct": [-136.11809668349548, 37.41272819520117],
+    "normalized_elo_diagnostic": -77.40118732148534,
+    "fault_counts": {},
+    "cap_draw_count": 0,
+    "complete_legal_action_coverage": true,
+    "interpretation": "The arena is inconclusive around parity: it does not establish clear inferiority, but its point estimate remains below Hero 1 and cannot override the failed frozen root-ranking gate."
+  },
+  "causal_update": {
+    "conclusion": "Illegal-mass optimization was not the main cause of root-ranking damage. Removing it improved the predictive/behavior tradeoff relative to full FP32 1:12, but did not preserve enough of the inherited policy.",
+    "next_experiment": "v2_fp32_1_12_legality0_distill1",
+    "next_preregister_path": "research/analysis/hero_v2_phase1/v2_fp32_1_12_legality0_distill1-preregister.json"
+  }
+}

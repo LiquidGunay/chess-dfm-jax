@@ -1,0 +1,32 @@
+{
+  "arena_label": "hero-arena-128p-o256-cpass1-opass8-d405f464c054e0769ea4",
+  "arena_source_tree_sha256": "209b7e95c23a086cc65ee732b3fec5f7aadc702637c860fe18872b5ef7e67741",
+  "candidate": {
+    "arm": "v2_fp32_1_12_legality0_hero1distill1",
+    "label": "hero-training-u1024-v2_fp32_1_12_legality0_hero1distill1-l40s-3d907b44f56783c43cfc",
+    "optimizer_update": 1024,
+    "profile": "u1024",
+    "root": "/workspace/training-results/runs/hero-training-u1024-v2_fp32_1_12_legality0_hero1distill1-l40s-3d907b44f56783c43cfc",
+    "state_sha256": "9cb21d328d9bdce38751603434a62e9755066839a673efcf7908fbf712a8282b"
+  },
+  "candidate_policy_mode": "dfm",
+  "candidate_refinement_passes": 1,
+  "declared_attempt_upper_bound_dollars": "0.92976000",
+  "device_name": "NVIDIA L4",
+  "git_commit": "86ba0b37e3e188eab115b45a1460d079fac341f8",
+  "opening_start_index": 256,
+  "opponent": {
+    "arm": "v2_fp32_1_12_legality0_hero1distill1",
+    "label": "hero-training-u1024-v2_fp32_1_12_legality0_hero1distill1-l40s-3d907b44f56783c43cfc",
+    "optimizer_update": 1024,
+    "profile": "u1024",
+    "root": "/workspace/training-results/runs/hero-training-u1024-v2_fp32_1_12_legality0_hero1distill1-l40s-3d907b44f56783c43cfc",
+    "state_sha256": "9cb21d328d9bdce38751603434a62e9755066839a673efcf7908fbf712a8282b"
+  },
+  "opponent_policy_mode": "dfm",
+  "opponent_refinement_passes": 8,
+  "pair_count": 128,
+  "raw_bt4_sha256": "61e43e98d2c4cb747498c6bc13a5bbb3b07e985d3f5d87f0351a4db855fa0651",
+  "remote_function_seconds": 330.693056294,
+  "schema_version": "chess-dfm-modal-torch-arena-wrapper-v1"
+}

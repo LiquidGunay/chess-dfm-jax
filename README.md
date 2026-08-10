@@ -18,6 +18,12 @@ point for:
 
 ## Local GPU autoresearch status
 
+The active interpretability program is the
+[raw-BT4 versus one-epoch Hero Torch plan](docs/hero_bt4_interpretability_plan.md).
+It makes model diffing the first gate, then covers literature replication,
+causal tracing, published transcoder/LoRSA transfer, and paired cross-model
+sparse methods under the local 30 GB and remote $42.50/month budgets.
+
 The clean A10G research path lives on `research/local-gpu-autoresearch`; the
 historical TPU implementation is preserved on
 `legacy/tpu-joint-latent-sasa`. The detailed contract and measured evidence are
@@ -53,7 +59,107 @@ constitute Elo promotion.
 - `scripts/`: runnable CLIs for parity checks, roofline measurement, and chunk inspection.
 - `docs/`: workflow notes for manual reproduction, roofline analysis, and data loading.
 
-## Quickstart
+## Torch experiment quickstart
+
+The active local environment is intentionally Torch-only. It reproduces the
+Hero checkpoint's PyTorch/CUDA line without installing JAX:
+
+```bash
+cd chess-dfm-jax
+uv venv .venv --python 3.12
+uv pip install --python .venv/bin/python \
+  --index https://download.pytorch.org/whl/cu121 \
+  'torch==2.5.1+cu121'
+uv pip install --python .venv/bin/python \
+  --requirement research/requirements_torch_local.txt
+uv pip install --python .venv/bin/python --no-deps --editable .
+```
+
+The final `--no-deps` is deliberate: the historical project metadata still
+describes the full JAX/TPU stack. Use the pinned requirements file for local
+Torch work until that legacy stack is split into an optional environment.
+
+Because this environment intentionally excludes JAX, raw repository-wide
+`pytest` collection is not the verification target. Run the maintained Torch
+and infrastructure suite with:
+
+```bash
+.venv/bin/python -m pytest -q tests/test_torch_*.py \
+  tests/test_compact_feature_report.py \
+  tests/test_compact_feature_semantics.py \
+  tests/test_pull_modal_training_compact.py \
+  tests/test_stitch_training_segments.py \
+  tests/test_research_resource_guard.py
+```
+
+Run all real local GPU work through the RAM/disk/GPU lock guard. The completed
+128-position raw/Hero pilot can be reproduced with:
+
+```bash
+research/run_torch_gpu.sh .venv/bin/python \
+  -m research.interpretability.pilot \
+  --output artifacts/interpretability/raw_hero_pilot_v1_reproduction
+```
+
+The immutable corpus lives in `research/eval/interpretability_pilot_v1/` and
+the retained run is `research/analysis/raw_hero_pilot_v1/`. This is an
+exploratory development corpus: it is valid for tooling and layer selection,
+not a confirmatory chess-strength claim.
+
+Open the retained positive-and-negative-results evidence tour without adding
+marimo to the project environment:
+
+```bash
+uvx --from marimo==0.23.16 marimo run \
+  research/notebooks/raw_hero_interpretability.py
+```
+
+The notebook reads compact repository artifacts, opens no model checkpoint,
+and performs no network requests after the isolated marimo runner is available.
+
+Optional Railway control-plane dependencies are deliberately separate from
+the Torch core:
+
+```bash
+uv pip install --python .venv/bin/python \
+  --requirement research/requirements_infra.txt
+
+.venv/bin/python -m research.interpretability.artifact_store \
+  push-run research/analysis/raw_hero_pilot_v1
+
+.venv/bin/python -m research.interpretability.artifact_store \
+  pull 467ef03d322bef1f16b680679817c3d84b552ff07a7f80193ac24b46444e4c87 \
+  /tmp/raw-hero-pilot-roundtrip
+```
+
+The default Railway credential JSON is mode-600 and ignored at
+`.local/config/railway-bucket-modal.json`; never commit or print it. Modal is
+installed as an isolated CLI tool, uses environment `chess-dfm-research`, and
+checks live workspace spend before every CPU or GPU stage:
+
+```bash
+modal run --env chess-dfm-research \
+  research/interpretability/modal_app.py --mode stage-input
+
+modal run --env chess-dfm-research \
+  research/interpretability/modal_app.py --mode probe-smoke
+
+modal run --env chess-dfm-research \
+  research/interpretability/modal_app.py --mode probe-all-layers
+```
+
+The probe modes run CPU-only Railway download/hash verification, then T4 work
+from a verified Volume cache, then CPU-only result publishing. The successful
+GPU job recorded zero network-download bytes. That retained probe sequence cost
+`$0.46430113` metered; cumulative workspace spend is intentionally not
+hard-coded here. Every new launch queries the live monthly meter and stops at
+`$34.00`, inside the provider-native `$42.50` workspace budget. See the
+[compute runbook](research/infra/README.md),
+[experiment plan](docs/hero_bt4_interpretability_plan.md), and
+[self-contained development report](research/analysis/raw_hero_interpretability_report_v1/report.html)
+for the exact identities, controls, findings, and caveats.
+
+## Legacy JAX/full-stack quickstart
 
 ```bash
 cd chess-dfm-jax

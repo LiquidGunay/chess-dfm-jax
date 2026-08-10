@@ -1,0 +1,33 @@
+{
+  "schema_version": "chess-dfm-full-loop-exploratory-arena-preregister-v1",
+  "created_utc": "2026-08-10T08:10:00+00:00",
+  "status": "preregistered_before_launch",
+  "scientific_role": "post-preregister mechanism clarification; not promotion evidence",
+  "question": "Does ordinary iterative unmasking help or hurt the matched non-loop control?",
+  "checkpoint": {
+    "result_label": "hero-training-u1024-v2_fp32_1_12_legality0_hero1distill1-l40s-3d907b44f56783c43cfc",
+    "state_sha256": "9cb21d328d9bdce38751603434a62e9755066839a673efcf7908fbf712a8282b"
+  },
+  "arena": {
+    "candidate_refinement_passes": 1,
+    "opponent_refinement_passes": 8,
+    "pair_count": 128,
+    "opening_start_index": 256,
+    "opening_stop_index_exclusive": 384,
+    "tier": "hero_development",
+    "additional_ply_cap": 256,
+    "block_pairs": 16,
+    "policy_mode": "dfm",
+    "arena_source_tree_sha256": "209b7e95c23a086cc65ee732b3fec5f7aadc702637c860fe18872b5ef7e67741"
+  },
+  "hypothesis": {
+    "direction": "one pass scores above 0.5 against eight passes",
+    "interpretation": "If supported, repeated unmasking without JEPA feedback is harmful at this training horizon; if unsupported, the full-loop fair-compute win is candidate-driven."
+  },
+  "decision_effect": "descriptive mechanism clarification only",
+  "budget": {
+    "workspace_budget_usd": 42.5,
+    "repository_new_launch_stop_usd": 34.0,
+    "per_job_cap_usd": 1.0
+  }
+}

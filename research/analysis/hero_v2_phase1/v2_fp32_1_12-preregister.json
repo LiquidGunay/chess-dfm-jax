@@ -1,0 +1,53 @@
+{
+  "arm": {
+    "encoder_lr_ratio": 0.08333333333333333,
+    "main_lr_multiplier": 1.0,
+    "name": "v2_fp32_1_12",
+    "optimizer_precision": "fp32_master",
+    "schedule": "warmup_stable_linear_decay",
+    "weight_decay_mode": "decoupled"
+  },
+  "behavioral_boundary": {
+    "arena_pair_count_before_phase2": 16,
+    "interpretation": "A Phase-1 pass allocates more compute only. Root legal top-1 and the bounded paired arena remain descriptive behavioral evidence; full promotion still requires the frozen blind chess gate.",
+    "root_legal_top1_is_not_retroactively_added_to_frozen_gate": true
+  },
+  "declared_before_observing_arm_metrics": true,
+  "declared_utc": "2026-08-09T10:37:36Z",
+  "frozen_control_contract": {
+    "path": "research/analysis/hero_v2_phase1/control_contract.json",
+    "sha256": "7de08c6676bdcfcbee70ecc5f80260490729dc540e1dee927cdca204672163e3"
+  },
+  "inputs": {
+    "v2_fp32_1_10": {
+      "comparison_sha256": "51de20b0bb333f5aa3e12455ce74f193f91ff7d556a44c46206b5b5ca940f6e0",
+      "global_relative_delta_l2": 0.005252039008293203,
+      "parameter_diff_sha256": "22d0add91d288e3abd8200fc21cb481ee69d6e4ce1065b293043421086faba1d",
+      "ratio": 0.1,
+      "trunk_relative_delta_l2": 0.005248938986083084
+    },
+    "v2_fp32_1_30": {
+      "comparison_sha256": "2327b236411cb6969bbef4fbd1a9e2ca81d408cb739d0de07b2845eb0ba51ccd",
+      "global_relative_delta_l2": 0.002170570251373596,
+      "parameter_diff_sha256": "ae575a2a1a0ad6f0ffcd7f3719ac4d99350e1107a1f472589387d1262aba1c52",
+      "ratio": 0.03333333333333333,
+      "trunk_relative_delta_l2": 0.0021673511276479405
+    }
+  },
+  "movement_prediction": {
+    "global_relative_delta_l2": 0.004481671819063301,
+    "interpolation_fraction_from_1_30_to_1_10": 0.75,
+    "method": "linear interpolation in encoder LR ratio between the two audited Phase-1 endpoints",
+    "nonbinding_model": true,
+    "trunk_ceiling": 0.005,
+    "trunk_headroom": 0.000521457978525702,
+    "trunk_relative_delta_l2": 0.004478542021474298
+  },
+  "rationale": "The 1:30 arm is gate-eligible but leaves substantial movement and loss-velocity headroom. The 1:10 arm is faster but exceeds the frozen trunk ceiling by 0.00024894. A 1:12 interpolation is the highest simple reciprocal ratio with a useful predicted margin; the already-risky 1:3 arm is not launched.",
+  "schema_version": "chess-dfm-phase1-arm-preregistration-v1",
+  "selection_contract": {
+    "same_frozen_validation_and_bootstrap_gates": true,
+    "same_movement_ceiling": true,
+    "terminal_update": 554
+  }
+}

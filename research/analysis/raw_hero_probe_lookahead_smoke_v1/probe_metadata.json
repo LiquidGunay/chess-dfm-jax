@@ -1,0 +1,247 @@
+{
+  "probes": {
+    "concept.hero.L14.legal_destination": {
+      "classes": null,
+      "probe": {
+        "architecture": "linear",
+        "batch_size": 4096,
+        "class_balance": true,
+        "epochs": 2,
+        "final_data_loss": 1.5104197263717651,
+        "group_balanced_loss": true,
+        "hidden_width": 0,
+        "initial_data_loss": 0.7720099091529846,
+        "input_width": 1024,
+        "l2": 0.0,
+        "learning_rate": 0.03,
+        "normalization_fit": "training split only",
+        "output_width": 1,
+        "schema_version": "bt4-concept-probe-v1",
+        "seed": 20272219,
+        "training_examples": 1536
+      }
+    },
+    "concept.hero.L14.opponent_attack_count": {
+      "classes": null,
+      "probe": {
+        "architecture": "linear",
+        "batch_size": 4096,
+        "class_balance": true,
+        "epochs": 2,
+        "final_data_loss": 56.50966262817383,
+        "group_balanced_loss": true,
+        "hidden_width": 0,
+        "initial_data_loss": 1.2453579902648926,
+        "input_width": 1024,
+        "l2": 1e-05,
+        "learning_rate": 0.03,
+        "normalization_fit": "training split only",
+        "output_width": 1,
+        "schema_version": "bt4-concept-probe-v1",
+        "seed": 20272229,
+        "training_examples": 1536
+      }
+    },
+    "concept.hero.L14.piece_code": {
+      "classes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12
+      ],
+      "probe": {
+        "architecture": "linear",
+        "batch_size": 4096,
+        "class_balance": true,
+        "epochs": 2,
+        "final_data_loss": 1.5175023078918457,
+        "group_balanced_loss": true,
+        "hidden_width": 0,
+        "initial_data_loss": 2.6929774284362793,
+        "input_width": 1024,
+        "l2": 0.0,
+        "learning_rate": 0.03,
+        "normalization_fit": "training split only",
+        "output_width": 13,
+        "schema_version": "bt4-concept-probe-v1",
+        "seed": 20272209,
+        "training_examples": 1536
+      }
+    },
+    "concept.raw.L14.legal_destination": {
+      "classes": null,
+      "probe": {
+        "architecture": "linear",
+        "batch_size": 4096,
+        "class_balance": true,
+        "epochs": 2,
+        "final_data_loss": 1.4030731916427612,
+        "group_balanced_loss": true,
+        "hidden_width": 0,
+        "initial_data_loss": 0.7361547350883484,
+        "input_width": 1024,
+        "l2": 0.0,
+        "learning_rate": 0.03,
+        "normalization_fit": "training split only",
+        "output_width": 1,
+        "schema_version": "bt4-concept-probe-v1",
+        "seed": 20272218,
+        "training_examples": 1536
+      }
+    },
+    "concept.raw.L14.opponent_attack_count": {
+      "classes": null,
+      "probe": {
+        "architecture": "linear",
+        "batch_size": 4096,
+        "class_balance": true,
+        "epochs": 2,
+        "final_data_loss": 42.64374542236328,
+        "group_balanced_loss": true,
+        "hidden_width": 0,
+        "initial_data_loss": 1.2399076223373413,
+        "input_width": 1024,
+        "l2": 1e-05,
+        "learning_rate": 0.03,
+        "normalization_fit": "training split only",
+        "output_width": 1,
+        "schema_version": "bt4-concept-probe-v1",
+        "seed": 20272228,
+        "training_examples": 1536
+      }
+    },
+    "concept.raw.L14.piece_code": {
+      "classes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12
+      ],
+      "probe": {
+        "architecture": "linear",
+        "batch_size": 4096,
+        "class_balance": true,
+        "epochs": 2,
+        "final_data_loss": 1.6972579956054688,
+        "group_balanced_loss": true,
+        "hidden_width": 0,
+        "initial_data_loss": 2.637726306915283,
+        "input_width": 1024,
+        "l2": 0.0,
+        "learning_rate": 0.03,
+        "normalization_fit": "training split only",
+        "output_width": 13,
+        "schema_version": "bt4-concept-probe-v1",
+        "seed": 20272208,
+        "training_examples": 1536
+      }
+    },
+    "lookahead.hero.L14": {
+      "destination": {
+        "batch_size": 64,
+        "epochs": 1,
+        "feature_width": 1024,
+        "final_loss": 10.063389460245768,
+        "group_balanced_loss": true,
+        "initial_loss": 10.063389460245768,
+        "learning_rate": 0.01,
+        "per_square_bias": false,
+        "rank": 32,
+        "replication": {
+          "architecture_match": false,
+          "official_code_commit": "da19a5905375570995dace848c94c794bef70347",
+          "paper": "Jenner et al., Evidence of Learned Look-Ahead (NeurIPS 2024)"
+        },
+        "schema_version": "bt4-bilinear-lookahead-probe-v1",
+        "seed": 20312209,
+        "shuffle": true,
+        "training_examples": 24,
+        "weight_decay": 0.0
+      },
+      "source": {
+        "batch_size": 64,
+        "epochs": 1,
+        "feature_width": 1024,
+        "final_loss": 7.717508316040039,
+        "group_balanced_loss": true,
+        "initial_loss": 7.717508316040039,
+        "learning_rate": 0.01,
+        "per_square_bias": false,
+        "rank": 32,
+        "replication": {
+          "architecture_match": false,
+          "official_code_commit": "da19a5905375570995dace848c94c794bef70347",
+          "paper": "Jenner et al., Evidence of Learned Look-Ahead (NeurIPS 2024)"
+        },
+        "schema_version": "bt4-bilinear-lookahead-probe-v1",
+        "seed": 20312210,
+        "shuffle": true,
+        "training_examples": 24,
+        "weight_decay": 0.0
+      }
+    },
+    "lookahead.raw.L14": {
+      "destination": {
+        "batch_size": 64,
+        "epochs": 1,
+        "feature_width": 1024,
+        "final_loss": 6.055624643961589,
+        "group_balanced_loss": true,
+        "initial_loss": 6.055624643961589,
+        "learning_rate": 0.01,
+        "per_square_bias": false,
+        "rank": 32,
+        "replication": {
+          "architecture_match": false,
+          "official_code_commit": "da19a5905375570995dace848c94c794bef70347",
+          "paper": "Jenner et al., Evidence of Learned Look-Ahead (NeurIPS 2024)"
+        },
+        "schema_version": "bt4-bilinear-lookahead-probe-v1",
+        "seed": 20312208,
+        "shuffle": true,
+        "training_examples": 24,
+        "weight_decay": 0.0
+      },
+      "source": {
+        "batch_size": 64,
+        "epochs": 1,
+        "feature_width": 1024,
+        "final_loss": 5.389952341715495,
+        "group_balanced_loss": true,
+        "initial_loss": 5.389952341715495,
+        "learning_rate": 0.01,
+        "per_square_bias": false,
+        "rank": 32,
+        "replication": {
+          "architecture_match": false,
+          "official_code_commit": "da19a5905375570995dace848c94c794bef70347",
+          "paper": "Jenner et al., Evidence of Learned Look-Ahead (NeurIPS 2024)"
+        },
+        "schema_version": "bt4-bilinear-lookahead-probe-v1",
+        "seed": 20312209,
+        "shuffle": true,
+        "training_examples": 24,
+        "weight_decay": 0.0
+      }
+    }
+  },
+  "schema_version": "bt4-raw-hero-probe-metadata-v1"
+}

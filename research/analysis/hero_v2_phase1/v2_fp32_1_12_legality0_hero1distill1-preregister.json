@@ -1,0 +1,175 @@
+{
+  "schema_version": "chess-dfm-hero-v2-fixed-policy-teacher-preregister-v1",
+  "created_utc": "2026-08-09T18:02:21Z",
+  "status": "sealed_before_diagnostic_launch",
+  "parents": {
+    "online_distillation_preregister": {
+      "path": "research/analysis/hero_v2_phase1/v2_fp32_1_12_legality0_distill1-preregister.json",
+      "sha256": "b9128d361b778d37749e1db0316bc2b8caa8e6fd527d5ed9056b2cfe2e7a1014"
+    },
+    "online_distillation_comparison": {
+      "path": "research/analysis/hero_v2_phase1/v2_fp32_1_12_legality0_distill1-comparison.json",
+      "sha256": "08ab834b79903e0adcac6401ae259b5c64c7b998c9bd52a4f936b0c19c5464a3"
+    },
+    "matched_control_contract": {
+      "path": "research/analysis/hero_v2_phase1/v2_fp32_1_12_legality0_distill1-control-contract.json",
+      "sha256": "5c3cfe6af5a3510c2a400565eb7a3df4e92a752772e32c281b0d0ab78e1e282f"
+    },
+    "policy_only_arena_preregister": {
+      "path": "research/analysis/hero_v2_phase1/v2_fp32_1_12_legality0_distill1-policy-only-arena-preregister.json",
+      "sha256": "283881f6fedfbc4fd32740c8411324a4bf7160aa0766240d920c05d2d0615641"
+    }
+  },
+  "causal_motivation": {
+    "online_candidate_frozen_dfm_root_top1": 0.4603271484375,
+    "online_candidate_frozen_base_policy_root_top1": 0.4666748046875,
+    "online_candidate_frozen_base_dfm_agreement": 0.8521728515625,
+    "online_candidate_dfm_arena_score_vs_hero1": 0.484375,
+    "online_candidate_policy_only_arena_score_vs_hero1": 0.322265625,
+    "policy_only_arena_interval_95pct": [0.20222527608500993, 0.44230597391499005],
+    "online_candidate_trunk_relative_delta_l2": 0.004012618014561268,
+    "legality_zero_control_trunk_relative_delta_l2": 0.004101642629955192,
+    "inference": "The stopped online teacher moved with the candidate encoder, so it constrained DFM relative to the current candidate policy but did not preserve the sealed Hero1 policy. The decisive policy-only arena regression and nearly unchanged trunk movement falsify the preservation interpretation of the online target.",
+    "hypothesis": "Replacing the moving online target with the immutable Hero1 Phase-1 policy encoder will preserve useful Hero1 move preferences while retaining the faster WSD and 1/12 encoder-learning-rate recipe. The deployed DFM path, not illegal-move mass, remains the behavioral decision target."
+  },
+  "arm": {
+    "name": "v2_fp32_1_12_legality0_hero1distill1",
+    "gpu": "L40S",
+    "recipe": "hero_v2",
+    "main_lr_multiplier": 1.0,
+    "encoder_lr_ratio": 0.08333333333333333,
+    "optimizer_precision": "fp32_master",
+    "schedule_kind": "warmup_stable_linear_decay",
+    "wsd_decay_fraction": 0.2,
+    "weight_decay_mode": "decoupled",
+    "legality_coeff": 0.0,
+    "policy_distill_coeff": 1.0,
+    "teacher_mode": "checkpoint",
+    "diagnostic_updates": 10,
+    "phase1_updates": 554,
+    "examples_per_update": 1024,
+    "diagnostic_result_label": "hero-training-diagnostic-v2_fp32_1_12_legality0_hero1distill1-l40s-f33a630872936c9f5ef0",
+    "phase1_result_label": "hero-training-phase1-v2_fp32_1_12_legality0_hero1distill1-l40s-1712d50db9d0a488031b"
+  },
+  "teacher_contract": {
+    "result_label": "hero-training-phase1-hero1_exact-l40s-fae7b0ccef5ca3668ed5",
+    "profile": "phase1",
+    "arm": "hero1_exact",
+    "gpu": "L40S",
+    "checkpoint_manifest_sha256": "61276cee7db1871b3071fa39b31356b42744df213d00113bd62b372984b9a6fa",
+    "checkpoint_state_sha256": "e518083ee5476e7ff15e7c34caf9c0505f8fb7d330ea5a6882e4e9e5c1ef1912",
+    "student": "current candidate one-pass DFM root logits",
+    "teacher": "frozen terminal Hero1 BT4 encoder and native policy head",
+    "support": "complete board-specific legal action set",
+    "direction": "KL(teacher || student)",
+    "weighting": "same valid-root example weight as root legal CE",
+    "teacher_gradient": false,
+    "teacher_trainable_parameter_count": 0,
+    "student_gradient": "ordinary gradient through current base policy, encoder, and DFM residual",
+    "inference_graph_change": false,
+    "only_change_from_online_distillation_arm": "teacher target changes from stopped current-candidate policy logits to content-bound Hero1 checkpoint policy logits"
+  },
+  "diagnostic_gate": {
+    "must_run_before_phase1": true,
+    "required": {
+      "completed_updates": 10,
+      "optimizer_skipped_nonfinite_count": 0,
+      "all_reported_losses_finite": true,
+      "policy_teacher_active_every_update": 1.0,
+      "policy_teacher_trainable_parameter_count": 0,
+      "policy_teacher_checkpoint_state_sha256": "e518083ee5476e7ff15e7c34caf9c0505f8fb7d330ea5a6882e4e9e5c1ef1912",
+      "gradient_global_norm_strictly_positive_every_update": true,
+      "gpu_peak_memory_reserved_bytes_max": 46000000000,
+      "median_examples_per_second_step_updates_3_to_10_min": 180.0
+    },
+    "failure_action": "Do not launch Phase 1; diagnose implementation, memory, or throughput first.",
+    "attempt_cap_usd": 1.4
+  },
+  "phase1_analysis_contract": {
+    "primary_predictive_estimand": {
+      "name": "canonical_predictive_loss",
+      "formula": "dfm_ce + root_legal_ce_coeff*root_legal_conditional_ce + jepa_positive + 2*target_sigreg + 2*pred_sigreg + 0.25*wdl_ce",
+      "excluded_terms": ["policy_distillation", "root_illegal_mass"],
+      "paired_inference": "updates 101-554; 32-update moving-block bootstrap; 10000 replicates; seed 20260809",
+      "matched_references": ["legality-zero control", "online distillation arm"],
+      "interpretation": "Fixed-teacher distillation is primarily a behavior-preservation intervention, so predictive noninferiority is required but a strict learning-speed win is not."
+    },
+    "frozen_validation_gate": {
+      "predictive_noninferiority": "pass the pre-existing content-bound legality-zero control tolerances for DFM CE, JEPA positive loss, WDL loss, accuracy, and WDL accuracy; first legal mass remains diagnostic only",
+      "dfm_root_legal_top1_accuracy_min": 0.455078125,
+      "reference": "Hero1 frozen DFM root top1",
+      "failure_action": "reject the arm before arena or Phase 2"
+    },
+    "mechanism_diagnostics": [
+      "policy_teacher_root_legal_conditional_ce",
+      "policy_teacher_dfm_root_legal_kl",
+      "weighted_policy_teacher_dfm_root_legal_kl",
+      "policy_teacher_root_legal_top1_accuracy",
+      "policy_teacher_dfm_root_legal_top1_agreement",
+      "base_policy_root_legal_conditional_ce",
+      "base_policy_dfm_root_legal_kl",
+      "base_policy_root_legal_top1_accuracy",
+      "base_policy_dfm_root_legal_top1_agreement",
+      "parameter movement by encoder subgroup"
+    ],
+    "total_training_loss_comparable": false,
+    "coefficient_sweep_authorized": false
+  },
+  "arena_contract": {
+    "trigger": "Run only if the frozen validation gate passes.",
+    "primary": "128 complete color-reversed pairs, one-pass DFM policy for candidate and Hero1, deterministic legal masking, same sealed development opening pool",
+    "mechanistic_followup": "Run the matched 128-pair policy-only arena after the primary arena to test preservation directly; it is diagnostic and cannot rescue a losing DFM result.",
+    "classification": {
+      "confirmed_superior": "paired score lower bound > 0.5",
+      "promising_inconclusive": "point score > 0.5 and interval includes 0.5",
+      "parity_inconclusive": "point score <= 0.5 and interval includes 0.5",
+      "confirmed_inferior": "paired score upper bound < 0.5"
+    },
+    "safety_requirements": {
+      "fault_count": 0,
+      "cap_draw_rate": 0.0,
+      "representable_fraction": 1.0
+    },
+    "phase2_rule": "Phase 2 is authorized only when frozen gates and arena safety pass and the primary DFM arena point score is greater than 0.5. An interval crossing 0.5 supports continuation as an experiment but is not a superiority claim."
+  },
+  "multiplicity": {
+    "new_training_arms_before_reassessment": 1,
+    "coefficient_sweep_authorized": false,
+    "selected_before_diagnostic_metrics": true
+  },
+  "implementation": {
+    "git_commit": "86ba0b37e3e188eab115b45a1460d079fac341f8",
+    "source_tree_sha256": "76ef39aa6f2c7b5adb52b3322d4d638a4e8a5725513c7f9c266a7b17a018d04d",
+    "compile_source_tree_sha256": "0446c726a5b667154224f8c54783d33d493f77dc266a7c5a0d97b9d12efd1f37",
+    "train_torch_sha256": "9541da799bf37ea0af0ebeb9f0ab84285d2dcdce65e2d3c53e13057051314714",
+    "modal_train_app_sha256": "5e951bf25de94e53dffb4b892105dea2c11e55281ffcd1128d2628b633d70830",
+    "tests": "75 focused Torch and Modal tests passed; 1 environment-dependent test skipped",
+    "ruff": "passed"
+  },
+  "prior_evidence": {
+    "dfm_arena_state": {
+      "path": "research/analysis/hero_v2_phase1/arena/v2_fp32_1_12_legality0_distill1_vs_hero1/128p/state.json",
+      "sha256": "b9a143e95bd698c64538731e3655c5faba9bd61060180f37a8835d04f37b2215"
+    },
+    "policy_only_arena_state": {
+      "path": "research/analysis/hero_v2_phase1/arena/v2_fp32_1_12_legality0_distill1_policy_only_vs_hero1_policy_only/128p/state.json",
+      "sha256": "acb038612832c46ae747f134b56e281a27f7774b06f43d96995d472c582eaee0"
+    },
+    "online_candidate_parameter_diff": {
+      "path": "research/analysis/hero_v2_phase1/v2_fp32_1_12_legality0_distill1/parameter_diff.json",
+      "sha256": "6d0bf4b63b31554a72e9aeb01120397b1a266f275af729d53f0b9a26981df7ea"
+    },
+    "legality_zero_parameter_diff": {
+      "path": "research/analysis/hero_v2_phase1/v2_fp32_1_12_legality0/parameter_diff.json",
+      "sha256": "c1763962c9670c31fc9f178c30bdca023abd4869c5ff27db1feee7157d31a9b1"
+    }
+  },
+  "cost_guard": {
+    "workspace_budget_usd": 42.5,
+    "repository_new_launch_stop_usd": 34.0,
+    "metered_spend_observed_before_seal_usd": 19.0855654,
+    "diagnostic_attempt_cap_usd": 1.4,
+    "phase1_attempt_cap_usd": 4.2,
+    "fresh_billing_query_required_immediately_before_each_launch": true
+  }
+}
