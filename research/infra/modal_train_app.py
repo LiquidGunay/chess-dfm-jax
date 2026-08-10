@@ -20,19 +20,18 @@ import modal
 
 
 APP_NAME = "chess-dfm-training"
-RUNNER_REVISION = "hero-v2-modal-training-v6"
+RUNNER_REVISION = "hero-v2-modal-training-v7"
 BASE_GIT_COMMIT = "86ba0b37e3e188eab115b45a1460d079fac341f8"
 BASE_INPUT_BUNDLE_SHA256 = "8be17957ad779e3756092306daa95ad9c1c7f5d482b6409bda7a16bc6d6c7a44"
 BASE_INPUT_VOLUME_NAME = "chess-dfm-interpretability-inputs"
 TRAINING_INPUT_VOLUME_NAME = "chess-dfm-training-inputs"
 TRAINING_RESULT_VOLUME_NAME = "chess-dfm-training-results"
-TRAINING_CACHE_VOLUME_NAME = "chess-dfm-training-compile-cache"
 
 WORKSPACE_MOUNT = "/workspace"
 BASE_INPUT_MOUNT = f"{WORKSPACE_MOUNT}/base-inputs"
 TRAINING_INPUT_MOUNT = f"{WORKSPACE_MOUNT}/training-inputs"
 TRAINING_RESULT_MOUNT = f"{WORKSPACE_MOUNT}/training-results"
-TRAINING_CACHE_MOUNT = f"{WORKSPACE_MOUNT}/training-cache"
+EPHEMERAL_COMPILE_CACHE_ROOT = "/tmp/chess-dfm-training-compile-cache"
 TRAINING_DATASET_LABEL = "trajectory-v3-lc0-test80-h8-sets1-3-20260430"
 LC0_PROPOSAL_A_DATASET_LABEL = "lc0-sequential-test80-20240401-0117-pilot-v1"
 LC0_PROPOSAL_A_STAGE_SCHEMA = "chess-dfm-modal-lc0-sequential-pilot-v1"
@@ -86,7 +85,6 @@ app = modal.App(APP_NAME)
 base_input_volume = modal.Volume.from_name(BASE_INPUT_VOLUME_NAME, create_if_missing=False)
 training_input_volume = modal.Volume.from_name(TRAINING_INPUT_VOLUME_NAME, create_if_missing=True)
 training_result_volume = modal.Volume.from_name(TRAINING_RESULT_VOLUME_NAME, create_if_missing=True)
-training_cache_volume = modal.Volume.from_name(TRAINING_CACHE_VOLUME_NAME, create_if_missing=True)
 
 control_image = (
     modal.Image.debian_slim(python_version="3.12")
@@ -1273,7 +1271,14 @@ def _run_training(
         / "hero_epoch_v1"
         / "manifest.json"
     )
-    cache_root = Path(TRAINING_CACHE_MOUNT) / gpu.lower() / compile_source_tree_sha256
+    # TorchInductor emits many small shared objects. Reusing those directly from a
+    # network Volume was slower than a cold local compile for this model, so each
+    # single-use GPU container gets a fresh cache on its ephemeral filesystem.
+    cache_root = (
+        Path(EPHEMERAL_COMPILE_CACHE_ROOT)
+        / gpu.lower()
+        / compile_source_tree_sha256
+    )
     cache_root.mkdir(parents=True, exist_ok=True)
     output_dir.parent.mkdir(parents=True, exist_ok=True)
     command = _training_command(
@@ -1295,7 +1300,6 @@ def _run_training(
             BASE_INPUT_MOUNT,
             TRAINING_INPUT_MOUNT,
             TRAINING_RESULT_MOUNT,
-            TRAINING_CACHE_MOUNT,
         )
     )
     environment = os.environ.copy()
@@ -1451,7 +1455,6 @@ def _run_training(
             terminal_segment="terminal",
             output_dir=output_dir,
         )
-    training_cache_volume.commit()
     training_result_volume.commit()
     summary = _completed_run_summary(output_dir)
     summary["reused_immutable_result"] = False
@@ -1855,7 +1858,6 @@ _TRAINING_VOLUMES = {
     BASE_INPUT_MOUNT: base_input_volume.with_mount_options(read_only=True),
     TRAINING_INPUT_MOUNT: training_input_volume.with_mount_options(read_only=True),
     TRAINING_RESULT_MOUNT: training_result_volume,
-    TRAINING_CACHE_MOUNT: training_cache_volume,
 }
 _MOVEMENT_VOLUMES = {
     BASE_INPUT_MOUNT: base_input_volume.with_mount_options(read_only=True),
@@ -1916,8 +1918,8 @@ def smoke_a100(**kwargs: str) -> dict[str, Any]:
     gpu="L40S",
     cpu=4.0,
     memory=32768,
-    timeout=2400,
-    startup_timeout=900,
+    timeout=1500,
+    startup_timeout=600,
     retries=0,
     max_containers=1,
     single_use_containers=True,
@@ -1932,8 +1934,8 @@ def proposal_screen_l40s(**kwargs: str) -> dict[str, Any]:
     gpu="A100-40GB",
     cpu=4.0,
     memory=32768,
-    timeout=2400,
-    startup_timeout=900,
+    timeout=1500,
+    startup_timeout=600,
     retries=0,
     max_containers=1,
     single_use_containers=True,
@@ -2068,8 +2070,8 @@ def _spec(stage: str) -> tuple[Any, Decimal]:
     resources = {
         "smoke-l40s": (1200, 900, "L40S", Decimal("1.40")),
         "smoke-a100": (1200, 900, "A100-40GB", Decimal("1.50")),
-        "proposal_screen-l40s": (2400, 900, "L40S", Decimal("2.20")),
-        "proposal_screen-a100": (2400, 900, "A100-40GB", Decimal("2.34")),
+        "proposal_screen-l40s": (1500, 600, "L40S", Decimal("1.40")),
+        "proposal_screen-a100": (1500, 600, "A100-40GB", Decimal("1.49")),
         "phase1-l40s": (5400, 900, "L40S", Decimal("4.20")),
         "phase1-a100": (5400, 900, "A100-40GB", Decimal("4.50")),
         "u1024-l40s": (9000, 900, "L40S", Decimal("7.00")),

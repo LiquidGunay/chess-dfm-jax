@@ -55,6 +55,7 @@ if "modal" not in sys.modules and importlib.util.find_spec("modal") is None:
 
 from research.infra.modal_train_app import (
     COMPILE_SOURCE_TREE_PATHS,
+    EPHEMERAL_COMPILE_CACHE_ROOT,
     HERO1_EXACT_PHASE1_RESULT_LABEL,
     HERO1_EXACT_PHASE1_STATE_SHA256,
     MOVEMENT_SOURCE_TREE_PATHS,
@@ -668,18 +669,17 @@ def test_source_tree_and_run_identity_are_content_and_gpu_specific(
     assert movement_first != _movement_source_tree_sha256(tmp_path)
 
 
-def test_training_runner_stitches_verified_resume_metrics_before_commit() -> None:
+def test_training_runner_stitches_verified_resume_metrics_before_result_commit() -> None:
     source = Path("research/infra/modal_train_app.py").read_text(
         encoding="utf-8"
     )
 
     stitch_call = source.index("stitch_training_segments(")
-    cache_commit = source.index(
-        "training_cache_volume.commit()",
-        stitch_call,
-    )
-    assert stitch_call < cache_commit
-    assert 'terminal_segment="terminal"' in source[stitch_call:cache_commit]
+    result_commit = source.index("training_result_volume.commit()", stitch_call)
+    assert stitch_call < result_commit
+    assert 'terminal_segment="terminal"' in source[stitch_call:result_commit]
+    assert "training_cache_volume.commit()" not in source
+    assert EPHEMERAL_COMPILE_CACHE_ROOT.startswith("/tmp/")
 
 
 def test_long_running_launchers_submit_asynchronous_function_calls() -> None:

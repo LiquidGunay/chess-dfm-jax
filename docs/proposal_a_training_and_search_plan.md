@@ -81,6 +81,15 @@ encoder and all new modules. They span 3x to 24x Hero 1's encoder peak while
 reducing the fresh-module peak to 0.1x to 0.8x Hero 1. This is a bounded sanity
 screen, not a claim that 3.2% of an epoch establishes final strength.
 
+The first two arms also exposed a systems-only cost trap. A cold compile on the
+network-mounted TorchInductor cache took 141 seconds on the first update, while
+reusing its many small artifacts directly from that Volume took 717 seconds on
+the next arm. Runner revision v7 therefore uses a fresh ephemeral `/tmp` cache
+inside each single-use container and a measured 1,500-second execution timeout.
+The runner identity changes, but the separately hashed trainer and model source
+remain identical across arms. No cached compiler artifact is treated as a
+research result.
+
 Reject any arm with non-finite/skipped updates. Among the rest, the provisional
 LR winner minimizes held-out total loss while remaining within 0.02 absolute
 of the best root legal top-1 accuracy and within 0.05 CE of the best current
