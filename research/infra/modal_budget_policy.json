@@ -1,0 +1,33 @@
+{
+  "schema_version": "chess-dfm-modal-budget-policy-v1",
+  "workspace_monthly_budget_dollars": 42.5,
+  "provider_workspace_budget_confirmed_by_user": true,
+  "provider_workspace_budget_semantics": "hard outer cap",
+  "stop_launch_fraction": 0.8,
+  "stop_launch_dollars": 34.0,
+  "allocation": {
+    "planned_gpu_work_dollars": 25.5,
+    "provider_reschedules_billing_lag_storage_and_failed_starts_dollars": 8.5,
+    "highest_value_followup_dollars": 8.5
+  },
+  "rules": [
+    "Read current metered spend from `modal billing summary` immediately before launch.",
+    "Refuse when the conservative per-job maximum exceeds its declared cap.",
+    "Refuse when current plus the declared-attempt estimate exceeds $34.00.",
+    "Timeouts and retries are part of the estimate; no unbounded retries.",
+    "Treat the per-job estimate as a bound on declared attempts only: Modal may independently reschedule crashed containers.",
+    "The unallocated 20% and provider-native hard cap cover platform reschedules, image builds, price drift, and delayed billing data.",
+    "Start with control-plane smoke, then minimal T4 smoke, before model workloads."
+  ],
+  "pricing_snapshot": {
+    "date": "2026-08-09",
+    "source": "https://modal.com/pricing",
+    "t4_dollars_per_second": 0.000164,
+    "l4_dollars_per_second": 0.000222,
+    "a10_dollars_per_second": 0.000306,
+    "cpu_dollars_per_core_second": 0.0000131,
+    "l40s_dollars_per_second": 0.000542,
+    "a100_40gb_dollars_per_second": 0.000583,
+    "memory_dollars_per_gib_second": 0.00000222
+  }
+}

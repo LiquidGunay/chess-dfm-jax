@@ -1,0 +1,5 @@
+order,segment,validation_pool,process_batch,val_batches,validation_examples,comparable_fit_use
+1,Run A,"Full 1,524-shard pool",256,32,8192,No — different population/size
+2,Run B,"Full 1,524-shard pool",512,32,16384,No — different population
+3,"Run C, steps 5k/10k",Process-0 96-shard slice,32,32,1024,No — undersampled protocol
+4,"Run C, step 15k onward",Process-0 96-shard slice,512,32,16384,"Yes, within this segment only"

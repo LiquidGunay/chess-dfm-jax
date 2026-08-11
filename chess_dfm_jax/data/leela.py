@@ -8,8 +8,9 @@ import gzip
 import os
 import queue
 import random
+import struct
 import threading
-from typing import Callable, Iterator, Sequence
+from typing import BinaryIO, Callable, Iterator, Sequence
 
 import numpy as np
 
@@ -40,6 +41,9 @@ V4_RECORD_SIZE = 8292
 V5_RECORD_SIZE = 8308
 V6_RECORD_SIZE = 8356
 
+_CANONICAL_INPUT_FORMATS = frozenset((3, 4, 5, 132, 133))
+_ARMAGEDDON_INPUT_FORMATS = frozenset((132, 133))
+
 INPUT_FORMAT_NAMES = {
     0: "INPUT_CLASSICAL_112_PLANE",
     1: "INPUT_CLASSICAL_112_PLANE",
@@ -65,6 +69,27 @@ class TrainingRecord:
     best_idx: int | None
     q_value: float | None = None
     wdl: tuple[float, float, float] | None = None
+    probabilities: np.ndarray | None = None
+    side_to_move_or_enpassant: int = 0
+    dummy: int = 0
+    root_q: float | None = None
+    best_q: float | None = None
+    root_d: float | None = None
+    best_d: float | None = None
+    root_m: float | None = None
+    best_m: float | None = None
+    plies_left: float | None = None
+    result_q: float | None = None
+    result_d: float | None = None
+    played_q: float | None = None
+    played_d: float | None = None
+    played_m: float | None = None
+    orig_q: float | None = None
+    orig_d: float | None = None
+    orig_m: float | None = None
+    visits: int | None = None
+    policy_kld: float | None = None
+    reserved: int | None = None
 
 
 @dataclass
@@ -347,7 +372,10 @@ def discover_chunk_files(chunk_dir: str | None) -> list[str]:
     return paths
 
 
-def _open_chunk(path: str):
+def _open_chunk(path: str | os.PathLike[str] | BinaryIO):
+    if hasattr(path, "read"):
+        return path
+    path = os.fspath(path)
     if path.endswith(".gz"):
         return gzip.open(path, "rb")
     if path.endswith(".zst"):
@@ -357,7 +385,27 @@ def _open_chunk(path: str):
     return open(path, "rb")
 
 
-def iter_records(path: str) -> Iterator[TrainingRecord]:
+def _wdl_from_qd(q_value: float | None, draw_value: float | None) -> tuple[float, float, float] | None:
+    if q_value is None or draw_value is None:
+        return None
+    return (
+        0.5 * (1.0 - draw_value + q_value),
+        draw_value,
+        0.5 * (1.0 - draw_value - q_value),
+    )
+
+
+def _valid_policy_index(value: int) -> int | None:
+    return value if 0 <= value < 1858 else None
+
+
+def iter_records(
+    path: str | os.PathLike[str] | BinaryIO,
+    *,
+    include_probabilities: bool = False,
+) -> Iterator[TrainingRecord]:
+    """Yield records with official V6 semantics and optional dense policy."""
+
     with _open_chunk(path) as f:
         while True:
             version_bytes = f.read(4)
@@ -386,6 +434,16 @@ def iter_records(path: str) -> Iterator[TrainingRecord]:
                 offset += 4
 
             probs_offset = offset
+            probabilities = (
+                np.frombuffer(
+                    record,
+                    dtype="<f4",
+                    count=1858,
+                    offset=probs_offset,
+                ).copy()
+                if include_probabilities
+                else None
+            )
             planes_offset = probs_offset + 1858 * 4
             planes = np.frombuffer(record, dtype="<u8", count=104, offset=planes_offset).copy()
 
@@ -393,27 +451,79 @@ def iter_records(path: str) -> Iterator[TrainingRecord]:
             castling = tuple(int(b) for b in record[castling_offset : castling_offset + 4])
 
             stm_offset = castling_offset + 4
-            side_to_move = int(record[stm_offset])
+            side_to_move_or_enpassant = int(record[stm_offset])
             rule50 = int(record[stm_offset + 1])
             invariance_info = int(record[stm_offset + 2]) if version >= 5 else 0
+
+            if input_format in _CANONICAL_INPUT_FORMATS:
+                side_to_move = (invariance_info >> 7) & 1
+            else:
+                side_to_move = side_to_move_or_enpassant
 
             played_idx = None
             best_idx = None
             q_value = None
             wdl = None
+            dummy = int(record[stm_offset + 3])
+            root_q = None
+            best_q = None
+            root_d = None
+            best_d = None
+            root_m = None
+            best_m = None
+            plies_left = None
+            result_q = None
+            result_d = None
+            played_q = None
+            played_d = None
+            played_m = None
+            orig_q = None
+            orig_d = None
+            orig_m = None
+            visits = None
+            policy_kld = None
+            reserved = None
             if version >= 6:
                 floats_offset = stm_offset + 4
-                
-                import struct
-                floats_bytes = record[floats_offset:floats_offset + 16]
-                if len(floats_bytes) == 16:
-                    q, w, d, loss_prob = struct.unpack("<4f", floats_bytes)
-                    q_value = q
-                    wdl = (w, d, loss_prob)
-
-                visits_offset = floats_offset + 15 * 4
-                played_idx = int.from_bytes(record[visits_offset + 4 : visits_offset + 6], "little")
-                best_idx = int.from_bytes(record[visits_offset + 6 : visits_offset + 8], "little")
+                (
+                    root_q,
+                    best_q,
+                    root_d,
+                    best_d,
+                    root_m,
+                    best_m,
+                    plies_left,
+                    result_q,
+                    result_d,
+                    played_q,
+                    played_d,
+                    played_m,
+                    orig_q,
+                    orig_d,
+                    orig_m,
+                    visits,
+                    raw_played_idx,
+                    raw_best_idx,
+                    policy_kld,
+                    reserved,
+                ) = struct.unpack_from("<15fIHHfI", record, floats_offset)
+                played_idx = _valid_policy_index(raw_played_idx)
+                best_idx = _valid_policy_index(raw_best_idx)
+                q_value = root_q
+                wdl = _wdl_from_qd(root_q, root_d)
+            elif version >= 4:
+                floats_offset = stm_offset + 4
+                legacy_float_count = 7 if version >= 5 else 4
+                legacy_values = struct.unpack_from(
+                    f"<{legacy_float_count}f",
+                    record,
+                    floats_offset,
+                )
+                root_q, best_q, root_d, best_d = legacy_values[:4]
+                if version >= 5:
+                    root_m, best_m, plies_left = legacy_values[4:]
+                q_value = root_q
+                wdl = _wdl_from_qd(root_q, root_d)
 
             yield TrainingRecord(
                 version=version,
@@ -427,7 +537,75 @@ def iter_records(path: str) -> Iterator[TrainingRecord]:
                 best_idx=best_idx,
                 q_value=q_value,
                 wdl=wdl,
+                probabilities=probabilities,
+                side_to_move_or_enpassant=side_to_move_or_enpassant,
+                dummy=dummy,
+                root_q=root_q,
+                best_q=best_q,
+                root_d=root_d,
+                best_d=best_d,
+                root_m=root_m,
+                best_m=best_m,
+                plies_left=plies_left,
+                result_q=result_q,
+                result_d=result_d,
+                played_q=played_q,
+                played_d=played_d,
+                played_m=played_m,
+                orig_q=orig_q,
+                orig_d=orig_d,
+                orig_m=orig_m,
+                visits=visits,
+                policy_kld=policy_kld,
+                reserved=reserved,
             )
+
+
+def record_to_input_planes(record: TrainingRecord) -> np.ndarray:
+    """Materialize one raw LC0 record as the network's [112, 8, 8] input.
+
+    The packed training bitboards use LC0's file-bit order, whereas this
+    repository's NumPy plane convention uses python-chess square order. A
+    horizontal bit reversal converts between them without reconstructing a
+    board or losing the eight-position history stored in the record.
+
+    The value-rich Test80 archive currently uses the classical input format.
+    Other formats are rejected until their en-passant/canonical aux-plane
+    semantics are covered by parity fixtures.
+    """
+
+    if record.input_format not in (0, 1):
+        raise ValueError(
+            "Raw record plane materialization currently supports only "
+            f"INPUT_CLASSICAL_112_PLANE, got input_format={record.input_format}"
+        )
+    if record.planes.shape != (104,) or record.planes.dtype != np.dtype("<u8"):
+        raise ValueError(
+            "TrainingRecord.planes must have shape (104,) and little-endian uint64 dtype"
+        )
+
+    masks = np.zeros((112,), dtype=np.uint64)
+    masks[:104] = np.asarray(
+        [
+            encode_mod._reverse_bits_in_bytes(int(mask))
+            for mask in record.planes
+        ],
+        dtype=np.uint64,
+    )
+    all_ones = np.uint64(encode_mod.ALL_ONES_MASK)
+    for offset, enabled in enumerate(record.castling):
+        masks[104 + offset] = all_ones if enabled else np.uint64(0)
+    masks[108] = all_ones if record.side_to_move else np.uint64(0)
+    masks[109] = all_ones
+    masks[110] = np.uint64(0)
+    masks[111] = all_ones
+
+    planes = np.stack(
+        [encode_mod._mask_to_plane(int(mask)) for mask in masks],
+        axis=0,
+    ).astype(np.float32, copy=False)
+    planes[109].fill(float(record.rule50))
+    return planes
 
 
 def record_to_board(record: TrainingRecord) -> "chess.Board":
@@ -489,4 +667,11 @@ def record_to_board(record: TrainingRecord) -> "chess.Board":
     return board
 
 
-__all__ = ["LeelaChunkDataLoader", "discover_chunk_files", "record_to_board", "iter_records"]
+__all__ = [
+    "LeelaChunkDataLoader",
+    "TrainingRecord",
+    "discover_chunk_files",
+    "iter_records",
+    "record_to_board",
+    "record_to_input_planes",
+]

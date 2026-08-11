@@ -1,0 +1,30 @@
+{
+  "schema_version": "chess-dfm-objective-analysis-addendum-v1",
+  "created_utc": "2026-08-09T14:36:12Z",
+  "status": "sealed_while_remote_run_active_before_terminal_metrics",
+  "parent_preregister": {
+    "path": "research/analysis/hero_v2_phase1/v2_fp32_1_12_legality0-preregister.json",
+    "sha256": "2ae4821c40ff4ec01b67b50d9a280d84deea194c63ae5ddf2939b8762e501f4f"
+  },
+  "frozen_control_contract": {
+    "path": "research/analysis/hero_v2_phase1/control_contract.json",
+    "sha256": "7de08c6676bdcfcbee70ecc5f80260490729dc540e1dee927cdca204672163e3"
+  },
+  "clarification": {
+    "paired_bootstrap_start_update": 101,
+    "reason": "Inherit the already frozen Hero 1 control-contract boundary used by every Phase 1 paired comparison.",
+    "block_updates": 32,
+    "replicates": 10000,
+    "seed": 20260809,
+    "total_loss_excluded": true,
+    "first_legal_mass_is_diagnostic_only": true
+  },
+  "tested_implementation": {
+    "path": "research/compare_training_runs.py",
+    "sha256": "f9569895289f7b2fceb694ddb8f9bbf13cb6af168d4c078a611f856b5b8d2fc6",
+    "command": "compare-legality-ablation",
+    "tests": "7 passed",
+    "ruff": "passed",
+    "phase2_authorized_by_comparator": false
+  }
+}

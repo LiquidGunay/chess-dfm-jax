@@ -1,0 +1,185 @@
+{
+  "cost": {
+    "backend": "local GTX 1660 Ti zero-provider-cost causal run",
+    "provider_dollars": 0.0
+  },
+  "dependency_gates": {
+    "runtime_models": {
+      "criteria": {
+        "encoder_layout_matches_semantic_source": true,
+        "hero_identity_matches": true,
+        "no_mixed_checkpoint_written": true,
+        "raw_identity_matches": true
+      },
+      "passed": true
+    },
+    "semantic_source": {
+      "criteria": {
+        "causal_targets_present_exactly_once": true,
+        "checksum_inventory_exact": true,
+        "corpus_rows_match": true,
+        "descriptive_run_complete": true,
+        "groups_disjoint": true,
+        "metrics_identity_matches": true,
+        "metrics_schema_exact": true,
+        "position_count_exact": true,
+        "positions_identity_matches": true,
+        "positions_schema_exact": true,
+        "positions_unique_and_development_only": true,
+        "run_identity_matches": true,
+        "run_schema_exact": true,
+        "selection_identity_matches": true,
+        "selection_raw_fit_only": true,
+        "selection_schema_exact": true,
+        "source_and_runtime_gates_passed": true,
+        "source_files_bound_and_well_formed": true,
+        "source_identities_match_local_assets": true,
+        "test_split_unopened": true
+      },
+      "current_source_equality_required": false,
+      "failure_action": "abort before model loading or intervention",
+      "fit_position_count": 256,
+      "heldout_position_count": 256,
+      "historical_source_files_identity": "9e697771c2800b37e65a86ee8c2c5f0ddb85e94d3d6b589d64b839be1ba55b93",
+      "passed": true,
+      "reason_current_source_equality_not_required": "the sealed run binds its historical source map; downstream code evolution is bound independently in the causal run",
+      "schema_version": "bt4-lorsa-semantic-source-verification-v1",
+      "semantic_checksum_identity": "2a1507ff2927c93ddafd330ac82ec6c12a45c2f62c5fe5c0a8f89de3976c4764",
+      "semantic_run_id": "sha256:a5c2d7bd75b4371a8d9778538a5bd0dc1f9be84e261e441eed22ee00fd150834",
+      "source_transfer_run_id": "sha256:e222c1cce5a2824c48168b5cdba3b2018211eb4c7817be95e354f9e5388e91f6"
+    },
+    "source_transfer": {
+      "criteria": {
+        "artifact_contract_passed": true,
+        "checksum_inventory_exact": true,
+        "corpus_identity_matches": true,
+        "development_split_only": true,
+        "examples_unique_and_complete": true,
+        "feature_width_exact": true,
+        "hero_identity_matches": true,
+        "hero_transfer_complete": true,
+        "hero_transfer_declared_interpretable": true,
+        "layer_exact": true,
+        "lorsa_before_after_frozen": true,
+        "lorsa_manifest_identity_matches": true,
+        "lorsa_payload_identity_matches": true,
+        "main_environment_pickle_excluded": true,
+        "manifest_schema_exact": true,
+        "metrics_identity_matches": true,
+        "metrics_schema_exact": true,
+        "position_counts_match": true,
+        "positions_identity_matches": true,
+        "raw_identity_matches": true,
+        "run_identity_matches": true,
+        "source_compatibility_passed": true,
+        "source_files_bound_in_run_id": true,
+        "source_files_identity_matches": true,
+        "source_files_manifest_well_formed": true,
+        "source_lorsa_frozen": true,
+        "source_stage_complete": true,
+        "source_test_split_unopened": true,
+        "token_width_exact": true
+      },
+      "failure_action": "abort before loading models or evaluating semantic features",
+      "passed": true,
+      "position_count": 512,
+      "schema_version": "bt4-lorsa-source-transfer-verification-v1",
+      "source_files_bound_in_run_id": true,
+      "source_transfer_checksum_identity": "3dbd6e4bd3f923b1595e01e791acea22959aa072c959884e16ca87475ac858be",
+      "source_transfer_metrics_identity": "5906d5235cb5c735f8d6e0c345057f072dea0c8682c05956d629b84b426941bc",
+      "source_transfer_positions_identity": "016fcf5775758f36f035685ddc4d0acd3cc45c426a13b18377a33748dd060d5f",
+      "source_transfer_run_id": "sha256:e222c1cce5a2824c48168b5cdba3b2018211eb4c7817be95e354f9e5388e91f6"
+    }
+  },
+  "elapsed_seconds": 522.7163855199469,
+  "environment": {
+    "cuda_runtime": "12.1",
+    "device": "cuda",
+    "gpu": {
+      "name": "NVIDIA GeForce GTX 1660 Ti",
+      "total_memory_bytes": 6442123264
+    },
+    "numpy": "2.2.6",
+    "python": "3.12.3",
+    "torch": "2.5.1+cu121"
+  },
+  "experiment": {
+    "autocast": false,
+    "batch_size": 2,
+    "compute_dtype": "float32",
+    "confirmatory": false,
+    "exploratory": true,
+    "fit_position_count": 256,
+    "heldout_position_count": 256,
+    "layer": 14,
+    "lorsa_checkpoint_dtype": "torch.float32",
+    "seed": 20260808,
+    "tf32": false
+  },
+  "git": {
+    "branch": "research/local-gpu-autoresearch",
+    "commit": "86ba0b37e3e188eab115b45a1460d079fac341f8",
+    "status_sha256": "94bb53fcdbecdf3cde86df1053ac56a01db45be8280a21a6876ed1f5bc8a2c13",
+    "worktree_clean": false
+  },
+  "payload_identities": {
+    "corpus": "9195f857f60ab123b353095b6b931c589ae69098750ea6b26e53e7d871f349d0",
+    "design": "3bf36de2083eb17cfac6221595b93c484b25c8ce7a0bc50d638df02ec8b64207",
+    "hero": "665ac91ad37e14a6c8810068700dba021e39e9c0fe145c8bf620882bb5a71692",
+    "interventions": "4ecc8f9a46156b5bac57df3e78ff94007c2b2d98f59a4b7bb74b88a7e74c3e4b",
+    "lorsa": "2dc7c7cd90550bc3489e4940bb39746e8a3cdcfdc613ac73e9bb2e4bdfe5b8fd",
+    "metrics": "da35496f92de0ad9d1a02ed020c579b6bed15b3bacc1fc3c668b0f9a2cae24e0",
+    "positions": "206c234142149830bd7f80abf2d31ade8c297ee26bf23b163fc1f0ae65fa2850",
+    "raw": "61e43e98d2c4cb747498c6bc13a5bbb3b07e985d3f5d87f0351a4db855fa0651",
+    "semantic_source_checksums": "2a1507ff2927c93ddafd330ac82ec6c12a45c2f62c5fe5c0a8f89de3976c4764",
+    "semantic_source_run": "sha256:a5c2d7bd75b4371a8d9778538a5bd0dc1f9be84e261e441eed22ee00fd150834",
+    "source_files": "55d1805146ff65d87744063d66cf2ff24d64fb0b2a7781ccb8182040374cc19d",
+    "source_transfer_run": "sha256:e222c1cce5a2824c48168b5cdba3b2018211eb4c7817be95e354f9e5388e91f6"
+  },
+  "resource_usage": {
+    "cuda_peak_allocated_bytes": 1167539200,
+    "cuda_peak_reserved_bytes": 1247805440,
+    "wall_seconds": 522.7163855199469
+  },
+  "run_id": "sha256:d40ef11d19cc250412825309e81df6b8dfcc4c83d61072f7987d32da871e9d20",
+  "schema_version": "bt4-lorsa-causal-validation-run-v2",
+  "source_files": {
+    "research/interpretability/artifacts.py": "8dc06be6218e941599990b9276f08985835294b61d3d94acdb9671cf67161c20",
+    "research/interpretability/chessbench.py": "ea4a19cf9e8a1af40212bdfc531c98f94db9d237021e5a0285399687c0d9c854",
+    "research/interpretability/models.py": "a3f8fddf06c74104e2fb15717fa4b612a45f5501c2791b62df7f329697270f03",
+    "research/interpretability/patching.py": "6e3d3f551e43ca4a9d1d1759bce43896db7d098de968c01858889654552512e6",
+    "research/interpretability/sparse/lorsa.py": "932b53e494773da90359300e9a3bc76249fbef6329e19537a0dbebfb5f9f9566",
+    "research/interpretability/sparse/lorsa_causal_validation.py": "5acba62d38217e13eacde74ec008292ce2fee5dfb6d6fc8a599298f8b5805dfe",
+    "research/interpretability/sparse/lorsa_token_semantics.py": "ab8d4cf859eff0bd66bbb1f6b938d395a1f9f82013003838f13f1ebe93e24ecb",
+    "research/train_torch.py": "c9ce7531f43a4e7bc0a6e1fa02a238dac8abb8eddf76da3530aa3b960904b4a3"
+  },
+  "source_identities": {
+    "corpus_integrity": "9195f857f60ab123b353095b6b931c589ae69098750ea6b26e53e7d871f349d0",
+    "hero": "665ac91ad37e14a6c8810068700dba021e39e9c0fe145c8bf620882bb5a71692",
+    "lorsa_manifest": "2fe2d2cf6a132e4a205b25373c50b74e4462caf44057ccb98c0e7e7a3f736b61",
+    "lorsa_weights": "2dc7c7cd90550bc3489e4940bb39746e8a3cdcfdc613ac73e9bb2e4bdfe5b8fd",
+    "raw": "61e43e98d2c4cb747498c6bc13a5bbb3b07e985d3f5d87f0351a4db855fa0651"
+  },
+  "started_utc": "2026-08-08T17:05:04.723828+00:00",
+  "storage_contract": {
+    "dense_activations_persisted": false,
+    "forbidden_tensor_suffixes": [
+      ".npy",
+      ".npz",
+      ".pt",
+      ".pth",
+      ".safetensors"
+    ],
+    "planes_persisted": false,
+    "policy_logits_persisted": false,
+    "retained_files": [
+      "metrics.json",
+      "design.json",
+      "positions.json",
+      "interventions.jsonl",
+      "manifest.json",
+      "run.log",
+      "checksums.sha256"
+    ]
+  }
+}

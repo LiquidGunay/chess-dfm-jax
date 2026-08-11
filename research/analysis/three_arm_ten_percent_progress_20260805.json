@@ -1,0 +1,128 @@
+{
+  "created_utc": "2026-08-05T04:33:46Z",
+  "experiment": "three-arm-ten-percent-scaling",
+  "guard": {
+    "abort_recorded": false,
+    "elapsed_seconds": 10195.52487548592,
+    "minimum_mem_available_bytes": 8219414528,
+    "peak_process_group_rss_bytes": 2640723968,
+    "python_traceback_recorded": false
+  },
+  "runs": {
+    "closed_loop": {
+      "status": "not_started"
+    },
+    "combined": {
+      "status": "not_started"
+    },
+    "current_wdl": {
+      "completed_examples": 2240512,
+      "completed_update": 2188,
+      "epoch_fraction": 0.07904909859460241,
+      "planned_update": 2768,
+      "status": "externally_interrupted_without_checkpoint",
+      "terminal_checkpoint": null,
+      "trailing_64_update_mean": {
+        "accuracy": 0.10263990156818181,
+        "dfm_ce_loss": 5.267988450825214,
+        "first_legal_mass": 0.6425360525026917,
+        "gradient_clip_scale": 0.08233734579698648,
+        "gradient_global_norm": 17.3723099604249,
+        "jepa_positive_loss": 0.10736890719272196,
+        "jepa_pred_sigreg_loss": 0.06583146640332416,
+        "jepa_sigreg_loss": 0.06794432521564886,
+        "loss": 6.717246130108833,
+        "wdl_current_accuracy": 0.662078857421875,
+        "wdl_current_loss": 0.7176461606286466,
+        "z_pred_norm": 29.91911095380783,
+        "z_target_norm": 29.579961627721786
+      },
+      "validations": [
+        {
+          "accuracy": 0.06402587890625,
+          "dfm_ce_loss": 5.899331085383892,
+          "epoch_fraction": 0.02001517395859677,
+          "first_legal_mass": 0.44127279752865434,
+          "jepa_positive_loss": 0.17881451966241002,
+          "jepa_pred_sigreg_loss": 0.09231128875399008,
+          "jepa_sigreg_loss": 0.08737795340130106,
+          "update": 554,
+          "wdl_current_accuracy": 0.563232421875,
+          "wdl_current_loss": 1.0041779368184507,
+          "z_pred_norm": 28.52347642183304,
+          "z_target_norm": 27.662579730153084
+        },
+        {
+          "accuracy": 0.07281494140625,
+          "dfm_ce_loss": 5.708813678473234,
+          "epoch_fraction": 0.036995556197839514,
+          "first_legal_mass": 0.5528239086270332,
+          "jepa_positive_loss": 0.13069980312138796,
+          "jepa_pred_sigreg_loss": 0.06591422413475811,
+          "jepa_sigreg_loss": 0.06888944545062259,
+          "update": 1024,
+          "wdl_current_accuracy": 0.6275634765625,
+          "wdl_current_loss": 0.7850707583129406,
+          "z_pred_norm": 28.734685748815536,
+          "z_target_norm": 28.134838432073593
+        },
+        {
+          "accuracy": 0.0766143798828125,
+          "dfm_ce_loss": 5.619850769639015,
+          "epoch_fraction": 0.05000180642364247,
+          "first_legal_mass": 0.5870714904740453,
+          "jepa_positive_loss": 0.1286714801681228,
+          "jepa_pred_sigreg_loss": 0.05860216004657559,
+          "jepa_sigreg_loss": 0.05612808943260461,
+          "update": 1384,
+          "wdl_current_accuracy": 0.64697265625,
+          "wdl_current_loss": 0.7561773196794093,
+          "z_pred_norm": 29.973998591303825,
+          "z_target_norm": 29.355929404497147
+        },
+        {
+          "accuracy": 0.0842742919921875,
+          "dfm_ce_loss": 5.489253640174866,
+          "epoch_fraction": 0.07500270963546371,
+          "first_legal_mass": 0.6403250293806195,
+          "jepa_positive_loss": 0.11677993292687461,
+          "jepa_pred_sigreg_loss": 0.053324520646128803,
+          "jepa_sigreg_loss": 0.052543100668117404,
+          "update": 2076,
+          "wdl_current_accuracy": 0.6458740234375,
+          "wdl_current_loss": 0.736477633472532,
+          "z_pred_norm": 29.960623264312744,
+          "z_target_norm": 29.277988463640213
+        }
+      ]
+    }
+  },
+  "schema_version": "three-arm-ten-percent-progress-v1",
+  "source_artifacts": {
+    "gpu_samples": {
+      "path": "research/runs/tenpct_current_wdl_u2768_v1/gpu_samples.csv",
+      "sha256": "31d77d6d39c5e1a2d4c1fa0d755e2361b8ed564c38a0b7e5ab45c09bdd3a170c",
+      "size_bytes": 5856698
+    },
+    "launch_log": {
+      "path": "research/runs/tenpct_current_wdl_u2768_v1.launch.log",
+      "sha256": "c4d94be42f39b4f850cec7646462a026f92d3d30796fbdb5cb7bf6d6d4dc1c7b",
+      "size_bytes": 394625
+    },
+    "metrics": {
+      "path": "research/runs/tenpct_current_wdl_u2768_v1/metrics.jsonl",
+      "sha256": "3d3cc6e300b476d8c6434a49c3c7611b8ccc34935cedf4cf1792e28be3f8dbf8",
+      "size_bytes": 6506304
+    },
+    "run_config": {
+      "path": "research/runs/tenpct_current_wdl_u2768_v1/run_config.json",
+      "sha256": "28c1c44ab5a52ca8a278015defb5fc87d35b3b8128f181ec8215ce1fa26554ef",
+      "size_bytes": 264142
+    },
+    "validation_metrics": {
+      "path": "research/runs/tenpct_current_wdl_u2768_v1/validation_metrics.jsonl",
+      "sha256": "1341a09f9c67b941f09349284680fddb739635ace31a38b08abeb87cc33f4cd8",
+      "size_bytes": 72043
+    }
+  }
+}

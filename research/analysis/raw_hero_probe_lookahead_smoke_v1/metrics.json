@@ -1,0 +1,858 @@
+{
+  "causal_lookahead": {
+    "14": {
+      "hero": {
+        "dose": 1.0,
+        "policy_target_log_odds_baseline": {
+          "bootstrap_samples": 100,
+          "confidence": 0.95,
+          "count": 2,
+          "lower": 1.4774785041809082,
+          "mean": 2.10316801071167,
+          "upper": 2.7288575172424316
+        },
+        "position_count": 2,
+        "probe_direction_policy_derivative": {
+          "bootstrap_samples": 100,
+          "confidence": 0.95,
+          "count": 2,
+          "lower": 0.00044083595275878906,
+          "mean": 0.001202404499053955,
+          "upper": 0.001963973045349121
+        },
+        "probe_direction_probe_objective_derivative": {
+          "bootstrap_samples": 100,
+          "confidence": 0.95,
+          "count": 2,
+          "lower": 1.7276946306228638,
+          "mean": 4.280071556568146,
+          "upper": 6.832448482513428
+        },
+        "probe_objective_positive_for_every_position": true,
+        "random_direction_policy_derivative": {
+          "bootstrap_samples": 100,
+          "confidence": 0.95,
+          "count": 2,
+          "lower": -0.0002294778823852539,
+          "mean": 0.0006136894226074219,
+          "upper": 0.0014568567276000977
+        },
+        "random_direction_probe_objective_derivative": {
+          "bootstrap_samples": 100,
+          "confidence": 0.95,
+          "count": 2,
+          "lower": -0.00010573863983154297,
+          "mean": 0.0060675740242004395,
+          "upper": 0.012240886688232422
+        }
+      },
+      "raw": {
+        "dose": 1.0,
+        "policy_target_log_odds_baseline": {
+          "bootstrap_samples": 100,
+          "confidence": 0.95,
+          "count": 2,
+          "lower": 1.1101073026657104,
+          "mean": 1.6570318341255188,
+          "upper": 2.203956365585327
+        },
+        "position_count": 2,
+        "probe_direction_policy_derivative": {
+          "bootstrap_samples": 100,
+          "confidence": 0.95,
+          "count": 2,
+          "lower": -0.0007494688034057617,
+          "mean": 0.0004298686981201172,
+          "upper": 0.001609206199645996
+        },
+        "probe_direction_probe_objective_derivative": {
+          "bootstrap_samples": 100,
+          "confidence": 0.95,
+          "count": 2,
+          "lower": 3.3999946117401123,
+          "mean": 3.5996339321136475,
+          "upper": 3.7992732524871826
+        },
+        "probe_objective_positive_for_every_position": true,
+        "random_direction_policy_derivative": {
+          "bootstrap_samples": 100,
+          "confidence": 0.95,
+          "count": 2,
+          "lower": -0.00018161535263061523,
+          "mean": -0.00012871623039245605,
+          "upper": -7.581710815429688e-05
+        },
+        "random_direction_probe_objective_derivative": {
+          "bootstrap_samples": 100,
+          "confidence": 0.95,
+          "count": 2,
+          "lower": -0.005696892738342285,
+          "mean": -0.0036697983741760254,
+          "upper": -0.0016427040100097656
+        }
+      }
+    }
+  },
+  "concept_probes": {
+    "14": {
+      "legal_destination": {
+        "array": "legal_destination_u8",
+        "hero": {
+          "evaluation": {
+            "accuracy": 0.73828125,
+            "auroc": 0.8868481075611806,
+            "average_precision": 0.8413490588533055,
+            "balanced_accuracy": 0.7612457340810481,
+            "brier": 0.2214897685081078,
+            "ece_10_equal_width_bins": 0.204991223501054,
+            "log_loss": 1.0311159910016785,
+            "positive_rate": 0.333984375,
+            "predicted_positive_rate": 0.482421875
+          },
+          "grid": {
+            "best_index": 0,
+            "candidates": [
+              {
+                "development_metrics": {
+                  "accuracy": 0.806640625,
+                  "auroc": 0.9284652545522111,
+                  "average_precision": 0.877661276145614,
+                  "balanced_accuracy": 0.8270336748597618,
+                  "brier": 0.14579550708763483,
+                  "ece_10_equal_width_bins": 0.11351198382120184,
+                  "log_loss": 0.6147854286669682,
+                  "positive_rate": 0.314453125,
+                  "predicted_positive_rate": 0.43359375
+                },
+                "hidden_width": 0,
+                "l2": 0.0
+              },
+              {
+                "development_metrics": {
+                  "accuracy": 0.806640625,
+                  "auroc": 0.9284652545522111,
+                  "average_precision": 0.877661276145614,
+                  "balanced_accuracy": 0.8270336748597618,
+                  "brier": 0.1457952802189427,
+                  "ece_10_equal_width_bins": 0.11351188164968004,
+                  "log_loss": 0.6147844285411654,
+                  "positive_rate": 0.314453125,
+                  "predicted_positive_rate": 0.43359375
+                },
+                "hidden_width": 0,
+                "l2": 1e-05
+              }
+            ],
+            "selection_metric": "auroc"
+          },
+          "label_permutation_control": {
+            "accuracy": 0.482421875,
+            "auroc": 0.4851057261923137,
+            "average_precision": 0.2969499053721527,
+            "balanced_accuracy": 0.5312633979866577,
+            "brier": 0.42096087561460227,
+            "ece_10_equal_width_bins": 0.3819664841733655,
+            "log_loss": 2.067737113026342,
+            "positive_rate": 0.333984375,
+            "predicted_positive_rate": 0.63671875
+          },
+          "selected_l2": 0.0,
+          "training_metadata": {
+            "architecture": "linear",
+            "batch_size": 4096,
+            "class_balance": true,
+            "epochs": 2,
+            "final_data_loss": 1.5104197263717651,
+            "group_balanced_loss": true,
+            "hidden_width": 0,
+            "initial_data_loss": 0.7720099091529846,
+            "input_width": 1024,
+            "l2": 0.0,
+            "learning_rate": 0.03,
+            "normalization_fit": "training split only",
+            "output_width": 1,
+            "schema_version": "bt4-concept-probe-v1",
+            "seed": 20272219,
+            "training_examples": 1536
+          }
+        },
+        "paired_evaluation": {
+          "ci_high": 0.04008789062499998,
+          "ci_low": -0.040087890625,
+          "confidence": 0.95,
+          "delta_hero_minus_raw": 0.0,
+          "group_count": 8,
+          "hero": 0.73828125,
+          "raw": 0.73828125,
+          "replicates": 100
+        },
+        "raw": {
+          "evaluation": {
+            "accuracy": 0.73828125,
+            "auroc": 0.8894548198453122,
+            "average_precision": 0.8458976247437765,
+            "balanced_accuracy": 0.7656188369261374,
+            "brier": 0.20977176534011355,
+            "ece_10_equal_width_bins": 0.19687405973956193,
+            "log_loss": 0.8526214055963246,
+            "positive_rate": 0.333984375,
+            "predicted_positive_rate": 0.494140625
+          },
+          "grid": {
+            "best_index": 0,
+            "candidates": [
+              {
+                "development_metrics": {
+                  "accuracy": 0.806640625,
+                  "auroc": 0.919688202296898,
+                  "average_precision": 0.8464531823071769,
+                  "balanced_accuracy": 0.832076940772593,
+                  "brier": 0.1555777633092027,
+                  "ece_10_equal_width_bins": 0.1169331671137948,
+                  "log_loss": 0.700587140505244,
+                  "positive_rate": 0.314453125,
+                  "predicted_positive_rate": 0.4453125
+                },
+                "hidden_width": 0,
+                "l2": 0.0
+              },
+              {
+                "development_metrics": {
+                  "accuracy": 0.806640625,
+                  "auroc": 0.919688202296898,
+                  "average_precision": 0.8464531823071769,
+                  "balanced_accuracy": 0.832076940772593,
+                  "brier": 0.15557758939163516,
+                  "ece_10_equal_width_bins": 0.11693308289564289,
+                  "log_loss": 0.7005861698950466,
+                  "positive_rate": 0.314453125,
+                  "predicted_positive_rate": 0.4453125
+                },
+                "hidden_width": 0,
+                "l2": 1e-05
+              }
+            ],
+            "selection_metric": "auroc"
+          },
+          "label_permutation_control": {
+            "accuracy": 0.498046875,
+            "auroc": 0.43621272144192347,
+            "average_precision": 0.2796036380636328,
+            "balanced_accuracy": 0.4336660321380186,
+            "brier": 0.4092168022935442,
+            "ece_10_equal_width_bins": 0.3617067318716068,
+            "log_loss": 1.9146880263528885,
+            "positive_rate": 0.333984375,
+            "predicted_positive_rate": 0.328125
+          },
+          "selected_l2": 0.0,
+          "training_metadata": {
+            "architecture": "linear",
+            "batch_size": 4096,
+            "class_balance": true,
+            "epochs": 2,
+            "final_data_loss": 1.4030731916427612,
+            "group_balanced_loss": true,
+            "hidden_width": 0,
+            "initial_data_loss": 0.7361547350883484,
+            "input_width": 1024,
+            "l2": 0.0,
+            "learning_rate": 0.03,
+            "normalization_fit": "training split only",
+            "output_width": 1,
+            "schema_version": "bt4-concept-probe-v1",
+            "seed": 20272218,
+            "training_examples": 1536
+          }
+        },
+        "task": "binary",
+        "train_only_frequency_or_mean_baseline": {
+          "accuracy": 0.666015625,
+          "auroc": 0.5,
+          "average_precision": 0.333984375,
+          "balanced_accuracy": 0.5,
+          "brier": 0.22257614135742188,
+          "ece_10_equal_width_bins": 0.01171875,
+          "log_loss": 0.6372697117143662,
+          "positive_rate": 0.333984375,
+          "predicted_positive_rate": 0.0
+        }
+      },
+      "opponent_attack_count": {
+        "array": "attack_count_theirs_u8",
+        "hero": {
+          "evaluation": {
+            "mae": 1.3680588486022316,
+            "pearson": 0.43646497995771405,
+            "r2": -4.634458420008824,
+            "rmse": 1.9871020103795165
+          },
+          "grid": {
+            "best_index": 1,
+            "candidates": [
+              {
+                "development_metrics": {
+                  "mae": 1.6828753563459031,
+                  "pearson": 0.35141421693863095,
+                  "r2": -7.552258144812942,
+                  "rmse": 2.16902027065522
+                },
+                "hidden_width": 0,
+                "l2": 0.0
+              },
+              {
+                "development_metrics": {
+                  "mae": 1.6828752362634987,
+                  "pearson": 0.3514142226056145,
+                  "r2": -7.552257050633553,
+                  "rmse": 2.1690201319025477
+                },
+                "hidden_width": 0,
+                "l2": 1e-05
+              }
+            ],
+            "selection_metric": "r2"
+          },
+          "label_permutation_control": {
+            "mae": 1.7414229899877682,
+            "pearson": 0.09257292349533472,
+            "r2": -5.565107687974498,
+            "rmse": 2.1449392712427566
+          },
+          "selected_l2": 1e-05,
+          "training_metadata": {
+            "architecture": "linear",
+            "batch_size": 4096,
+            "class_balance": true,
+            "epochs": 2,
+            "final_data_loss": 56.50966262817383,
+            "group_balanced_loss": true,
+            "hidden_width": 0,
+            "initial_data_loss": 1.2453579902648926,
+            "input_width": 1024,
+            "l2": 1e-05,
+            "learning_rate": 0.03,
+            "normalization_fit": "training split only",
+            "output_width": 1,
+            "schema_version": "bt4-concept-probe-v1",
+            "seed": 20272229,
+            "training_examples": 1536
+          }
+        },
+        "paired_evaluation": {
+          "ci_high": 0.33264063298702234,
+          "ci_low": 0.15598982572555542,
+          "confidence": 0.95,
+          "delta_hero_minus_raw": 0.2591973543167114,
+          "group_count": 8,
+          "hero": -1.3680588006973267,
+          "raw": -1.627256155014038,
+          "replicates": 100
+        },
+        "raw": {
+          "evaluation": {
+            "mae": 1.6272560727666132,
+            "pearson": 0.39097713947046786,
+            "r2": -4.781867590788009,
+            "rmse": 2.012927552642092
+          },
+          "grid": {
+            "best_index": 1,
+            "candidates": [
+              {
+                "development_metrics": {
+                  "mae": 1.6141491839662194,
+                  "pearson": 0.3329410491212934,
+                  "r2": -6.325190741897391,
+                  "rmse": 2.007394264749493
+                },
+                "hidden_width": 0,
+                "l2": 0.0
+              },
+              {
+                "development_metrics": {
+                  "mae": 1.6141489840811118,
+                  "pearson": 0.33294107001458817,
+                  "r2": -6.325189011399158,
+                  "rmse": 2.0073940276367304
+                },
+                "hidden_width": 0,
+                "l2": 1e-05
+              }
+            ],
+            "selection_metric": "r2"
+          },
+          "label_permutation_control": {
+            "mae": 1.4993205908103846,
+            "pearson": 0.1693013431220321,
+            "r2": -3.8110896387151616,
+            "rmse": 1.8361823051434827
+          },
+          "selected_l2": 1e-05,
+          "training_metadata": {
+            "architecture": "linear",
+            "batch_size": 4096,
+            "class_balance": true,
+            "epochs": 2,
+            "final_data_loss": 42.64374542236328,
+            "group_balanced_loss": true,
+            "hidden_width": 0,
+            "initial_data_loss": 1.2399076223373413,
+            "input_width": 1024,
+            "l2": 1e-05,
+            "learning_rate": 0.03,
+            "normalization_fit": "training split only",
+            "output_width": 1,
+            "schema_version": "bt4-concept-probe-v1",
+            "seed": 20272228,
+            "training_examples": 1536
+          }
+        },
+        "task": "regression",
+        "train_only_frequency_or_mean_baseline": {
+          "mae": 0.7136993408203126,
+          "pearson": 0.0,
+          "r2": -0.00031995219466640634,
+          "rmse": 0.8372661612065818
+        }
+      },
+      "piece_code": {
+        "array": "piece_code_i8",
+        "hero": {
+          "evaluation": {
+            "accuracy": 0.556640625,
+            "ece_10_equal_width_bins": 0.2832608062890358,
+            "log_loss": 4.247984747209655,
+            "macro_f1": 0.4734831633580156
+          },
+          "grid": {
+            "best_index": 0,
+            "candidates": [
+              {
+                "development_metrics": {
+                  "accuracy": 0.552734375,
+                  "ece_10_equal_width_bins": 0.2703927183174528,
+                  "log_loss": 3.351129282220983,
+                  "macro_f1": 0.48540895691602953
+                },
+                "hidden_width": 0,
+                "l2": 0.0
+              },
+              {
+                "development_metrics": {
+                  "accuracy": 0.552734375,
+                  "ece_10_equal_width_bins": 0.27039180195424706,
+                  "log_loss": 3.3511152693939,
+                  "macro_f1": 0.48540895691602953
+                },
+                "hidden_width": 0,
+                "l2": 1e-05
+              }
+            ],
+            "selection_metric": "accuracy"
+          },
+          "label_permutation_control": {
+            "accuracy": 0.037109375,
+            "ece_10_equal_width_bins": 0.7972777991672046,
+            "log_loss": 10.342146019711862,
+            "macro_f1": 0.04357609913400468
+          },
+          "selected_l2": 0.0,
+          "training_metadata": {
+            "architecture": "linear",
+            "batch_size": 4096,
+            "class_balance": true,
+            "epochs": 2,
+            "final_data_loss": 1.5175023078918457,
+            "group_balanced_loss": true,
+            "hidden_width": 0,
+            "initial_data_loss": 2.6929774284362793,
+            "input_width": 1024,
+            "l2": 0.0,
+            "learning_rate": 0.03,
+            "normalization_fit": "training split only",
+            "output_width": 13,
+            "schema_version": "bt4-concept-probe-v1",
+            "seed": 20272209,
+            "training_examples": 1536
+          }
+        },
+        "paired_evaluation": {
+          "ci_high": 0.05180664062499998,
+          "ci_low": -0.036279296874999985,
+          "confidence": 0.95,
+          "delta_hero_minus_raw": 0.0,
+          "group_count": 8,
+          "hero": 0.556640625,
+          "raw": 0.556640625,
+          "replicates": 100
+        },
+        "raw": {
+          "evaluation": {
+            "accuracy": 0.556640625,
+            "ece_10_equal_width_bins": 0.271864276350243,
+            "log_loss": 4.5036539188672595,
+            "macro_f1": 0.4697824961262599
+          },
+          "grid": {
+            "best_index": 0,
+            "candidates": [
+              {
+                "development_metrics": {
+                  "accuracy": 0.5390625,
+                  "ece_10_equal_width_bins": 0.27995205455226824,
+                  "log_loss": 3.7468805888344567,
+                  "macro_f1": 0.48940035847744134
+                },
+                "hidden_width": 0,
+                "l2": 0.0
+              },
+              {
+                "development_metrics": {
+                  "accuracy": 0.5390625,
+                  "ece_10_equal_width_bins": 0.2799505816656165,
+                  "log_loss": 3.7468584075237157,
+                  "macro_f1": 0.48940035847744134
+                },
+                "hidden_width": 0,
+                "l2": 1e-05
+              }
+            ],
+            "selection_metric": "accuracy"
+          },
+          "label_permutation_control": {
+            "accuracy": 0.041015625,
+            "ece_10_equal_width_bins": 0.7943496748339385,
+            "log_loss": 9.49594985559314,
+            "macro_f1": 0.03969209272376694
+          },
+          "selected_l2": 0.0,
+          "training_metadata": {
+            "architecture": "linear",
+            "batch_size": 4096,
+            "class_balance": true,
+            "epochs": 2,
+            "final_data_loss": 1.6972579956054688,
+            "group_balanced_loss": true,
+            "hidden_width": 0,
+            "initial_data_loss": 2.637726306915283,
+            "input_width": 1024,
+            "l2": 0.0,
+            "learning_rate": 0.03,
+            "normalization_fit": "training split only",
+            "output_width": 13,
+            "schema_version": "bt4-concept-probe-v1",
+            "seed": 20272208,
+            "training_examples": 1536
+          }
+        },
+        "task": "multiclass",
+        "train_only_frequency_or_mean_baseline": {
+          "accuracy": 0.7109375,
+          "ece_10_equal_width_bins": 0.006612128792769512,
+          "log_loss": 1.209341216777287,
+          "macro_f1": 0.0639269406392694
+        }
+      }
+    }
+  },
+  "correctness_gates": {
+    "group_disjoint_nested_splits": true,
+    "passed": false,
+    "pickle_free_weights": true,
+    "probe_gradient_increases_probe_objective_everywhere": true,
+    "published_lookahead_architecture_match": false,
+    "test_split_evaluated": false
+  },
+  "future_ply_zero_indexed": 2,
+  "layers": [
+    14
+  ],
+  "lookahead": {
+    "14": {
+      "hero": {
+        "destination_frequency_baseline": {
+          "accuracy": 0.0,
+          "count": 8,
+          "entropy": 4.055857840879953,
+          "mean_reciprocal_rank": 0.14298245310783386,
+          "nll": 4.080080085684713,
+          "top3_accuracy": 0.125,
+          "top5_accuracy": 0.5
+        },
+        "destination_training": {
+          "batch_size": 64,
+          "epochs": 1,
+          "feature_width": 1024,
+          "final_loss": 10.063389460245768,
+          "group_balanced_loss": true,
+          "initial_loss": 10.063389460245768,
+          "learning_rate": 0.01,
+          "per_square_bias": false,
+          "rank": 32,
+          "replication": {
+            "architecture_match": false,
+            "official_code_commit": "da19a5905375570995dace848c94c794bef70347",
+            "paper": "Jenner et al., Evidence of Learned Look-Ahead (NeurIPS 2024)"
+          },
+          "schema_version": "bt4-bilinear-lookahead-probe-v1",
+          "seed": 20312209,
+          "shuffle": true,
+          "training_examples": 24,
+          "weight_decay": 0.0
+        },
+        "evaluation": {
+          "destination": {
+            "accuracy": 0.25,
+            "count": 8,
+            "entropy": 0.4233243763446808,
+            "mean_reciprocal_rank": 0.5145833492279053,
+            "nll": 24.484617233276367,
+            "top3_accuracy": 0.75,
+            "top5_accuracy": 1.0
+          },
+          "joint_move_accuracy": 0.0,
+          "source_given_predicted_destination": {
+            "accuracy": 0.25,
+            "count": 8,
+            "entropy": 0.5233213901519775,
+            "mean_reciprocal_rank": 0.3826049566268921,
+            "nll": 13.54519271850586,
+            "top3_accuracy": 0.375,
+            "top5_accuracy": 0.5
+          },
+          "source_given_true_destination": {
+            "accuracy": 0.25,
+            "count": 8,
+            "entropy": 0.5355722904205322,
+            "mean_reciprocal_rank": 0.41279762983322144,
+            "nll": 9.491811752319336,
+            "top3_accuracy": 0.375,
+            "top5_accuracy": 0.625
+          }
+        },
+        "label_permutation_control": {
+          "destination": {
+            "accuracy": 0.0,
+            "count": 8,
+            "entropy": 2.209623098373413,
+            "mean_reciprocal_rank": 0.02945898286998272,
+            "nll": 21.590742111206055,
+            "top3_accuracy": 0.0,
+            "top5_accuracy": 0.0
+          },
+          "joint_move_accuracy": 0.0,
+          "source_given_predicted_destination": {
+            "accuracy": 0.25,
+            "count": 8,
+            "entropy": 2.2479970455169678,
+            "mean_reciprocal_rank": 0.352838397026062,
+            "nll": 4.404752731323242,
+            "top3_accuracy": 0.375,
+            "top5_accuracy": 0.375
+          },
+          "source_given_true_destination": {
+            "accuracy": 0.125,
+            "count": 8,
+            "entropy": 1.7855626344680786,
+            "mean_reciprocal_rank": 0.17555424571037292,
+            "nll": 9.884147644042969,
+            "top3_accuracy": 0.125,
+            "top5_accuracy": 0.125
+          }
+        },
+        "source_frequency_baseline": {
+          "accuracy": 0.0,
+          "count": 8,
+          "entropy": 4.07547252763803,
+          "mean_reciprocal_rank": 0.10476190596818924,
+          "nll": 4.217406621768227,
+          "top3_accuracy": 0.0,
+          "top5_accuracy": 0.375
+        },
+        "source_training": {
+          "batch_size": 64,
+          "epochs": 1,
+          "feature_width": 1024,
+          "final_loss": 7.717508316040039,
+          "group_balanced_loss": true,
+          "initial_loss": 7.717508316040039,
+          "learning_rate": 0.01,
+          "per_square_bias": false,
+          "rank": 32,
+          "replication": {
+            "architecture_match": false,
+            "official_code_commit": "da19a5905375570995dace848c94c794bef70347",
+            "paper": "Jenner et al., Evidence of Learned Look-Ahead (NeurIPS 2024)"
+          },
+          "schema_version": "bt4-bilinear-lookahead-probe-v1",
+          "seed": 20312210,
+          "shuffle": true,
+          "training_examples": 24,
+          "weight_decay": 0.0
+        }
+      },
+      "paired_evaluation": {
+        "destination_accuracy": {
+          "ci_high": 0.375,
+          "ci_low": 0.0,
+          "confidence": 0.95,
+          "delta_hero_minus_raw": 0.125,
+          "group_count": 8,
+          "hero": 0.25,
+          "raw": 0.125,
+          "replicates": 100
+        },
+        "joint_move_accuracy": {
+          "ci_high": 0.0,
+          "ci_low": 0.0,
+          "confidence": 0.95,
+          "delta_hero_minus_raw": 0.0,
+          "group_count": 8,
+          "hero": 0.0,
+          "raw": 0.0,
+          "replicates": 100
+        },
+        "source_given_predicted_destination_accuracy": {
+          "ci_high": -0.125,
+          "ci_low": -0.75,
+          "confidence": 0.95,
+          "delta_hero_minus_raw": -0.375,
+          "group_count": 8,
+          "hero": 0.25,
+          "raw": 0.625,
+          "replicates": 100
+        }
+      },
+      "raw": {
+        "destination_frequency_baseline": {
+          "accuracy": 0.0,
+          "count": 8,
+          "entropy": 4.055857840879953,
+          "mean_reciprocal_rank": 0.14298245310783386,
+          "nll": 4.080080085684713,
+          "top3_accuracy": 0.125,
+          "top5_accuracy": 0.5
+        },
+        "destination_training": {
+          "batch_size": 64,
+          "epochs": 1,
+          "feature_width": 1024,
+          "final_loss": 6.055624643961589,
+          "group_balanced_loss": true,
+          "initial_loss": 6.055624643961589,
+          "learning_rate": 0.01,
+          "per_square_bias": false,
+          "rank": 32,
+          "replication": {
+            "architecture_match": false,
+            "official_code_commit": "da19a5905375570995dace848c94c794bef70347",
+            "paper": "Jenner et al., Evidence of Learned Look-Ahead (NeurIPS 2024)"
+          },
+          "schema_version": "bt4-bilinear-lookahead-probe-v1",
+          "seed": 20312208,
+          "shuffle": true,
+          "training_examples": 24,
+          "weight_decay": 0.0
+        },
+        "evaluation": {
+          "destination": {
+            "accuracy": 0.125,
+            "count": 8,
+            "entropy": 1.1730875968933105,
+            "mean_reciprocal_rank": 0.3475053608417511,
+            "nll": 16.066200256347656,
+            "top3_accuracy": 0.5,
+            "top5_accuracy": 0.5
+          },
+          "joint_move_accuracy": 0.0,
+          "source_given_predicted_destination": {
+            "accuracy": 0.625,
+            "count": 8,
+            "entropy": 0.7748159170150757,
+            "mean_reciprocal_rank": 0.6617026329040527,
+            "nll": 4.5274763107299805,
+            "top3_accuracy": 0.625,
+            "top5_accuracy": 0.75
+          },
+          "source_given_true_destination": {
+            "accuracy": 0.375,
+            "count": 8,
+            "entropy": 0.21501348912715912,
+            "mean_reciprocal_rank": 0.4546625018119812,
+            "nll": 8.542322158813477,
+            "top3_accuracy": 0.5,
+            "top5_accuracy": 0.625
+          }
+        },
+        "label_permutation_control": {
+          "destination": {
+            "accuracy": 0.0,
+            "count": 8,
+            "entropy": 1.8936762809753418,
+            "mean_reciprocal_rank": 0.03567187860608101,
+            "nll": 18.28915786743164,
+            "top3_accuracy": 0.0,
+            "top5_accuracy": 0.0
+          },
+          "joint_move_accuracy": 0.0,
+          "source_given_predicted_destination": {
+            "accuracy": 0.125,
+            "count": 8,
+            "entropy": 2.69034481048584,
+            "mean_reciprocal_rank": 0.16479305922985077,
+            "nll": 17.364517211914062,
+            "top3_accuracy": 0.125,
+            "top5_accuracy": 0.25
+          },
+          "source_given_true_destination": {
+            "accuracy": 0.125,
+            "count": 8,
+            "entropy": 3.3940863609313965,
+            "mean_reciprocal_rank": 0.15561826527118683,
+            "nll": 10.521078109741211,
+            "top3_accuracy": 0.125,
+            "top5_accuracy": 0.125
+          }
+        },
+        "source_frequency_baseline": {
+          "accuracy": 0.0,
+          "count": 8,
+          "entropy": 4.07547252763803,
+          "mean_reciprocal_rank": 0.10476190596818924,
+          "nll": 4.217406621768227,
+          "top3_accuracy": 0.0,
+          "top5_accuracy": 0.375
+        },
+        "source_training": {
+          "batch_size": 64,
+          "epochs": 1,
+          "feature_width": 1024,
+          "final_loss": 5.389952341715495,
+          "group_balanced_loss": true,
+          "initial_loss": 5.389952341715495,
+          "learning_rate": 0.01,
+          "per_square_bias": false,
+          "rank": 32,
+          "replication": {
+            "architecture_match": false,
+            "official_code_commit": "da19a5905375570995dace848c94c794bef70347",
+            "paper": "Jenner et al., Evidence of Learned Look-Ahead (NeurIPS 2024)"
+          },
+          "schema_version": "bt4-bilinear-lookahead-probe-v1",
+          "seed": 20312209,
+          "shuffle": true,
+          "training_examples": 24,
+          "weight_decay": 0.0
+        }
+      }
+    }
+  },
+  "schema_version": "bt4-raw-hero-probe-lookahead-metrics-v1",
+  "scope": "exploratory nested-development pilot",
+  "split_counts": {
+    "evaluation": 8,
+    "fit": 16,
+    "selection": 8
+  }
+}

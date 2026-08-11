@@ -1,0 +1,6236 @@
+{
+  "adamw_leaf_count": 366,
+  "bt4_leaf_count": 411,
+  "leaf_count": 462,
+  "leaves": [
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.float32",
+      "has_master_parameter": false,
+      "learning_rate_kind": "main",
+      "master_parameter_dtype": null,
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "time_embed1",
+      "shape": [
+        1,
+        256
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.float32",
+      "has_master_parameter": false,
+      "learning_rate_kind": "main",
+      "master_parameter_dtype": null,
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "time_embed2",
+      "shape": [
+        256,
+        256
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.float32",
+      "has_master_parameter": false,
+      "learning_rate_kind": "main",
+      "master_parameter_dtype": null,
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "time_bias",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.float32",
+      "has_master_parameter": false,
+      "learning_rate_kind": "main",
+      "master_parameter_dtype": null,
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "pos_embed",
+      "shape": [
+        8,
+        256
+      ]
+    },
+    {
+      "apply_weight_decay": true,
+      "dtype": "torch.float32",
+      "has_master_parameter": false,
+      "learning_rate_kind": "main",
+      "master_parameter_dtype": null,
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "out_proj",
+      "shape": [
+        256,
+        1858
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.float32",
+      "has_master_parameter": false,
+      "learning_rate_kind": "main",
+      "master_parameter_dtype": null,
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "out_bias",
+      "shape": [
+        1858
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.embedding.mul_gate",
+      "shape": [
+        64,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.embedding.add_gate",
+      "shape": [
+        64,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.embedding.preproc.w",
+      "shape": [
+        768,
+        32768
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.embedding.preproc.b",
+      "shape": [
+        32768
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.embedding.proj.w",
+      "shape": [
+        624,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.embedding.proj.b",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.embedding.ln.scale",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.embedding.ln.bias",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.embedding.ffn1.w",
+      "shape": [
+        1024,
+        1536
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.embedding.ffn1.b",
+      "shape": [
+        1536
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.embedding.ffn2.w",
+      "shape": [
+        1536,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.embedding.ffn2.b",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.embedding.ffn_ln.scale",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.embedding.ffn_ln.bias",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.0.wq",
+      "shape": [
+        1024,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.0.wq_b",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.0.wk",
+      "shape": [
+        1024,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.0.wk_b",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.0.wv",
+      "shape": [
+        1024,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.0.wv_b",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.0.wo.w",
+      "shape": [
+        1024,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.0.wo.b",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.0.ln_attn.scale",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.0.ln_attn.bias",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.0.ffn1.w",
+      "shape": [
+        1024,
+        1536
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.0.ffn1.b",
+      "shape": [
+        1536
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.0.ffn2.w",
+      "shape": [
+        1536,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.0.ffn2.b",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.0.ln_ffn.scale",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.0.ln_ffn.bias",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.0.smolgen.shared_w",
+      "shape": [
+        256,
+        4096
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.0.smolgen.compress.w",
+      "shape": [
+        1024,
+        32
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.0.smolgen.dense1.w",
+      "shape": [
+        2048,
+        256
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.0.smolgen.dense1.b",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.0.smolgen.ln1.scale",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.0.smolgen.ln1.bias",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.0.smolgen.dense2.w",
+      "shape": [
+        256,
+        8192
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.0.smolgen.dense2.b",
+      "shape": [
+        8192
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.0.smolgen.ln2.scale",
+      "shape": [
+        8192
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.0.smolgen.ln2.bias",
+      "shape": [
+        8192
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.1.wq",
+      "shape": [
+        1024,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.1.wq_b",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.1.wk",
+      "shape": [
+        1024,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.1.wk_b",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.1.wv",
+      "shape": [
+        1024,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.1.wv_b",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.1.wo.w",
+      "shape": [
+        1024,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.1.wo.b",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.1.ln_attn.scale",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.1.ln_attn.bias",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.1.ffn1.w",
+      "shape": [
+        1024,
+        1536
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.1.ffn1.b",
+      "shape": [
+        1536
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.1.ffn2.w",
+      "shape": [
+        1536,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.1.ffn2.b",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.1.ln_ffn.scale",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.1.ln_ffn.bias",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.1.smolgen.shared_w",
+      "shape": [
+        256,
+        4096
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.1.smolgen.compress.w",
+      "shape": [
+        1024,
+        32
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.1.smolgen.dense1.w",
+      "shape": [
+        2048,
+        256
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.1.smolgen.dense1.b",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.1.smolgen.ln1.scale",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.1.smolgen.ln1.bias",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.1.smolgen.dense2.w",
+      "shape": [
+        256,
+        8192
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.1.smolgen.dense2.b",
+      "shape": [
+        8192
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.1.smolgen.ln2.scale",
+      "shape": [
+        8192
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.1.smolgen.ln2.bias",
+      "shape": [
+        8192
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.2.wq",
+      "shape": [
+        1024,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.2.wq_b",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.2.wk",
+      "shape": [
+        1024,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.2.wk_b",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.2.wv",
+      "shape": [
+        1024,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.2.wv_b",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.2.wo.w",
+      "shape": [
+        1024,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.2.wo.b",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.2.ln_attn.scale",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.2.ln_attn.bias",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.2.ffn1.w",
+      "shape": [
+        1024,
+        1536
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.2.ffn1.b",
+      "shape": [
+        1536
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.2.ffn2.w",
+      "shape": [
+        1536,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.2.ffn2.b",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.2.ln_ffn.scale",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.2.ln_ffn.bias",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.2.smolgen.shared_w",
+      "shape": [
+        256,
+        4096
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.2.smolgen.compress.w",
+      "shape": [
+        1024,
+        32
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.2.smolgen.dense1.w",
+      "shape": [
+        2048,
+        256
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.2.smolgen.dense1.b",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.2.smolgen.ln1.scale",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.2.smolgen.ln1.bias",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.2.smolgen.dense2.w",
+      "shape": [
+        256,
+        8192
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.2.smolgen.dense2.b",
+      "shape": [
+        8192
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.2.smolgen.ln2.scale",
+      "shape": [
+        8192
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.2.smolgen.ln2.bias",
+      "shape": [
+        8192
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.3.wq",
+      "shape": [
+        1024,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.3.wq_b",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.3.wk",
+      "shape": [
+        1024,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.3.wk_b",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.3.wv",
+      "shape": [
+        1024,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.3.wv_b",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.3.wo.w",
+      "shape": [
+        1024,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.3.wo.b",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.3.ln_attn.scale",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.3.ln_attn.bias",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.3.ffn1.w",
+      "shape": [
+        1024,
+        1536
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.3.ffn1.b",
+      "shape": [
+        1536
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.3.ffn2.w",
+      "shape": [
+        1536,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.3.ffn2.b",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.3.ln_ffn.scale",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.3.ln_ffn.bias",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.3.smolgen.shared_w",
+      "shape": [
+        256,
+        4096
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.3.smolgen.compress.w",
+      "shape": [
+        1024,
+        32
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.3.smolgen.dense1.w",
+      "shape": [
+        2048,
+        256
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.3.smolgen.dense1.b",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.3.smolgen.ln1.scale",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.3.smolgen.ln1.bias",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.3.smolgen.dense2.w",
+      "shape": [
+        256,
+        8192
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.3.smolgen.dense2.b",
+      "shape": [
+        8192
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.3.smolgen.ln2.scale",
+      "shape": [
+        8192
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.3.smolgen.ln2.bias",
+      "shape": [
+        8192
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.4.wq",
+      "shape": [
+        1024,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.4.wq_b",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.4.wk",
+      "shape": [
+        1024,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.4.wk_b",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.4.wv",
+      "shape": [
+        1024,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.4.wv_b",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.4.wo.w",
+      "shape": [
+        1024,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.4.wo.b",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.4.ln_attn.scale",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.4.ln_attn.bias",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.4.ffn1.w",
+      "shape": [
+        1024,
+        1536
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.4.ffn1.b",
+      "shape": [
+        1536
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.4.ffn2.w",
+      "shape": [
+        1536,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.4.ffn2.b",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.4.ln_ffn.scale",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.4.ln_ffn.bias",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.4.smolgen.shared_w",
+      "shape": [
+        256,
+        4096
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.4.smolgen.compress.w",
+      "shape": [
+        1024,
+        32
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.4.smolgen.dense1.w",
+      "shape": [
+        2048,
+        256
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.4.smolgen.dense1.b",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.4.smolgen.ln1.scale",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.4.smolgen.ln1.bias",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.4.smolgen.dense2.w",
+      "shape": [
+        256,
+        8192
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.4.smolgen.dense2.b",
+      "shape": [
+        8192
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.4.smolgen.ln2.scale",
+      "shape": [
+        8192
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.4.smolgen.ln2.bias",
+      "shape": [
+        8192
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.5.wq",
+      "shape": [
+        1024,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.5.wq_b",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.5.wk",
+      "shape": [
+        1024,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.5.wk_b",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.5.wv",
+      "shape": [
+        1024,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.5.wv_b",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.5.wo.w",
+      "shape": [
+        1024,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.5.wo.b",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.5.ln_attn.scale",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.5.ln_attn.bias",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.5.ffn1.w",
+      "shape": [
+        1024,
+        1536
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.5.ffn1.b",
+      "shape": [
+        1536
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.5.ffn2.w",
+      "shape": [
+        1536,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.5.ffn2.b",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.5.ln_ffn.scale",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.5.ln_ffn.bias",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.5.smolgen.shared_w",
+      "shape": [
+        256,
+        4096
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.5.smolgen.compress.w",
+      "shape": [
+        1024,
+        32
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.5.smolgen.dense1.w",
+      "shape": [
+        2048,
+        256
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.5.smolgen.dense1.b",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.5.smolgen.ln1.scale",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.5.smolgen.ln1.bias",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.5.smolgen.dense2.w",
+      "shape": [
+        256,
+        8192
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.5.smolgen.dense2.b",
+      "shape": [
+        8192
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.5.smolgen.ln2.scale",
+      "shape": [
+        8192
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.5.smolgen.ln2.bias",
+      "shape": [
+        8192
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.6.wq",
+      "shape": [
+        1024,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.6.wq_b",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.6.wk",
+      "shape": [
+        1024,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.6.wk_b",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.6.wv",
+      "shape": [
+        1024,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.6.wv_b",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.6.wo.w",
+      "shape": [
+        1024,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.6.wo.b",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.6.ln_attn.scale",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.6.ln_attn.bias",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.6.ffn1.w",
+      "shape": [
+        1024,
+        1536
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.6.ffn1.b",
+      "shape": [
+        1536
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.6.ffn2.w",
+      "shape": [
+        1536,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.6.ffn2.b",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.6.ln_ffn.scale",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.6.ln_ffn.bias",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.6.smolgen.shared_w",
+      "shape": [
+        256,
+        4096
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.6.smolgen.compress.w",
+      "shape": [
+        1024,
+        32
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.6.smolgen.dense1.w",
+      "shape": [
+        2048,
+        256
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.6.smolgen.dense1.b",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.6.smolgen.ln1.scale",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.6.smolgen.ln1.bias",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.6.smolgen.dense2.w",
+      "shape": [
+        256,
+        8192
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.6.smolgen.dense2.b",
+      "shape": [
+        8192
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.6.smolgen.ln2.scale",
+      "shape": [
+        8192
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.6.smolgen.ln2.bias",
+      "shape": [
+        8192
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.7.wq",
+      "shape": [
+        1024,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.7.wq_b",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.7.wk",
+      "shape": [
+        1024,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.7.wk_b",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.7.wv",
+      "shape": [
+        1024,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.7.wv_b",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.7.wo.w",
+      "shape": [
+        1024,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.7.wo.b",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.7.ln_attn.scale",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.7.ln_attn.bias",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.7.ffn1.w",
+      "shape": [
+        1024,
+        1536
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.7.ffn1.b",
+      "shape": [
+        1536
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.7.ffn2.w",
+      "shape": [
+        1536,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.7.ffn2.b",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.7.ln_ffn.scale",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.7.ln_ffn.bias",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.7.smolgen.shared_w",
+      "shape": [
+        256,
+        4096
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.7.smolgen.compress.w",
+      "shape": [
+        1024,
+        32
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.7.smolgen.dense1.w",
+      "shape": [
+        2048,
+        256
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.7.smolgen.dense1.b",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.7.smolgen.ln1.scale",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.7.smolgen.ln1.bias",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.7.smolgen.dense2.w",
+      "shape": [
+        256,
+        8192
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.7.smolgen.dense2.b",
+      "shape": [
+        8192
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.7.smolgen.ln2.scale",
+      "shape": [
+        8192
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.7.smolgen.ln2.bias",
+      "shape": [
+        8192
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.8.wq",
+      "shape": [
+        1024,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.8.wq_b",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.8.wk",
+      "shape": [
+        1024,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.8.wk_b",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.8.wv",
+      "shape": [
+        1024,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.8.wv_b",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.8.wo.w",
+      "shape": [
+        1024,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.8.wo.b",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.8.ln_attn.scale",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.8.ln_attn.bias",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.8.ffn1.w",
+      "shape": [
+        1024,
+        1536
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.8.ffn1.b",
+      "shape": [
+        1536
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.8.ffn2.w",
+      "shape": [
+        1536,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.8.ffn2.b",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.8.ln_ffn.scale",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.8.ln_ffn.bias",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.8.smolgen.shared_w",
+      "shape": [
+        256,
+        4096
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.8.smolgen.compress.w",
+      "shape": [
+        1024,
+        32
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.8.smolgen.dense1.w",
+      "shape": [
+        2048,
+        256
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.8.smolgen.dense1.b",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.8.smolgen.ln1.scale",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.8.smolgen.ln1.bias",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.8.smolgen.dense2.w",
+      "shape": [
+        256,
+        8192
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.8.smolgen.dense2.b",
+      "shape": [
+        8192
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.8.smolgen.ln2.scale",
+      "shape": [
+        8192
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.8.smolgen.ln2.bias",
+      "shape": [
+        8192
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.9.wq",
+      "shape": [
+        1024,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.9.wq_b",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.9.wk",
+      "shape": [
+        1024,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.9.wk_b",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.9.wv",
+      "shape": [
+        1024,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.9.wv_b",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.9.wo.w",
+      "shape": [
+        1024,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.9.wo.b",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.9.ln_attn.scale",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.9.ln_attn.bias",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.9.ffn1.w",
+      "shape": [
+        1024,
+        1536
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.9.ffn1.b",
+      "shape": [
+        1536
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.9.ffn2.w",
+      "shape": [
+        1536,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.9.ffn2.b",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.9.ln_ffn.scale",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.9.ln_ffn.bias",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.9.smolgen.shared_w",
+      "shape": [
+        256,
+        4096
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.9.smolgen.compress.w",
+      "shape": [
+        1024,
+        32
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.9.smolgen.dense1.w",
+      "shape": [
+        2048,
+        256
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.9.smolgen.dense1.b",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.9.smolgen.ln1.scale",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.9.smolgen.ln1.bias",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.9.smolgen.dense2.w",
+      "shape": [
+        256,
+        8192
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.9.smolgen.dense2.b",
+      "shape": [
+        8192
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.9.smolgen.ln2.scale",
+      "shape": [
+        8192
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.9.smolgen.ln2.bias",
+      "shape": [
+        8192
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.10.wq",
+      "shape": [
+        1024,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.10.wq_b",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.10.wk",
+      "shape": [
+        1024,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.10.wk_b",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.10.wv",
+      "shape": [
+        1024,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.10.wv_b",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.10.wo.w",
+      "shape": [
+        1024,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.10.wo.b",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.10.ln_attn.scale",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.10.ln_attn.bias",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.10.ffn1.w",
+      "shape": [
+        1024,
+        1536
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.10.ffn1.b",
+      "shape": [
+        1536
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.10.ffn2.w",
+      "shape": [
+        1536,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.10.ffn2.b",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.10.ln_ffn.scale",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.10.ln_ffn.bias",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.10.smolgen.shared_w",
+      "shape": [
+        256,
+        4096
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.10.smolgen.compress.w",
+      "shape": [
+        1024,
+        32
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.10.smolgen.dense1.w",
+      "shape": [
+        2048,
+        256
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.10.smolgen.dense1.b",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.10.smolgen.ln1.scale",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.10.smolgen.ln1.bias",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.10.smolgen.dense2.w",
+      "shape": [
+        256,
+        8192
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.10.smolgen.dense2.b",
+      "shape": [
+        8192
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.10.smolgen.ln2.scale",
+      "shape": [
+        8192
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.10.smolgen.ln2.bias",
+      "shape": [
+        8192
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.11.wq",
+      "shape": [
+        1024,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.11.wq_b",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.11.wk",
+      "shape": [
+        1024,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.11.wk_b",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.11.wv",
+      "shape": [
+        1024,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.11.wv_b",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.11.wo.w",
+      "shape": [
+        1024,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.11.wo.b",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.11.ln_attn.scale",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.11.ln_attn.bias",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.11.ffn1.w",
+      "shape": [
+        1024,
+        1536
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.11.ffn1.b",
+      "shape": [
+        1536
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.11.ffn2.w",
+      "shape": [
+        1536,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.11.ffn2.b",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.11.ln_ffn.scale",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.11.ln_ffn.bias",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.11.smolgen.shared_w",
+      "shape": [
+        256,
+        4096
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.11.smolgen.compress.w",
+      "shape": [
+        1024,
+        32
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.11.smolgen.dense1.w",
+      "shape": [
+        2048,
+        256
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.11.smolgen.dense1.b",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.11.smolgen.ln1.scale",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.11.smolgen.ln1.bias",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.11.smolgen.dense2.w",
+      "shape": [
+        256,
+        8192
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.11.smolgen.dense2.b",
+      "shape": [
+        8192
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.11.smolgen.ln2.scale",
+      "shape": [
+        8192
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.11.smolgen.ln2.bias",
+      "shape": [
+        8192
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.12.wq",
+      "shape": [
+        1024,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.12.wq_b",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.12.wk",
+      "shape": [
+        1024,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.12.wk_b",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.12.wv",
+      "shape": [
+        1024,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.12.wv_b",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.12.wo.w",
+      "shape": [
+        1024,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.12.wo.b",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.12.ln_attn.scale",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.12.ln_attn.bias",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.12.ffn1.w",
+      "shape": [
+        1024,
+        1536
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.12.ffn1.b",
+      "shape": [
+        1536
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.12.ffn2.w",
+      "shape": [
+        1536,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.12.ffn2.b",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.12.ln_ffn.scale",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.12.ln_ffn.bias",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.12.smolgen.shared_w",
+      "shape": [
+        256,
+        4096
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.12.smolgen.compress.w",
+      "shape": [
+        1024,
+        32
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.12.smolgen.dense1.w",
+      "shape": [
+        2048,
+        256
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.12.smolgen.dense1.b",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.12.smolgen.ln1.scale",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.12.smolgen.ln1.bias",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.12.smolgen.dense2.w",
+      "shape": [
+        256,
+        8192
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.12.smolgen.dense2.b",
+      "shape": [
+        8192
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.12.smolgen.ln2.scale",
+      "shape": [
+        8192
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.12.smolgen.ln2.bias",
+      "shape": [
+        8192
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.13.wq",
+      "shape": [
+        1024,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.13.wq_b",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.13.wk",
+      "shape": [
+        1024,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.13.wk_b",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.13.wv",
+      "shape": [
+        1024,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.13.wv_b",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.13.wo.w",
+      "shape": [
+        1024,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.13.wo.b",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.13.ln_attn.scale",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.13.ln_attn.bias",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.13.ffn1.w",
+      "shape": [
+        1024,
+        1536
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.13.ffn1.b",
+      "shape": [
+        1536
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.13.ffn2.w",
+      "shape": [
+        1536,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.13.ffn2.b",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.13.ln_ffn.scale",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.13.ln_ffn.bias",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.13.smolgen.shared_w",
+      "shape": [
+        256,
+        4096
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.13.smolgen.compress.w",
+      "shape": [
+        1024,
+        32
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.13.smolgen.dense1.w",
+      "shape": [
+        2048,
+        256
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.13.smolgen.dense1.b",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.13.smolgen.ln1.scale",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.13.smolgen.ln1.bias",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.13.smolgen.dense2.w",
+      "shape": [
+        256,
+        8192
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.13.smolgen.dense2.b",
+      "shape": [
+        8192
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.13.smolgen.ln2.scale",
+      "shape": [
+        8192
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.13.smolgen.ln2.bias",
+      "shape": [
+        8192
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.14.wq",
+      "shape": [
+        1024,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.14.wq_b",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.14.wk",
+      "shape": [
+        1024,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.14.wk_b",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.14.wv",
+      "shape": [
+        1024,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.14.wv_b",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.14.wo.w",
+      "shape": [
+        1024,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.14.wo.b",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.14.ln_attn.scale",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.14.ln_attn.bias",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.14.ffn1.w",
+      "shape": [
+        1024,
+        1536
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.14.ffn1.b",
+      "shape": [
+        1536
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.14.ffn2.w",
+      "shape": [
+        1536,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.14.ffn2.b",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.14.ln_ffn.scale",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.14.ln_ffn.bias",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.14.smolgen.shared_w",
+      "shape": [
+        256,
+        4096
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.14.smolgen.compress.w",
+      "shape": [
+        1024,
+        32
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.14.smolgen.dense1.w",
+      "shape": [
+        2048,
+        256
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.14.smolgen.dense1.b",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.14.smolgen.ln1.scale",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.14.smolgen.ln1.bias",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.14.smolgen.dense2.w",
+      "shape": [
+        256,
+        8192
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.14.smolgen.dense2.b",
+      "shape": [
+        8192
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.14.smolgen.ln2.scale",
+      "shape": [
+        8192
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.layers.14.smolgen.ln2.bias",
+      "shape": [
+        8192
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.policy_head.prom_w",
+      "shape": [
+        1024,
+        4
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.policy_head.dense1.w",
+      "shape": [
+        1024,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.policy_head.dense1.b",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.policy_head.q.w",
+      "shape": [
+        1024,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.policy_head.q.b",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.policy_head.k.w",
+      "shape": [
+        1024,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.bfloat16",
+      "has_master_parameter": true,
+      "learning_rate_kind": "bt4",
+      "master_parameter_dtype": "torch.float32",
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "encoder.policy_head.k.b",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": true,
+      "dtype": "torch.float32",
+      "has_master_parameter": false,
+      "learning_rate_kind": "main",
+      "master_parameter_dtype": null,
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "state_projector.in_proj",
+      "shape": [
+        1024,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.float32",
+      "has_master_parameter": false,
+      "learning_rate_kind": "main",
+      "master_parameter_dtype": null,
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "state_projector.in_bias",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": true,
+      "dtype": "torch.float32",
+      "has_master_parameter": false,
+      "learning_rate_kind": "main",
+      "master_parameter_dtype": null,
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "state_projector.cls",
+      "shape": [
+        1,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.float32",
+      "has_master_parameter": false,
+      "learning_rate_kind": "main",
+      "master_parameter_dtype": null,
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "state_projector.pos_embed",
+      "shape": [
+        65,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.float32",
+      "has_master_parameter": false,
+      "learning_rate_kind": "main",
+      "master_parameter_dtype": null,
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "state_projector.blocks.attn_norm_scale",
+      "shape": [
+        2,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.float32",
+      "has_master_parameter": false,
+      "learning_rate_kind": "main",
+      "master_parameter_dtype": null,
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "state_projector.blocks.mlp_norm_scale",
+      "shape": [
+        2,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.float32",
+      "has_master_parameter": false,
+      "learning_rate_kind": "main",
+      "master_parameter_dtype": null,
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "state_projector.blocks.w_qkv",
+      "shape": [
+        2,
+        1024,
+        3072
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.float32",
+      "has_master_parameter": false,
+      "learning_rate_kind": "main",
+      "master_parameter_dtype": null,
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "state_projector.blocks.b_qkv",
+      "shape": [
+        2,
+        3072
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.float32",
+      "has_master_parameter": false,
+      "learning_rate_kind": "main",
+      "master_parameter_dtype": null,
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "state_projector.blocks.w_o",
+      "shape": [
+        2,
+        1024,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.float32",
+      "has_master_parameter": false,
+      "learning_rate_kind": "main",
+      "master_parameter_dtype": null,
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "state_projector.blocks.b_o",
+      "shape": [
+        2,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.float32",
+      "has_master_parameter": false,
+      "learning_rate_kind": "main",
+      "master_parameter_dtype": null,
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "state_projector.blocks.w_gate_up",
+      "shape": [
+        2,
+        1024,
+        5632
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.float32",
+      "has_master_parameter": false,
+      "learning_rate_kind": "main",
+      "master_parameter_dtype": null,
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "state_projector.blocks.b_gate_up",
+      "shape": [
+        2,
+        5632
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.float32",
+      "has_master_parameter": false,
+      "learning_rate_kind": "main",
+      "master_parameter_dtype": null,
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "state_projector.blocks.w_down",
+      "shape": [
+        2,
+        2816,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.float32",
+      "has_master_parameter": false,
+      "learning_rate_kind": "main",
+      "master_parameter_dtype": null,
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "state_projector.blocks.b_down",
+      "shape": [
+        2,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": true,
+      "dtype": "torch.float32",
+      "has_master_parameter": false,
+      "learning_rate_kind": "main",
+      "master_parameter_dtype": null,
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "dfm_state_projector.w",
+      "shape": [
+        1024,
+        256
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.float32",
+      "has_master_parameter": false,
+      "learning_rate_kind": "main",
+      "master_parameter_dtype": null,
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "dfm_state_projector.b",
+      "shape": [
+        256
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.float32",
+      "has_master_parameter": false,
+      "learning_rate_kind": "main",
+      "master_parameter_dtype": null,
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "jepa_action_embed.embedding",
+      "shape": [
+        1859,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": true,
+      "dtype": "torch.float32",
+      "has_master_parameter": false,
+      "learning_rate_kind": "main",
+      "master_parameter_dtype": null,
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "jepa_hidden_adapter.w",
+      "shape": [
+        256,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.float32",
+      "has_master_parameter": false,
+      "learning_rate_kind": "main",
+      "master_parameter_dtype": null,
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "jepa_hidden_adapter.b",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.float32",
+      "has_master_parameter": false,
+      "learning_rate_kind": "main",
+      "master_parameter_dtype": null,
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "jepa_transition.norm_scale",
+      "shape": [
+        4,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": true,
+      "dtype": "torch.float32",
+      "has_master_parameter": false,
+      "learning_rate_kind": "main",
+      "master_parameter_dtype": null,
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "jepa_transition.cond_w",
+      "shape": [
+        4,
+        1024,
+        2048
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.float32",
+      "has_master_parameter": false,
+      "learning_rate_kind": "main",
+      "master_parameter_dtype": null,
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "jepa_transition.cond_b",
+      "shape": [
+        4,
+        2048
+      ]
+    },
+    {
+      "apply_weight_decay": true,
+      "dtype": "torch.float32",
+      "has_master_parameter": false,
+      "learning_rate_kind": "main",
+      "master_parameter_dtype": null,
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "jepa_transition.w_gate_up",
+      "shape": [
+        4,
+        1024,
+        5632
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.float32",
+      "has_master_parameter": false,
+      "learning_rate_kind": "main",
+      "master_parameter_dtype": null,
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "jepa_transition.b_gate_up",
+      "shape": [
+        4,
+        5632
+      ]
+    },
+    {
+      "apply_weight_decay": true,
+      "dtype": "torch.float32",
+      "has_master_parameter": false,
+      "learning_rate_kind": "main",
+      "master_parameter_dtype": null,
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "jepa_transition.w_down",
+      "shape": [
+        4,
+        2816,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.float32",
+      "has_master_parameter": false,
+      "learning_rate_kind": "main",
+      "master_parameter_dtype": null,
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "jepa_transition.b_down",
+      "shape": [
+        4,
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.float32",
+      "has_master_parameter": false,
+      "learning_rate_kind": "main",
+      "master_parameter_dtype": null,
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "jepa_state_norm.scale",
+      "shape": [
+        1024
+      ]
+    },
+    {
+      "apply_weight_decay": true,
+      "dtype": "torch.float32",
+      "has_master_parameter": false,
+      "learning_rate_kind": "main",
+      "master_parameter_dtype": null,
+      "optimizer": "muon",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "value_wdl_head.w1",
+      "shape": [
+        1024,
+        2048
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.float32",
+      "has_master_parameter": false,
+      "learning_rate_kind": "main",
+      "master_parameter_dtype": null,
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "value_wdl_head.b1",
+      "shape": [
+        2048
+      ]
+    },
+    {
+      "apply_weight_decay": true,
+      "dtype": "torch.float32",
+      "has_master_parameter": false,
+      "learning_rate_kind": "main",
+      "master_parameter_dtype": null,
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "value_wdl_head.value_w",
+      "shape": [
+        2048,
+        1
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.float32",
+      "has_master_parameter": false,
+      "learning_rate_kind": "main",
+      "master_parameter_dtype": null,
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "value_wdl_head.value_b",
+      "shape": [
+        1
+      ]
+    },
+    {
+      "apply_weight_decay": true,
+      "dtype": "torch.float32",
+      "has_master_parameter": false,
+      "learning_rate_kind": "main",
+      "master_parameter_dtype": null,
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "value_wdl_head.wdl_w",
+      "shape": [
+        2048,
+        3
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.float32",
+      "has_master_parameter": false,
+      "learning_rate_kind": "main",
+      "master_parameter_dtype": null,
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "value_wdl_head.wdl_b",
+      "shape": [
+        3
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.float32",
+      "has_master_parameter": false,
+      "learning_rate_kind": "main",
+      "master_parameter_dtype": null,
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "action_embed.embedding",
+      "shape": [
+        1859,
+        256
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.float32",
+      "has_master_parameter": false,
+      "learning_rate_kind": "main",
+      "master_parameter_dtype": null,
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "dfm_blocks.attn_norm_scale",
+      "shape": [
+        4,
+        256
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.float32",
+      "has_master_parameter": false,
+      "learning_rate_kind": "main",
+      "master_parameter_dtype": null,
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "dfm_blocks.mlp_norm_scale",
+      "shape": [
+        4,
+        256
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.float32",
+      "has_master_parameter": false,
+      "learning_rate_kind": "main",
+      "master_parameter_dtype": null,
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "dfm_blocks.w_qkv",
+      "shape": [
+        4,
+        256,
+        768
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.float32",
+      "has_master_parameter": false,
+      "learning_rate_kind": "main",
+      "master_parameter_dtype": null,
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "dfm_blocks.b_qkv",
+      "shape": [
+        4,
+        768
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.float32",
+      "has_master_parameter": false,
+      "learning_rate_kind": "main",
+      "master_parameter_dtype": null,
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "dfm_blocks.w_o",
+      "shape": [
+        4,
+        256,
+        256
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.float32",
+      "has_master_parameter": false,
+      "learning_rate_kind": "main",
+      "master_parameter_dtype": null,
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "dfm_blocks.b_o",
+      "shape": [
+        4,
+        256
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.float32",
+      "has_master_parameter": false,
+      "learning_rate_kind": "main",
+      "master_parameter_dtype": null,
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "dfm_blocks.w_gate_up",
+      "shape": [
+        4,
+        256,
+        1536
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.float32",
+      "has_master_parameter": false,
+      "learning_rate_kind": "main",
+      "master_parameter_dtype": null,
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "dfm_blocks.b_gate_up",
+      "shape": [
+        4,
+        1536
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.float32",
+      "has_master_parameter": false,
+      "learning_rate_kind": "main",
+      "master_parameter_dtype": null,
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "dfm_blocks.w_down",
+      "shape": [
+        4,
+        768,
+        256
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.float32",
+      "has_master_parameter": false,
+      "learning_rate_kind": "main",
+      "master_parameter_dtype": null,
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "dfm_blocks.b_down",
+      "shape": [
+        4,
+        256
+      ]
+    },
+    {
+      "apply_weight_decay": false,
+      "dtype": "torch.float32",
+      "has_master_parameter": false,
+      "learning_rate_kind": "main",
+      "master_parameter_dtype": null,
+      "optimizer": "nesterov_adamw",
+      "optimizer_state_dtype": "torch.float32",
+      "path": "dfm_out_norm.scale",
+      "shape": [
+        256
+      ]
+    }
+  ],
+  "main_leaf_count": 51,
+  "master_parameter_count": 411,
+  "master_parameter_nbytes": 793834496,
+  "muon_leaf_count": 96,
+  "optimizer_policy": {
+    "precision": "fp32_master",
+    "schedule_kind": "warmup_stable_linear_decay",
+    "weight_decay_mode": "cautious",
+    "wsd_decay_examples": 1592115
+  },
+  "schema_version": "torch-muon-adamw-partition-v2"
+}

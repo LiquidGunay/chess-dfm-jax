@@ -1,0 +1,955 @@
+import dataclasses
+
+import ml_dtypes
+import numpy as np
+import pytest
+import torch
+
+try:
+    import jax
+    import jax.numpy as jnp
+
+    from chess_dfm_jax.nnx_bt4 import muon_adamw
+except ModuleNotFoundError as exc:
+    if (exc.name or "").split(".", 1)[0] not in {"flax", "jax", "optax"}:
+        raise
+    jax = None
+    jnp = None
+    muon_adamw = None
+import research.train_torch as train_torch_module
+from research.train_torch import (
+    CONFIG,
+    MuonAdamW,
+    OptimizerPolicy,
+    _LOSS_SUMMARY_METRICS,
+    _prepare_training_step,
+    _summarize_training_records,
+    load_checkpoint_model_for_evaluation,
+    load_checkpoint_numpy_tree_for_evaluation,
+    load_model_checkpoint,
+    load_model_checkpoint_numpy_tree,
+    load_training_checkpoint,
+    save_model_checkpoint,
+    save_training_checkpoint,
+)
+
+
+class TinyModel(torch.nn.Module):
+    def __init__(self, matrix: np.ndarray, bias: np.ndarray):
+        super().__init__()
+        self.matrix = torch.nn.Parameter(torch.from_numpy(matrix.copy()))
+        self.bias = torch.nn.Parameter(torch.from_numpy(bias.copy()))
+
+
+
+
+class TinyAdamModel(torch.nn.Module):
+    def __init__(self, values: np.ndarray):
+        super().__init__()
+        self.vector = torch.nn.Parameter(torch.from_numpy(values.copy()))
+
+
+class TinyHybridPrecisionModel(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.encoder = torch.nn.Linear(4, 4, bias=False)
+        self.head = torch.nn.Linear(4, 4, bias=False)
+
+
+class TinyTrunkPolicyPrecisionModel(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.encoder = torch.nn.Module()
+        self.encoder.trunk = torch.nn.Linear(4, 4, bias=False)
+        self.encoder.policy_head = torch.nn.Linear(4, 4, bias=False)
+        self.head = torch.nn.Linear(4, 4, bias=False)
+
+
+@pytest.fixture
+def checkpoint_workspace(tmp_path, monkeypatch):
+    monkeypatch.setattr(train_torch_module, "_WORKSPACE_ROOT", tmp_path)
+    return tmp_path
+
+
+@pytest.mark.skipif(jax is None, reason="optional JAX/Optax oracle is not installed")
+def test_torch_muon_adamw_matches_optax_for_two_updates():
+    rng = np.random.default_rng(7)
+    matrix = rng.standard_normal((128, 128), dtype=np.float32) * 0.02
+    bias = rng.standard_normal((128,), dtype=np.float32) * 0.02
+    gradient_rows = [
+        {
+            "matrix": rng.standard_normal((128, 128), dtype=np.float32) * 0.01,
+            "bias": rng.standard_normal((128,), dtype=np.float32) * 0.01,
+        }
+        for _ in range(2)
+    ]
+    learning_rate = 3e-3
+    weight_decay = 1e-4
+    config = dataclasses.replace(
+        CONFIG,
+        learning_rate=learning_rate,
+        bt4_learning_rate=learning_rate,
+        weight_decay=weight_decay,
+        grad_clip_norm=0.0,
+    )
+
+    torch_model = TinyModel(matrix, bias)
+    torch_optimizer = MuonAdamW(torch_model, config)
+    jax_params = {"matrix": jnp.asarray(matrix), "bias": jnp.asarray(bias)}
+    transform = muon_adamw(learning_rate, weight_decay)
+    jax_state = transform.init(jax_params)
+
+    for gradients in gradient_rows:
+        torch_model.matrix.grad = torch.from_numpy(gradients["matrix"].copy())
+        torch_model.bias.grad = torch.from_numpy(gradients["bias"].copy())
+        torch_optimizer.step()
+
+        jax_gradients = jax.tree.map(jnp.asarray, gradients)
+        updates, jax_state = transform.update(jax_gradients, jax_state, jax_params)
+        jax_params = jax.tree.map(
+            lambda parameter, update: parameter + update,
+            jax_params,
+            updates,
+        )
+
+        np.testing.assert_allclose(
+            torch_model.matrix.detach().numpy(),
+            np.asarray(jax_params["matrix"]),
+            rtol=2e-5,
+            atol=2e-6,
+        )
+        np.testing.assert_allclose(
+            torch_model.bias.detach().numpy(),
+            np.asarray(jax_params["bias"]),
+            rtol=2e-5,
+            atol=2e-6,
+        )
+
+
+def test_torch_optimizer_partition_and_schedule_contract():
+    with torch.device("meta"):
+        from research.train_torch import JointModel
+
+        model = JointModel(CONFIG)
+    optimizer = MuonAdamW(model, CONFIG)
+    manifest = optimizer.partition_manifest()
+
+    assert manifest["leaf_count"] == 455
+    assert manifest["bt4_leaf_count"] == 404
+    assert manifest["main_leaf_count"] == 51
+    assert manifest["muon_leaf_count"] > 0
+    assert manifest["adamw_leaf_count"] > 0
+    assert optimizer.learning_rate_ratio() == 1.0
+    optimizer.update = 400
+    assert optimizer.learning_rate_ratio() == 1.0
+    optimizer.update = 800
+    assert optimizer.learning_rate_ratio() == 0.55
+    optimizer.update = 1200
+    assert optimizer.learning_rate_ratio() == 0.1
+
+
+def test_wsd_schedule_has_warmup_plateau_and_terminal_linear_decay():
+    config = dataclasses.replace(
+        CONFIG,
+        lr_schedule_unit="examples",
+        lr_warmup_examples=20,
+        lr_total_examples=100,
+        lr_min_ratio=0.1,
+    )
+    policy = OptimizerPolicy(
+        schedule_kind="warmup_stable_linear_decay",
+        wsd_decay_examples=20,
+    )
+    optimizer = MuonAdamW(
+        TinyAdamModel(np.ones(4, dtype=np.float32)),
+        config,
+        policy=policy,
+        examples_per_update=10,
+    )
+
+    assert optimizer.learning_rate_ratio() == pytest.approx(0.5)
+    optimizer.examples_seen = 20
+    assert optimizer.learning_rate_ratio() == 1.0
+    optimizer.examples_seen = 70
+    assert optimizer.learning_rate_ratio() == 1.0
+    optimizer.examples_seen = 80
+    assert optimizer.learning_rate_ratio() == pytest.approx(0.55)
+    optimizer.examples_seen = 90
+    assert optimizer.learning_rate_ratio() == pytest.approx(0.1)
+
+
+def test_fp32_master_accumulates_sub_bfloat16_updates():
+    model = TinyAdamModel(np.ones(4, dtype=np.float32)).to(torch.bfloat16)
+    config = dataclasses.replace(
+        CONFIG,
+        learning_rate=1e-6,
+        bt4_learning_rate=1e-6,
+        weight_decay=0.0,
+        grad_clip_norm=0.0,
+    )
+    optimizer = MuonAdamW(
+        model,
+        config,
+        policy=OptimizerPolicy(precision="fp32_master"),
+    )
+    before = model.vector.detach().clone()
+    model.vector.grad = torch.ones_like(model.vector)
+    optimizer.step()
+
+    leaf = optimizer.leaves[0]
+    assert leaf.first_moment.dtype == torch.float32
+    assert leaf.second_moment is not None
+    assert leaf.second_moment.dtype == torch.float32
+    assert leaf.master_parameter is not None
+    assert leaf.master_parameter.dtype == torch.float32
+    torch.testing.assert_close(model.vector, before, rtol=0.0, atol=0.0)
+    assert not torch.equal(leaf.master_parameter, before.float())
+    torch.testing.assert_close(
+        model.vector,
+        leaf.master_parameter.to(torch.bfloat16),
+        rtol=0.0,
+        atol=0.0,
+    )
+    assert optimizer.partition_manifest()["schema_version"].endswith("v2")
+
+
+def test_encoder_fp32_master_partitions_state_and_master_weights_by_name():
+    model = TinyHybridPrecisionModel().to(torch.bfloat16)
+    config = dataclasses.replace(
+        CONFIG,
+        learning_rate=1e-6,
+        bt4_learning_rate=1e-6,
+        weight_decay=0.0,
+        grad_clip_norm=0.0,
+    )
+    optimizer = MuonAdamW(
+        model,
+        config,
+        policy=OptimizerPolicy(precision="encoder_fp32_master"),
+    )
+    leaves = {leaf.name: leaf for leaf in optimizer.leaves}
+    encoder_leaf = leaves["encoder.weight"]
+    main_leaf = leaves["head.weight"]
+
+    assert encoder_leaf.learning_rate_kind == "bt4"
+    assert encoder_leaf.first_moment.dtype == torch.float32
+    assert encoder_leaf.master_parameter is not None
+    assert encoder_leaf.master_parameter.dtype == torch.float32
+    assert main_leaf.learning_rate_kind == "main"
+    assert main_leaf.first_moment.dtype == torch.bfloat16
+    assert main_leaf.master_parameter is None
+
+    model.encoder.weight.grad = torch.ones_like(model.encoder.weight)
+    model.head.weight.grad = torch.ones_like(model.head.weight)
+    optimizer.step()
+    manifest = optimizer.partition_manifest()
+    manifest_leaves = {row["path"]: row for row in manifest["leaves"]}
+    assert manifest["master_parameter_count"] == 1
+    assert manifest_leaves["encoder.weight"]["optimizer_state_dtype"] == "torch.float32"
+    assert manifest_leaves["head.weight"]["optimizer_state_dtype"] == "torch.bfloat16"
+
+
+def test_encoder_trunk_fp32_master_excludes_policy_head_and_main_parameters():
+    model = TinyTrunkPolicyPrecisionModel().to(torch.bfloat16)
+    config = dataclasses.replace(
+        CONFIG,
+        learning_rate=1e-6,
+        bt4_learning_rate=1e-6,
+        weight_decay=0.0,
+        grad_clip_norm=0.0,
+    )
+    optimizer = MuonAdamW(
+        model,
+        config,
+        policy=OptimizerPolicy(precision="encoder_trunk_fp32_master"),
+    )
+    leaves = {leaf.name: leaf for leaf in optimizer.leaves}
+    trunk_leaf = leaves["encoder.trunk.weight"]
+    policy_leaf = leaves["encoder.policy_head.weight"]
+    main_leaf = leaves["head.weight"]
+
+    assert trunk_leaf.learning_rate_kind == "bt4"
+    assert trunk_leaf.first_moment.dtype == torch.float32
+    assert trunk_leaf.master_parameter is not None
+    assert policy_leaf.learning_rate_kind == "bt4"
+    assert policy_leaf.first_moment.dtype == torch.bfloat16
+    assert policy_leaf.master_parameter is None
+    assert main_leaf.learning_rate_kind == "main"
+    assert main_leaf.first_moment.dtype == torch.bfloat16
+    assert main_leaf.master_parameter is None
+
+    model.encoder.trunk.weight.grad = torch.ones_like(model.encoder.trunk.weight)
+    model.encoder.policy_head.weight.grad = torch.ones_like(
+        model.encoder.policy_head.weight
+    )
+    model.head.weight.grad = torch.ones_like(model.head.weight)
+    optimizer.step()
+    manifest = optimizer.partition_manifest()
+    manifest_leaves = {row["path"]: row for row in manifest["leaves"]}
+    assert manifest["master_parameter_count"] == 1
+    assert (
+        manifest_leaves["encoder.trunk.weight"]["optimizer_state_dtype"]
+        == "torch.float32"
+    )
+    assert (
+        manifest_leaves["encoder.policy_head.weight"]["optimizer_state_dtype"]
+        == "torch.bfloat16"
+    )
+
+
+def test_main_fp32_master_excludes_encoder_and_promotes_main_parameters():
+    model = TinyHybridPrecisionModel().to(torch.bfloat16)
+    config = dataclasses.replace(
+        CONFIG,
+        learning_rate=1e-6,
+        bt4_learning_rate=1e-6,
+        weight_decay=0.0,
+        grad_clip_norm=0.0,
+    )
+    optimizer = MuonAdamW(
+        model,
+        config,
+        policy=OptimizerPolicy(precision="main_fp32_master"),
+    )
+    leaves = {leaf.name: leaf for leaf in optimizer.leaves}
+    encoder_leaf = leaves["encoder.weight"]
+    main_leaf = leaves["head.weight"]
+
+    assert encoder_leaf.learning_rate_kind == "bt4"
+    assert encoder_leaf.first_moment.dtype == torch.bfloat16
+    assert encoder_leaf.master_parameter is None
+    assert main_leaf.learning_rate_kind == "main"
+    assert main_leaf.first_moment.dtype == torch.float32
+    assert main_leaf.master_parameter is not None
+    assert main_leaf.master_parameter.dtype == torch.float32
+
+    model.encoder.weight.grad = torch.ones_like(model.encoder.weight)
+    model.head.weight.grad = torch.ones_like(model.head.weight)
+    optimizer.step()
+    manifest = optimizer.partition_manifest()
+    manifest_leaves = {row["path"]: row for row in manifest["leaves"]}
+    assert manifest["master_parameter_count"] == 1
+    assert manifest_leaves["encoder.weight"]["optimizer_state_dtype"] == (
+        "torch.bfloat16"
+    )
+    assert manifest_leaves["head.weight"]["optimizer_state_dtype"] == (
+        "torch.float32"
+    )
+
+
+def test_cautious_weight_decay_only_shrinks_aligned_coordinates():
+    config = dataclasses.replace(
+        CONFIG,
+        learning_rate=0.1,
+        bt4_learning_rate=0.1,
+        weight_decay=0.5,
+        grad_clip_norm=0.0,
+    )
+
+    def run(mode: str, *, weight_decay: float = 0.5):
+        model = TinyAdamModel(np.ones(2, dtype=np.float32))
+        optimizer = MuonAdamW(
+            model,
+            dataclasses.replace(config, weight_decay=weight_decay),
+            policy=OptimizerPolicy(weight_decay_mode=mode),
+        )
+        model.vector.grad = torch.tensor([1.0, -1.0])
+        metrics = optimizer.step()
+        return model.vector.detach().clone(), metrics
+
+    no_decay, _ = run("decoupled", weight_decay=0.0)
+    cautious, cautious_metrics = run("cautious")
+    decoupled, _ = run("decoupled")
+
+    assert cautious[0] < no_decay[0]
+    torch.testing.assert_close(cautious[1], no_decay[1], rtol=0.0, atol=0.0)
+    assert decoupled[1] < no_decay[1]
+    assert cautious_metrics["weight_decay_active_fraction"] == pytest.approx(0.5)
+
+
+def test_torch_optimizer_skips_entire_nonfinite_update():
+    matrix = np.zeros((128, 128), dtype=np.float32)
+    bias = np.zeros((128,), dtype=np.float32)
+    model = TinyModel(matrix, bias)
+    optimizer = MuonAdamW(model, CONFIG)
+    before = {name: parameter.detach().clone() for name, parameter in model.named_parameters()}
+
+    model.matrix.grad = torch.ones_like(model.matrix)
+    model.bias.grad = torch.full_like(model.bias, float("nan"))
+    metrics = optimizer.step()
+
+    assert metrics["optimizer_skipped_nonfinite"] is True
+    assert optimizer.update == 0
+    assert model.matrix.grad is None
+    assert model.bias.grad is None
+    for name, parameter in model.named_parameters():
+        torch.testing.assert_close(parameter, before[name], rtol=0.0, atol=0.0)
+    for leaf in optimizer.leaves:
+        assert torch.count_nonzero(leaf.first_moment) == 0
+        if leaf.second_moment is not None:
+            assert torch.count_nonzero(leaf.second_moment) == 0
+
+
+def test_torch_model_checkpoint_is_strict_model_only_roundtrip(checkpoint_workspace):
+    tmp_path = checkpoint_workspace
+    matrix = np.arange(128 * 128, dtype=np.float32).reshape(128, 128)
+    bias = np.arange(128, dtype=np.float32)
+    model = TinyModel(matrix, bias)
+    expected = {name: parameter.detach().clone() for name, parameter in model.named_parameters()}
+
+    manifest = save_model_checkpoint(
+        output_dir=tmp_path,
+        model=model,
+        source_mapping_sha256="a" * 64,
+        optimizer_update=7,
+        data_cursor=11,
+    )
+    checkpoint_dir = tmp_path / "checkpoint"
+    assert sorted(path.name for path in checkpoint_dir.iterdir()) == [
+        "manifest.json",
+        "model.safetensors",
+    ]
+    assert manifest["model_only"] is True
+    assert manifest["optimizer_resume_supported"] is False
+    assert manifest["optimizer_update"] == 7
+    assert manifest["data_cursor"] == 11
+    assert manifest["state"]["leaf_count"] == 2
+
+    with torch.no_grad():
+        for parameter in model.parameters():
+            parameter.zero_()
+    restored = load_model_checkpoint(
+        checkpoint_dir=checkpoint_dir,
+        model=model,
+    )
+    tree, tree_manifest, tree_summary = load_model_checkpoint_numpy_tree(
+        checkpoint_dir=checkpoint_dir,
+        model=model,
+    )
+
+    assert restored == manifest
+    assert tree_manifest == manifest
+    assert tree_summary["leaf_count"] == 2
+    assert tree_summary["nbytes"] == matrix.nbytes + bias.nbytes
+    np.testing.assert_array_equal(tree["matrix"], matrix)
+    np.testing.assert_array_equal(tree["bias"], bias)
+    for name, parameter in model.named_parameters():
+        torch.testing.assert_close(
+            parameter,
+            expected[name],
+            rtol=0.0,
+            atol=0.0,
+        )
+
+
+def test_torch_checkpoint_numpy_tree_preserves_bfloat16_bits(checkpoint_workspace):
+    tmp_path = checkpoint_workspace
+    model = torch.nn.Module()
+    expected = torch.tensor(
+        [0.0, -1.5, 3.25, float("inf")],
+        dtype=torch.bfloat16,
+    )
+    model.register_parameter(
+        "bf16",
+        torch.nn.Parameter(expected.clone()),
+    )
+    save_model_checkpoint(
+        output_dir=tmp_path,
+        model=model,
+        source_mapping_sha256="b" * 64,
+        optimizer_update=0,
+        data_cursor=0,
+    )
+
+    tree, _, summary = load_model_checkpoint_numpy_tree(
+        checkpoint_dir=tmp_path / "checkpoint",
+        model=model,
+    )
+
+    assert tree["bf16"].dtype == ml_dtypes.bfloat16
+    assert summary["nbytes"] == expected.numel() * expected.element_size()
+    np.testing.assert_array_equal(
+        tree["bf16"].view(np.uint16),
+        expected.view(torch.uint16).numpy(),
+    )
+
+
+def test_torch_training_checkpoint_resumes_optimizer_exactly(checkpoint_workspace):
+    tmp_path = checkpoint_workspace
+    rng = np.random.default_rng(41)
+    matrix = rng.standard_normal((128, 128), dtype=np.float32) * 0.02
+    bias = rng.standard_normal((128,), dtype=np.float32) * 0.02
+    gradients = [
+        (
+            rng.standard_normal((128, 128), dtype=np.float32) * 0.01,
+            rng.standard_normal((128,), dtype=np.float32) * 0.01,
+        )
+        for _ in range(3)
+    ]
+    config = dataclasses.replace(
+        CONFIG,
+        learning_rate=2e-3,
+        bt4_learning_rate=2e-3,
+        grad_clip_norm=0.0,
+    )
+    control_model = TinyModel(matrix, bias)
+    control_optimizer = MuonAdamW(
+        control_model,
+        config,
+        examples_per_update=8,
+    )
+    staged_model = TinyModel(matrix, bias)
+    staged_optimizer = MuonAdamW(
+        staged_model,
+        config,
+        examples_per_update=8,
+    )
+
+    def step(
+        model: TinyModel,
+        optimizer: MuonAdamW,
+        gradient: tuple[np.ndarray, np.ndarray],
+    ) -> None:
+        model.matrix.grad = torch.from_numpy(gradient[0].copy())
+        model.bias.grad = torch.from_numpy(gradient[1].copy())
+        optimizer.step()
+
+    for gradient in gradients[:2]:
+        step(control_model, control_optimizer, gradient)
+        step(staged_model, staged_optimizer, gradient)
+
+    resume_contract = {
+        "schema_version": "unit-test-resume-v1",
+        "batch_size": 8,
+        "schedule": {"target_updates": 2},
+    }
+    source_sha256 = "c" * 64
+    manifest = save_training_checkpoint(
+        output_dir=tmp_path,
+        model=staged_model,
+        optimizer=staged_optimizer,
+        source_mapping_sha256=source_sha256,
+        next_data_cursor=19,
+        resume_contract=resume_contract,
+    )
+    checkpoint_dir = tmp_path / "checkpoints" / "update00000002"
+    assert sorted(path.name for path in checkpoint_dir.iterdir()) == [
+        "manifest.json",
+        "state.safetensors",
+    ]
+    assert manifest["model_only"] is False
+    assert manifest["optimizer_resume_supported"] is True
+    assert manifest["optimizer_update"] == 2
+    assert manifest["optimizer_examples_seen"] == 16
+    assert manifest["next_data_cursor"] == 19
+
+    evaluation_model = TinyModel(
+        np.zeros_like(matrix),
+        np.zeros_like(bias),
+    )
+    evaluation_manifest = load_checkpoint_model_for_evaluation(
+        checkpoint_dir=checkpoint_dir,
+        model=evaluation_model,
+    )
+    assert evaluation_manifest == manifest
+    evaluation_tree, tree_manifest, tree_summary = load_checkpoint_numpy_tree_for_evaluation(
+        checkpoint_dir=checkpoint_dir,
+        model=evaluation_model,
+    )
+    assert tree_manifest == manifest
+    assert tree_summary["leaf_count"] == 2
+    assert tree_summary["nbytes"] == matrix.nbytes + bias.nbytes
+    np.testing.assert_array_equal(
+        evaluation_tree["matrix"],
+        staged_model.matrix.detach().numpy(),
+    )
+    np.testing.assert_array_equal(
+        evaluation_tree["bias"],
+        staged_model.bias.detach().numpy(),
+    )
+    for (expected_name, expected_parameter), (
+        evaluation_name,
+        evaluation_parameter,
+    ) in zip(
+        staged_model.named_parameters(),
+        evaluation_model.named_parameters(),
+        strict=True,
+    ):
+        assert evaluation_name == expected_name
+        torch.testing.assert_close(
+            evaluation_parameter,
+            expected_parameter,
+            rtol=0.0,
+            atol=0.0,
+        )
+
+    resumed_model = TinyModel(
+        np.zeros_like(matrix),
+        np.zeros_like(bias),
+    )
+    resumed_optimizer = MuonAdamW(
+        resumed_model,
+        config,
+        examples_per_update=8,
+    )
+    restored = load_training_checkpoint(
+        checkpoint_dir=checkpoint_dir,
+        model=resumed_model,
+        optimizer=resumed_optimizer,
+        expected_source_mapping_sha256=source_sha256,
+        expected_resume_contract=resume_contract,
+    )
+    assert restored == manifest
+    assert resumed_optimizer.update == 2
+    assert resumed_optimizer.examples_seen == 16
+    extended = load_training_checkpoint(
+        checkpoint_dir=checkpoint_dir,
+        model=resumed_model,
+        optimizer=resumed_optimizer,
+        expected_source_mapping_sha256=source_sha256,
+        expected_resume_contract={
+            **resume_contract,
+            "schedule": {"target_updates": 3},
+        },
+    )
+    assert extended == manifest
+    with pytest.raises(ValueError, match="resume contract"):
+        load_training_checkpoint(
+            checkpoint_dir=checkpoint_dir,
+            model=resumed_model,
+            optimizer=resumed_optimizer,
+            expected_source_mapping_sha256=source_sha256,
+            expected_resume_contract={**resume_contract, "batch_size": 16},
+        )
+
+    step(control_model, control_optimizer, gradients[2])
+    step(resumed_model, resumed_optimizer, gradients[2])
+    for (control_name, control_parameter), (resumed_name, resumed_parameter) in zip(
+        control_model.named_parameters(),
+        resumed_model.named_parameters(),
+        strict=True,
+    ):
+        assert control_name == resumed_name
+        torch.testing.assert_close(
+            control_parameter,
+            resumed_parameter,
+            rtol=0.0,
+            atol=0.0,
+        )
+    for control_leaf, resumed_leaf in zip(
+        control_optimizer.leaves,
+        resumed_optimizer.leaves,
+        strict=True,
+    ):
+        assert control_leaf.name == resumed_leaf.name
+        torch.testing.assert_close(
+            control_leaf.first_moment,
+            resumed_leaf.first_moment,
+            rtol=0.0,
+            atol=0.0,
+        )
+        if control_leaf.second_moment is None:
+            assert resumed_leaf.second_moment is None
+        else:
+            assert resumed_leaf.second_moment is not None
+            torch.testing.assert_close(
+                control_leaf.second_moment,
+                resumed_leaf.second_moment,
+                rtol=0.0,
+                atol=0.0,
+            )
+
+
+def test_fp32_master_training_checkpoint_is_exactly_resumable(checkpoint_workspace):
+    tmp_path = checkpoint_workspace
+    config = dataclasses.replace(
+        CONFIG,
+        learning_rate=1e-4,
+        bt4_learning_rate=1e-4,
+        weight_decay=0.0,
+        grad_clip_norm=0.0,
+    )
+    policy = OptimizerPolicy(precision="fp32_master")
+    model = TinyAdamModel(np.ones(4, dtype=np.float32)).to(torch.bfloat16)
+    optimizer = MuonAdamW(
+        model,
+        config,
+        policy=policy,
+        examples_per_update=4,
+    )
+    model.vector.grad = torch.tensor([1.0, -1.0, 0.5, -0.5], dtype=torch.bfloat16)
+    optimizer.step()
+    resume_contract = {
+        "schema_version": "unit-test-fp32-master-resume-v1",
+        "optimizer_policy": dataclasses.asdict(policy),
+        "schedule": {"target_updates": 1},
+    }
+    manifest = save_training_checkpoint(
+        output_dir=tmp_path,
+        model=model,
+        optimizer=optimizer,
+        source_mapping_sha256="d" * 64,
+        next_data_cursor=7,
+        resume_contract=resume_contract,
+    )
+    assert manifest["format"] == "chess-dfm-torch-training-v2"
+    assert manifest["state"]["master_parameter_count"] == 1
+
+    evaluation_model = TinyAdamModel(
+        np.zeros(4, dtype=np.float32)
+    ).to(torch.bfloat16)
+    evaluation_manifest = load_checkpoint_model_for_evaluation(
+        checkpoint_dir=tmp_path / "checkpoints" / "update00000001",
+        model=evaluation_model,
+    )
+    assert evaluation_manifest == manifest
+    torch.testing.assert_close(
+        evaluation_model.vector,
+        model.vector,
+        rtol=0.0,
+        atol=0.0,
+    )
+    evaluation_tree, tree_manifest, tree_summary = (
+        load_checkpoint_numpy_tree_for_evaluation(
+            checkpoint_dir=tmp_path / "checkpoints" / "update00000001",
+            model=evaluation_model,
+        )
+    )
+    assert tree_manifest == manifest
+    assert tree_summary["leaf_count"] == 1
+    np.testing.assert_array_equal(
+        evaluation_tree["vector"].view(np.uint16),
+        model.vector.detach().view(torch.uint16).numpy(),
+    )
+
+    resumed_model = TinyAdamModel(np.zeros(4, dtype=np.float32)).to(torch.bfloat16)
+    resumed_optimizer = MuonAdamW(
+        resumed_model,
+        config,
+        policy=policy,
+        examples_per_update=4,
+    )
+    restored = load_training_checkpoint(
+        checkpoint_dir=tmp_path / "checkpoints" / "update00000001",
+        model=resumed_model,
+        optimizer=resumed_optimizer,
+        expected_source_mapping_sha256="d" * 64,
+        expected_resume_contract=resume_contract,
+    )
+    assert restored == manifest
+    original_leaf = optimizer.leaves[0]
+    resumed_leaf = resumed_optimizer.leaves[0]
+    assert original_leaf.master_parameter is not None
+    assert resumed_leaf.master_parameter is not None
+    torch.testing.assert_close(
+        resumed_leaf.master_parameter,
+        original_leaf.master_parameter,
+        rtol=0.0,
+        atol=0.0,
+    )
+
+    next_gradient = torch.tensor([-0.25, 0.25, -1.0, 1.0], dtype=torch.bfloat16)
+    model.vector.grad = next_gradient.clone()
+    resumed_model.vector.grad = next_gradient.clone()
+    optimizer.step()
+    resumed_optimizer.step()
+    torch.testing.assert_close(resumed_model.vector, model.vector, rtol=0.0, atol=0.0)
+    torch.testing.assert_close(
+        resumed_leaf.master_parameter,
+        original_leaf.master_parameter,
+        rtol=0.0,
+        atol=0.0,
+    )
+
+
+def test_prefetch_preparation_is_schedule_keyed_and_deterministic():
+    class FakeBatches:
+        def __init__(self):
+            self.calls: list[int] = []
+
+        def batch_at(self, cursor: int):
+            self.calls.append(cursor)
+            future = np.arange(64 * 8, dtype=np.int64).reshape(64, 8, 1)
+            return {
+                "current_planes": np.full((64, 1), cursor, dtype=np.float32),
+                "future_planes": future,
+            }
+
+    batches = FakeBatches()
+    first = _prepare_training_step(
+        batches,
+        seed=17,
+        update=3,
+        data_cursor=7,
+        batch_size=64,
+    )
+    second = _prepare_training_step(
+        batches,
+        seed=17,
+        update=3,
+        data_cursor=7,
+        batch_size=64,
+    )
+
+    assert first.update == second.update == 3
+    assert first.data_cursor == second.data_cursor == 7
+    assert batches.calls == [7, 7]
+    for left, right in zip(first.choices, second.choices, strict=True):
+        torch.testing.assert_close(left, right, rtol=0.0, atol=0.0)
+    rows = np.arange(64)
+    expected = np.arange(64 * 8, dtype=np.int64).reshape(64, 8, 1)[
+        rows,
+        first.choices.target_horizon.numpy(),
+    ]
+    np.testing.assert_array_equal(
+        first.compact_batch["selected_future_planes"],
+        expected,
+    )
+    assert first.prepare_seconds >= 0.0
+
+
+def test_training_loss_summary_preserves_terminal_and_fixed_window_metrics():
+    metric_names = _LOSS_SUMMARY_METRICS
+    records = [
+        {
+            "update": update,
+            "examples": update * 512,
+            **{
+                name: float(update + metric_index) for metric_index, name in enumerate(metric_names)
+            },
+        }
+        for update in range(1, 6)
+    ]
+
+    summary = _summarize_training_records(records, window_updates=2)
+
+    assert summary["schema_version"] == "torch-eager-loss-summary-v2"
+    assert summary["window_updates"] == 2
+    assert summary["terminal"]["update"] == 5
+    assert summary["terminal"]["examples"] == 2560
+    assert summary["terminal"]["loss"] == 5.0
+    assert summary["first_window"]["updates"] == [1, 2]
+    assert summary["first_window"]["loss"] == 1.5
+    assert summary["last_window"]["updates"] == [4, 5]
+    assert summary["last_window"]["loss"] == 4.5
+    assert summary["last_minus_first"]["loss"] == 3.0
+    assert (
+        summary["plot_contract"]["primary_cross_experiment_metric"]
+        == "matched mean validation dfm_ce_loss over frozen seeds 10000 and 20000"
+    )
+
+
+def test_v2_resume_compatibility_uses_source_digest_not_commit_label():
+    validation_contract = {
+        "enabled": True,
+        "manifest_path": "/workspace/frozen-validation/manifest.json",
+        "fast_validation": {"batch_size": 64, "pool": "fast"},
+    }
+    first = {
+        "schema_version": "torch-training-resume-contract-v1",
+        "git_commit": "a" * 40,
+        "source_tree_sha256": "c" * 64,
+        "config": {"learning_rate": 5e-4},
+        "schedule": {"target_updates": 554},
+        "runtime": {
+            "attention_impl": "sdpa",
+            "live_validation": {
+                **validation_contract,
+                "updates": [554],
+                "observed_percentages": [2.001197610575099],
+            }
+        },
+    }
+    extended = {
+        **first,
+        "git_commit": "b" * 40,
+        "config": {
+            **first["config"],
+            "policy_distill_coeff": 0.0,
+            "policy_distill_teacher_mode": "online",
+            "policy_distill_teacher_state_sha256": "",
+        },
+        "policy_distill_teacher": {
+            "schema_version": "torch-policy-distill-online-teacher-v1",
+            "mode": "online",
+            "checkpoint_state_sha256": None,
+        },
+        "schedule": {"target_updates": 2_768},
+        "runtime": {
+            "attention_impl": "sdpa",
+            "live_validation": {
+                **validation_contract,
+                "updates": [1_384, 2_768],
+                "observed_percentages": [
+                    5.000828416896065,
+                    10.00165683379213,
+                ],
+            }
+        },
+    }
+    assert train_torch_module._resume_contract_comparison_payload(
+        first
+    ) == train_torch_module._resume_contract_comparison_payload(extended)
+    legacy = dict(first)
+    legacy.pop("source_tree_sha256")
+    assert train_torch_module._resume_contract_comparison_payload(
+        legacy
+    ) != train_torch_module._resume_contract_comparison_payload(
+        {**legacy, "git_commit": "b" * 40}
+    )
+    legacy_without_validation_contract = {
+        **first,
+        "runtime": {"attention_impl": "sdpa"},
+    }
+    assert train_torch_module._resume_contract_comparison_payload(
+        legacy_without_validation_contract
+    ) == train_torch_module._resume_contract_comparison_payload(extended)
+    validation_drift = {
+        **extended,
+        "runtime": {
+            "attention_impl": "sdpa",
+            "live_validation": {
+                **extended["runtime"]["live_validation"],
+                "manifest_path": "/workspace/different-validation/manifest.json",
+            }
+        },
+    }
+    assert train_torch_module._resume_contract_comparison_payload(
+        first
+    ) == train_torch_module._resume_contract_comparison_payload(
+        validation_drift
+    )
+    runtime_drift = {
+        **extended,
+        "runtime": {
+            **extended["runtime"],
+            "attention_impl": "eager",
+        },
+    }
+    assert train_torch_module._resume_contract_comparison_payload(
+        first
+    ) != train_torch_module._resume_contract_comparison_payload(runtime_drift)
+    distillation_drift = {
+        **extended,
+        "config": {
+            **extended["config"],
+            "policy_distill_coeff": 1.0,
+        },
+    }
+    assert train_torch_module._resume_contract_comparison_payload(
+        first
+    ) != train_torch_module._resume_contract_comparison_payload(
+        distillation_drift
+    )
+    checkpoint_teacher_drift = {
+        **extended,
+        "policy_distill_teacher": {
+            "mode": "checkpoint",
+            "checkpoint_state_sha256": "d" * 64,
+        },
+    }
+    assert train_torch_module._resume_contract_comparison_payload(
+        first
+    ) != train_torch_module._resume_contract_comparison_payload(
+        checkpoint_teacher_drift
+    )

@@ -1,0 +1,174 @@
+{
+  "kind": "weight_decay",
+  "runs": [
+    {
+      "arm": "proposal_a_equal_lr_5em5_wd0",
+      "checks": {
+        "compile_source": true,
+        "contiguous_metrics": true,
+        "current_value": true,
+        "data_format": true,
+        "equal_peak_rates": true,
+        "finite_training": true,
+        "fp32_master": true,
+        "full_epoch_clock": true,
+        "gpu": true,
+        "no_illegal_mass_aux": true,
+        "no_teacher_term": true,
+        "open_loop": true,
+        "profile": true,
+        "train_inventory": true,
+        "train_steps": true,
+        "updates": true,
+        "validation_examples": true,
+        "validation_inventory": true,
+        "validation_update": true,
+        "wsd": true
+      },
+      "directory": "/home/ubuntu/chess-dfm-jax/research/analysis/proposal_a_tuning/lr/5em5_wd0",
+      "examples_per_second": 315.6386122902617,
+      "learning_rate": 5e-05,
+      "promotion_eligible": true,
+      "provenance": {
+        "compile_source_tree_sha256": "8e2b3f748bf57b2927cad029c612cf98d779c5cd3672d38d055352b338b03202",
+        "git_commit": "5dfa99790ab86f49e33ed5d495454d83a3659e0b",
+        "gpu": "L40S",
+        "source_tree_sha256": "475c9418b03032c4946334f3e65fe5c374c00ca071d8df13880e77d411b340ff"
+      },
+      "result_label": "hero-training-proposal_screen-proposal_a_equal_lr_5em5_wd0-l40s-ed2fe2be480b2f801c3e",
+      "timing": {
+        "first_step_seconds": 141.342096538,
+        "mean_steady_examples_per_second_step": 396.6718488225874,
+        "validation_seconds": 84.70308691699995
+      },
+      "train_seconds": 817.5425627669999,
+      "validation": {
+        "dfm_ce_loss": 5.939078436957465,
+        "jepa_positive_loss": 0.2099569489558538,
+        "loss": 7.635124418470594,
+        "root_legal_conditional_ce": 1.439516133732266,
+        "root_legal_top1_accuracy": 0.5190972222222222,
+        "wdl_current_accuracy": 0.8472222222222222,
+        "wdl_current_loss": 0.8944041993882921,
+        "wdl_expected_value_mse": 0.2702263433279263,
+        "wdl_loss": 0.9367313815487756
+      },
+      "weight_decay": 0.0,
+      "weight_decay_mode": "decoupled"
+    },
+    {
+      "arm": "proposal_a_equal_lr_5em5_wd1_cautious",
+      "checks": {
+        "compile_source": true,
+        "contiguous_metrics": true,
+        "current_value": true,
+        "data_format": true,
+        "equal_peak_rates": true,
+        "finite_training": true,
+        "fp32_master": true,
+        "full_epoch_clock": true,
+        "gpu": true,
+        "no_illegal_mass_aux": true,
+        "no_teacher_term": true,
+        "open_loop": true,
+        "profile": true,
+        "train_inventory": true,
+        "train_steps": true,
+        "updates": true,
+        "validation_examples": true,
+        "validation_inventory": true,
+        "validation_update": true,
+        "wsd": true
+      },
+      "directory": "/home/ubuntu/chess-dfm-jax/research/analysis/proposal_a_tuning/decay/5em5_wd1_cautious",
+      "examples_per_second": 339.0428618446957,
+      "learning_rate": 5e-05,
+      "promotion_eligible": false,
+      "provenance": {
+        "compile_source_tree_sha256": "8e2b3f748bf57b2927cad029c612cf98d779c5cd3672d38d055352b338b03202",
+        "git_commit": "0b355b72b6aabf82080453c744a8cfa070faea36",
+        "gpu": "L40S",
+        "source_tree_sha256": "64961d256cafcd5b31299e7e0d32d31d244d2d53e6c16b0cb31b28c8a7959a01"
+      },
+      "result_label": "hero-training-proposal_screen-proposal_a_equal_lr_5em5_wd1_cautious-l40s-b6e8b4da1340e98a3733",
+      "timing": {
+        "first_step_seconds": 114.726821161,
+        "mean_steady_examples_per_second_step": 399.6386891240733,
+        "validation_seconds": 58.92003268600001
+      },
+      "train_seconds": 761.1073083679998,
+      "validation": {
+        "dfm_ce_loss": 5.937353875901964,
+        "jepa_positive_loss": 0.21801730079783332,
+        "loss": 7.608906348546346,
+        "root_legal_conditional_ce": 1.448497063583798,
+        "root_legal_top1_accuracy": 0.5243055555555556,
+        "wdl_current_accuracy": 0.8628472222222222,
+        "wdl_current_loss": 0.880209528737598,
+        "wdl_expected_value_mse": 0.26883275602530277,
+        "wdl_loss": 0.9413176940547096
+      },
+      "weight_decay": 0.05622851404690516,
+      "weight_decay_mode": "cautious"
+    },
+    {
+      "arm": "proposal_a_equal_lr_5em5_wd1",
+      "checks": {
+        "compile_source": true,
+        "contiguous_metrics": true,
+        "current_value": true,
+        "data_format": true,
+        "equal_peak_rates": true,
+        "finite_training": true,
+        "fp32_master": true,
+        "full_epoch_clock": true,
+        "gpu": true,
+        "no_illegal_mass_aux": true,
+        "no_teacher_term": true,
+        "open_loop": true,
+        "profile": true,
+        "train_inventory": true,
+        "train_steps": true,
+        "updates": true,
+        "validation_examples": true,
+        "validation_inventory": true,
+        "validation_update": true,
+        "wsd": true
+      },
+      "directory": "/home/ubuntu/chess-dfm-jax/research/analysis/proposal_a_tuning/decay/5em5_wd1",
+      "examples_per_second": 336.95483951385074,
+      "learning_rate": 5e-05,
+      "promotion_eligible": true,
+      "provenance": {
+        "compile_source_tree_sha256": "8e2b3f748bf57b2927cad029c612cf98d779c5cd3672d38d055352b338b03202",
+        "git_commit": "0b355b72b6aabf82080453c744a8cfa070faea36",
+        "gpu": "L40S",
+        "source_tree_sha256": "64961d256cafcd5b31299e7e0d32d31d244d2d53e6c16b0cb31b28c8a7959a01"
+      },
+      "result_label": "hero-training-proposal_screen-proposal_a_equal_lr_5em5_wd1-l40s-ff5cf4c541dd0a30e6ae",
+      "timing": {
+        "first_step_seconds": 112.868028535,
+        "mean_steady_examples_per_second_step": 395.72369152324796,
+        "validation_seconds": 40.34173729400004
+      },
+      "train_seconds": 765.8236942740001,
+      "validation": {
+        "dfm_ce_loss": 5.939380857679579,
+        "jepa_positive_loss": 0.2121599449051751,
+        "loss": 7.594203021791246,
+        "root_legal_conditional_ce": 1.4533452126714919,
+        "root_legal_top1_accuracy": 0.5164930555555556,
+        "wdl_current_accuracy": 0.8220486111111112,
+        "wdl_current_loss": 0.8967005279329088,
+        "wdl_expected_value_mse": 0.2704141433350742,
+        "wdl_loss": 0.9370379779073927
+      },
+      "weight_decay": 0.05622851404690516,
+      "weight_decay_mode": "decoupled"
+    }
+  ],
+  "schema_version": "proposal-a-tuning-analysis-v1",
+  "winner_arm": "proposal_a_equal_lr_5em5_wd1",
+  "winner_weight_decay": 0.05622851404690516,
+  "winner_weight_decay_mode": "decoupled"
+}

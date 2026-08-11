@@ -1,0 +1,64 @@
+{
+  "schema_version": "chess-dfm-modal-training-launch-addendum-v1",
+  "created_utc": "2026-08-09T16:29:33Z",
+  "status": "sealed_after_durable_relaunch_and_first_committed_recovery_checkpoint",
+  "parent_implementation_addendum": {
+    "path": "research/analysis/hero_v2_phase1/v2_fp32_1_12_legality0_distill1-implementation-addendum.json",
+    "sha256": "d65ed313dc06a77b0f2cd5341ce8b98fbdd8fc4c3b99c4314f20661d1a6576c2"
+  },
+  "canceled_submission": {
+    "app_id": "ap-C8FIfOt2AoGGoibascHWwq",
+    "function_call_id": "fc-01KZKMHCAP20RKGXN8PYQMT04Z",
+    "launcher_semantics": "synchronous function.remote under a detached local entrypoint",
+    "failure": "local Modal control-plane await reached its deadline; cancellation propagated to the input",
+    "remote_evidence": {
+      "terminal_state": "stopped",
+      "surviving_tasks": 0,
+      "training_logs_observed": false,
+      "checkpoint_saved": false
+    },
+    "disposition": "operationally invalid; excluded from all scientific evidence",
+    "spend_observation": {
+      "recorded_before_usd": 17.24272284,
+      "recorded_at_relaunch_usd": 17.42847136,
+      "observed_delta_usd": 0.18574852,
+      "attribution_note": "Workspace billing can be delayed; the observed delta bounds context but is not asserted as an exact per-input invoice."
+    }
+  },
+  "durable_submission_fix": {
+    "change": "submit the selected training function with asynchronous spawn and print its immutable FunctionCall ID",
+    "scientific_contract_changed": false,
+    "training_compile_source_tree_sha256_before_and_after": "176a17b259d49e67af11e5617919e46f87523eb24fda104bb8edde632b67fbf3",
+    "prior_full_source_tree_sha256": "c1411e4bb529e92aff69a7fcff6e06a040b21febb577da0a44868971c1fe5f7f",
+    "relaunch_full_source_tree_sha256": "c2f87226fc2cecd735049e7aa649bad24e8dd826e0efbc193d24a4cfc5e5ad5e",
+    "modal_train_app_sha256": "12c6b57517f3e6111d7d42ede7f54b645ca1271303f4f19e6e91d72ebafc9680",
+    "modal_training_test_sha256": "0571ac1e02ea6e58e6c86dac38f889cd0806e206bc59eda47b789c1dc2e6bbe2",
+    "verification": {
+      "focused_torch_training_modal_arena_tests": "79 passed",
+      "comparator_tests": "8 passed",
+      "ruff": "passed",
+      "git_diff_check": "passed"
+    }
+  },
+  "active_relaunch": {
+    "app_id": "ap-tUZIp3T4V6qGeSotZPZIXs",
+    "function_call_id": "fc-01KZKN72WT6ZKY4D3ZAK8VP088",
+    "submission_mode": "asynchronous_spawn",
+    "result_label": "hero-training-phase1-v2_fp32_1_12_legality0_distill1-l40s-f3c3887f52d699a4206b",
+    "first_committed_recovery": {
+      "update": 100,
+      "observed": true
+    },
+    "recorded_spend_at_launch_usd": 17.42847136,
+    "declared_attempt_upper_bound_usd": 4.192272
+  },
+  "contract_invariance": {
+    "arm_unchanged": true,
+    "coefficient_unchanged": true,
+    "data_order_unchanged": true,
+    "optimizer_and_schedule_unchanged": true,
+    "analysis_rule_unchanged": true,
+    "phase2_authorization_unchanged": true,
+    "phase2_authorized": false
+  }
+}

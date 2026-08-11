@@ -1,0 +1,297 @@
+{
+  "allowed_state_files": [
+    "checkpoints/source/step0265000/checkpoints/step0265000/state.npz",
+    "research/runs/baseline-freshopt-online-target576-b128-lr3e5-bt4lr1e6-30m-v2/checkpoints/update00000300/state.npz",
+    "research/runs/corrected-nonorm-target5p76-pred1-fixed64-b128-30m-v2/checkpoints/update00000400/state.npz",
+    "research/runs/future-target-k2-b128-30m-v1/checkpoints/update00000800/state.npz",
+    "research/runs/cosine-warmdown-k2-b128-30m-v1/checkpoints/update00001261/state.npz",
+    "research/runs/balanced-example-k1-cosine-b128-30m-v1/checkpoints/update00001581/state.npz",
+    "research/runs/future-tail1-balanced-k1-cosine-b128-30m-v1/checkpoints/update00002072/state.npz"
+  ],
+  "cache_budgets_bytes": {
+    ".local/cache/jax": 4294967296
+  },
+  "dataset": {
+    "chunks_written": {
+      "test": 1523,
+      "train": 27679,
+      "val": 1524
+    },
+    "manifest_path": "data/trajectory_v3/manifest.json",
+    "payload_size_bytes": 11507846723,
+    "root": "data/trajectory_v3",
+    "schema_version": "trajectory-v3"
+  },
+  "must_be_absent": [
+    "checkpoints/source/step0265000_archive",
+    "checkpoints/source/step0265000_parts",
+    "data/source/trajectory_v3_lc0_test80_h8_sets1_3_20260430.tar",
+    "models/source/models.tar",
+    "research/runs/torch_hero_epoch_v1/checkpoints/update00013840"
+  ],
+  "required_files": [
+    {
+      "path": "data/trajectory_v3/manifest.json",
+      "role": "trajectory_manifest",
+      "sha256": "07696d8a7091c6d4f81d884b89a08cb825e2e2d2ef77c53667d49e1dd2d93f88",
+      "size_bytes": 1163
+    },
+    {
+      "path": "data/trajectory_v3/status.json",
+      "role": "trajectory_completion_record",
+      "sha256": "07696d8a7091c6d4f81d884b89a08cb825e2e2d2ef77c53667d49e1dd2d93f88",
+      "size_bytes": 1163
+    },
+    {
+      "path": "models/source/extracted/BT4_exported.pb.gz",
+      "role": "raw_bt4_constructor_and_policy",
+      "sha256": "61e43e98d2c4cb747498c6bc13a5bbb3b07e985d3f5d87f0351a4db855fa0651",
+      "size_bytes": 335916563
+    },
+    {
+      "path": "models/source/extracted/BT4-1024x15x32h-swa-6147500-policytune-332.pb.gz",
+      "role": "published_bt4_identity_and_parity",
+      "sha256": "e6ada9d6c4a769bfab3aa0848d82caeb809aa45f83e6c605fc58a31d21bdd618",
+      "size_bytes": 382645315
+    },
+    {
+      "path": "models/source/extracted/BT4.onnx",
+      "role": "cross_framework_representation_parity",
+      "sha256": "4206710c9adf00137f6592f7d5de8991ba1603be72716612caa43977a930bcb0",
+      "size_bytes": 741143413
+    },
+    {
+      "path": "checkpoints/source/step0265000/archive_manifest.json",
+      "role": "source_checkpoint_provenance",
+      "sha256": "ba7078ca41cae04619df7a962c5fc6b3bc6f724047048fef2fee6d2c9592eb5b",
+      "size_bytes": 510
+    },
+    {
+      "path": "checkpoints/source/step0265000/checkpoint_state.json",
+      "role": "source_checkpoint_metadata",
+      "sha256": "6b672bfdc34b35b8f3cc0f53e951d0c29abc82589a847f22be2bd9e4ec603b4f",
+      "size_bytes": 18029
+    },
+    {
+      "path": "checkpoints/source/step0265000/run_config.json",
+      "role": "source_run_configuration",
+      "sha256": "f4f44c673322fbb04367db7b28fcc82c30f89fc12340e66322607d53bbf99555",
+      "size_bytes": 4956
+    },
+    {
+      "path": "checkpoints/source/step0265000/metrics.jsonl",
+      "role": "source_training_history",
+      "sha256": "bf62337ae6c74281fe790fbc743fe030dd8f0a28813f7590aa9e73716b8c67fc",
+      "size_bytes": 273048283
+    },
+    {
+      "path": "checkpoints/source/step0265000/checkpoints/step0265000/state.npz",
+      "role": "recovered_dfm_jepa_source",
+      "sha256": "16a3c7e77e411a8a7577ff04dac1ca5173ce24ecb343b5fa4938e2d2b5fb8906",
+      "size_bytes": 1851704172
+    },
+    {
+      "path": "research/runs/baseline-freshopt-online-target576-b128-lr3e5-bt4lr1e6-30m-v2/checkpoints/update00000300/manifest.json",
+      "role": "norm_on_control_manifest",
+      "sha256": "6872ab05f240cef5dbc3c0f87e5150ccea20cd5b1f46690a2dd80e585e365cb2",
+      "size_bytes": 5965501
+    },
+    {
+      "path": "research/runs/baseline-freshopt-online-target576-b128-lr3e5-bt4lr1e6-30m-v2/checkpoints/update00000300/state.npz",
+      "role": "norm_on_control",
+      "sha256": "491da32259be4669e8824a7a06dc06401483f1d98febdb860e65bbae2f63c1ba",
+      "size_bytes": 1851704172
+    },
+    {
+      "path": "research/runs/corrected-nonorm-target5p76-pred1-fixed64-b128-30m-v2/checkpoints/update00000400/manifest.json",
+      "role": "corrected_baseline_manifest",
+      "sha256": "6e2a9449eea5aa1a77c5dc9b24f0da0e8b2d44d40a79b387c4da6d09bd9e380b",
+      "size_bytes": 5966135
+    },
+    {
+      "path": "research/runs/corrected-nonorm-target5p76-pred1-fixed64-b128-30m-v2/checkpoints/update00000400/state.npz",
+      "role": "corrected_no_norm_baseline",
+      "sha256": "cbeb1bafa74d0983ae4c0cad2a33c405c3507b2428c5bcebbe4fb7f8df44aa61",
+      "size_bytes": 1851704172
+    },
+    {
+      "path": "research/runs/future-target-k2-b128-30m-v1/checkpoints/update00000800/manifest.json",
+      "role": "sampled_future_target_k2_previous_offline_incumbent_manifest",
+      "sha256": "e8c58fcaa1730e8c2927fa8e8dd108592d57f28c33b95c66831a0a969bc95ab6",
+      "size_bytes": 5966688
+    },
+    {
+      "path": "research/runs/future-target-k2-b128-30m-v1/checkpoints/update00000800/state.npz",
+      "role": "sampled_future_target_k2_previous_offline_incumbent",
+      "sha256": "f42af6bef64c532376e0532d2370b1cf2bd6356d494e08738355359bb506abd2",
+      "size_bytes": 1851704172
+    },
+    {
+      "path": "research/runs/cosine-warmdown-k2-b128-30m-v1/checkpoints/update00001261/manifest.json",
+      "role": "cosine_warmdown_k2_previous_offline_incumbent_manifest",
+      "sha256": "ca783a1e55b02cdb13e1fd34741b736253ca78f9a6b7c1adb91bc991e2b686a4",
+      "size_bytes": 5967947
+    },
+    {
+      "path": "research/runs/cosine-warmdown-k2-b128-30m-v1/checkpoints/update00001261/state.npz",
+      "role": "cosine_warmdown_k2_previous_offline_incumbent",
+      "sha256": "7bac3c49875ab35c3121c4471b65a40c08ce169a10915d4ebbb55661617cdc1a",
+      "size_bytes": 1851704172
+    },
+    {
+      "path": "research/runs/balanced-example-k1-cosine-b128-30m-v1/checkpoints/update00001581/manifest.json",
+      "role": "balanced_example_k1_previous_offline_incumbent_manifest",
+      "sha256": "a1cc0b374bb91544a8a2cfb41f2c3f7d6d6a52aae000408484d0f56b111f9933",
+      "size_bytes": 5968838
+    },
+    {
+      "path": "research/runs/balanced-example-k1-cosine-b128-30m-v1/checkpoints/update00001581/state.npz",
+      "role": "balanced_example_k1_previous_offline_incumbent",
+      "sha256": "26c3621d1f9c35aa1401ef5e2e9d35ffdf59607d0c4369730cc6dd207b65c7c7",
+      "size_bytes": 1851704172
+    },
+    {
+      "path": "research/runs/future-tail1-balanced-k1-cosine-b128-30m-v1/checkpoints/update00002072/manifest.json",
+      "role": "future_tail1_balanced_k1_offline_incumbent_manifest",
+      "sha256": "2eb3e9745b989616f8ea091f0648bf97c70c58c7057edcb6548ae45609df782c",
+      "size_bytes": 5970370
+    },
+    {
+      "path": "research/runs/future-tail1-balanced-k1-cosine-b128-30m-v1/checkpoints/update00002072/state.npz",
+      "role": "future_tail1_balanced_k1_offline_incumbent",
+      "sha256": "69b11b51e7f98885deecefca541e1b8408795367bd60e89aa3f279b56e953edb",
+      "size_bytes": 1851704172
+    },
+    {
+      "path": "artifacts/representations/dense-stage1-four-model-v2/manifest.json",
+      "role": "dense_representation_manifest",
+      "sha256": "af164c52ed2f03912cf012a732615f9c1013b3e59266f7f3417493ef55944281",
+      "size_bytes": 2688
+    },
+    {
+      "path": "artifacts/representations/dense-stage1-four-model-v2/summary.json",
+      "role": "dense_representation_summary",
+      "sha256": "55ac516c9e7c9f855abf771a3e96dea91550892dc8f5329fa7665460f12db43a",
+      "size_bytes": 18169
+    },
+    {
+      "path": "artifacts/representations/dense-stage1-four-model-v2/corpus.json",
+      "role": "dense_representation_corpus_contract",
+      "sha256": "66a180324d905d00c9a057f48cf78647b17960c85880a6a1005f5e309245dfed",
+      "size_bytes": 94745
+    },
+    {
+      "path": "artifacts/representations/dense-stage1-four-model-v2/models.json",
+      "role": "dense_representation_model_contracts",
+      "sha256": "bc15d69c8acab24378e89237d8e476fd00578acd692500ebbf590d24e875b6a0",
+      "size_bytes": 5207
+    },
+    {
+      "path": "artifacts/representations/dense-stage1-four-model-v2/per_model_metrics.jsonl",
+      "role": "dense_representation_per_model_metrics",
+      "sha256": "1f163651037b4b484f6e23bba15e2fe0c5b694e7745fcac00a1754aaf4622d77",
+      "size_bytes": 398531
+    },
+    {
+      "path": "artifacts/representations/dense-stage1-four-model-v2/pair_metrics.jsonl",
+      "role": "dense_representation_pair_metrics",
+      "sha256": "a31310f6731752f0df8d0d7fa8cbea3d80522b7e491660e0116bb7c0c4fd5749",
+      "size_bytes": 1021309
+    },
+    {
+      "path": "artifacts/representations/dense-stage1-four-model-v2/layer_correspondence.jsonl",
+      "role": "dense_representation_layer_correspondence",
+      "sha256": "724edd874165c8a44f58f9569b1efec59f338bada9e98366bfefc1bf3ff166ab",
+      "size_bytes": 297691
+    },
+    {
+      "path": "artifacts/representations/dense-stage1-four-model-v2/policy_metrics.json",
+      "role": "dense_representation_fixed_head_policy_metrics",
+      "sha256": "6b0700d9dcafd75927f6139e213ea5e36ae6b1bde386a5139a4fb7120cedc474",
+      "size_bytes": 7522
+    },
+    {
+      "path": "artifacts/representations/dense-stage1-four-model-v2/coordinate_moments.npz",
+      "role": "dense_representation_coordinate_moments",
+      "sha256": "179016e34d8d066fbf30c70c6f36408624e8a74f9b683d11d0c01040fe905b5c",
+      "size_bytes": 6826095
+    },
+    {
+      "path": "artifacts/representations/dense-stage1-four-model-v2/covariance_spectra.npz",
+      "role": "dense_representation_covariance_spectra",
+      "sha256": "1babdcfe169ba8ae17a3d14cc7be7368ff6737d4936b052628b8d7b38ef2825a",
+      "size_bytes": 1796957
+    },
+    {
+      "path": "artifacts/representations/dense-stage1-four-model-v2/cca_spectra.npz",
+      "role": "dense_representation_cca_spectra",
+      "sha256": "9ae8b479dc2e5f83546d6c298ce4c25ee958c10a4c7b9b1d5731a81333228bd2",
+      "size_bytes": 507202
+    },
+    {
+      "path": "artifacts/representations/upstream-bt4-source-parity-v1/manifest.json",
+      "role": "upstream_bt4_source_parity_manifest",
+      "sha256": "97dfd27c213fd3cc272cc020932ee2ca80ca0615cfa6c422219d1795be086cee",
+      "size_bytes": 2668
+    },
+    {
+      "path": "artifacts/representations/upstream-bt4-source-parity-v1/results.json",
+      "role": "upstream_bt4_source_parity_results",
+      "sha256": "2a26d8cf0e206107db8b1fa077ba1820bab70e3005cf719bb757ffca8197c77e",
+      "size_bytes": 73550
+    },
+    {
+      "path": "artifacts/representations/upstream-bt4-source-parity-v1/corpus.json",
+      "role": "upstream_bt4_source_parity_corpus",
+      "sha256": "49821c8a6dfcbcd2ac94e58d5ab5ce68be1bc5ef9a2445ba4143c5b0704da111",
+      "size_bytes": 2461
+    },
+    {
+      "path": "research/runs/torch_hero_epoch_v1/checkpoint/model.safetensors",
+      "role": "hero_epoch_v1_selected_terminal_model",
+      "sha256": "665ac91ad37e14a6c8810068700dba021e39e9c0fe145c8bf620882bb5a71692",
+      "size_bytes": 712339616
+    },
+    {
+      "path": "research/runs/torch_hero_epoch_v1/checkpoint/manifest.json",
+      "role": "hero_epoch_v1_selected_terminal_manifest",
+      "sha256": "ac4c00ed6dcee8130655dff665549e1834959cd902522be593e3e3e611062735",
+      "size_bytes": 489
+    },
+    {
+      "path": "research/runs/torch_hero_epoch_v1/run_config.json",
+      "role": "hero_epoch_v1_training_contract",
+      "sha256": "5d6138706269ae4a0f87879aa91ee4298df65b70443d1c5ac663989d9b5e3b43",
+      "size_bytes": 266145
+    },
+    {
+      "path": "research/runs/torch_hero_epoch_v1/report.json",
+      "role": "hero_epoch_v1_training_report",
+      "sha256": "c568642f6b22be9546e759df696bd9385d5ee8b79cae04f1472a312a260789e3",
+      "size_bytes": 126880
+    },
+    {
+      "path": "research/runs/torch_hero_epoch_v1/loss_summary.json",
+      "role": "hero_epoch_v1_compact_loss_summary",
+      "sha256": "0fa50b4cf567840a140063103b6626a6771c69e233ca8ae40b524395175c2b19",
+      "size_bytes": 3530
+    },
+    {
+      "path": "research/runs/torch_hero_epoch_v1/metrics.jsonl",
+      "role": "hero_epoch_v1_full_training_loss_record",
+      "sha256": "c2fe1f5eb834a7f1bf54a5754e4cf5dc4bfa05ffc0baf48fac2ab7f5b0f58e0d",
+      "size_bytes": 61941568
+    },
+    {
+      "path": "research/runs/torch_hero_epoch_v1/hero_validation_metrics.jsonl",
+      "role": "hero_epoch_v1_fast_validation_curve",
+      "sha256": "4f9bcde052ceec09168e0e3ed43de217828378773bbcb49688a9fd0640e873d8",
+      "size_bytes": 86326
+    }
+  ],
+  "schema_version": 1,
+  "state_search_roots": [
+    "checkpoints",
+    "research/runs"
+  ]
+}

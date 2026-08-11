@@ -1,0 +1,408 @@
+{
+  "claim_gates": {
+    "confirmatory_test_claim_permitted": false,
+    "exact_token_level_descriptive_association_measured": true,
+    "feature_causality_permitted": false,
+    "hero_heldout_direction_transfer_observed": true,
+    "internal_search_claim_permitted": false,
+    "raw_heldout_direction_replication_observed": true,
+    "raw_hero_semantic_equivalence_permitted": false,
+    "runtime_model_identities_match": true,
+    "source_transfer_artifact_passed": true,
+    "test_split_selected_or_evaluated": false
+  },
+  "concept_contract": {
+    "attack_count_binning": "min(exact python-chess attacker count, 4)",
+    "concepts": [
+      {
+        "attack_count_bins": false,
+        "class_names": [
+          "empty",
+          "our_pawn",
+          "our_knight",
+          "our_bishop",
+          "our_rook",
+          "our_queen",
+          "our_king",
+          "their_pawn",
+          "their_knight",
+          "their_bishop",
+          "their_rook",
+          "their_queen",
+          "their_king"
+        ],
+        "name": "piece_code",
+        "source_array": "piece_code_i8"
+      },
+      {
+        "attack_count_bins": false,
+        "class_names": [
+          "absent",
+          "present"
+        ],
+        "name": "legal_origin",
+        "source_array": "legal_origin_u8"
+      },
+      {
+        "attack_count_bins": false,
+        "class_names": [
+          "absent",
+          "present"
+        ],
+        "name": "legal_destination",
+        "source_array": "legal_destination_u8"
+      },
+      {
+        "attack_count_bins": false,
+        "class_names": [
+          "absent",
+          "present"
+        ],
+        "name": "attacked_undefended_ours",
+        "source_array": "attacked_undefended_ours_u8"
+      },
+      {
+        "attack_count_bins": false,
+        "class_names": [
+          "absent",
+          "present"
+        ],
+        "name": "attacked_undefended_theirs",
+        "source_array": "attacked_undefended_theirs_u8"
+      },
+      {
+        "attack_count_bins": false,
+        "class_names": [
+          "absent",
+          "present"
+        ],
+        "name": "pinned_ours",
+        "source_array": "pinned_ours_u8"
+      },
+      {
+        "attack_count_bins": false,
+        "class_names": [
+          "absent",
+          "present"
+        ],
+        "name": "pinned_theirs",
+        "source_array": "pinned_theirs_u8"
+      },
+      {
+        "attack_count_bins": false,
+        "class_names": [
+          "absent",
+          "present"
+        ],
+        "name": "capture_destination",
+        "source_array": "capture_destination_u8"
+      },
+      {
+        "attack_count_bins": false,
+        "class_names": [
+          "absent",
+          "present"
+        ],
+        "name": "checking_destination",
+        "source_array": "checking_destination_u8"
+      },
+      {
+        "attack_count_bins": false,
+        "class_names": [
+          "absent",
+          "present"
+        ],
+        "name": "our_king_zone",
+        "source_array": "our_king_zone_u8"
+      },
+      {
+        "attack_count_bins": false,
+        "class_names": [
+          "absent",
+          "present"
+        ],
+        "name": "their_king_zone",
+        "source_array": "their_king_zone_u8"
+      },
+      {
+        "attack_count_bins": true,
+        "class_names": [
+          "zero",
+          "one",
+          "two",
+          "three",
+          "four_or_more"
+        ],
+        "name": "attack_count_ours",
+        "source_array": "attack_count_ours_u8"
+      },
+      {
+        "attack_count_bins": true,
+        "class_names": [
+          "zero",
+          "one",
+          "two",
+          "three",
+          "four_or_more"
+        ],
+        "name": "attack_count_theirs",
+        "source_array": "attack_count_theirs_u8"
+      }
+    ],
+    "definitions": {
+      "attacked_undefended": "occupied square has at least one enemy attacker and zero friendly attackers",
+      "capture_check_destination": "union of destinations of exact legal captures/checking moves",
+      "king_zone": "king square plus its adjacent king-attack squares",
+      "legal_origin_destination": "union over exact legal moves in the position",
+      "pinned": "exact absolute pin under python-chess board rules"
+    },
+    "engine_calls": false,
+    "orientation": "BT4 side-to-move token frame; black-to-move squares are vertically mirrored",
+    "schema_version": "bt4-lorsa-exact-token-concepts-v1"
+  },
+  "hero_heldout": {
+    "activity": {
+      "dead_feature_fraction": 0.584228515625,
+      "feature_count": 16384,
+      "live_feature_count": 6812,
+      "mean_activation_given_active": 1.543763225550525,
+      "mean_l0": 29.96258544921875,
+      "nonzero_count": 490907,
+      "token_count": 16384
+    },
+    "direction_nonreplicated_supported_count": 0,
+    "direction_replicated_count": 207,
+    "direction_replication_rate_supported": 1.0,
+    "minimum_evaluation_support": 10,
+    "selected_pair_count": 215,
+    "supported_negative_lift_count": 160,
+    "supported_pair_count": 207,
+    "supported_positive_lift_count": 47,
+    "supported_zero_lift_count": 0,
+    "unsupported_pair_count": 8
+  },
+  "interpretation_contract": {
+    "causal_followup_required": "ablation/insertion, specificity, dose-response, and matched random controls",
+    "descriptive_only": true,
+    "exploratory": true,
+    "frozen_selection_on_both_heldout_arms": true,
+    "multiple_testing_adjusted": false,
+    "selection_only_on_raw_fit": true,
+    "test_split_selected_or_evaluated": false
+  },
+  "layer": 14,
+  "negative_and_null_results": {
+    "hero_heldout_direction_nonreplicated_supported_count": 0,
+    "hero_heldout_unsupported_pair_count": 8,
+    "hero_heldout_zero_lift_supported_count": 0,
+    "no_pairs_met_raw_fit_selection_gate": false,
+    "null_fields_are_json_null_not_imputed": true,
+    "raw_heldout_direction_nonreplicated_supported_count": 0,
+    "raw_heldout_unsupported_pair_count": 7,
+    "raw_heldout_zero_lift_supported_count": 0,
+    "raw_hero_direction_disagreement_supported_count": 0
+  },
+  "position_split": {
+    "evaluation_splits": [
+      "Raw heldout development groups",
+      "Hero heldout development groups"
+    ],
+    "fit_fraction_requested": 0.5,
+    "fit_group_count": 256,
+    "fit_group_identity_sha256": "bc0784f79033d3186e78fc20405e1f491d718968ddad2cde168972d621e731a0",
+    "fit_partition_available_positions": 256,
+    "fit_position_count": 256,
+    "fit_position_identity_sha256": "fe648f2ef6ff245a90682a04ad98fcb9b6089359e35d63f59f02971d28174c49",
+    "group_disjoint": true,
+    "heldout_group_count": 256,
+    "heldout_group_identity_sha256": "2a930dd059a0453a978b79ddca95bdd6dd72f87ca4b4581fb5c5e76791031909",
+    "heldout_partition_available_positions": 1726,
+    "heldout_position_count": 256,
+    "heldout_position_identity_sha256": "9b82868b9b2bc60aae0df8a5d02209101043f7146bedb28016ea8430ad23dada",
+    "method": "SHA-256(seed, namespace, identity) ordering; constrained group cut; fixed per-partition position counts",
+    "requested_position_count": 512,
+    "seed": 20260808,
+    "selection_source_model": "Raw",
+    "selection_split": "Raw-fit development groups",
+    "test_rows_selected": 0
+  },
+  "raw_heldout": {
+    "activity": {
+      "dead_feature_fraction": 0.5640869140625,
+      "feature_count": 16384,
+      "live_feature_count": 7142,
+      "mean_activation_given_active": 1.5845957741541021,
+      "mean_l0": 29.9583740234375,
+      "nonzero_count": 490838,
+      "token_count": 16384
+    },
+    "direction_nonreplicated_supported_count": 0,
+    "direction_replicated_count": 208,
+    "direction_replication_rate_supported": 1.0,
+    "minimum_evaluation_support": 10,
+    "selected_pair_count": 215,
+    "supported_negative_lift_count": 161,
+    "supported_pair_count": 208,
+    "supported_positive_lift_count": 47,
+    "supported_zero_lift_count": 0,
+    "unsupported_pair_count": 7
+  },
+  "raw_hero_model_diff": {
+    "both_supported_pair_count": 205,
+    "interpretation": "A descriptive model-diff summary on pairs frozen from Raw fit; agreement is not semantic equivalence and disagreement is an explicit negative result.",
+    "mean_absolute_hero_minus_raw_lift_supported": 0.5064465255174561,
+    "raw_hero_direction_agreement_count": 205,
+    "raw_hero_direction_agreement_rate_supported": 1.0,
+    "raw_hero_heldout_lift_pearson_supported": 0.9833331033914671
+  },
+  "runtime_model_identity_gate": {
+    "criteria": {
+      "encoder_layout_matches_source_transfer": true,
+      "hero_runtime_identity_matches": true,
+      "no_mixed_checkpoint_written": true,
+      "raw_runtime_identity_matches": true
+    },
+    "descriptor": {
+      "arm_semantics": "first letter encoder; second letter policy head",
+      "arms": [
+        "RR",
+        "HR",
+        "RH",
+        "HH"
+      ],
+      "encoder_layout_sha256": "c8c7fdcab3dfb1b6af5f1ac3a54f9347dd52e3d4673ad6f88e8d9407523d8bbb",
+      "hero_leaf_count": 462,
+      "hero_state_sha256": "665ac91ad37e14a6c8810068700dba021e39e9c0fe145c8bf620882bb5a71692",
+      "on_disk_mixed_checkpoints": false,
+      "raw_asset_sha256": "61e43e98d2c4cb747498c6bc13a5bbb3b07e985d3f5d87f0351a4db855fa0651",
+      "raw_mapping_sha256": "c7a22e25a74e959357f294dfdda4a8f47372d79c96ada49131967bec75b2d93c",
+      "resident_parameter_bytes": 793834496,
+      "schema_version": "bt4-raw-hero-comparison-models-v1"
+    },
+    "passed": true
+  },
+  "schema_version": "bt4-lorsa-token-semantics-metrics-v1",
+  "selection": {
+    "activity": {
+      "dead_feature_fraction": 0.55963134765625,
+      "feature_count": 16384,
+      "live_feature_count": 7215,
+      "mean_activation_given_active": 1.5675587927578958,
+      "mean_l0": 29.96832275390625,
+      "nonzero_count": 491001,
+      "token_count": 16384
+    },
+    "minimum_fit_feature_support": 20,
+    "selected_negative_fit_pair_count": 164,
+    "selected_pair_count": 215,
+    "selected_positive_fit_pair_count": 51,
+    "smoothing": 0.5,
+    "source_model": "Raw",
+    "source_partition": "group-disjoint fit development positions",
+    "top_per_class": 5
+  },
+  "source_transfer_gate": {
+    "criteria": {
+      "artifact_contract_passed": true,
+      "checksum_inventory_exact": true,
+      "corpus_identity_matches": true,
+      "development_split_only": true,
+      "examples_unique_and_complete": true,
+      "feature_width_exact": true,
+      "hero_identity_matches": true,
+      "hero_transfer_complete": true,
+      "hero_transfer_declared_interpretable": true,
+      "layer_exact": true,
+      "lorsa_before_after_frozen": true,
+      "lorsa_manifest_identity_matches": true,
+      "lorsa_payload_identity_matches": true,
+      "main_environment_pickle_excluded": true,
+      "manifest_schema_exact": true,
+      "metrics_identity_matches": true,
+      "metrics_schema_exact": true,
+      "position_counts_match": true,
+      "positions_identity_matches": true,
+      "raw_identity_matches": true,
+      "run_identity_matches": true,
+      "source_compatibility_passed": true,
+      "source_lorsa_frozen": true,
+      "source_stage_complete": true,
+      "source_test_split_unopened": true,
+      "token_width_exact": true
+    },
+    "failure_action": "abort before loading models or evaluating semantic features",
+    "passed": true,
+    "position_count": 512,
+    "schema_version": "bt4-lorsa-source-transfer-verification-v1",
+    "source_transfer_checksum_identity": "9e40c817562955070418d2dae1587eba2cfea3bc5baa71a83f4dfdb72b80d18e",
+    "source_transfer_metrics_identity": "5906d5235cb5c735f8d6e0c345057f072dea0c8682c05956d629b84b426941bc",
+    "source_transfer_positions_identity": "016fcf5775758f36f035685ddc4d0acd3cc45c426a13b18377a33748dd060d5f",
+    "source_transfer_run_id": "sha256:b7b67d80087f5beec16a1ce3fe331cf228457394ea15cd50d56ee21213209e0c"
+  },
+  "status": "complete_descriptive",
+  "streaming": {
+    "dense_feature_batches_immediately_discarded": true,
+    "features_persisted": false,
+    "hero_heldout": {
+      "activity": {
+        "dead_feature_fraction": 0.584228515625,
+        "feature_count": 16384,
+        "live_feature_count": 6812,
+        "mean_activation_given_active": 1.543763225550525,
+        "mean_l0": 29.96258544921875,
+        "nonzero_count": 490907,
+        "token_count": 16384
+      },
+      "arm": "HH",
+      "checkpoint_dtype": "torch.float32",
+      "feature_shape": [
+        "batch",
+        64,
+        16384
+      ],
+      "features_persisted": false,
+      "position_count": 256
+    },
+    "only_cpu_sufficient_statistics_retained": true,
+    "raw_fit": {
+      "activity": {
+        "dead_feature_fraction": 0.55963134765625,
+        "feature_count": 16384,
+        "live_feature_count": 7215,
+        "mean_activation_given_active": 1.5675587927578958,
+        "mean_l0": 29.96832275390625,
+        "nonzero_count": 491001,
+        "token_count": 16384
+      },
+      "arm": "RR",
+      "checkpoint_dtype": "torch.float32",
+      "feature_shape": [
+        "batch",
+        64,
+        16384
+      ],
+      "features_persisted": false,
+      "position_count": 256
+    },
+    "raw_heldout": {
+      "activity": {
+        "dead_feature_fraction": 0.5640869140625,
+        "feature_count": 16384,
+        "live_feature_count": 7142,
+        "mean_activation_given_active": 1.5845957741541021,
+        "mean_l0": 29.9583740234375,
+        "nonzero_count": 490838,
+        "token_count": 16384
+      },
+      "arm": "RR",
+      "checkpoint_dtype": "torch.float32",
+      "feature_shape": [
+        "batch",
+        64,
+        16384
+      ],
+      "features_persisted": false,
+      "position_count": 256
+    }
+  }
+}

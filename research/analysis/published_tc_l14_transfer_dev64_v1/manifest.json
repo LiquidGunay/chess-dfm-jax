@@ -1,0 +1,155 @@
+{
+  "cost": {
+    "backend": "local GTX 1660 Ti",
+    "provider_dollars": 0.0
+  },
+  "elapsed_seconds": 27.00842433498474,
+  "environment": {
+    "cuda_runtime": "12.1",
+    "device": "cuda",
+    "gpu": {
+      "name": "NVIDIA GeForce GTX 1660 Ti",
+      "total_memory_bytes": 6442123264
+    },
+    "numpy": "2.2.6",
+    "python": "3.12.3",
+    "torch": "2.5.1+cu121"
+  },
+  "experiment": {
+    "batch_size": 1,
+    "compute_dtype": "float32",
+    "confirmatory": false,
+    "hook_in": "resid_mid_after_ln",
+    "hook_out": "hook_mlp_out",
+    "layer": 14,
+    "position_count": 64,
+    "replacement_point": "before alpha, residual addition, and LN2",
+    "seed": 20260808
+  },
+  "git": {
+    "branch": "research/local-gpu-autoresearch",
+    "commit": "86ba0b37e3e188eab115b45a1460d079fac341f8",
+    "status": [
+      "M .gitignore",
+      " M README.md",
+      " M chess_dfm_jax/__init__.py",
+      " M research/resource_guard.py",
+      " M research/train_torch.py",
+      " M tests/test_research_resource_guard.py",
+      " M tests/test_torch_gradient_parity.py",
+      " M tests/test_torch_muon_parity.py",
+      "?? docs/hero_bt4_interpretability_plan.md",
+      "?? research/analysis/.published_tc_l14_transfer_dev64_v1.417547.partial/",
+      "?? research/analysis/modal_smoke_20260807.json",
+      "?? research/analysis/published_tc_l14_transfer_pilot_v1/",
+      "?? research/analysis/raw_hero_matrix_spectra_20260807.json",
+      "?? research/analysis/raw_hero_parameter_diff_20260807.json",
+      "?? research/analysis/raw_hero_pilot_v1/",
+      "?? research/eval/interpretability_pilot_v1/",
+      "?? research/eval/interpretability_public_v1/",
+      "?? research/eval/interpretability_public_v2/",
+      "?? research/infra/",
+      "?? research/interpretability/",
+      "?? research/requirements_infra.txt",
+      "?? research/requirements_torch_local.txt",
+      "?? research/run_torch_gpu.sh",
+      "?? tests/test_torch_activation_diff.py",
+      "?? tests/test_torch_artifact_store.py",
+      "?? tests/test_torch_attention_components.py",
+      "?? tests/test_torch_attribution.py",
+      "?? tests/test_torch_behavior_diff.py",
+      "?? tests/test_torch_bt4_representation_hooks.py",
+      "?? tests/test_torch_delta_crosscoder.py",
+      "?? tests/test_torch_interpretability_accumulators.py",
+      "?? tests/test_torch_interpretability_artifacts.py",
+      "?? tests/test_torch_interpretability_models.py",
+      "?? tests/test_torch_logit_lens.py",
+      "?? tests/test_torch_lookahead.py",
+      "?? tests/test_torch_lorsa.py",
+      "?? tests/test_torch_paired_diff.py",
+      "?? tests/test_torch_parameter_diff.py",
+      "?? tests/test_torch_patching.py",
+      "?? tests/test_torch_pilot_corpus.py",
+      "?? tests/test_torch_probes.py",
+      "?? tests/test_torch_public_chess_data.py",
+      "?? tests/test_torch_remote_cost.py",
+      "?? tests/test_torch_sparse_transcoder.py",
+      "?? tests/test_torch_sparse_transfer_pilot.py",
+      "?? tests/test_torch_spectral_diff.py"
+    ],
+    "status_sha256": "18c4c80e9278af9b287fcbb3571f242fdb6d635cd651295b8a5601699c078eab",
+    "worktree_clean": false
+  },
+  "model_lattice": {
+    "arm_semantics": "first letter encoder; second letter policy head",
+    "arms": [
+      "RR",
+      "HR",
+      "RH",
+      "HH"
+    ],
+    "encoder_layout_sha256": "c8c7fdcab3dfb1b6af5f1ac3a54f9347dd52e3d4673ad6f88e8d9407523d8bbb",
+    "hero_leaf_count": 462,
+    "hero_state_sha256": "665ac91ad37e14a6c8810068700dba021e39e9c0fe145c8bf620882bb5a71692",
+    "on_disk_mixed_checkpoints": false,
+    "raw_asset_sha256": "61e43e98d2c4cb747498c6bc13a5bbb3b07e985d3f5d87f0351a4db855fa0651",
+    "raw_mapping_sha256": "c7a22e25a74e959357f294dfdda4a8f47372d79c96ada49131967bec75b2d93c",
+    "resident_parameter_bytes": 793834496,
+    "schema_version": "bt4-raw-hero-comparison-models-v1"
+  },
+  "payload_identities": {
+    "hero": "665ac91ad37e14a6c8810068700dba021e39e9c0fe145c8bf620882bb5a71692",
+    "metrics": "e9884912772378e36efb81d35f16a33e30b18ca3038c0e9c45e97c71d7219255",
+    "positions": "e97a554942828d778aeafd8b401023a02fb0f6815e994ac9330a5eaac2b39f9f",
+    "raw": "61e43e98d2c4cb747498c6bc13a5bbb3b07e985d3f5d87f0351a4db855fa0651",
+    "transcoder": "cca07164dab44ce4126497856fdb659f90605ae9143db26d60d2b3cc5c770584"
+  },
+  "public_corpus_manifest": {
+    "integrity_sha256": "9195f857f60ab123b353095b6b931c589ae69098750ea6b26e53e7d871f349d0",
+    "path": "/home/ubuntu/chess-dfm-jax/research/eval/interpretability_public_v2/manifest.json",
+    "selection": "lowest position_id in development split",
+    "split": "development only"
+  },
+  "run_id": "sha256:16c30fd8249a730cc3d46040b9d1d7d4d85372227bd887ae28f4fe36ea00f939",
+  "schema_version": "bt4-published-transcoder-transfer-run-v1",
+  "source_files": {
+    "research/interpretability/models.py": "a3f8fddf06c74104e2fb15717fa4b612a45f5501c2791b62df7f329697270f03",
+    "research/interpretability/sparse/transcoder.py": "e0e31f8e2c0242cb5935f8e8a4a1e040a86c40332d7642934578db10b59c6edd",
+    "research/interpretability/sparse/transfer_pilot.py": "d64d1a83373d4643b9723ef1987bbb4f7f02b9db6aa054de4e5efda853825837",
+    "research/train_torch.py": "c9ce7531f43a4e7bc0a6e1fa02a238dac8abb8eddf76da3530aa3b960904b4a3"
+  },
+  "started_utc": "2026-08-08T05:00:33.895433+00:00",
+  "transcoder": {
+    "config_path": "/home/ubuntu/chess-dfm-jax/data/external/leela_saes/k_30_e_16/L14/config.json",
+    "config_sha256": "d3f662281b682d443046237081ab0dba9b6a57a6e97ebe36bc6a9fdc32ef31bf",
+    "d_model": 1024,
+    "d_sae": 16384,
+    "dataset_average_activation_norm": {
+      "blocks.14.hook_mlp_out": 127.61770629882812,
+      "blocks.14.resid_mid_after_ln": 15.572322845458984
+    },
+    "dataset_normalization_folded": true,
+    "hook_point_in": "blocks.14.resid_mid_after_ln",
+    "hook_point_out": "blocks.14.hook_mlp_out",
+    "pickle_loaded": false,
+    "safetensors_metadata": {
+      "version": "unknown"
+    },
+    "schema_version": "bt4-published-transcoder-load-v1",
+    "tensor_keys": [
+      "W_D",
+      "W_E",
+      "b_D",
+      "b_E",
+      "dataset_average_activation_norm.blocks.14.hook_mlp_out",
+      "dataset_average_activation_norm.blocks.14.resid_mid_after_ln",
+      "is_dead",
+      "tokens_since_last_activation"
+    ],
+    "top_k": 30,
+    "topk_semantics": "pinned upstream positive binary threshold, tolerance=1",
+    "upstream_code_commit": "f946a5736f40397f5c834104aeac6e8e6ff753bd",
+    "weights_path": "/home/ubuntu/chess-dfm-jax/data/external/leela_saes/k_30_e_16/L14/sae_weights.safetensors",
+    "weights_sha256": "cca07164dab44ce4126497856fdb659f90605ae9143db26d60d2b3cc5c770584"
+  }
+}

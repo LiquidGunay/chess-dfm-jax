@@ -1,0 +1,67 @@
+{
+  "schema_version": "chess-dfm-hero-v2-phase1-preregister-v1",
+  "created_utc": "2026-08-09T12:06:10Z",
+  "status": "sealed_before_launch",
+  "parent_decision_record": {
+    "path": "research/analysis/hero_v2_phase1/followup_decision_tree-preregister.json",
+    "sha256": "a0563da781d7c45e00d04e0db3fe99c9d8b9c4da55b0e0a1b56ea9e70a28b26a"
+  },
+  "triggered_branch": "bf16_retains_root_top1_and_full_fp32_regresses",
+  "prelaunch_evidence": {
+    "hero1_root_legal_top1_accuracy": 0.455078125,
+    "v2_bf16_1_30_root_legal_top1_accuracy": 0.4517822265625,
+    "v2_fp32_1_12_root_legal_top1_accuracy": 0.41455078125,
+    "v2_fp32_1_12_arena_pair_count": 128,
+    "v2_fp32_1_12_arena_score": 0.3203125,
+    "v2_fp32_1_12_arena_score_interval": [
+      0.20027215108500993,
+      0.44035284891499005
+    ]
+  },
+  "arm": {
+    "name": "v2_encoder_fp32_1_12",
+    "profile": "phase1",
+    "gpu": "L40S",
+    "updates": 554,
+    "examples_per_update": 1024,
+    "recipe": "hero_v2",
+    "main_lr_multiplier": 1.0,
+    "encoder_lr_ratio": 0.08333333333333333,
+    "optimizer_precision": "encoder_fp32_master",
+    "optimizer_precision_scope": "all encoder.* parameters, including encoder.policy_head; non-encoder parameters retain parameter-precision optimizer state and no FP32 master",
+    "weight_decay_mode": "decoupled",
+    "schedule_kind": "warmup_stable_linear_decay",
+    "wsd_decay_fraction": 0.2
+  },
+  "question": "Does the policy regression come from changing optimizer precision outside encoder.*, or does it persist when only encoder.* receives FP32 state and master weights?",
+  "predictions": {
+    "if_non_encoder_precision_is_causal": "root legal top-1 returns to the Hero-1/BF16 band while loss remains materially faster than Hero 1",
+    "if_encoder_precision_is_causal": "root legal top-1 remains roughly four percentage points below Hero 1 despite BF16 non-encoder optimizer state",
+    "important_limitation": "This arm does not distinguish encoder.policy_head from the encoder trunk; that partition is a possible later diagnostic only after reassessment."
+  },
+  "decision_gates": {
+    "root_legal_top1_noninferiority_floor": 0.445078125,
+    "root_legal_top1_tolerance": 0.01,
+    "max_trunk_relative_delta_l2": 0.005,
+    "max_global_relative_delta_l2": 0.01,
+    "requires_frozen_validation_comparator": true,
+    "requires_arena_before_phase2": true,
+    "loss_alone_cannot_promote": true,
+    "phase2_only_if_behavior_is_not_materially_worse": true
+  },
+  "source_identity": {
+    "compile_source_tree_sha256": "f3619b1b8f9a6cc1d62c9750f943a6a2b147a810ebc4bc920dc7517b0908519d",
+    "full_source_tree_sha256": "74196488d0d546029c10db3f9e523ea7b65c410699f2b90f5c171e08543f2766"
+  },
+  "verification": {
+    "targeted_tests": "83 passed, 1 skipped",
+    "ruff": "passed",
+    "modal_metered_spend_before_launch_usd": 11.29320739,
+    "workspace_native_hard_budget_usd": 42.5,
+    "repository_new_launch_stop_usd": 34.0
+  },
+  "multiplicity": {
+    "additional_phase1_training_arms_before_reassessment": 1,
+    "arm_selected_without_inspecting_its_outcome": true
+  }
+}

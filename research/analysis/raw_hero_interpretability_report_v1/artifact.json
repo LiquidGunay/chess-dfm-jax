@@ -1,0 +1,2949 @@
+{
+  "manifest": {
+    "blocks": [
+      {
+        "body": "# Raw BT4 vs Hero: exploratory interpretability audit",
+        "id": "title",
+        "type": "markdown"
+      },
+      {
+        "body": "**Decision:** share with caveats. The end-to-end tooling is working and independently recomputes every saved probe metric, but this is a nested-development study—not a confirmatory result. The frozen test partition remains unopened.",
+        "id": "status",
+        "sourceId": "validation",
+        "type": "markdown"
+      },
+      {
+        "cardIds": [
+          "run_card",
+          "validation_card",
+          "cost_card"
+        ],
+        "id": "metrics",
+        "type": "metric-strip"
+      },
+      {
+        "body": "## Technical summary\n\nThe 2×2 encoder/head lattice localizes nearly all resolved policy change to the Hero encoder. Hero makes legal-destination information more accessible through most middle and late layers, while attack-count changes are mixed and late piece identity is often slightly worse. Both models contain late third-ply information; Hero does not show a systematic layerwise lookahead advantage. Probe directions reliably move their trained objectives, yet only one of 30 current-policy derivative intervals excludes zero. The right conclusion is representational redistribution with weak evidence of policy use—not evidence that Hero learned an internal search algorithm.",
+        "id": "technical_summary",
+        "sourceId": "synthesis",
+        "type": "markdown"
+      },
+      {
+        "body": "## Scope, data, and metric definitions\n\nThe powered run fits probes on 1,024 training roots, selects hyperparameters on 256 training roots, and evaluates on 512 development roots across all 15 residual-post layers. The target is the third ply (zero-indexed future ply 2) from public puzzle continuations. Piece code uses accuracy; legal destination displays AUROC but paired inference uses threshold accuracy; opponent attack count displays R² but paired inference uses negative MAE. Every interval is a paired 2,000-replicate group bootstrap.",
+        "id": "scope",
+        "sourceId": "validation",
+        "type": "markdown"
+      },
+      {
+        "body": "## Finding 1 — the encoder mediates the resolved behavioral change\n\nOn the 128-position development pilot, RR/RH target NLL was 2.8776/2.8816 and both reached 25.0% top-1 accuracy; HR/HH reached 1.4288/1.4284 and 53.1%. Encoder swaps produced about 0.256 JS divergence with only 36.7–37.5% top-1 agreement, whereas head swaps produced 5.84e-6–1.40e-5 JS and 98.4–100% agreement. Corresponding-layer CKA falls from 0.819 to 0.236 while symmetric relative L2 rises from 0.531 to 1.144.",
+        "id": "model_diff_heading",
+        "sourceId": "model_diff",
+        "type": "markdown"
+      },
+      {
+        "chartId": "cka_chart",
+        "id": "cka",
+        "layout": "full",
+        "type": "chart"
+      },
+      {
+        "body": "This localizer is decisive enough to route experiments toward the encoder, but its uncertainty intervals are not confirmatory: all rows share a placeholder game ID and the 64-wide CKA sketch is not convergence-certified.",
+        "id": "model_diff_limit",
+        "sourceId": "model_diff",
+        "type": "markdown"
+      },
+      {
+        "body": "## Finding 2 — Hero redistributes chess concepts rather than uniformly improving them\n\nHero is higher on legal-destination paired accuracy at 13 of 15 layers, Raw is higher at layer 0, and layer 3 is unresolved. Attack-count differences resolve in Hero's direction at nine layers and Raw's at three, with three unresolved. Piece-code differences resolve only at layers 10, 12, 13, and 14; Hero is lower at three of those four, including a −0.0061 final-layer difference (95% interval −0.0119 to −0.0005).",
+        "id": "concept_heading",
+        "sourceId": "validation",
+        "type": "markdown"
+      },
+      {
+        "chartId": "legal_chart",
+        "id": "legal",
+        "layout": "full",
+        "type": "chart"
+      },
+      {
+        "chartId": "attack_chart",
+        "id": "attack",
+        "layout": "full",
+        "type": "chart"
+      },
+      {
+        "chartId": "piece_chart",
+        "id": "piece",
+        "layout": "full",
+        "type": "chart"
+      },
+      {
+        "id": "concept_table_block",
+        "layout": "full",
+        "tableId": "concept_delta_table",
+        "type": "table"
+      },
+      {
+        "body": "## Finding 3 — both models encode future moves late; Hero has no systematic advantage\n\nRaw destination accuracy peaks at 0.713 on layer 13; Hero peaks at 0.703 on layer 12. Joint-move accuracy peaks at layer 13 for both (Raw 0.670; Hero 0.662). Only layer 6 resolves for destination accuracy, favoring Raw by 0.0234. At layer 14, Hero resolves a +0.0547 joint-move difference (95% interval +0.0137 to +0.0977). This final-layer difference is a localized redistribution, not a depth-wide gain.",
+        "id": "lookahead_heading",
+        "sourceId": "validation",
+        "type": "markdown"
+      },
+      {
+        "chartId": "destination_chart",
+        "id": "destination",
+        "layout": "full",
+        "type": "chart"
+      },
+      {
+        "chartId": "joint_chart",
+        "id": "joint",
+        "layout": "full",
+        "type": "chart"
+      },
+      {
+        "id": "lookahead_table_block",
+        "layout": "full",
+        "tableId": "lookahead_delta_table",
+        "type": "table"
+      },
+      {
+        "body": "## Causal-use audit\n\nAll 30 learned lookahead directions have positive lower bounds for movement of their probe objective. That proves the interventions work in probe space. It does not prove policy use: only Raw layer 2 has a current-policy target-log-odds derivative interval excluding zero (mean 0.00252; 95% interval 0.000307–0.00558). Random-direction probe intervals contain zero in 26 of 30 comparisons, leaving four control failures that must be resolved before stronger claims.",
+        "id": "causal_heading",
+        "sourceId": "validation",
+        "type": "markdown"
+      },
+      {
+        "body": "## Literature-method replications and negative diagnostics\n\nLogit-lens target probability stays near 0.06 through layer 7 and rises to 0.867–0.872 at layer 14. Bidirectional residual patching progresses with depth and reaches essentially 1.0 distribution-delta projection at layer 14. Raw/Hero attention-pattern JS is small (0.00176, 0.000504, 0.00606 at layers 0, 7, 14). Exact SARFA piece-removal maps align closely on two examples (cosine 0.953), but 16-step integrated gradients fails its completeness diagnostic with mean relative error 4.50; IG maps are therefore excluded from substantive interpretation.",
+        "id": "literature_heading",
+        "sourceId": "literature",
+        "type": "markdown"
+      },
+      {
+        "chartId": "patch_chart",
+        "id": "patching_chart",
+        "layout": "full",
+        "type": "chart"
+      },
+      {
+        "body": "## Sparse-feature compatibility\n\nThe published layer-14 transcoder passes its source-compatibility gate for both models. Hero reconstruction is marginally better (cosine 0.949 vs 0.948; normalized MSE 0.0992 vs 0.1013), and replacing the MLP output preserves top-1 policy choice on all 16 rows. This supports using the published artifact as a transfer baseline; it does not establish that its individual features retain the same chess semantics.",
+        "id": "sparse_heading",
+        "sourceId": "transcoder",
+        "type": "markdown"
+      },
+      {
+        "id": "transcoder_table_block",
+        "layout": "full",
+        "tableId": "transcoder_table",
+        "type": "table"
+      },
+      {
+        "id": "evidence_table_block",
+        "layout": "full",
+        "tableId": "evidence_table",
+        "type": "table"
+      },
+      {
+        "body": "## Compute, cost, and reliability\n\nInputs were downloaded and fully SHA-256 verified by a CPU-only Modal function into an immutable Volume. The T4 job started only after a cache/path preflight and reported zero network-download bytes; a separate CPU function published the result. Current settled usage is $0.46430113 metered and $0 billed after credits. The powered pipeline added $0.44357680, about 1.04% of the $42.50 workspace budget; total metered usage is 1.09%. No Volume charge has accrued.",
+        "id": "cost_heading",
+        "sourceId": "cost",
+        "type": "markdown"
+      },
+      {
+        "body": "## Limitations and robustness\n\n- Exploratory nested-development analysis; the frozen test partition remains unopened.\n- One training seed for learned probes; seed variance is unknown.\n- All-layer interval scans are uncorrected for multiple comparisons.\n- Linear decodability does not establish causal use or search.\n- Policy steering uses only 16 development positions per model and layer.\n- Third-ply labels are public puzzle continuations, not a fresh standardized engine-PV benchmark.",
+        "id": "limitations",
+        "sourceId": "validation",
+        "type": "markdown"
+      },
+      {
+        "body": "## Recommended next experiments\n\n1. Freeze the present metrics and run a three-seed confirmatory probe/lookahead analysis on the unopened test partition with family-wise or FDR correction.\n2. Build a licensed, versioned Stockfish-PV benchmark with matched quiet/tactical roots, then repeat future-move decoding and causal steering. Public searchless-chess positions can supply roots; engine version, nodes, multipv, and label confidence must be stored.\n3. Replace whole-residual patching with head/MLP/path patching at layers 7–14 to localize the encoder-mediated delta.\n4. Audit transferred transcoder features semantically, then train a small paired delta crosscoder or LoRSA model only at the validated high-change layers.\n5. Spend in gates: roughly $2–$4 for confirmatory probes, $5–$10 for engine-labelled causal work, and reserve the remaining budget for a sparse model only after the causal gate.",
+        "id": "next_steps",
+        "sourceId": "synthesis",
+        "type": "markdown"
+      },
+      {
+        "body": "## Further questions\n\nDoes Hero's late legal-destination gain survive true game-disjoint test data? Is the final joint-move gain tied to particular tactical motifs or merely readout geometry? Which attention heads or MLP features carry the bidirectional patching effect? Do sparse features preserve semantics across the model pair, or does Hero rotate them into a new basis? These are now answerable with the retained tooling.",
+        "id": "questions",
+        "type": "markdown"
+      }
+    ],
+    "cards": [
+      {
+        "dataset": "probe_summary",
+        "description": "Powered development evaluation scope.",
+        "id": "run_card",
+        "metrics": [
+          {
+            "field": "evaluation_positions",
+            "format": "number",
+            "label": "Evaluation roots"
+          },
+          {
+            "field": "layers",
+            "format": "number",
+            "label": "Layers"
+          }
+        ],
+        "sourceId": "validation"
+      },
+      {
+        "dataset": "probe_summary",
+        "description": "Independent recomputation and controls.",
+        "id": "validation_card",
+        "metrics": [
+          {
+            "field": "recomputed_metric_groups",
+            "format": "number",
+            "label": "Metrics recomputed"
+          },
+          {
+            "field": "controls_passed",
+            "format": "number",
+            "label": "Controls beaten"
+          }
+        ],
+        "sourceId": "validation"
+      },
+      {
+        "dataset": "cost_summary",
+        "description": "Current Modal workspace usage after credits.",
+        "id": "cost_card",
+        "metrics": [
+          {
+            "field": "metered_cost_dollars",
+            "format": "currency",
+            "label": "Modal metered"
+          },
+          {
+            "field": "budget_fraction",
+            "format": "percent",
+            "label": "Budget used"
+          }
+        ],
+        "sourceId": "cost"
+      }
+    ],
+    "charts": [
+      {
+        "dataset": "legal_metrics",
+        "encodings": {
+          "color": {
+            "field": "model",
+            "label": "Series",
+            "type": "nominal"
+          },
+          "tooltip": [
+            {
+              "field": "layer",
+              "label": "Layer",
+              "type": "ordinal"
+            },
+            {
+              "field": "model",
+              "label": "Series",
+              "type": "nominal"
+            },
+            {
+              "field": "score",
+              "label": "AUROC",
+              "type": "quantitative"
+            }
+          ],
+          "x": {
+            "field": "layer",
+            "label": "Layer",
+            "type": "ordinal"
+          },
+          "y": {
+            "field": "score",
+            "label": "AUROC",
+            "type": "quantitative"
+          }
+        },
+        "id": "legal_chart",
+        "layout": "full",
+        "sourceId": "synthesis",
+        "subtitle": "Absolute linear-probe AUROC; paired intervals use threshold accuracy, not AUROC.",
+        "title": "Legal-destination information increases in most Hero layers",
+        "type": "line",
+        "valueFormat": "number"
+      },
+      {
+        "dataset": "attack_metrics",
+        "encodings": {
+          "color": {
+            "field": "model",
+            "label": "Series",
+            "type": "nominal"
+          },
+          "tooltip": [
+            {
+              "field": "layer",
+              "label": "Layer",
+              "type": "ordinal"
+            },
+            {
+              "field": "model",
+              "label": "Series",
+              "type": "nominal"
+            },
+            {
+              "field": "score",
+              "label": "R²",
+              "type": "quantitative"
+            }
+          ],
+          "x": {
+            "field": "layer",
+            "label": "Layer",
+            "type": "ordinal"
+          },
+          "y": {
+            "field": "score",
+            "label": "R²",
+            "type": "quantitative"
+          }
+        },
+        "id": "attack_chart",
+        "layout": "full",
+        "sourceId": "synthesis",
+        "subtitle": "Absolute probe R²; paired inference is based on negative MAE.",
+        "title": "Opponent-attack decoding changes are mixed across depth",
+        "type": "line",
+        "valueFormat": "number"
+      },
+      {
+        "dataset": "piece_metrics",
+        "encodings": {
+          "color": {
+            "field": "model",
+            "label": "Series",
+            "type": "nominal"
+          },
+          "tooltip": [
+            {
+              "field": "layer",
+              "label": "Layer",
+              "type": "ordinal"
+            },
+            {
+              "field": "model",
+              "label": "Series",
+              "type": "nominal"
+            },
+            {
+              "field": "score",
+              "label": "Accuracy",
+              "type": "quantitative"
+            }
+          ],
+          "x": {
+            "field": "layer",
+            "label": "Layer",
+            "type": "ordinal"
+          },
+          "y": {
+            "field": "score",
+            "label": "Accuracy",
+            "type": "quantitative"
+          }
+        },
+        "id": "piece_chart",
+        "layout": "full",
+        "sourceId": "synthesis",
+        "subtitle": "Absolute square-level piece-code accuracy.",
+        "title": "Piece identity is nearly perfect early and degrades late",
+        "type": "line",
+        "valueFormat": "number"
+      },
+      {
+        "dataset": "destination_metrics",
+        "encodings": {
+          "color": {
+            "field": "model",
+            "label": "Series",
+            "type": "nominal"
+          },
+          "tooltip": [
+            {
+              "field": "layer",
+              "label": "Layer",
+              "type": "ordinal"
+            },
+            {
+              "field": "model",
+              "label": "Series",
+              "type": "nominal"
+            },
+            {
+              "field": "accuracy",
+              "label": "Accuracy",
+              "type": "quantitative"
+            }
+          ],
+          "x": {
+            "field": "layer",
+            "label": "Layer",
+            "type": "ordinal"
+          },
+          "y": {
+            "field": "accuracy",
+            "label": "Accuracy",
+            "type": "quantitative"
+          }
+        },
+        "id": "destination_chart",
+        "layout": "full",
+        "sourceId": "synthesis",
+        "subtitle": "Public puzzle-continuation destination accuracy; test split remains unopened.",
+        "title": "Third-ply destination information peaks late in both models",
+        "type": "line",
+        "valueFormat": "number"
+      },
+      {
+        "dataset": "joint_metrics",
+        "encodings": {
+          "color": {
+            "field": "model",
+            "label": "Series",
+            "type": "nominal"
+          },
+          "tooltip": [
+            {
+              "field": "layer",
+              "label": "Layer",
+              "type": "ordinal"
+            },
+            {
+              "field": "model",
+              "label": "Series",
+              "type": "nominal"
+            },
+            {
+              "field": "accuracy",
+              "label": "Accuracy",
+              "type": "quantitative"
+            }
+          ],
+          "x": {
+            "field": "layer",
+            "label": "Layer",
+            "type": "ordinal"
+          },
+          "y": {
+            "field": "accuracy",
+            "label": "Accuracy",
+            "type": "quantitative"
+          }
+        },
+        "id": "joint_chart",
+        "layout": "full",
+        "sourceId": "synthesis",
+        "subtitle": "Hero is higher at layer 14, but not systematically across layers.",
+        "title": "Third-ply joint-move information is strongest near the output",
+        "type": "line",
+        "valueFormat": "number"
+      },
+      {
+        "dataset": "activation_depth",
+        "encodings": {
+          "color": {
+            "field": "metric_label",
+            "label": "Series",
+            "type": "nominal"
+          },
+          "tooltip": [
+            {
+              "field": "layer",
+              "label": "Layer",
+              "type": "ordinal"
+            },
+            {
+              "field": "metric_label",
+              "label": "Series",
+              "type": "nominal"
+            },
+            {
+              "field": "corresponding_layer_cka",
+              "label": "Linear CKA",
+              "type": "quantitative"
+            }
+          ],
+          "x": {
+            "field": "layer",
+            "label": "Layer",
+            "type": "ordinal"
+          },
+          "y": {
+            "field": "corresponding_layer_cka",
+            "label": "Linear CKA",
+            "type": "quantitative"
+          }
+        },
+        "id": "cka_chart",
+        "layout": "full",
+        "sourceId": "synthesis",
+        "subtitle": "Projected linear CKA on the 128-position model-diff pilot.",
+        "title": "Corresponding Raw/Hero representations diverge with depth",
+        "type": "line",
+        "valueFormat": "number"
+      },
+      {
+        "dataset": "patching",
+        "encodings": {
+          "color": {
+            "field": "direction",
+            "label": "Series",
+            "type": "nominal"
+          },
+          "tooltip": [
+            {
+              "field": "layer",
+              "label": "Layer",
+              "type": "ordinal"
+            },
+            {
+              "field": "direction",
+              "label": "Series",
+              "type": "nominal"
+            },
+            {
+              "field": "distribution_delta_projection",
+              "label": "Delta projection",
+              "type": "quantitative"
+            }
+          ],
+          "x": {
+            "field": "layer",
+            "label": "Layer",
+            "type": "ordinal"
+          },
+          "y": {
+            "field": "distribution_delta_projection",
+            "label": "Delta projection",
+            "type": "quantitative"
+          }
+        },
+        "id": "patch_chart",
+        "layout": "full",
+        "sourceId": "synthesis",
+        "subtitle": "Distribution-delta projection; 1 means full alignment with the reference change.",
+        "title": "Whole-residual patches mediate the fixed-head policy delta by layer 14",
+        "type": "line",
+        "valueFormat": "number"
+      }
+    ],
+    "description": "A source-linked technical audit of model diffing, probes, causal tests, attribution, sparse transfer, and compute cost.",
+    "generatedAt": "2026-08-08T07:58:34Z",
+    "sources": [
+      {
+        "id": "synthesis",
+        "label": "Audited synthesis and chart data",
+        "path": "research/analysis/raw_hero_interpretability_report_v1/synthesis.json"
+      },
+      {
+        "id": "validation",
+        "label": "Independent all-layer result validation",
+        "path": "research/analysis/raw_hero_interpretability_report_v1/validation.json"
+      },
+      {
+        "id": "cost",
+        "label": "Modal billing and execution cost audit",
+        "path": "research/analysis/raw_hero_interpretability_report_v1/cost_audit.json"
+      },
+      {
+        "id": "probe",
+        "label": "All-layer probe/lookahead metrics",
+        "path": "research/analysis/modal_probe_all_layers_dev_v1/metrics.json"
+      },
+      {
+        "id": "model_diff",
+        "label": "Raw/Hero 2×2 model-diff metrics",
+        "path": "research/analysis/raw_hero_pilot_v1/metrics.json"
+      },
+      {
+        "id": "literature",
+        "label": "Literature-method replication metrics",
+        "path": "research/analysis/raw_hero_literature_pilot_v2/metrics.json"
+      },
+      {
+        "id": "transcoder",
+        "label": "Published transcoder transfer metrics",
+        "path": "research/analysis/published_tc_l14_transfer_pilot_v1/metrics.json"
+      }
+    ],
+    "surface": "report",
+    "tables": [
+      {
+        "columns": [
+          {
+            "field": "layer",
+            "format": "number",
+            "label": "Layer"
+          },
+          {
+            "field": "concept",
+            "label": "Concept",
+            "type": "text"
+          },
+          {
+            "field": "paired_metric",
+            "label": "Paired metric",
+            "type": "text"
+          },
+          {
+            "field": "hero_minus_raw",
+            "format": "number",
+            "label": "Hero − Raw",
+            "signed": true
+          },
+          {
+            "field": "ci_low",
+            "format": "number",
+            "label": "95% low",
+            "signed": true
+          },
+          {
+            "field": "ci_high",
+            "format": "number",
+            "label": "95% high",
+            "signed": true
+          },
+          {
+            "field": "direction",
+            "label": "Resolved direction",
+            "type": "text"
+          }
+        ],
+        "dataset": "concept_deltas",
+        "defaultSort": {
+          "direction": "asc",
+          "field": "layer"
+        },
+        "id": "concept_delta_table",
+        "sourceId": "validation",
+        "subtitle": "Hero minus Raw; exploratory paired group-bootstrap 95% intervals.",
+        "title": "Layerwise concept differences"
+      },
+      {
+        "columns": [
+          {
+            "field": "layer",
+            "format": "number",
+            "label": "Layer"
+          },
+          {
+            "field": "target",
+            "label": "Target",
+            "type": "text"
+          },
+          {
+            "field": "hero_minus_raw",
+            "format": "number",
+            "label": "Hero − Raw",
+            "signed": true
+          },
+          {
+            "field": "ci_low",
+            "format": "number",
+            "label": "95% low",
+            "signed": true
+          },
+          {
+            "field": "ci_high",
+            "format": "number",
+            "label": "95% high",
+            "signed": true
+          },
+          {
+            "field": "direction",
+            "label": "Resolved direction",
+            "type": "text"
+          }
+        ],
+        "dataset": "lookahead_deltas",
+        "defaultSort": {
+          "direction": "asc",
+          "field": "layer"
+        },
+        "id": "lookahead_delta_table",
+        "sourceId": "validation",
+        "subtitle": "Hero minus Raw accuracy; exploratory paired group-bootstrap 95% intervals.",
+        "title": "Layerwise lookahead differences"
+      },
+      {
+        "columns": [
+          {
+            "field": "model",
+            "label": "Model",
+            "type": "text"
+          },
+          {
+            "field": "cosine",
+            "format": "number",
+            "label": "Reconstruction cosine"
+          },
+          {
+            "field": "normalized_mse",
+            "format": "number",
+            "label": "Normalized MSE"
+          },
+          {
+            "field": "policy_js",
+            "format": "number",
+            "label": "Policy JS"
+          },
+          {
+            "field": "top1_agreement",
+            "format": "percent",
+            "label": "Top-1 agreement"
+          }
+        ],
+        "dataset": "transcoder",
+        "defaultSort": {
+          "direction": "asc",
+          "field": "model"
+        },
+        "id": "transcoder_table",
+        "sourceId": "transcoder",
+        "subtitle": "Same published artifact applied to Raw and Hero on 16 development positions.",
+        "title": "Published L14 transcoder transfer"
+      },
+      {
+        "columns": [
+          {
+            "field": "method",
+            "label": "Method",
+            "type": "text"
+          },
+          {
+            "field": "scope",
+            "label": "Scope",
+            "type": "text"
+          },
+          {
+            "field": "finding",
+            "label": "Finding",
+            "type": "text"
+          },
+          {
+            "field": "evidence_rank",
+            "label": "Status",
+            "type": "text"
+          },
+          {
+            "field": "main_limit",
+            "label": "Main limitation",
+            "type": "text"
+          }
+        ],
+        "dataset": "evidence_matrix",
+        "defaultSort": {
+          "direction": "asc",
+          "field": "method"
+        },
+        "id": "evidence_table",
+        "sourceId": "synthesis",
+        "subtitle": "What each method establishes—and what it does not.",
+        "title": "Evidence ladder"
+      }
+    ],
+    "title": "Raw BT4 vs Hero: exploratory interpretability audit",
+    "version": 1
+  },
+  "package_info": {
+    "controls": {
+      "edit": false,
+      "refresh": false
+    },
+    "originUrl": "artifact://raw-hero-interpretability-report-v1"
+  },
+  "snapshot": {
+    "datasets": {
+      "activation_depth": [
+        {
+          "best_hero_layer": 0,
+          "best_layer_cka": 0.8185707680981854,
+          "corresponding_layer_cka": 0.8185707768071956,
+          "layer": 0,
+          "metric_label": "Corresponding-layer CKA",
+          "symmetric_relative_l2": 0.5305667769220593
+        },
+        {
+          "best_hero_layer": 1,
+          "best_layer_cka": 0.6105568913223599,
+          "corresponding_layer_cka": 0.610556894906816,
+          "layer": 1,
+          "metric_label": "Corresponding-layer CKA",
+          "symmetric_relative_l2": 0.744931216300684
+        },
+        {
+          "best_hero_layer": 2,
+          "best_layer_cka": 0.5443381755353054,
+          "corresponding_layer_cka": 0.5443381733975803,
+          "layer": 2,
+          "metric_label": "Corresponding-layer CKA",
+          "symmetric_relative_l2": 0.8674398350192271
+        },
+        {
+          "best_hero_layer": 3,
+          "best_layer_cka": 0.520112868272135,
+          "corresponding_layer_cka": 0.5201128737440615,
+          "layer": 3,
+          "metric_label": "Corresponding-layer CKA",
+          "symmetric_relative_l2": 0.9135301318510193
+        },
+        {
+          "best_hero_layer": 4,
+          "best_layer_cka": 0.46864682965899573,
+          "corresponding_layer_cka": 0.4686468285151248,
+          "layer": 4,
+          "metric_label": "Corresponding-layer CKA",
+          "symmetric_relative_l2": 0.9349732978059041
+        },
+        {
+          "best_hero_layer": 1,
+          "best_layer_cka": 0.3376130218802571,
+          "corresponding_layer_cka": 0.3160604130650626,
+          "layer": 5,
+          "metric_label": "Corresponding-layer CKA",
+          "symmetric_relative_l2": 0.9803403856485582
+        },
+        {
+          "best_hero_layer": 6,
+          "best_layer_cka": 0.3786592491323946,
+          "corresponding_layer_cka": 0.3786592446681504,
+          "layer": 6,
+          "metric_label": "Corresponding-layer CKA",
+          "symmetric_relative_l2": 0.9728109648818658
+        },
+        {
+          "best_hero_layer": 7,
+          "best_layer_cka": 0.38643565627665677,
+          "corresponding_layer_cka": 0.38643566208522767,
+          "layer": 7,
+          "metric_label": "Corresponding-layer CKA",
+          "symmetric_relative_l2": 0.9641959206701606
+        },
+        {
+          "best_hero_layer": 8,
+          "best_layer_cka": 0.3467277446292328,
+          "corresponding_layer_cka": 0.3467277475439983,
+          "layer": 8,
+          "metric_label": "Corresponding-layer CKA",
+          "symmetric_relative_l2": 1.007455505734858
+        },
+        {
+          "best_hero_layer": 1,
+          "best_layer_cka": 0.31033986445536615,
+          "corresponding_layer_cka": 0.29913671416761695,
+          "layer": 9,
+          "metric_label": "Corresponding-layer CKA",
+          "symmetric_relative_l2": 1.023466168166753
+        },
+        {
+          "best_hero_layer": 1,
+          "best_layer_cka": 0.301466886757151,
+          "corresponding_layer_cka": 0.2760701944015174,
+          "layer": 10,
+          "metric_label": "Corresponding-layer CKA",
+          "symmetric_relative_l2": 1.0158515164522315
+        },
+        {
+          "best_hero_layer": 1,
+          "best_layer_cka": 0.2893763002505254,
+          "corresponding_layer_cka": 0.27302123179645066,
+          "layer": 11,
+          "metric_label": "Corresponding-layer CKA",
+          "symmetric_relative_l2": 1.0463730211056896
+        },
+        {
+          "best_hero_layer": 1,
+          "best_layer_cka": 0.2859198765087825,
+          "corresponding_layer_cka": 0.2675694349803666,
+          "layer": 12,
+          "metric_label": "Corresponding-layer CKA",
+          "symmetric_relative_l2": 1.0799938150002268
+        },
+        {
+          "best_hero_layer": 13,
+          "best_layer_cka": 0.37139917546378964,
+          "corresponding_layer_cka": 0.37139917086116636,
+          "layer": 13,
+          "metric_label": "Corresponding-layer CKA",
+          "symmetric_relative_l2": 0.9757787292142879
+        },
+        {
+          "best_hero_layer": 14,
+          "best_layer_cka": 0.23568687764172522,
+          "corresponding_layer_cka": 0.2356868794381218,
+          "layer": 14,
+          "metric_label": "Corresponding-layer CKA",
+          "symmetric_relative_l2": 1.1443693850212189
+        }
+      ],
+      "attack_metrics": [
+        {
+          "concept": "Opponent attack count",
+          "layer": 0,
+          "metric": "R²",
+          "model": "Raw BT4",
+          "score": 0.9146700644396452
+        },
+        {
+          "concept": "Opponent attack count",
+          "layer": 0,
+          "metric": "R²",
+          "model": "Hero",
+          "score": 0.927188346096775
+        },
+        {
+          "concept": "Opponent attack count",
+          "layer": 1,
+          "metric": "R²",
+          "model": "Raw BT4",
+          "score": 0.911073480997356
+        },
+        {
+          "concept": "Opponent attack count",
+          "layer": 1,
+          "metric": "R²",
+          "model": "Hero",
+          "score": 0.853845608914348
+        },
+        {
+          "concept": "Opponent attack count",
+          "layer": 2,
+          "metric": "R²",
+          "model": "Raw BT4",
+          "score": 0.8807535798240635
+        },
+        {
+          "concept": "Opponent attack count",
+          "layer": 2,
+          "metric": "R²",
+          "model": "Hero",
+          "score": 0.8894996667165769
+        },
+        {
+          "concept": "Opponent attack count",
+          "layer": 3,
+          "metric": "R²",
+          "model": "Raw BT4",
+          "score": 0.8452457414125027
+        },
+        {
+          "concept": "Opponent attack count",
+          "layer": 3,
+          "metric": "R²",
+          "model": "Hero",
+          "score": 0.8492203974618626
+        },
+        {
+          "concept": "Opponent attack count",
+          "layer": 4,
+          "metric": "R²",
+          "model": "Raw BT4",
+          "score": 0.8403958278570515
+        },
+        {
+          "concept": "Opponent attack count",
+          "layer": 4,
+          "metric": "R²",
+          "model": "Hero",
+          "score": 0.8447957268621346
+        },
+        {
+          "concept": "Opponent attack count",
+          "layer": 5,
+          "metric": "R²",
+          "model": "Raw BT4",
+          "score": 0.8400766432413685
+        },
+        {
+          "concept": "Opponent attack count",
+          "layer": 5,
+          "metric": "R²",
+          "model": "Hero",
+          "score": 0.8513558306120568
+        },
+        {
+          "concept": "Opponent attack count",
+          "layer": 6,
+          "metric": "R²",
+          "model": "Raw BT4",
+          "score": 0.8075524107325612
+        },
+        {
+          "concept": "Opponent attack count",
+          "layer": 6,
+          "metric": "R²",
+          "model": "Hero",
+          "score": 0.8357759961663165
+        },
+        {
+          "concept": "Opponent attack count",
+          "layer": 7,
+          "metric": "R²",
+          "model": "Raw BT4",
+          "score": 0.8416274861660038
+        },
+        {
+          "concept": "Opponent attack count",
+          "layer": 7,
+          "metric": "R²",
+          "model": "Hero",
+          "score": 0.8502187549284299
+        },
+        {
+          "concept": "Opponent attack count",
+          "layer": 8,
+          "metric": "R²",
+          "model": "Raw BT4",
+          "score": 0.8653099236730835
+        },
+        {
+          "concept": "Opponent attack count",
+          "layer": 8,
+          "metric": "R²",
+          "model": "Hero",
+          "score": 0.8651672595965317
+        },
+        {
+          "concept": "Opponent attack count",
+          "layer": 9,
+          "metric": "R²",
+          "model": "Raw BT4",
+          "score": 0.8574848036217947
+        },
+        {
+          "concept": "Opponent attack count",
+          "layer": 9,
+          "metric": "R²",
+          "model": "Hero",
+          "score": 0.860590614159141
+        },
+        {
+          "concept": "Opponent attack count",
+          "layer": 10,
+          "metric": "R²",
+          "model": "Raw BT4",
+          "score": 0.8244662118961339
+        },
+        {
+          "concept": "Opponent attack count",
+          "layer": 10,
+          "metric": "R²",
+          "model": "Hero",
+          "score": 0.8140347262580032
+        },
+        {
+          "concept": "Opponent attack count",
+          "layer": 11,
+          "metric": "R²",
+          "model": "Raw BT4",
+          "score": 0.78988680423758
+        },
+        {
+          "concept": "Opponent attack count",
+          "layer": 11,
+          "metric": "R²",
+          "model": "Hero",
+          "score": 0.7765649838738721
+        },
+        {
+          "concept": "Opponent attack count",
+          "layer": 12,
+          "metric": "R²",
+          "model": "Raw BT4",
+          "score": 0.7606654027077365
+        },
+        {
+          "concept": "Opponent attack count",
+          "layer": 12,
+          "metric": "R²",
+          "model": "Hero",
+          "score": 0.7653599982477405
+        },
+        {
+          "concept": "Opponent attack count",
+          "layer": 13,
+          "metric": "R²",
+          "model": "Raw BT4",
+          "score": 0.7315348623033577
+        },
+        {
+          "concept": "Opponent attack count",
+          "layer": 13,
+          "metric": "R²",
+          "model": "Hero",
+          "score": 0.7439626264337265
+        },
+        {
+          "concept": "Opponent attack count",
+          "layer": 14,
+          "metric": "R²",
+          "model": "Raw BT4",
+          "score": 0.5030455942004408
+        },
+        {
+          "concept": "Opponent attack count",
+          "layer": 14,
+          "metric": "R²",
+          "model": "Hero",
+          "score": 0.5108611578910849
+        }
+      ],
+      "concept_deltas": [
+        {
+          "ci_high": 0.000244140625,
+          "ci_low": -0.00042724609375,
+          "concept": "Piece code",
+          "direction": "unresolved",
+          "hero_minus_raw": -9.1552734375e-05,
+          "interval_excludes_zero": false,
+          "layer": 0,
+          "paired_metric": "accuracy"
+        },
+        {
+          "ci_high": -0.0007614135742187583,
+          "ci_low": -0.00311279296875,
+          "concept": "Legal destination",
+          "direction": "Raw higher",
+          "hero_minus_raw": -0.00189208984375,
+          "interval_excludes_zero": true,
+          "layer": 0,
+          "paired_metric": "accuracy"
+        },
+        {
+          "ci_high": 0.01589900329709053,
+          "ci_low": 0.012513842806220055,
+          "concept": "Opponent attack count",
+          "direction": "Hero higher",
+          "hero_minus_raw": 0.014185085892677307,
+          "interval_excludes_zero": true,
+          "layer": 0,
+          "paired_metric": "negative MAE"
+        },
+        {
+          "ci_high": 0.000274658203125,
+          "ci_low": -0.000732421875,
+          "concept": "Piece code",
+          "direction": "unresolved",
+          "hero_minus_raw": -0.000213623046875,
+          "interval_excludes_zero": false,
+          "layer": 1,
+          "paired_metric": "accuracy"
+        },
+        {
+          "ci_high": 0.00213623046875,
+          "ci_low": 3.0517578125e-05,
+          "concept": "Legal destination",
+          "direction": "Hero higher",
+          "hero_minus_raw": 0.001068115234375,
+          "interval_excludes_zero": true,
+          "layer": 1,
+          "paired_metric": "accuracy"
+        },
+        {
+          "ci_high": -0.027987496927380562,
+          "ci_low": -0.03242209330201149,
+          "concept": "Opponent attack count",
+          "direction": "Raw higher",
+          "hero_minus_raw": -0.030165553092956543,
+          "interval_excludes_zero": true,
+          "layer": 1,
+          "paired_metric": "negative MAE"
+        },
+        {
+          "ci_high": 0.000579833984375,
+          "ci_low": -0.00036697387695312366,
+          "concept": "Piece code",
+          "direction": "unresolved",
+          "hero_minus_raw": 0.0001220703125,
+          "interval_excludes_zero": false,
+          "layer": 2,
+          "paired_metric": "accuracy"
+        },
+        {
+          "ci_high": 0.003875732421875,
+          "ci_low": 0.0014640808105468763,
+          "concept": "Legal destination",
+          "direction": "Hero higher",
+          "hero_minus_raw": 0.002655029296875,
+          "interval_excludes_zero": true,
+          "layer": 2,
+          "paired_metric": "accuracy"
+        },
+        {
+          "ci_high": 0.01152478642761707,
+          "ci_low": 0.007163282856345177,
+          "concept": "Opponent attack count",
+          "direction": "Hero higher",
+          "hero_minus_raw": 0.009324997663497925,
+          "interval_excludes_zero": true,
+          "layer": 2,
+          "paired_metric": "negative MAE"
+        },
+        {
+          "ci_high": 0.000579833984375,
+          "ci_low": -0.0003662109375,
+          "concept": "Piece code",
+          "direction": "unresolved",
+          "hero_minus_raw": 0.0001220703125,
+          "interval_excludes_zero": false,
+          "layer": 3,
+          "paired_metric": "accuracy"
+        },
+        {
+          "ci_high": 0.002655029296875,
+          "ci_low": -0.00045852661132812366,
+          "concept": "Legal destination",
+          "direction": "unresolved",
+          "hero_minus_raw": 0.001129150390625,
+          "interval_excludes_zero": false,
+          "layer": 3,
+          "paired_metric": "accuracy"
+        },
+        {
+          "ci_high": 0.004651512950658796,
+          "ci_low": -0.00023039281368255598,
+          "concept": "Opponent attack count",
+          "direction": "unresolved",
+          "hero_minus_raw": 0.0022696107625961304,
+          "interval_excludes_zero": false,
+          "layer": 3,
+          "paired_metric": "negative MAE"
+        },
+        {
+          "ci_high": 0.000885009765625,
+          "ci_low": -0.00030517578125,
+          "concept": "Piece code",
+          "direction": "unresolved",
+          "hero_minus_raw": 0.000274658203125,
+          "interval_excludes_zero": false,
+          "layer": 4,
+          "paired_metric": "accuracy"
+        },
+        {
+          "ci_high": 0.00518798828125,
+          "ci_low": 0.0015556335449218763,
+          "concept": "Legal destination",
+          "direction": "Hero higher",
+          "hero_minus_raw": 0.003387451171875,
+          "interval_excludes_zero": true,
+          "layer": 4,
+          "paired_metric": "accuracy"
+        },
+        {
+          "ci_high": 0.006557365879416463,
+          "ci_low": 0.0014637820422649394,
+          "concept": "Opponent attack count",
+          "direction": "Hero higher",
+          "hero_minus_raw": 0.004000037908554077,
+          "interval_excludes_zero": true,
+          "layer": 4,
+          "paired_metric": "negative MAE"
+        },
+        {
+          "ci_high": 0.00054931640625,
+          "ci_low": -0.00067138671875,
+          "concept": "Piece code",
+          "direction": "unresolved",
+          "hero_minus_raw": -6.103515625e-05,
+          "interval_excludes_zero": false,
+          "layer": 5,
+          "paired_metric": "accuracy"
+        },
+        {
+          "ci_high": 0.00433349609375,
+          "ci_low": 0.000518798828125,
+          "concept": "Legal destination",
+          "direction": "Hero higher",
+          "hero_minus_raw": 0.002471923828125,
+          "interval_excludes_zero": true,
+          "layer": 5,
+          "paired_metric": "accuracy"
+        },
+        {
+          "ci_high": 0.011080397665500641,
+          "ci_low": 0.006576081365346908,
+          "concept": "Opponent attack count",
+          "direction": "Hero higher",
+          "hero_minus_raw": 0.008871078491210938,
+          "interval_excludes_zero": true,
+          "layer": 5,
+          "paired_metric": "negative MAE"
+        },
+        {
+          "ci_high": 0.0005500793457031208,
+          "ci_low": -0.000396728515625,
+          "concept": "Piece code",
+          "direction": "unresolved",
+          "hero_minus_raw": 6.103515625e-05,
+          "interval_excludes_zero": false,
+          "layer": 6,
+          "paired_metric": "accuracy"
+        },
+        {
+          "ci_high": 0.004273223876953121,
+          "ci_low": 0.000152587890625,
+          "concept": "Legal destination",
+          "direction": "Hero higher",
+          "hero_minus_raw": 0.002227783203125,
+          "interval_excludes_zero": true,
+          "layer": 6,
+          "paired_metric": "accuracy"
+        },
+        {
+          "ci_high": 0.020252354443073273,
+          "ci_low": 0.014256230741739274,
+          "concept": "Opponent attack count",
+          "direction": "Hero higher",
+          "hero_minus_raw": 0.01729106903076172,
+          "interval_excludes_zero": true,
+          "layer": 6,
+          "paired_metric": "negative MAE"
+        },
+        {
+          "ci_high": 0.000396728515625,
+          "ci_low": -0.0007331848144531237,
+          "concept": "Piece code",
+          "direction": "unresolved",
+          "hero_minus_raw": -0.00018310546875,
+          "interval_excludes_zero": false,
+          "layer": 7,
+          "paired_metric": "accuracy"
+        },
+        {
+          "ci_high": 0.005097961425781242,
+          "ci_low": 0.000885009765625,
+          "concept": "Legal destination",
+          "direction": "Hero higher",
+          "hero_minus_raw": 0.002899169921875,
+          "interval_excludes_zero": true,
+          "layer": 7,
+          "paired_metric": "accuracy"
+        },
+        {
+          "ci_high": 0.00918588973581791,
+          "ci_low": 0.0039921399205923086,
+          "concept": "Opponent attack count",
+          "direction": "Hero higher",
+          "hero_minus_raw": 0.0066450536251068115,
+          "interval_excludes_zero": true,
+          "layer": 7,
+          "paired_metric": "negative MAE"
+        },
+        {
+          "ci_high": 0.0004890441894531208,
+          "ci_low": -0.000885009765625,
+          "concept": "Piece code",
+          "direction": "unresolved",
+          "hero_minus_raw": -0.00018310546875,
+          "interval_excludes_zero": false,
+          "layer": 8,
+          "paired_metric": "accuracy"
+        },
+        {
+          "ci_high": 0.006103515625,
+          "ci_low": 0.0028373718261718766,
+          "concept": "Legal destination",
+          "direction": "Hero higher",
+          "hero_minus_raw": 0.00445556640625,
+          "interval_excludes_zero": true,
+          "layer": 8,
+          "paired_metric": "accuracy"
+        },
+        {
+          "ci_high": 0.0016696434468030901,
+          "ci_low": -0.003014031425118446,
+          "concept": "Opponent attack count",
+          "direction": "unresolved",
+          "hero_minus_raw": -0.0005814433097839355,
+          "interval_excludes_zero": false,
+          "layer": 8,
+          "paired_metric": "negative MAE"
+        },
+        {
+          "ci_high": 0.00128173828125,
+          "ci_low": -0.00018386840820312366,
+          "concept": "Piece code",
+          "direction": "unresolved",
+          "hero_minus_raw": 0.00054931640625,
+          "interval_excludes_zero": false,
+          "layer": 9,
+          "paired_metric": "accuracy"
+        },
+        {
+          "ci_high": 0.004486083984375,
+          "ci_low": 0.000701904296875,
+          "concept": "Legal destination",
+          "direction": "Hero higher",
+          "hero_minus_raw": 0.00262451171875,
+          "interval_excludes_zero": true,
+          "layer": 9,
+          "paired_metric": "accuracy"
+        },
+        {
+          "ci_high": 0.006960619240999219,
+          "ci_low": 0.0024577312171459214,
+          "concept": "Opponent attack count",
+          "direction": "Hero higher",
+          "hero_minus_raw": 0.004686832427978516,
+          "interval_excludes_zero": true,
+          "layer": 9,
+          "paired_metric": "negative MAE"
+        },
+        {
+          "ci_high": -0.003814697265625,
+          "ci_low": -0.0062255859375,
+          "concept": "Piece code",
+          "direction": "Raw higher",
+          "hero_minus_raw": -0.004974365234375,
+          "interval_excludes_zero": true,
+          "layer": 10,
+          "paired_metric": "accuracy"
+        },
+        {
+          "ci_high": 0.006134796142578121,
+          "ci_low": 0.002349853515625,
+          "concept": "Legal destination",
+          "direction": "Hero higher",
+          "hero_minus_raw": 0.004241943359375,
+          "interval_excludes_zero": true,
+          "layer": 10,
+          "paired_metric": "accuracy"
+        },
+        {
+          "ci_high": -0.0006687387824058554,
+          "ci_low": -0.005763983726501464,
+          "concept": "Opponent attack count",
+          "direction": "Raw higher",
+          "hero_minus_raw": -0.0033245980739593506,
+          "interval_excludes_zero": true,
+          "layer": 10,
+          "paired_metric": "negative MAE"
+        },
+        {
+          "ci_high": 0.001220703125,
+          "ci_low": -0.000274658203125,
+          "concept": "Piece code",
+          "direction": "unresolved",
+          "hero_minus_raw": 0.00048828125,
+          "interval_excludes_zero": false,
+          "layer": 11,
+          "paired_metric": "accuracy"
+        },
+        {
+          "ci_high": 0.011505126953125,
+          "ci_low": 0.00714111328125,
+          "concept": "Legal destination",
+          "direction": "Hero higher",
+          "hero_minus_raw": 0.00927734375,
+          "interval_excludes_zero": true,
+          "layer": 11,
+          "paired_metric": "accuracy"
+        },
+        {
+          "ci_high": -0.009625165164470675,
+          "ci_low": -0.015102481842041014,
+          "concept": "Opponent attack count",
+          "direction": "Raw higher",
+          "hero_minus_raw": -0.012321561574935913,
+          "interval_excludes_zero": true,
+          "layer": 11,
+          "paired_metric": "negative MAE"
+        },
+        {
+          "ci_high": -0.003631591796875,
+          "ci_low": -0.006011962890625,
+          "concept": "Piece code",
+          "direction": "Raw higher",
+          "hero_minus_raw": -0.004791259765625,
+          "interval_excludes_zero": true,
+          "layer": 12,
+          "paired_metric": "accuracy"
+        },
+        {
+          "ci_high": 0.005889892578125,
+          "ci_low": 0.0013114929199218763,
+          "concept": "Legal destination",
+          "direction": "Hero higher",
+          "hero_minus_raw": 0.00372314453125,
+          "interval_excludes_zero": true,
+          "layer": 12,
+          "paired_metric": "accuracy"
+        },
+        {
+          "ci_high": 0.004940614104270934,
+          "ci_low": 0.0006212353706359865,
+          "concept": "Opponent attack count",
+          "direction": "Hero higher",
+          "hero_minus_raw": 0.002763986587524414,
+          "interval_excludes_zero": true,
+          "layer": 12,
+          "paired_metric": "negative MAE"
+        },
+        {
+          "ci_high": 0.002349853515625,
+          "ci_low": 0.000640869140625,
+          "concept": "Piece code",
+          "direction": "Hero higher",
+          "hero_minus_raw": 0.001495361328125,
+          "interval_excludes_zero": true,
+          "layer": 13,
+          "paired_metric": "accuracy"
+        },
+        {
+          "ci_high": 0.00506591796875,
+          "ci_low": 0.001434326171875,
+          "concept": "Legal destination",
+          "direction": "Hero higher",
+          "hero_minus_raw": 0.003173828125,
+          "interval_excludes_zero": true,
+          "layer": 13,
+          "paired_metric": "accuracy"
+        },
+        {
+          "ci_high": 0.011150086671113965,
+          "ci_low": 0.007859284430742266,
+          "concept": "Opponent attack count",
+          "direction": "Hero higher",
+          "hero_minus_raw": 0.00951927900314331,
+          "interval_excludes_zero": true,
+          "layer": 13,
+          "paired_metric": "negative MAE"
+        },
+        {
+          "ci_high": -0.00048751831054687916,
+          "ci_low": -0.01190185546875,
+          "concept": "Piece code",
+          "direction": "Raw higher",
+          "hero_minus_raw": -0.006134033203125,
+          "interval_excludes_zero": true,
+          "layer": 14,
+          "paired_metric": "accuracy"
+        },
+        {
+          "ci_high": 0.01266555786132812,
+          "ci_low": 0.0063774108886718766,
+          "concept": "Legal destination",
+          "direction": "Hero higher",
+          "hero_minus_raw": 0.00946044921875,
+          "interval_excludes_zero": true,
+          "layer": 14,
+          "paired_metric": "accuracy"
+        },
+        {
+          "ci_high": 0.004415895789861678,
+          "ci_low": -0.002220301330089569,
+          "concept": "Opponent attack count",
+          "direction": "unresolved",
+          "hero_minus_raw": 0.0008285045623779297,
+          "interval_excludes_zero": false,
+          "layer": 14,
+          "paired_metric": "negative MAE"
+        }
+      ],
+      "cost_summary": [
+        {
+          "billed_cost_dollars": 0.0,
+          "budget_fraction": 0.010924732470588235,
+          "metered_cost_dollars": 0.46430113,
+          "pipeline_incremental_cost_dollars": 0.4435768
+        }
+      ],
+      "destination_metrics": [
+        {
+          "accuracy": 0.376953125,
+          "layer": 0,
+          "model": "Raw BT4",
+          "target": "Third-ply destination"
+        },
+        {
+          "accuracy": 0.373046875,
+          "layer": 0,
+          "model": "Hero",
+          "target": "Third-ply destination"
+        },
+        {
+          "accuracy": 0.427734375,
+          "layer": 1,
+          "model": "Raw BT4",
+          "target": "Third-ply destination"
+        },
+        {
+          "accuracy": 0.4453125,
+          "layer": 1,
+          "model": "Hero",
+          "target": "Third-ply destination"
+        },
+        {
+          "accuracy": 0.484375,
+          "layer": 2,
+          "model": "Raw BT4",
+          "target": "Third-ply destination"
+        },
+        {
+          "accuracy": 0.486328125,
+          "layer": 2,
+          "model": "Hero",
+          "target": "Third-ply destination"
+        },
+        {
+          "accuracy": 0.53515625,
+          "layer": 3,
+          "model": "Raw BT4",
+          "target": "Third-ply destination"
+        },
+        {
+          "accuracy": 0.546875,
+          "layer": 3,
+          "model": "Hero",
+          "target": "Third-ply destination"
+        },
+        {
+          "accuracy": 0.576171875,
+          "layer": 4,
+          "model": "Raw BT4",
+          "target": "Third-ply destination"
+        },
+        {
+          "accuracy": 0.552734375,
+          "layer": 4,
+          "model": "Hero",
+          "target": "Third-ply destination"
+        },
+        {
+          "accuracy": 0.6015625,
+          "layer": 5,
+          "model": "Raw BT4",
+          "target": "Third-ply destination"
+        },
+        {
+          "accuracy": 0.591796875,
+          "layer": 5,
+          "model": "Hero",
+          "target": "Third-ply destination"
+        },
+        {
+          "accuracy": 0.625,
+          "layer": 6,
+          "model": "Raw BT4",
+          "target": "Third-ply destination"
+        },
+        {
+          "accuracy": 0.6015625,
+          "layer": 6,
+          "model": "Hero",
+          "target": "Third-ply destination"
+        },
+        {
+          "accuracy": 0.638671875,
+          "layer": 7,
+          "model": "Raw BT4",
+          "target": "Third-ply destination"
+        },
+        {
+          "accuracy": 0.62890625,
+          "layer": 7,
+          "model": "Hero",
+          "target": "Third-ply destination"
+        },
+        {
+          "accuracy": 0.66796875,
+          "layer": 8,
+          "model": "Raw BT4",
+          "target": "Third-ply destination"
+        },
+        {
+          "accuracy": 0.640625,
+          "layer": 8,
+          "model": "Hero",
+          "target": "Third-ply destination"
+        },
+        {
+          "accuracy": 0.669921875,
+          "layer": 9,
+          "model": "Raw BT4",
+          "target": "Third-ply destination"
+        },
+        {
+          "accuracy": 0.677734375,
+          "layer": 9,
+          "model": "Hero",
+          "target": "Third-ply destination"
+        },
+        {
+          "accuracy": 0.669921875,
+          "layer": 10,
+          "model": "Raw BT4",
+          "target": "Third-ply destination"
+        },
+        {
+          "accuracy": 0.67578125,
+          "layer": 10,
+          "model": "Hero",
+          "target": "Third-ply destination"
+        },
+        {
+          "accuracy": 0.67578125,
+          "layer": 11,
+          "model": "Raw BT4",
+          "target": "Third-ply destination"
+        },
+        {
+          "accuracy": 0.658203125,
+          "layer": 11,
+          "model": "Hero",
+          "target": "Third-ply destination"
+        },
+        {
+          "accuracy": 0.705078125,
+          "layer": 12,
+          "model": "Raw BT4",
+          "target": "Third-ply destination"
+        },
+        {
+          "accuracy": 0.703125,
+          "layer": 12,
+          "model": "Hero",
+          "target": "Third-ply destination"
+        },
+        {
+          "accuracy": 0.712890625,
+          "layer": 13,
+          "model": "Raw BT4",
+          "target": "Third-ply destination"
+        },
+        {
+          "accuracy": 0.697265625,
+          "layer": 13,
+          "model": "Hero",
+          "target": "Third-ply destination"
+        },
+        {
+          "accuracy": 0.591796875,
+          "layer": 14,
+          "model": "Raw BT4",
+          "target": "Third-ply destination"
+        },
+        {
+          "accuracy": 0.576171875,
+          "layer": 14,
+          "model": "Hero",
+          "target": "Third-ply destination"
+        }
+      ],
+      "evidence_matrix": [
+        {
+          "evidence_rank": "strong exploratory localization",
+          "finding": "Encoder swaps changed policy strongly; head swaps were almost inert.",
+          "main_limit": "One placeholder game cluster; bounded CKA sketch.",
+          "method": "2×2 encoder/head model diff",
+          "scope": "128 development positions"
+        },
+        {
+          "evidence_rank": "causal pilot",
+          "finding": "Final-layer patches reproduced essentially all fixed-head distribution delta.",
+          "main_limit": "Tiny position sample; whole-residual intervention.",
+          "method": "Bidirectional residual patching",
+          "scope": "8 development positions; layers 0/7/14"
+        },
+        {
+          "evidence_rank": "validated decodability",
+          "finding": "120/120 primary scores beat permutation and simple controls.",
+          "main_limit": "One probe seed; uncorrected layer scan; test unopened.",
+          "method": "Chess-concept probes",
+          "scope": "15 layers; 512 development evaluations"
+        },
+        {
+          "evidence_rank": "validated exploratory comparison",
+          "finding": "Both models peak late; no systematic Hero advantage.",
+          "main_limit": "Puzzle continuation is not a fresh engine-PV benchmark.",
+          "method": "Third-ply lookahead probes",
+          "scope": "15 layers; 512 public puzzle continuations"
+        },
+        {
+          "evidence_rank": "weak causal-use evidence",
+          "finding": "Only 1/30 policy-derivative intervals excluded zero.",
+          "main_limit": "Small n; learned direction; random controls failed 4/30 zero checks.",
+          "method": "Probe-direction causal steering",
+          "scope": "16 development positions per model/layer"
+        },
+        {
+          "evidence_rank": "method diagnostic",
+          "finding": "SARFA maps aligned (cosine 0.953); IG completeness error was 4.50.",
+          "main_limit": "Attribution sample is too small; IG failed its own completeness check.",
+          "method": "SARFA / integrated gradients",
+          "scope": "2 SARFA examples; 4 IG arm-examples"
+        },
+        {
+          "evidence_rank": "compatibility pilot",
+          "finding": "Source compatibility passed; Hero normalized MSE was 0.980× Raw.",
+          "main_limit": "High dead-feature fraction; not a semantic feature audit.",
+          "method": "Published L14 transcoder transfer",
+          "scope": "16 development positions"
+        },
+        {
+          "evidence_rank": "behavioral pilot",
+          "finding": "Raw/Hero fixed-head JS was 0.0016 (95% interval 0.0005–0.0029).",
+          "main_limit": "Small, deliberately selected prefix.",
+          "method": "Fixed-head policy comparison",
+          "scope": "8 development positions"
+        }
+      ],
+      "joint_metrics": [
+        {
+          "accuracy": 0.26171875,
+          "layer": 0,
+          "model": "Raw BT4",
+          "target": "Third-ply joint move"
+        },
+        {
+          "accuracy": 0.263671875,
+          "layer": 0,
+          "model": "Hero",
+          "target": "Third-ply joint move"
+        },
+        {
+          "accuracy": 0.337890625,
+          "layer": 1,
+          "model": "Raw BT4",
+          "target": "Third-ply joint move"
+        },
+        {
+          "accuracy": 0.333984375,
+          "layer": 1,
+          "model": "Hero",
+          "target": "Third-ply joint move"
+        },
+        {
+          "accuracy": 0.375,
+          "layer": 2,
+          "model": "Raw BT4",
+          "target": "Third-ply joint move"
+        },
+        {
+          "accuracy": 0.37109375,
+          "layer": 2,
+          "model": "Hero",
+          "target": "Third-ply joint move"
+        },
+        {
+          "accuracy": 0.44921875,
+          "layer": 3,
+          "model": "Raw BT4",
+          "target": "Third-ply joint move"
+        },
+        {
+          "accuracy": 0.451171875,
+          "layer": 3,
+          "model": "Hero",
+          "target": "Third-ply joint move"
+        },
+        {
+          "accuracy": 0.494140625,
+          "layer": 4,
+          "model": "Raw BT4",
+          "target": "Third-ply joint move"
+        },
+        {
+          "accuracy": 0.478515625,
+          "layer": 4,
+          "model": "Hero",
+          "target": "Third-ply joint move"
+        },
+        {
+          "accuracy": 0.533203125,
+          "layer": 5,
+          "model": "Raw BT4",
+          "target": "Third-ply joint move"
+        },
+        {
+          "accuracy": 0.51171875,
+          "layer": 5,
+          "model": "Hero",
+          "target": "Third-ply joint move"
+        },
+        {
+          "accuracy": 0.55859375,
+          "layer": 6,
+          "model": "Raw BT4",
+          "target": "Third-ply joint move"
+        },
+        {
+          "accuracy": 0.5390625,
+          "layer": 6,
+          "model": "Hero",
+          "target": "Third-ply joint move"
+        },
+        {
+          "accuracy": 0.583984375,
+          "layer": 7,
+          "model": "Raw BT4",
+          "target": "Third-ply joint move"
+        },
+        {
+          "accuracy": 0.576171875,
+          "layer": 7,
+          "model": "Hero",
+          "target": "Third-ply joint move"
+        },
+        {
+          "accuracy": 0.599609375,
+          "layer": 8,
+          "model": "Raw BT4",
+          "target": "Third-ply joint move"
+        },
+        {
+          "accuracy": 0.583984375,
+          "layer": 8,
+          "model": "Hero",
+          "target": "Third-ply joint move"
+        },
+        {
+          "accuracy": 0.607421875,
+          "layer": 9,
+          "model": "Raw BT4",
+          "target": "Third-ply joint move"
+        },
+        {
+          "accuracy": 0.61328125,
+          "layer": 9,
+          "model": "Hero",
+          "target": "Third-ply joint move"
+        },
+        {
+          "accuracy": 0.61328125,
+          "layer": 10,
+          "model": "Raw BT4",
+          "target": "Third-ply joint move"
+        },
+        {
+          "accuracy": 0.615234375,
+          "layer": 10,
+          "model": "Hero",
+          "target": "Third-ply joint move"
+        },
+        {
+          "accuracy": 0.625,
+          "layer": 11,
+          "model": "Raw BT4",
+          "target": "Third-ply joint move"
+        },
+        {
+          "accuracy": 0.61328125,
+          "layer": 11,
+          "model": "Hero",
+          "target": "Third-ply joint move"
+        },
+        {
+          "accuracy": 0.658203125,
+          "layer": 12,
+          "model": "Raw BT4",
+          "target": "Third-ply joint move"
+        },
+        {
+          "accuracy": 0.64453125,
+          "layer": 12,
+          "model": "Hero",
+          "target": "Third-ply joint move"
+        },
+        {
+          "accuracy": 0.669921875,
+          "layer": 13,
+          "model": "Raw BT4",
+          "target": "Third-ply joint move"
+        },
+        {
+          "accuracy": 0.662109375,
+          "layer": 13,
+          "model": "Hero",
+          "target": "Third-ply joint move"
+        },
+        {
+          "accuracy": 0.4140625,
+          "layer": 14,
+          "model": "Raw BT4",
+          "target": "Third-ply joint move"
+        },
+        {
+          "accuracy": 0.46875,
+          "layer": 14,
+          "model": "Hero",
+          "target": "Third-ply joint move"
+        }
+      ],
+      "legal_metrics": [
+        {
+          "concept": "Legal destination",
+          "layer": 0,
+          "metric": "AUROC",
+          "model": "Raw BT4",
+          "score": 0.9907379914660353
+        },
+        {
+          "concept": "Legal destination",
+          "layer": 0,
+          "metric": "AUROC",
+          "model": "Hero",
+          "score": 0.9907920979885991
+        },
+        {
+          "concept": "Legal destination",
+          "layer": 1,
+          "metric": "AUROC",
+          "model": "Raw BT4",
+          "score": 0.9961593801733403
+        },
+        {
+          "concept": "Legal destination",
+          "layer": 1,
+          "metric": "AUROC",
+          "model": "Hero",
+          "score": 0.9963606582496847
+        },
+        {
+          "concept": "Legal destination",
+          "layer": 2,
+          "metric": "AUROC",
+          "model": "Raw BT4",
+          "score": 0.9966963077565658
+        },
+        {
+          "concept": "Legal destination",
+          "layer": 2,
+          "metric": "AUROC",
+          "model": "Hero",
+          "score": 0.9971702294877768
+        },
+        {
+          "concept": "Legal destination",
+          "layer": 3,
+          "metric": "AUROC",
+          "model": "Raw BT4",
+          "score": 0.993069823796984
+        },
+        {
+          "concept": "Legal destination",
+          "layer": 3,
+          "metric": "AUROC",
+          "model": "Hero",
+          "score": 0.9939847782540838
+        },
+        {
+          "concept": "Legal destination",
+          "layer": 4,
+          "metric": "AUROC",
+          "model": "Raw BT4",
+          "score": 0.9875893979967137
+        },
+        {
+          "concept": "Legal destination",
+          "layer": 4,
+          "metric": "AUROC",
+          "model": "Hero",
+          "score": 0.9896130964517604
+        },
+        {
+          "concept": "Legal destination",
+          "layer": 5,
+          "metric": "AUROC",
+          "model": "Raw BT4",
+          "score": 0.9849764819618151
+        },
+        {
+          "concept": "Legal destination",
+          "layer": 5,
+          "metric": "AUROC",
+          "model": "Hero",
+          "score": 0.9866570979824205
+        },
+        {
+          "concept": "Legal destination",
+          "layer": 6,
+          "metric": "AUROC",
+          "model": "Raw BT4",
+          "score": 0.9827083577905277
+        },
+        {
+          "concept": "Legal destination",
+          "layer": 6,
+          "metric": "AUROC",
+          "model": "Hero",
+          "score": 0.9844777755671906
+        },
+        {
+          "concept": "Legal destination",
+          "layer": 7,
+          "metric": "AUROC",
+          "model": "Raw BT4",
+          "score": 0.9850897058999197
+        },
+        {
+          "concept": "Legal destination",
+          "layer": 7,
+          "metric": "AUROC",
+          "model": "Hero",
+          "score": 0.9867093838599404
+        },
+        {
+          "concept": "Legal destination",
+          "layer": 8,
+          "metric": "AUROC",
+          "model": "Raw BT4",
+          "score": 0.986887485783934
+        },
+        {
+          "concept": "Legal destination",
+          "layer": 8,
+          "metric": "AUROC",
+          "model": "Hero",
+          "score": 0.9887452810486916
+        },
+        {
+          "concept": "Legal destination",
+          "layer": 9,
+          "metric": "AUROC",
+          "model": "Raw BT4",
+          "score": 0.9840072974089584
+        },
+        {
+          "concept": "Legal destination",
+          "layer": 9,
+          "metric": "AUROC",
+          "model": "Hero",
+          "score": 0.9858822652284394
+        },
+        {
+          "concept": "Legal destination",
+          "layer": 10,
+          "metric": "AUROC",
+          "model": "Raw BT4",
+          "score": 0.9831044078146041
+        },
+        {
+          "concept": "Legal destination",
+          "layer": 10,
+          "metric": "AUROC",
+          "model": "Hero",
+          "score": 0.9861170378187519
+        },
+        {
+          "concept": "Legal destination",
+          "layer": 11,
+          "metric": "AUROC",
+          "model": "Raw BT4",
+          "score": 0.9830627636485563
+        },
+        {
+          "concept": "Legal destination",
+          "layer": 11,
+          "metric": "AUROC",
+          "model": "Hero",
+          "score": 0.9867252218241792
+        },
+        {
+          "concept": "Legal destination",
+          "layer": 12,
+          "metric": "AUROC",
+          "model": "Raw BT4",
+          "score": 0.9883466607022006
+        },
+        {
+          "concept": "Legal destination",
+          "layer": 12,
+          "metric": "AUROC",
+          "model": "Hero",
+          "score": 0.9907102039740315
+        },
+        {
+          "concept": "Legal destination",
+          "layer": 13,
+          "metric": "AUROC",
+          "model": "Raw BT4",
+          "score": 0.9921740376016749
+        },
+        {
+          "concept": "Legal destination",
+          "layer": 13,
+          "metric": "AUROC",
+          "model": "Hero",
+          "score": 0.9939854331920067
+        },
+        {
+          "concept": "Legal destination",
+          "layer": 14,
+          "metric": "AUROC",
+          "model": "Raw BT4",
+          "score": 0.9784692947389536
+        },
+        {
+          "concept": "Legal destination",
+          "layer": 14,
+          "metric": "AUROC",
+          "model": "Hero",
+          "score": 0.9822029722648207
+        }
+      ],
+      "lookahead_deltas": [
+        {
+          "ci_high": 0.025390625,
+          "ci_low": -0.03515625,
+          "direction": "unresolved",
+          "hero_minus_raw": -0.00390625,
+          "interval_excludes_zero": false,
+          "layer": 0,
+          "target": "Third-ply destination"
+        },
+        {
+          "ci_high": 0.041015625,
+          "ci_low": -0.025390625,
+          "direction": "unresolved",
+          "hero_minus_raw": 0.0078125,
+          "interval_excludes_zero": false,
+          "layer": 0,
+          "target": "Third-ply source | predicted destination"
+        },
+        {
+          "ci_high": 0.029296875,
+          "ci_low": -0.025390625,
+          "direction": "unresolved",
+          "hero_minus_raw": 0.001953125,
+          "interval_excludes_zero": false,
+          "layer": 0,
+          "target": "Third-ply joint move"
+        },
+        {
+          "ci_high": 0.044921875,
+          "ci_low": -0.0078125,
+          "direction": "unresolved",
+          "hero_minus_raw": 0.017578125,
+          "interval_excludes_zero": false,
+          "layer": 1,
+          "target": "Third-ply destination"
+        },
+        {
+          "ci_high": 0.017578125,
+          "ci_low": -0.041015625,
+          "direction": "unresolved",
+          "hero_minus_raw": -0.01171875,
+          "interval_excludes_zero": false,
+          "layer": 1,
+          "target": "Third-ply source | predicted destination"
+        },
+        {
+          "ci_high": 0.021484375,
+          "ci_low": -0.029296875,
+          "direction": "unresolved",
+          "hero_minus_raw": -0.00390625,
+          "interval_excludes_zero": false,
+          "layer": 1,
+          "target": "Third-ply joint move"
+        },
+        {
+          "ci_high": 0.03125,
+          "ci_low": -0.025390625,
+          "direction": "unresolved",
+          "hero_minus_raw": 0.001953125,
+          "interval_excludes_zero": false,
+          "layer": 2,
+          "target": "Third-ply destination"
+        },
+        {
+          "ci_high": 0.029345703124999734,
+          "ci_low": -0.03515625,
+          "direction": "unresolved",
+          "hero_minus_raw": -0.00390625,
+          "interval_excludes_zero": false,
+          "layer": 2,
+          "target": "Third-ply source | predicted destination"
+        },
+        {
+          "ci_high": 0.025390625,
+          "ci_low": -0.03515625,
+          "direction": "unresolved",
+          "hero_minus_raw": -0.00390625,
+          "interval_excludes_zero": false,
+          "layer": 2,
+          "target": "Third-ply joint move"
+        },
+        {
+          "ci_high": 0.0390625,
+          "ci_low": -0.013671875,
+          "direction": "unresolved",
+          "hero_minus_raw": 0.01171875,
+          "interval_excludes_zero": false,
+          "layer": 3,
+          "target": "Third-ply destination"
+        },
+        {
+          "ci_high": 0.025390625,
+          "ci_low": -0.03515625,
+          "direction": "unresolved",
+          "hero_minus_raw": -0.005859375,
+          "interval_excludes_zero": false,
+          "layer": 3,
+          "target": "Third-ply source | predicted destination"
+        },
+        {
+          "ci_high": 0.029296875,
+          "ci_low": -0.025390625,
+          "direction": "unresolved",
+          "hero_minus_raw": 0.001953125,
+          "interval_excludes_zero": false,
+          "layer": 3,
+          "target": "Third-ply joint move"
+        },
+        {
+          "ci_high": 0.001953125,
+          "ci_low": -0.052734375,
+          "direction": "unresolved",
+          "hero_minus_raw": -0.0234375,
+          "interval_excludes_zero": false,
+          "layer": 4,
+          "target": "Third-ply destination"
+        },
+        {
+          "ci_high": 0.009765625,
+          "ci_low": -0.052734375,
+          "direction": "unresolved",
+          "hero_minus_raw": -0.021484375,
+          "interval_excludes_zero": false,
+          "layer": 4,
+          "target": "Third-ply source | predicted destination"
+        },
+        {
+          "ci_high": 0.015625,
+          "ci_low": -0.046875,
+          "direction": "unresolved",
+          "hero_minus_raw": -0.015625,
+          "interval_excludes_zero": false,
+          "layer": 4,
+          "target": "Third-ply joint move"
+        },
+        {
+          "ci_high": 0.01171875,
+          "ci_low": -0.03125,
+          "direction": "unresolved",
+          "hero_minus_raw": -0.009765625,
+          "interval_excludes_zero": false,
+          "layer": 5,
+          "target": "Third-ply destination"
+        },
+        {
+          "ci_high": 0.0234375,
+          "ci_low": -0.029296875,
+          "direction": "unresolved",
+          "hero_minus_raw": -0.00390625,
+          "interval_excludes_zero": false,
+          "layer": 5,
+          "target": "Third-ply source | predicted destination"
+        },
+        {
+          "ci_high": 0.001953125,
+          "ci_low": -0.04296875,
+          "direction": "unresolved",
+          "hero_minus_raw": -0.021484375,
+          "interval_excludes_zero": false,
+          "layer": 5,
+          "target": "Third-ply joint move"
+        },
+        {
+          "ci_high": -0.001953125,
+          "ci_low": -0.046875,
+          "direction": "Raw higher",
+          "hero_minus_raw": -0.0234375,
+          "interval_excludes_zero": true,
+          "layer": 6,
+          "target": "Third-ply destination"
+        },
+        {
+          "ci_high": 0.0078125,
+          "ci_low": -0.04296875,
+          "direction": "unresolved",
+          "hero_minus_raw": -0.017578125,
+          "interval_excludes_zero": false,
+          "layer": 6,
+          "target": "Third-ply source | predicted destination"
+        },
+        {
+          "ci_high": 0.00390625,
+          "ci_low": -0.04296875,
+          "direction": "unresolved",
+          "hero_minus_raw": -0.01953125,
+          "interval_excludes_zero": false,
+          "layer": 6,
+          "target": "Third-ply joint move"
+        },
+        {
+          "ci_high": 0.021484375,
+          "ci_low": -0.039111328124999914,
+          "direction": "unresolved",
+          "hero_minus_raw": -0.009765625,
+          "interval_excludes_zero": false,
+          "layer": 7,
+          "target": "Third-ply destination"
+        },
+        {
+          "ci_high": 0.015625,
+          "ci_low": -0.048828125,
+          "direction": "unresolved",
+          "hero_minus_raw": -0.015625,
+          "interval_excludes_zero": false,
+          "layer": 7,
+          "target": "Third-ply source | predicted destination"
+        },
+        {
+          "ci_high": 0.021533203124999734,
+          "ci_low": -0.037109375,
+          "direction": "unresolved",
+          "hero_minus_raw": -0.0078125,
+          "interval_excludes_zero": false,
+          "layer": 7,
+          "target": "Third-ply joint move"
+        },
+        {
+          "ci_high": 0.0,
+          "ci_low": -0.056640625,
+          "direction": "unresolved",
+          "hero_minus_raw": -0.02734375,
+          "interval_excludes_zero": false,
+          "layer": 8,
+          "target": "Third-ply destination"
+        },
+        {
+          "ci_high": 0.013671875,
+          "ci_low": -0.052734375,
+          "direction": "unresolved",
+          "hero_minus_raw": -0.01953125,
+          "interval_excludes_zero": false,
+          "layer": 8,
+          "target": "Third-ply source | predicted destination"
+        },
+        {
+          "ci_high": 0.015625,
+          "ci_low": -0.046875,
+          "direction": "unresolved",
+          "hero_minus_raw": -0.015625,
+          "interval_excludes_zero": false,
+          "layer": 8,
+          "target": "Third-ply joint move"
+        },
+        {
+          "ci_high": 0.03515625,
+          "ci_low": -0.017578125,
+          "direction": "unresolved",
+          "hero_minus_raw": 0.0078125,
+          "interval_excludes_zero": false,
+          "layer": 9,
+          "target": "Third-ply destination"
+        },
+        {
+          "ci_high": 0.01953125,
+          "ci_low": -0.029296875,
+          "direction": "unresolved",
+          "hero_minus_raw": -0.005859375,
+          "interval_excludes_zero": false,
+          "layer": 9,
+          "target": "Third-ply source | predicted destination"
+        },
+        {
+          "ci_high": 0.033203125,
+          "ci_low": -0.01953125,
+          "direction": "unresolved",
+          "hero_minus_raw": 0.005859375,
+          "interval_excludes_zero": false,
+          "layer": 9,
+          "target": "Third-ply joint move"
+        },
+        {
+          "ci_high": 0.033203125,
+          "ci_low": -0.01953125,
+          "direction": "unresolved",
+          "hero_minus_raw": 0.005859375,
+          "interval_excludes_zero": false,
+          "layer": 10,
+          "target": "Third-ply destination"
+        },
+        {
+          "ci_high": 0.01953125,
+          "ci_low": -0.033203125,
+          "direction": "unresolved",
+          "hero_minus_raw": -0.005859375,
+          "interval_excludes_zero": false,
+          "layer": 10,
+          "target": "Third-ply source | predicted destination"
+        },
+        {
+          "ci_high": 0.025439453124999734,
+          "ci_low": -0.0234375,
+          "direction": "unresolved",
+          "hero_minus_raw": 0.001953125,
+          "interval_excludes_zero": false,
+          "layer": 10,
+          "target": "Third-ply joint move"
+        },
+        {
+          "ci_high": 0.00390625,
+          "ci_low": -0.041015625,
+          "direction": "unresolved",
+          "hero_minus_raw": -0.017578125,
+          "interval_excludes_zero": false,
+          "layer": 11,
+          "target": "Third-ply destination"
+        },
+        {
+          "ci_high": 0.01171875,
+          "ci_low": -0.0390625,
+          "direction": "unresolved",
+          "hero_minus_raw": -0.013671875,
+          "interval_excludes_zero": false,
+          "layer": 11,
+          "target": "Third-ply source | predicted destination"
+        },
+        {
+          "ci_high": 0.01171875,
+          "ci_low": -0.03515625,
+          "direction": "unresolved",
+          "hero_minus_raw": -0.01171875,
+          "interval_excludes_zero": false,
+          "layer": 11,
+          "target": "Third-ply joint move"
+        },
+        {
+          "ci_high": 0.025390625,
+          "ci_low": -0.029296875,
+          "direction": "unresolved",
+          "hero_minus_raw": -0.001953125,
+          "interval_excludes_zero": false,
+          "layer": 12,
+          "target": "Third-ply destination"
+        },
+        {
+          "ci_high": 0.01171875,
+          "ci_low": -0.046875,
+          "direction": "unresolved",
+          "hero_minus_raw": -0.017578125,
+          "interval_excludes_zero": false,
+          "layer": 12,
+          "target": "Third-ply source | predicted destination"
+        },
+        {
+          "ci_high": 0.01953125,
+          "ci_low": -0.044921875,
+          "direction": "unresolved",
+          "hero_minus_raw": -0.013671875,
+          "interval_excludes_zero": false,
+          "layer": 12,
+          "target": "Third-ply joint move"
+        },
+        {
+          "ci_high": 0.0078125,
+          "ci_low": -0.0390625,
+          "direction": "unresolved",
+          "hero_minus_raw": -0.015625,
+          "interval_excludes_zero": false,
+          "layer": 13,
+          "target": "Third-ply destination"
+        },
+        {
+          "ci_high": 0.0234375,
+          "ci_low": -0.029296875,
+          "direction": "unresolved",
+          "hero_minus_raw": -0.00390625,
+          "interval_excludes_zero": false,
+          "layer": 13,
+          "target": "Third-ply source | predicted destination"
+        },
+        {
+          "ci_high": 0.019580078124999734,
+          "ci_low": -0.03515625,
+          "direction": "unresolved",
+          "hero_minus_raw": -0.0078125,
+          "interval_excludes_zero": false,
+          "layer": 13,
+          "target": "Third-ply joint move"
+        },
+        {
+          "ci_high": 0.021484375,
+          "ci_low": -0.056640625,
+          "direction": "unresolved",
+          "hero_minus_raw": -0.015625,
+          "interval_excludes_zero": false,
+          "layer": 14,
+          "target": "Third-ply destination"
+        },
+        {
+          "ci_high": 0.125,
+          "ci_low": 0.03125,
+          "direction": "Hero higher",
+          "hero_minus_raw": 0.078125,
+          "interval_excludes_zero": true,
+          "layer": 14,
+          "target": "Third-ply source | predicted destination"
+        },
+        {
+          "ci_high": 0.09765625,
+          "ci_low": 0.013671875,
+          "direction": "Hero higher",
+          "hero_minus_raw": 0.0546875,
+          "interval_excludes_zero": true,
+          "layer": 14,
+          "target": "Third-ply joint move"
+        }
+      ],
+      "patching": [
+        {
+          "direction": "Hero → Raw",
+          "distribution_delta_projection": 0.33773856051266193,
+          "layer": 0
+        },
+        {
+          "direction": "Hero → Raw",
+          "distribution_delta_projection": 0.6313410513103008,
+          "layer": 7
+        },
+        {
+          "direction": "Hero → Raw",
+          "distribution_delta_projection": 0.9999982863664627,
+          "layer": 14
+        },
+        {
+          "direction": "Raw → Hero",
+          "distribution_delta_projection": 0.4618672669166699,
+          "layer": 0
+        },
+        {
+          "direction": "Raw → Hero",
+          "distribution_delta_projection": 0.7982429154217243,
+          "layer": 7
+        },
+        {
+          "direction": "Raw → Hero",
+          "distribution_delta_projection": 1.0000000149011612,
+          "layer": 14
+        }
+      ],
+      "piece_metrics": [
+        {
+          "concept": "Piece code",
+          "layer": 0,
+          "metric": "Accuracy",
+          "model": "Raw BT4",
+          "score": 0.999176025390625
+        },
+        {
+          "concept": "Piece code",
+          "layer": 0,
+          "metric": "Accuracy",
+          "model": "Hero",
+          "score": 0.99908447265625
+        },
+        {
+          "concept": "Piece code",
+          "layer": 1,
+          "metric": "Accuracy",
+          "model": "Raw BT4",
+          "score": 0.99822998046875
+        },
+        {
+          "concept": "Piece code",
+          "layer": 1,
+          "metric": "Accuracy",
+          "model": "Hero",
+          "score": 0.998016357421875
+        },
+        {
+          "concept": "Piece code",
+          "layer": 2,
+          "metric": "Accuracy",
+          "model": "Raw BT4",
+          "score": 0.998016357421875
+        },
+        {
+          "concept": "Piece code",
+          "layer": 2,
+          "metric": "Accuracy",
+          "model": "Hero",
+          "score": 0.998138427734375
+        },
+        {
+          "concept": "Piece code",
+          "layer": 3,
+          "metric": "Accuracy",
+          "model": "Raw BT4",
+          "score": 0.997802734375
+        },
+        {
+          "concept": "Piece code",
+          "layer": 3,
+          "metric": "Accuracy",
+          "model": "Hero",
+          "score": 0.9979248046875
+        },
+        {
+          "concept": "Piece code",
+          "layer": 4,
+          "metric": "Accuracy",
+          "model": "Raw BT4",
+          "score": 0.997222900390625
+        },
+        {
+          "concept": "Piece code",
+          "layer": 4,
+          "metric": "Accuracy",
+          "model": "Hero",
+          "score": 0.99749755859375
+        },
+        {
+          "concept": "Piece code",
+          "layer": 5,
+          "metric": "Accuracy",
+          "model": "Raw BT4",
+          "score": 0.996246337890625
+        },
+        {
+          "concept": "Piece code",
+          "layer": 5,
+          "metric": "Accuracy",
+          "model": "Hero",
+          "score": 0.996185302734375
+        },
+        {
+          "concept": "Piece code",
+          "layer": 6,
+          "metric": "Accuracy",
+          "model": "Raw BT4",
+          "score": 0.997406005859375
+        },
+        {
+          "concept": "Piece code",
+          "layer": 6,
+          "metric": "Accuracy",
+          "model": "Hero",
+          "score": 0.997467041015625
+        },
+        {
+          "concept": "Piece code",
+          "layer": 7,
+          "metric": "Accuracy",
+          "model": "Raw BT4",
+          "score": 0.997222900390625
+        },
+        {
+          "concept": "Piece code",
+          "layer": 7,
+          "metric": "Accuracy",
+          "model": "Hero",
+          "score": 0.997039794921875
+        },
+        {
+          "concept": "Piece code",
+          "layer": 8,
+          "metric": "Accuracy",
+          "model": "Raw BT4",
+          "score": 0.99615478515625
+        },
+        {
+          "concept": "Piece code",
+          "layer": 8,
+          "metric": "Accuracy",
+          "model": "Hero",
+          "score": 0.9959716796875
+        },
+        {
+          "concept": "Piece code",
+          "layer": 9,
+          "metric": "Accuracy",
+          "model": "Raw BT4",
+          "score": 0.9952392578125
+        },
+        {
+          "concept": "Piece code",
+          "layer": 9,
+          "metric": "Accuracy",
+          "model": "Hero",
+          "score": 0.99578857421875
+        },
+        {
+          "concept": "Piece code",
+          "layer": 10,
+          "metric": "Accuracy",
+          "model": "Raw BT4",
+          "score": 0.996063232421875
+        },
+        {
+          "concept": "Piece code",
+          "layer": 10,
+          "metric": "Accuracy",
+          "model": "Hero",
+          "score": 0.9910888671875
+        },
+        {
+          "concept": "Piece code",
+          "layer": 11,
+          "metric": "Accuracy",
+          "model": "Raw BT4",
+          "score": 0.995880126953125
+        },
+        {
+          "concept": "Piece code",
+          "layer": 11,
+          "metric": "Accuracy",
+          "model": "Hero",
+          "score": 0.996368408203125
+        },
+        {
+          "concept": "Piece code",
+          "layer": 12,
+          "metric": "Accuracy",
+          "model": "Raw BT4",
+          "score": 0.994873046875
+        },
+        {
+          "concept": "Piece code",
+          "layer": 12,
+          "metric": "Accuracy",
+          "model": "Hero",
+          "score": 0.990081787109375
+        },
+        {
+          "concept": "Piece code",
+          "layer": 13,
+          "metric": "Accuracy",
+          "model": "Raw BT4",
+          "score": 0.994598388671875
+        },
+        {
+          "concept": "Piece code",
+          "layer": 13,
+          "metric": "Accuracy",
+          "model": "Hero",
+          "score": 0.99609375
+        },
+        {
+          "concept": "Piece code",
+          "layer": 14,
+          "metric": "Accuracy",
+          "model": "Raw BT4",
+          "score": 0.9007568359375
+        },
+        {
+          "concept": "Piece code",
+          "layer": 14,
+          "metric": "Accuracy",
+          "model": "Hero",
+          "score": 0.894622802734375
+        }
+      ],
+      "probe_summary": [
+        {
+          "controls_passed": 120,
+          "controls_total": 120,
+          "evaluation_positions": 512,
+          "layers": 15,
+          "max_abs_recompute_error": 4.218847493575595e-15,
+          "recomputed_metric_groups": 120
+        }
+      ],
+      "transcoder": [
+        {
+          "cosine": 0.9480585334100504,
+          "model": "Raw BT4",
+          "normalized_mse": 0.10125146452959131,
+          "policy_js": 0.0007351350004682899,
+          "top1_agreement": 1.0
+        },
+        {
+          "cosine": 0.9491364216473316,
+          "model": "Hero",
+          "normalized_mse": 0.09918499822510288,
+          "policy_js": 0.0004931555986331659,
+          "top1_agreement": 1.0
+        }
+      ]
+    },
+    "generatedAt": "2026-08-08T07:58:34Z",
+    "status": "ready",
+    "version": 1
+  },
+  "sources": [
+    {
+      "id": "synthesis",
+      "query": {
+        "description": "Audited synthesis and chart data",
+        "engine": "duckdb",
+        "language": "sql",
+        "path": "research/analysis/raw_hero_interpretability_report_v1/synthesis.json",
+        "sql": "SELECT * FROM read_json_auto('research/analysis/raw_hero_interpretability_report_v1/synthesis.json');"
+      }
+    },
+    {
+      "id": "validation",
+      "query": {
+        "description": "Independent all-layer result validation",
+        "engine": "duckdb",
+        "file_sha256": "390e8b8053cecd8972614ae08ef2d34a85cc6b8476aee208513e68c22f9ac134",
+        "language": "sql",
+        "path": "research/analysis/raw_hero_interpretability_report_v1/validation.json",
+        "sql": "SELECT * FROM read_json_auto('research/analysis/raw_hero_interpretability_report_v1/validation.json');"
+      }
+    },
+    {
+      "id": "cost",
+      "query": {
+        "description": "Modal billing and execution cost audit",
+        "engine": "duckdb",
+        "language": "sql",
+        "path": "research/analysis/raw_hero_interpretability_report_v1/cost_audit.json",
+        "sql": "SELECT * FROM read_json_auto('research/analysis/raw_hero_interpretability_report_v1/cost_audit.json');"
+      }
+    },
+    {
+      "id": "probe",
+      "query": {
+        "description": "All-layer probe/lookahead metrics",
+        "engine": "duckdb",
+        "file_sha256": "c9823c56098d62767e2f9b79506dc98ff57bfc0b76d85602969752671e332c28",
+        "language": "sql",
+        "path": "research/analysis/modal_probe_all_layers_dev_v1/metrics.json",
+        "sql": "SELECT * FROM read_json_auto('research/analysis/modal_probe_all_layers_dev_v1/metrics.json');"
+      }
+    },
+    {
+      "id": "model_diff",
+      "query": {
+        "description": "Raw/Hero 2×2 model-diff metrics",
+        "engine": "duckdb",
+        "file_sha256": "671cbb68699881e31de68c95119a518f01c811939d637391b1776578c3b72880",
+        "language": "sql",
+        "path": "research/analysis/raw_hero_pilot_v1/metrics.json",
+        "sql": "SELECT * FROM read_json_auto('research/analysis/raw_hero_pilot_v1/metrics.json');"
+      }
+    },
+    {
+      "id": "literature",
+      "query": {
+        "description": "Literature-method replication metrics",
+        "engine": "duckdb",
+        "file_sha256": "7e4752acf4b1815bd27e4125441948a3d892449fa72757eb365ffe8d856a8f31",
+        "language": "sql",
+        "path": "research/analysis/raw_hero_literature_pilot_v2/metrics.json",
+        "sql": "SELECT * FROM read_json_auto('research/analysis/raw_hero_literature_pilot_v2/metrics.json');"
+      }
+    },
+    {
+      "id": "transcoder",
+      "query": {
+        "description": "Published transcoder transfer metrics",
+        "engine": "duckdb",
+        "file_sha256": "80ae71de820d525c4d5e9c498566858dba78e26a30eae3272ea9b37f4c9726f7",
+        "language": "sql",
+        "path": "research/analysis/published_tc_l14_transfer_pilot_v1/metrics.json",
+        "sql": "SELECT * FROM read_json_auto('research/analysis/published_tc_l14_transfer_pilot_v1/metrics.json');"
+      }
+    }
+  ],
+  "surface": "report"
+}

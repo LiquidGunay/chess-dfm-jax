@@ -1,0 +1,787 @@
+{
+  "cost": {
+    "backend": "local GTX 1660 Ti zero-provider-cost source-bound development rerun",
+    "base_input_bundle_sha256": null,
+    "declared_attempt_upper_bound_dollars": null,
+    "input_bundle_sha256": null,
+    "lorsa_input_bundle_sha256": null,
+    "provider_dollars": 0.0
+  },
+  "elapsed_seconds": 574.742852053023,
+  "environment": {
+    "cuda_runtime": "12.1",
+    "device": "cuda",
+    "gpu": {
+      "name": "NVIDIA GeForce GTX 1660 Ti",
+      "total_memory_bytes": 6442123264
+    },
+    "numpy": "2.2.6",
+    "python": "3.12.3",
+    "torch": "2.5.1+cu121"
+  },
+  "experiment": {
+    "batch_size": 1,
+    "compute_dtype": "float32",
+    "confirmatory": false,
+    "dtype_contract": {
+      "autocast_enabled": false,
+      "dense_capture_dtype": "torch.float32",
+      "explicit_input_cast": false,
+      "explicit_intervention_cast": false,
+      "lorsa_checkpoint_dtype": "torch.float32",
+      "policy_intervention_dtype": "torch.float32",
+      "reconstruction_metric_dtype": "torch.float32"
+    },
+    "feature_summary_count": 16,
+    "hook_in": "hook_attn_in",
+    "hook_out": "hook_attn_out",
+    "layer": 14,
+    "position_count": 512,
+    "replacement_point": "before alpha, residual addition, and attention LN",
+    "seed": 20260808,
+    "sequential_source_gate": true
+  },
+  "git": {
+    "branch": "research/local-gpu-autoresearch",
+    "commit": "86ba0b37e3e188eab115b45a1460d079fac341f8",
+    "git_available": true,
+    "repository_available": true,
+    "status": [
+      "M .gitignore",
+      " M README.md",
+      " M chess_dfm_jax/__init__.py",
+      " M research/resource_guard.py",
+      " M research/train_torch.py",
+      " M tests/test_research_resource_guard.py",
+      " M tests/test_torch_gradient_parity.py",
+      " M tests/test_torch_muon_parity.py",
+      "?? docs/hero_bt4_interpretability_plan.md",
+      "?? research/analysis/modal_lorsa_smoke_l4_v2/",
+      "?? research/analysis/modal_lorsa_smoke_t4_v2/",
+      "?? research/analysis/modal_probe_all_layers_dev_v1/",
+      "?? research/analysis/modal_probe_smoke_v1/",
+      "?? research/analysis/modal_smoke_20260807.json",
+      "?? research/analysis/published_lorsa_l14_compact_peak_semantics_dev512_v1/",
+      "?? research/analysis/published_lorsa_l14_compact_peak_semantics_dev512_v2/",
+      "?? research/analysis/published_lorsa_l14_compact_peak_semantics_dev512_v3/",
+      "?? research/analysis/published_lorsa_l14_local_smoke_v1/",
+      "?? research/analysis/published_lorsa_l14_token_semantics_dev512_v1/",
+      "?? research/analysis/published_lorsa_l14_token_semantics_dev512_v2/",
+      "?? research/analysis/published_lorsa_l14_transfer_dev512_paired_bootstrap_v1/",
+      "?? research/analysis/published_lorsa_l14_transfer_dev512_v1/",
+      "?? research/analysis/published_lorsa_l14_transfer_dev64_v1/",
+      "?? research/analysis/published_lorsa_l14_transfer_local1_v1/",
+      "?? research/analysis/published_tc_l14_transfer_dev64_v1/",
+      "?? research/analysis/published_tc_l14_transfer_pilot_v1/",
+      "?? research/analysis/raw_hero_interpretability_report_v1/",
+      "?? research/analysis/raw_hero_literature_pilot_v1/",
+      "?? research/analysis/raw_hero_literature_pilot_v2/",
+      "?? research/analysis/raw_hero_literature_smoke_v1/",
+      "?? research/analysis/raw_hero_literature_smoke_v2/",
+      "?? research/analysis/raw_hero_matrix_spectra_20260807.json",
+      "?? research/analysis/raw_hero_parameter_diff_20260807.json",
+      "?? research/analysis/raw_hero_pilot_v1/",
+      "?? research/analysis/raw_hero_probe_lookahead_pilot_v1/",
+      "?? research/analysis/raw_hero_probe_lookahead_pilot_v2/",
+      "?? research/analysis/raw_hero_probe_lookahead_smoke_v1/",
+      "?? research/eval/interpretability_pilot_v1/",
+      "?? research/eval/interpretability_public_v1/",
+      "?? research/eval/interpretability_public_v2/",
+      "?? research/infra/",
+      "?? research/interpretability/",
+      "?? research/notebooks/",
+      "?? research/requirements_infra.txt",
+      "?? research/requirements_torch_local.txt",
+      "?? research/run_torch_gpu.sh",
+      "?? tests/test_compact_feature_semantics.py",
+      "?? tests/test_torch_activation_diff.py",
+      "?? tests/test_torch_artifact_store.py",
+      "?? tests/test_torch_attention_components.py",
+      "?? tests/test_torch_attribution.py",
+      "?? tests/test_torch_behavior_diff.py",
+      "?? tests/test_torch_bt4_representation_hooks.py",
+      "?? tests/test_torch_build_interpretability_report.py",
+      "?? tests/test_torch_delta_crosscoder.py",
+      "?? tests/test_torch_interpretability_accumulators.py",
+      "?? tests/test_torch_interpretability_artifacts.py",
+      "?? tests/test_torch_interpretability_models.py",
+      "?? tests/test_torch_literature_pilot.py",
+      "?? tests/test_torch_logit_lens.py",
+      "?? tests/test_torch_lookahead.py",
+      "?? tests/test_torch_lorsa.py",
+      "?? tests/test_torch_lorsa_conversion.py",
+      "?? tests/test_torch_lorsa_token_semantics.py",
+      "?? tests/test_torch_lorsa_transfer_analysis.py",
+      "?? tests/test_torch_lorsa_transfer_pilot.py",
+      "?? tests/test_torch_modal_lorsa.py",
+      "?? tests/test_torch_paired_diff.py",
+      "?? tests/test_torch_parameter_diff.py",
+      "?? tests/test_torch_patching.py",
+      "?? tests/test_torch_pilot_corpus.py",
+      "?? tests/test_torch_probe_pilot.py",
+      "?? tests/test_torch_probes.py",
+      "?? tests/test_torch_public_chess_data.py",
+      "?? tests/test_torch_remote_cost.py",
+      "?? tests/test_torch_sparse_feature_semantics.py",
+      "?? tests/test_torch_sparse_transcoder.py",
+      "?? tests/test_torch_sparse_transfer_pilot.py",
+      "?? tests/test_torch_spectral_diff.py",
+      "?? tests/test_torch_validate_probe_result.py"
+    ],
+    "status_sha256": "fb40b448104ca04893e248a3243945bae45d2feed6d3375a9e1d4aaacae5615e",
+    "worktree_clean": false
+  },
+  "lorsa": {
+    "architecture": {
+      "attn_scale": 5.656854249492381,
+      "d_model": 1024,
+      "d_qk_head": 32,
+      "n_ctx": 64,
+      "n_ov_heads": 16384,
+      "n_qk_heads": 128,
+      "smolgen_score_scale": 1.0,
+      "top_k": 30,
+      "use_decoder_bias": true,
+      "use_learnable_attn_scale": true,
+      "use_smolgen": true
+    },
+    "conversion": {
+      "conversion_reviewed": true,
+      "converter_module": "research.interpretability.sparse.convert_lorsa_checkpoint",
+      "converter_schema": "bt4-trusted-lorsa-dcp-converter-v1",
+      "converter_sha256": "467e785b803d4ef6446eda6867fbf50e84e4985acbbb2cab7db062189efbe55a",
+      "main_environment_pickle_loaded": false,
+      "normal_experiment_loader_accepts_pickle": false,
+      "platform": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+      "process_isolation": "dedicated uv venv process reusing pinned project site-packages",
+      "python": "3.12.3",
+      "safetensors": "0.5.3",
+      "source_pickle_deserialized_in_isolated_environment": true,
+      "torch": "2.5.1+cu121",
+      "trust_basis": "user explicitly trusted the paper checkpoint"
+    },
+    "conversion_reviewed": true,
+    "hook_contract": {
+      "complete_ordered_board_required": true,
+      "input": "blocks.14.hook_attn_in",
+      "layer": 14,
+      "sequence_shape": [
+        "batch",
+        64,
+        1024
+      ],
+      "target": "blocks.14.hook_attn_out"
+    },
+    "loaded_tensor_keys": [
+      "W_K",
+      "W_O",
+      "W_Q",
+      "W_V",
+      "_attn_scale_param",
+      "b_D",
+      "b_K",
+      "b_Q",
+      "b_V",
+      "smolgen.compress.weight",
+      "smolgen.dense1.bias",
+      "smolgen.dense1.weight",
+      "smolgen.dense2.bias",
+      "smolgen.dense2.weight",
+      "smolgen.ln1.bias",
+      "smolgen.ln1.weight",
+      "smolgen.ln2.bias",
+      "smolgen.ln2.weight",
+      "smolgen.smol_weight_gen.weight",
+      "smolgen_score_scale"
+    ],
+    "main_environment_pickle_loaded": false,
+    "manifest_path": "/home/ubuntu/chess-dfm-jax/.local/artifacts/lorsa/converted/JacklE0niden_lc0-BT4-lorsa/1ec52be63cce41017b3853edbe9421b643a1476d/k_30_e_16/L14_reviewed_v1/manifest.json",
+    "manifest_sha256": "2fe2d2cf6a132e4a205b25373c50b74e4462caf44057ccb98c0e7e7a3f736b61",
+    "normalization": {
+      "c_in": 9.159417647170422,
+      "c_out": 0.37657902127436454,
+      "converted_mode": "inference",
+      "folded": true,
+      "input_norm": 3.4936718940734863,
+      "learned_attention_scale": 5.656854152679443,
+      "output_norm": 84.97552490234375,
+      "rule": "W_Q/W_K/W_V *= c_in; W_O/b_D /= c_out",
+      "smolgen_score_scale": 1.0,
+      "source_mode": "dataset-wise"
+    },
+    "parameters_frozen": true,
+    "parity_fixture": {
+      "assert_close": {
+        "features": {
+          "atol": 2e-05,
+          "rtol": 0.0002
+        },
+        "pattern": {
+          "atol": 2e-06,
+          "rtol": 2e-05
+        },
+        "reconstruction": {
+          "atol": 2e-05,
+          "rtol": 0.0002
+        }
+      },
+      "file": "parity.safetensors",
+      "input_rule": "lcg25173_mod65536_div131072",
+      "lean_vs_upstream_reference": {
+        "features": {
+          "exact_equal": false,
+          "max_abs_error": 2.6226043701171875e-06,
+          "mean_abs_error": 4.121147867408581e-10,
+          "support_equal": true
+        },
+        "pattern": {
+          "exact_equal": false,
+          "max_abs_error": 2.8759241104125977e-06,
+          "mean_abs_error": 2.948988386819451e-09
+        },
+        "reconstruction": {
+          "exact_equal": false,
+          "max_abs_error": 3.814697265625e-06,
+          "mean_abs_error": 1.91783669833967e-07
+        }
+      },
+      "schema_version": "bt4-lorsa-upstream-parity-fixture-v1",
+      "sha256": "1eb55a5f18493f0cebdb15075af72893a20aba661f37d35b7ce0c32e37117cb1",
+      "size_bytes": 6816224,
+      "tensor_inventory": {
+        "features": {
+          "dtype": "float32",
+          "numel": 1048576,
+          "sha256": "ce9d742054a925eb47376576e9af8110a7b92ea20f4cf86da6411ccaeeeebd60",
+          "shape": [
+            1,
+            64,
+            16384
+          ]
+        },
+        "input": {
+          "dtype": "float32",
+          "numel": 65536,
+          "sha256": "21afdfb4e196c8da133f3e85d18abfb5fe885b613d40a6d9f588c4a015f3793a",
+          "shape": [
+            1,
+            64,
+            1024
+          ]
+        },
+        "pattern": {
+          "dtype": "float32",
+          "numel": 524288,
+          "sha256": "25f7eb7677097def9498aaeb138f5de9f70f6f6e7aef0414c8aa301416f9ff4a",
+          "shape": [
+            1,
+            128,
+            64,
+            64
+          ]
+        },
+        "reconstruction": {
+          "dtype": "float32",
+          "numel": 65536,
+          "sha256": "6448cdd2772e9bd2c5391b7e8e5d9b42a7971698469e2fc5c63ba525e679ae49",
+          "shape": [
+            1,
+            64,
+            1024
+          ]
+        }
+      },
+      "verified_during_conversion": true
+    },
+    "schema_version": "bt4-lorsa-converted-safetensors-v1",
+    "source": {
+      "checkpoint_subpath": "k_30_e_16/L14",
+      "dcp_metadata": {
+        "planner_keys": [
+          "IGNORE",
+          "W_K",
+          "W_O",
+          "W_Q",
+          "W_V",
+          "_attn_scale_param",
+          "b_D",
+          "b_K",
+          "b_Q",
+          "b_V",
+          "dataset_average_activation_norm.blocks.14.hook_attn_in",
+          "dataset_average_activation_norm.blocks.14.hook_attn_out",
+          "is_dead",
+          "mask",
+          "smolgen.compress.weight",
+          "smolgen.dense1.bias",
+          "smolgen.dense1.weight",
+          "smolgen.dense2.bias",
+          "smolgen.dense2.weight",
+          "smolgen.ln1.bias",
+          "smolgen.ln1.weight",
+          "smolgen.ln2.bias",
+          "smolgen.ln2.weight",
+          "smolgen.smol_weight_gen.weight",
+          "smolgen_score_scale",
+          "tokens_since_last_activation"
+        ],
+        "storage_checkpoint_id": "result_BT4/lorsa/lc0_L14_lr0.0002_k30_exp16_aux2048_coefficient0.03125_dead_threshold100000/sae_weights.dcp",
+        "storage_save_id": "dd74f11b-dfcd-4f33-92b8-6fb533b3d08a",
+        "tensor_bytes": 208399380,
+        "tensor_count": 26,
+        "tensor_inventory": {
+          "IGNORE": {
+            "dtype": "float32",
+            "numel": 1,
+            "shape": []
+          },
+          "W_K": {
+            "dtype": "float32",
+            "numel": 4194304,
+            "shape": [
+              128,
+              1024,
+              32
+            ]
+          },
+          "W_O": {
+            "dtype": "float32",
+            "numel": 16777216,
+            "shape": [
+              16384,
+              1024
+            ]
+          },
+          "W_Q": {
+            "dtype": "float32",
+            "numel": 4194304,
+            "shape": [
+              128,
+              1024,
+              32
+            ]
+          },
+          "W_V": {
+            "dtype": "float32",
+            "numel": 16777216,
+            "shape": [
+              16384,
+              1024
+            ]
+          },
+          "_attn_scale_param": {
+            "dtype": "float32",
+            "numel": 1,
+            "shape": []
+          },
+          "b_D": {
+            "dtype": "float32",
+            "numel": 1024,
+            "shape": [
+              1024
+            ]
+          },
+          "b_K": {
+            "dtype": "float32",
+            "numel": 4096,
+            "shape": [
+              128,
+              32
+            ]
+          },
+          "b_Q": {
+            "dtype": "float32",
+            "numel": 4096,
+            "shape": [
+              128,
+              32
+            ]
+          },
+          "b_V": {
+            "dtype": "float32",
+            "numel": 16384,
+            "shape": [
+              16384
+            ]
+          },
+          "dataset_average_activation_norm.blocks.14.hook_attn_in": {
+            "dtype": "float32",
+            "numel": 1,
+            "shape": []
+          },
+          "dataset_average_activation_norm.blocks.14.hook_attn_out": {
+            "dtype": "float32",
+            "numel": 1,
+            "shape": []
+          },
+          "is_dead": {
+            "dtype": "bool",
+            "numel": 16384,
+            "shape": [
+              16384
+            ]
+          },
+          "mask": {
+            "dtype": "bool",
+            "numel": 4096,
+            "shape": [
+              64,
+              64
+            ]
+          },
+          "smolgen.compress.weight": {
+            "dtype": "float32",
+            "numel": 32768,
+            "shape": [
+              32,
+              1024
+            ]
+          },
+          "smolgen.dense1.bias": {
+            "dtype": "float32",
+            "numel": 256,
+            "shape": [
+              256
+            ]
+          },
+          "smolgen.dense1.weight": {
+            "dtype": "float32",
+            "numel": 524288,
+            "shape": [
+              256,
+              2048
+            ]
+          },
+          "smolgen.dense2.bias": {
+            "dtype": "float32",
+            "numel": 32768,
+            "shape": [
+              32768
+            ]
+          },
+          "smolgen.dense2.weight": {
+            "dtype": "float32",
+            "numel": 8388608,
+            "shape": [
+              32768,
+              256
+            ]
+          },
+          "smolgen.ln1.bias": {
+            "dtype": "float32",
+            "numel": 256,
+            "shape": [
+              256
+            ]
+          },
+          "smolgen.ln1.weight": {
+            "dtype": "float32",
+            "numel": 256,
+            "shape": [
+              256
+            ]
+          },
+          "smolgen.ln2.bias": {
+            "dtype": "float32",
+            "numel": 32768,
+            "shape": [
+              32768
+            ]
+          },
+          "smolgen.ln2.weight": {
+            "dtype": "float32",
+            "numel": 32768,
+            "shape": [
+              32768
+            ]
+          },
+          "smolgen.smol_weight_gen.weight": {
+            "dtype": "float32",
+            "numel": 1048576,
+            "shape": [
+              4096,
+              256
+            ]
+          },
+          "smolgen_score_scale": {
+            "dtype": "float32",
+            "numel": 1,
+            "shape": []
+          },
+          "tokens_since_last_activation": {
+            "dtype": "int64",
+            "numel": 16384,
+            "shape": [
+              16384
+            ]
+          }
+        }
+      },
+      "declared_license": null,
+      "file_inventory_sha256": "fa1bcd967b48457234fcd9d6be9f4f68837b61f170695e0a345f53f8c1eb6ceb",
+      "files": {
+        "config.json": {
+          "sha256": "f465c27afc460ba8c741cec2ebc1b6cada9d6c297dd33615f2f5108553fefad1",
+          "size_bytes": 1215
+        },
+        "sae_weights.dcp/.metadata": {
+          "sha256": "e61ba568b64ea291eeabb5614456bfd0053baf4aa50201b098cccf1360b55e59",
+          "size_bytes": 10516
+        },
+        "sae_weights.dcp/__0_0.distcp": {
+          "sha256": "66959912d7a77006d9334e6ef2edea78d04ca41ad111f69fdcfd5ec1c5edcdf5",
+          "size_bytes": 42018673
+        },
+        "sae_weights.dcp/__1_0.distcp": {
+          "sha256": "985a6e938b442a6f5ca3750448ec4188f08596b5c368b1a5821437d447c144a5",
+          "size_bytes": 44126229
+        },
+        "sae_weights.dcp/__2_0.distcp": {
+          "sha256": "3fc3678ce65bd75193bcbf8c3466441d2e75cf989a07fec1453b0ec4e1bd00d3",
+          "size_bytes": 46749881
+        },
+        "sae_weights.dcp/__3_0.distcp": {
+          "sha256": "53e34b84428070f05c7098fe555cecdf90a996534216495a15804a6d269dc1ba",
+          "size_bytes": 75588158
+        }
+      },
+      "gated": false,
+      "public": true,
+      "redistribution_rights_established": false,
+      "repo_id": "JacklE0niden/lc0-BT4-lorsa",
+      "repo_revision": "1ec52be63cce41017b3853edbe9421b643a1476d",
+      "source_file_commit": "fb30623060c46c6721bab2f792c6e08ea13f973b",
+      "storage_policy": "keep converted weights in private local/Railway experiment storage"
+    },
+    "source_pickle_deserialized_in_isolated_environment": true,
+    "tensor_count": 20,
+    "tensor_inventory": {
+      "W_K": {
+        "dtype": "float32",
+        "numel": 4194304,
+        "sha256": "19ba7a81fef7086d7059e8cf82eec2d3ea082794aebe96f82dfc7c5dc559df86",
+        "shape": [
+          128,
+          1024,
+          32
+        ]
+      },
+      "W_O": {
+        "dtype": "float32",
+        "numel": 16777216,
+        "sha256": "6a4a6ad9cb7abb0b5b849db9a9850cc83a06b34551e31fa15e0dfab34baf5ca3",
+        "shape": [
+          16384,
+          1024
+        ]
+      },
+      "W_Q": {
+        "dtype": "float32",
+        "numel": 4194304,
+        "sha256": "2a6f6ea58e6e124cc2d70a95b6c3562706cd84ec9ab23ee901d1b8cd45613047",
+        "shape": [
+          128,
+          1024,
+          32
+        ]
+      },
+      "W_V": {
+        "dtype": "float32",
+        "numel": 16777216,
+        "sha256": "8c0fc3c9aeee8aae79b7ce24b6ad7241236351da2d13e367ca652b9513612fb8",
+        "shape": [
+          16384,
+          1024
+        ]
+      },
+      "_attn_scale_param": {
+        "dtype": "float32",
+        "numel": 1,
+        "sha256": "f72cb8dedae36798db125af21d88a1a092337579f5edfd9ab7c1b8b36d5cd46d",
+        "shape": []
+      },
+      "b_D": {
+        "dtype": "float32",
+        "numel": 1024,
+        "sha256": "9fd4a23290d6544182df9268224594adef3a34adc0450a5a4c434298382fc27f",
+        "shape": [
+          1024
+        ]
+      },
+      "b_K": {
+        "dtype": "float32",
+        "numel": 4096,
+        "sha256": "85493086fb5108aeccfdd204bbea21268ccbbf67befb8fd9f15d18984298fa55",
+        "shape": [
+          128,
+          32
+        ]
+      },
+      "b_Q": {
+        "dtype": "float32",
+        "numel": 4096,
+        "sha256": "55336cc36c2e264c3addc6396ee33d063998740879018dfccbbebf7629f9da6f",
+        "shape": [
+          128,
+          32
+        ]
+      },
+      "b_V": {
+        "dtype": "float32",
+        "numel": 16384,
+        "sha256": "0b6e8ec4883d21aca91650f9a2eddab39f1b4195bda6a7fa98926bdecc135909",
+        "shape": [
+          16384
+        ]
+      },
+      "smolgen.compress.weight": {
+        "dtype": "float32",
+        "numel": 32768,
+        "sha256": "a1f4d14b234cf7ed4a7d323bb9049e0fe63679ed540604654c4a5e10bafdfca3",
+        "shape": [
+          32,
+          1024
+        ]
+      },
+      "smolgen.dense1.bias": {
+        "dtype": "float32",
+        "numel": 256,
+        "sha256": "4778ac0073303771eeed0ab92a20181129b19dbd7e5f67b715495bf12f535e52",
+        "shape": [
+          256
+        ]
+      },
+      "smolgen.dense1.weight": {
+        "dtype": "float32",
+        "numel": 524288,
+        "sha256": "7a70f2928e81b6c807972ed3b8c2a51fa47f856178eff63ea18d64bcec9de96d",
+        "shape": [
+          256,
+          2048
+        ]
+      },
+      "smolgen.dense2.bias": {
+        "dtype": "float32",
+        "numel": 32768,
+        "sha256": "46ef90847fb03bb355797de7601ab8feadaee4563f7260d56f81e61e5e6a18d5",
+        "shape": [
+          32768
+        ]
+      },
+      "smolgen.dense2.weight": {
+        "dtype": "float32",
+        "numel": 8388608,
+        "sha256": "f5c22975cd6eb27d08f09f86f99b3bcc5b65cbe419ca3be444d4d9d045fa44c4",
+        "shape": [
+          32768,
+          256
+        ]
+      },
+      "smolgen.ln1.bias": {
+        "dtype": "float32",
+        "numel": 256,
+        "sha256": "4d5b4b1ecfb03792e953c973c517affadc99908f2121052128019069136dd155",
+        "shape": [
+          256
+        ]
+      },
+      "smolgen.ln1.weight": {
+        "dtype": "float32",
+        "numel": 256,
+        "sha256": "89ec7aa176194a25aa001042f12bc3b72ea983e1ee8cad1962f81954c60ec23b",
+        "shape": [
+          256
+        ]
+      },
+      "smolgen.ln2.bias": {
+        "dtype": "float32",
+        "numel": 32768,
+        "sha256": "86fd7fba2e4d9c4f78f808f13e4dbe8b279fcc1d3193d2373c3a8ccee0fe1ae3",
+        "shape": [
+          32768
+        ]
+      },
+      "smolgen.ln2.weight": {
+        "dtype": "float32",
+        "numel": 32768,
+        "sha256": "a25c397e73f0b48fb6265ea42912999cf041f659e063f01561d2928c9c05c191",
+        "shape": [
+          32768
+        ]
+      },
+      "smolgen.smol_weight_gen.weight": {
+        "dtype": "float32",
+        "numel": 1048576,
+        "sha256": "f80055f5aeb90eae21acbb3ec075d93f5d6e3cacc05656d2e6923c91e00abece",
+        "shape": [
+          4096,
+          256
+        ]
+      },
+      "smolgen_score_scale": {
+        "dtype": "float32",
+        "numel": 1,
+        "sha256": "e00e5eb9444182f352323374ef4e08ebcb784725fdd4fd612d7730540b3e0c8c",
+        "shape": []
+      }
+    },
+    "upstream": {
+      "code_commit": "f946a5736f40397f5c834104aeac6e8e6ff753bd",
+      "code_repository": "JacklE0niden/Leela-SAEs",
+      "config_sha256": "f465c27afc460ba8c741cec2ebc1b6cada9d6c297dd33615f2f5108553fefad1"
+    },
+    "weights_file": "lorsa.safetensors",
+    "weights_path": "/home/ubuntu/chess-dfm-jax/.local/artifacts/lorsa/converted/JacklE0niden_lc0-BT4-lorsa/1ec52be63cce41017b3853edbe9421b643a1476d/k_30_e_16/L14_reviewed_v1/lorsa.safetensors",
+    "weights_sha256": "2dc7c7cd90550bc3489e4940bb39746e8a3cdcfdc613ac73e9bb2e4bdfe5b8fd",
+    "weights_sha256_after": "2dc7c7cd90550bc3489e4940bb39746e8a3cdcfdc613ac73e9bb2e4bdfe5b8fd",
+    "weights_sha256_before": "2dc7c7cd90550bc3489e4940bb39746e8a3cdcfdc613ac73e9bb2e4bdfe5b8fd",
+    "weights_size_bytes": 208249832
+  },
+  "model_lattice": {
+    "arm_semantics": "first letter encoder; second letter policy head",
+    "arms": [
+      "RR",
+      "HR",
+      "RH",
+      "HH"
+    ],
+    "encoder_layout_sha256": "c8c7fdcab3dfb1b6af5f1ac3a54f9347dd52e3d4673ad6f88e8d9407523d8bbb",
+    "hero_leaf_count": 462,
+    "hero_state_sha256": "665ac91ad37e14a6c8810068700dba021e39e9c0fe145c8bf620882bb5a71692",
+    "on_disk_mixed_checkpoints": false,
+    "raw_asset_sha256": "61e43e98d2c4cb747498c6bc13a5bbb3b07e985d3f5d87f0351a4db855fa0651",
+    "raw_mapping_sha256": "c7a22e25a74e959357f294dfdda4a8f47372d79c96ada49131967bec75b2d93c",
+    "resident_parameter_bytes": 793834496,
+    "schema_version": "bt4-raw-hero-comparison-models-v1"
+  },
+  "payload_identities": {
+    "base_input_bundle": null,
+    "hero": "665ac91ad37e14a6c8810068700dba021e39e9c0fe145c8bf620882bb5a71692",
+    "lorsa": "2dc7c7cd90550bc3489e4940bb39746e8a3cdcfdc613ac73e9bb2e4bdfe5b8fd",
+    "lorsa_input_bundle": null,
+    "metrics": "5906d5235cb5c735f8d6e0c345057f072dea0c8682c05956d629b84b426941bc",
+    "positions": "016fcf5775758f36f035685ddc4d0acd3cc45c426a13b18377a33748dd060d5f",
+    "raw": "61e43e98d2c4cb747498c6bc13a5bbb3b07e985d3f5d87f0351a4db855fa0651",
+    "source_files": "7a1b3f171dccc1fc98b960a7169e2102670362d0ee0fac69920cb9524aaf2e4d"
+  },
+  "public_corpus_manifest": {
+    "integrity_sha256": "9195f857f60ab123b353095b6b931c589ae69098750ea6b26e53e7d871f349d0",
+    "path": "/home/ubuntu/chess-dfm-jax/research/eval/interpretability_public_v2/manifest.json",
+    "selection": "lowest position_id in development split",
+    "split": "development only"
+  },
+  "resource_usage": {
+    "cuda_peak_allocated_bytes": 1229769728,
+    "cuda_peak_reserved_bytes": 1260388352,
+    "wall_seconds": 574.742852053023
+  },
+  "run_id": "sha256:abad60ab6a1992b7ca9405ba8ce3da08b6b4431278810e697adfe9d7b94fbbf4",
+  "schema_version": "bt4-published-lorsa-transfer-run-v1",
+  "source_files": {
+    "research/interpretability/models.py": "a3f8fddf06c74104e2fb15717fa4b612a45f5501c2791b62df7f329697270f03",
+    "research/interpretability/sparse/lorsa.py": "932b53e494773da90359300e9a3bc76249fbef6329e19537a0dbebfb5f9f9566",
+    "research/interpretability/sparse/lorsa_transfer_pilot.py": "80147e54c862bb2d545f4a05218a91e2a8fa7e8d76a62a7115c4e784dd93e5ea",
+    "research/train_torch.py": "c9ce7531f43a4e7bc0a6e1fa02a238dac8abb8eddf76da3530aa3b960904b4a3"
+  },
+  "started_utc": "2026-08-08T13:55:39.022261+00:00"
+}

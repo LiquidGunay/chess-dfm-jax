@@ -1,0 +1,64 @@
+{
+  "schema_version": "chess-dfm-hero-v2-conditional-decision-v1",
+  "created_utc": "2026-08-09T12:25:29Z",
+  "status": "sealed_before_hybrid_terminal_validation",
+  "parent_preregistration": {
+    "path": "research/analysis/hero_v2_phase1/v2_encoder_fp32_1_12-preregister.json",
+    "sha256": "cf3e729e33e86afc1336bbbf6bda67dca32ea570775d926ae8d114bdaeba4afe"
+  },
+  "information_available_when_sealed": {
+    "hybrid_terminal_result_available": false,
+    "hybrid_last_observed_update": 240,
+    "matched_update_240": {
+      "hybrid": {
+        "loss": 7.963338375091553,
+        "dfm_ce_loss": 5.8275532722473145,
+        "first_legal_mass": 0.48512589931488037,
+        "root_legal_conditional_ce": 1.6331422328948975,
+        "accuracy": 0.07059421390295029
+      },
+      "whole_model_fp32_1_12": {
+        "loss": 7.965409278869629,
+        "dfm_ce_loss": 5.829039573669434,
+        "first_legal_mass": 0.48726606369018555,
+        "root_legal_conditional_ce": 1.6363556385040283,
+        "accuracy": 0.0716104507446289
+      }
+    }
+  },
+  "interpretation": "Through update 240, changing non-encoder optimizer state back to parameter precision has no material trajectory effect. The remaining causal scope is encoder.*, which still combines encoder trunk and encoder.policy_head.",
+  "terminal_branches": [
+    {
+      "id": "hybrid_behavior_safe",
+      "condition": "hybrid frozen root legal top-1 >= 0.445078125 and frozen validation comparator passes",
+      "action": "run movement audit and paired arena against Hero 1; Phase 2 remains prohibited unless the arena is not clearly worse"
+    },
+    {
+      "id": "hybrid_behavior_regresses_and_matches_whole_encoder",
+      "condition": "hybrid frozen root legal top-1 < 0.445078125 and its terminal trajectory remains materially aligned with whole-model FP32 1:12",
+      "action": "run exactly one v2_trunk_fp32_1_12 Phase-1 diagnostic: FP32 master/state for encoder.* except encoder.policy_head.*, parameter precision for the policy head and all non-encoder parameters"
+    },
+    {
+      "id": "hybrid_terminal_ambiguous",
+      "condition": "terminal metrics diverge unexpectedly from the matched prefix or artifact/frozen-validation integrity fails",
+      "action": "launch no new training arm; audit the terminal artifact and exact-resume lineage"
+    }
+  ],
+  "trunk_only_arm_gates": {
+    "root_legal_top1_noninferiority_floor": 0.445078125,
+    "max_trunk_relative_delta_l2": 0.005,
+    "max_global_relative_delta_l2": 0.01,
+    "requires_frozen_validation_comparator": true,
+    "requires_arena_before_phase2": true,
+    "loss_alone_cannot_promote": true
+  },
+  "after_trunk_only_reassessment": {
+    "if_behavior_is_safe": "arena, then allocate Phase-2 compute only if play is not clearly worse",
+    "if_behavior_still_regresses": "stop precision-only arms and preregister an objective/policy-preservation screen; candidates include reducing root legality pressure because inference masks illegal moves, or anchoring/freezing the pretrained policy head",
+    "no_objective_arm_selected_here": true
+  },
+  "multiplicity": {
+    "maximum_new_phase1_training_arms_before_next_reassessment": 1,
+    "terminal_outcome_not_inspected_when_branches_were_declared": true
+  }
+}

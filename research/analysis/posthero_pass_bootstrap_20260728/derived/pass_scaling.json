@@ -1,0 +1,92 @@
+[
+  {
+    "mean_call_ms": 31.021174344325274,
+    "passes": 1,
+    "score": 0.986328125,
+    "series": "1,024-update JEPA broadcast"
+  },
+  {
+    "mean_call_ms": 33.47501994601891,
+    "passes": 2,
+    "score": 0.943359375,
+    "series": "1,024-update JEPA broadcast"
+  },
+  {
+    "mean_call_ms": 37.3540578647829,
+    "passes": 4,
+    "score": 0.958984375,
+    "series": "1,024-update JEPA broadcast"
+  },
+  {
+    "mean_call_ms": 47.27216999871229,
+    "passes": 8,
+    "score": 0.9453125,
+    "series": "1,024-update JEPA broadcast"
+  },
+  {
+    "mean_call_ms": 67.1305594143119,
+    "passes": 16,
+    "score": 0.93359375,
+    "series": "1,024-update JEPA broadcast"
+  },
+  {
+    "mean_call_ms": 28.955080340514638,
+    "passes": 1,
+    "score": 0.9609375,
+    "series": "Matched 1,024-update control"
+  },
+  {
+    "mean_call_ms": 31.0594632554317,
+    "passes": 2,
+    "score": 0.9375,
+    "series": "Matched 1,024-update control"
+  },
+  {
+    "mean_call_ms": 36.41475587259125,
+    "passes": 4,
+    "score": 0.92578125,
+    "series": "Matched 1,024-update control"
+  },
+  {
+    "mean_call_ms": 44.585867599515176,
+    "passes": 8,
+    "score": 0.908203125,
+    "series": "Matched 1,024-update control"
+  },
+  {
+    "mean_call_ms": 65.19798833450342,
+    "passes": 16,
+    "score": 0.91015625,
+    "series": "Matched 1,024-update control"
+  },
+  {
+    "mean_call_ms": 29.10714685323558,
+    "passes": 1,
+    "score": 0.6640625,
+    "series": "One-epoch Hero"
+  },
+  {
+    "mean_call_ms": 32.245850339448744,
+    "passes": 2,
+    "score": 0.70703125,
+    "series": "One-epoch Hero"
+  },
+  {
+    "mean_call_ms": 36.50962208558142,
+    "passes": 4,
+    "score": 0.82421875,
+    "series": "One-epoch Hero"
+  },
+  {
+    "mean_call_ms": 45.48094757299015,
+    "passes": 8,
+    "score": 0.904296875,
+    "series": "One-epoch Hero"
+  },
+  {
+    "mean_call_ms": 65.29697090039629,
+    "passes": 16,
+    "score": 0.935546875,
+    "series": "One-epoch Hero"
+  }
+]

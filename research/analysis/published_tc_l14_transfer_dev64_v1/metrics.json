@@ -1,0 +1,103 @@
+{
+  "artifact": "k_30_e_16",
+  "layer": 14,
+  "policy_replacement": {
+    "hero": {
+      "js_divergence": {
+        "count": 64,
+        "maximum_absolute": 0.00909087061882019,
+        "mean": 0.0012219421352597237,
+        "median": 0.00023333483841270208
+      },
+      "target_log_odds_change": {
+        "count": 64,
+        "maximum_absolute": 0.6062078475952148,
+        "mean": 0.05438660178333521,
+        "median": 0.03822040557861328
+      },
+      "top1_agreement": {
+        "count": 64,
+        "mean": 0.984375,
+        "true_count": 63
+      },
+      "total_variation": {
+        "count": 64,
+        "maximum_absolute": 0.1340641975402832,
+        "mean": 0.02124053252464364,
+        "median": 0.007814972661435604
+      }
+    },
+    "raw": {
+      "js_divergence": {
+        "count": 64,
+        "maximum_absolute": 0.013366516679525375,
+        "mean": 0.0014495138814822894,
+        "median": 0.00033867210731841624
+      },
+      "target_log_odds_change": {
+        "count": 64,
+        "maximum_absolute": 0.9257783889770508,
+        "mean": 0.08100248780101538,
+        "median": 0.0784463882446289
+      },
+      "top1_agreement": {
+        "count": 64,
+        "mean": 0.984375,
+        "true_count": 63
+      },
+      "total_variation": {
+        "count": 64,
+        "maximum_absolute": 0.15829360485076904,
+        "mean": 0.02320717347356549,
+        "median": 0.008420631289482117
+      }
+    }
+  },
+  "position_count": 64,
+  "reconstruction": {
+    "hero": {
+      "cosine": 0.9497991650091739,
+      "explained_variance": 0.8181437267796408,
+      "mse": 1.772832099067322,
+      "normalized_mse": 0.09797022013984813,
+      "reconstruction_rms": 4.000288279257326,
+      "relative_l2": 0.31300194909912005,
+      "target_rms": 4.253894954912813
+    },
+    "raw": {
+      "cosine": 0.9483655081930048,
+      "explained_variance": 0.8159017695405297,
+      "mse": 1.843956371811006,
+      "normalized_mse": 0.10074874334469056,
+      "reconstruction_rms": 4.005573313640737,
+      "relative_l2": 0.31740942541879646,
+      "target_rms": 4.278145016463944
+    }
+  },
+  "schema_version": "bt4-published-transcoder-transfer-metrics-v1",
+  "source_compatibility_gate": {
+    "criteria": {
+      "cosine_ge_0.85": true,
+      "mean_policy_js_le_0.02": true,
+      "normalized_mse_le_0.25": true,
+      "top1_agreement_ge_0.80": true
+    },
+    "interpretation": "A failure blocks published-feature semantic claims; it does not measure Hero drift.",
+    "passed": true,
+    "scope": "exploratory 64-position source compatibility pilot"
+  },
+  "support_transfer": {
+    "first_dead_feature_fraction": 0.89251708984375,
+    "mean_first_l0": 29.966796875,
+    "mean_resolved_activation_correlation": 0.7957832372979398,
+    "mean_second_l0": 30.001708984375,
+    "mean_support_jaccard": 0.6737051396619299,
+    "resolved_activation_correlations": 1633,
+    "second_dead_feature_fraction": 0.89556884765625
+  },
+  "transfer_degradation": {
+    "normalized_mse_delta_hero_minus_raw": -0.0027785232048424258,
+    "normalized_mse_ratio_hero_over_raw": 0.972421261917518,
+    "policy_js_delta_hero_minus_raw": -0.0002275717462225657
+  }
+}

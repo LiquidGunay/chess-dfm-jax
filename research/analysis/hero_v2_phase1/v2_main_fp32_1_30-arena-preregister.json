@@ -1,0 +1,56 @@
+{
+  "schema_version": "chess-dfm-hero-v2-arena-preregister-v1",
+  "created_utc": "2026-08-09T14:01:11Z",
+  "status": "sealed_before_launch",
+  "parent_preregister": {
+    "path": "research/analysis/hero_v2_phase1/v2_main_fp32_1_30-preregister.json",
+    "sha256": "2784267c37351f81400c40b70fc5f575499e07cddbd9b52e5b241c536f041c3a"
+  },
+  "trigger_evidence": {
+    "candidate_root_legal_top1_accuracy": 0.454833984375,
+    "hero1_root_legal_top1_accuracy": 0.455078125,
+    "candidate_minus_hero1": -0.000244140625,
+    "noninferiority_floor": 0.445078125,
+    "candidate_checkpoint_state_sha256": "058d71a72d3f3e05850070286eaa3009603c16acb39a3c3b0702e52cb487e273",
+    "frozen_validation_comparator_passed": false,
+    "interpretation": "The legal-masked root move proxy is behaviorally safe, authorizing the preregistered arena. Conventional validation did not establish a model improvement, so this arena is diagnostic and cannot by itself authorize Phase 2."
+  },
+  "arena": {
+    "candidate_label": "hero-training-phase1-v2_main_fp32_1_30-l40s-ef5d5775fdbd433aeb52",
+    "opponent_label": "hero-training-phase1-hero1_exact-l40s-fae7b0ccef5ca3668ed5",
+    "pair_count": 128,
+    "game_count": 256,
+    "opening_start_index": 0,
+    "seed": 0,
+    "refinement_passes": 1,
+    "policy_mode": "dfm",
+    "deterministic_greedy_policy": true,
+    "complete_legal_masking": true,
+    "policy_batch_size_cap": 16,
+    "additional_ply_cap": 256,
+    "block_pairs": 16,
+    "promotion_eligible": false,
+    "relative_elo_scope": "checkpoint_pool_relative_only",
+    "declared_attempt_upper_bound_usd": 0.92976,
+    "rationale_for_direct_128_pairs": "Prior 16-pair and 128-pair runs had nearly identical fixed startup and compilation overhead, and a 16-pair score failed to predict the decisive 128-pair result. A single 128-pair run is cheaper and more informative than staged duplicate launches."
+  },
+  "analysis": {
+    "primary_estimand": "candidate score over complete color-swapped opening pairs",
+    "uncertainty": "pair-aware 95% bounded interval plus paired logistic Elo interval",
+    "report": [
+      "wins_draws_losses",
+      "pentanomial_counts",
+      "pair_score",
+      "pair_aware_95pct_interval",
+      "paired_logistic_elo_interval",
+      "fault_and_cap_draw_counts"
+    ],
+    "clearly_worse_rule": "Reject behavioral parity if the pair-aware 95% score interval is wholly below 0.5.",
+    "phase2_rule": "Do not authorize Phase 2 because the frozen validation comparator already failed. An unexpectedly strong arena may motivate a separately preregistered reassessment, not continuation of this arm."
+  },
+  "post_arena_rule": {
+    "precision_partition_search": "stop regardless of arena result",
+    "candidate_selection": "Hero 1 remains incumbent unless both behavioral evidence and predictive validation support replacement",
+    "next_branch_if_no_winner": "preregister an objective or model intervention that removes unnecessary legality pressure and/or explicitly preserves the pretrained greedy policy"
+  }
+}

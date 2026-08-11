@@ -1,0 +1,280 @@
+{
+  "direct_matches": [
+    {
+      "candidate": "dfm_128",
+      "candidate_mean_physical_call_ms": 331.14639120847704,
+      "direct_hoeffding_elo_95": [
+        -83.63423185638985,
+        86.51461209501129
+      ],
+      "direct_logistic_elo": 1.3571771589357418,
+      "draws": 159,
+      "games": 256,
+      "joint_model_predicted_score": 0.5058717513834864,
+      "joint_model_score_residual": -0.00391862638348639,
+      "losses": 48,
+      "opponent": "dfm_16",
+      "opponent_mean_physical_call_ms": 64.72938466440822,
+      "pentanomial": [
+        5,
+        30,
+        58,
+        29,
+        6
+      ],
+      "points": 128.5,
+      "score": 0.501953125,
+      "source_state": "artifacts/arena/hero-epoch-v1-round-robin-first128-dfm128-vs-dfm16-v1/state.json",
+      "source_state_sha256": "d0c44f6899761b4ced33704baf36d65ca1173ce5b17213364edab094cc8029b5",
+      "wins": 49
+    },
+    {
+      "candidate": "dfm_128",
+      "candidate_mean_physical_call_ms": 329.1508188652321,
+      "direct_hoeffding_elo_95": [
+        -291.5732513793964,
+        -72.33204081032876
+      ],
+      "direct_logistic_elo": -166.3653518735754,
+      "draws": 100,
+      "games": 256,
+      "joint_model_predicted_score": 0.26083155895722543,
+      "joint_model_score_residual": 0.01651219104277457,
+      "losses": 135,
+      "opponent": "policy_only",
+      "opponent_mean_physical_call_ms": 26.21246737307648,
+      "pentanomial": [
+        38,
+        50,
+        30,
+        8,
+        2
+      ],
+      "points": 71.0,
+      "score": 0.27734375,
+      "source_state": "artifacts/arena/hero-epoch-v1-round-robin-first128-dfm128-vs-policy-v1/state.json",
+      "source_state_sha256": "8c075ce6e2956ce6eaf2987a22e24fd9d13efc29ab8b43bdde44cf1e7879d524",
+      "wins": 21
+    },
+    {
+      "candidate": "dfm_128",
+      "candidate_mean_physical_call_ms": 341.2688586472624,
+      "direct_hoeffding_elo_95": [
+        249.30163803619604,
+        3999.999985609154
+      ],
+      "direct_logistic_elo": 443.39675422314866,
+      "draws": 37,
+      "games": 256,
+      "joint_model_predicted_score": 0.9403279396592882,
+      "joint_model_score_residual": -0.012593564659288181,
+      "losses": 0,
+      "opponent": "raw_bt4",
+      "opponent_mean_physical_call_ms": 26.804978490083403,
+      "pentanomial": [
+        0,
+        0,
+        3,
+        31,
+        94
+      ],
+      "points": 237.5,
+      "score": 0.927734375,
+      "source_state": "artifacts/arena/hero-epoch-v1-round-robin-first128-dfm128-vs-raw-v1/state.json",
+      "source_state_sha256": "ddf7d1da929460ec5f5c70c1c9ea37e461fa1974cdb87399a21c526b560db5d7",
+      "wins": 219
+    },
+    {
+      "candidate": "dfm_16",
+      "candidate_mean_physical_call_ms": 64.14695417965797,
+      "direct_hoeffding_elo_95": [
+        -321.4576354238625,
+        -88.07294718438632
+      ],
+      "direct_logistic_elo": -185.46147200794204,
+      "draws": 107,
+      "games": 256,
+      "joint_model_predicted_score": 0.25632859526057755,
+      "joint_model_score_residual": -0.00046922026057755195,
+      "losses": 137,
+      "opponent": "policy_only",
+      "opponent_mean_physical_call_ms": 26.1763089711499,
+      "pentanomial": [
+        36,
+        60,
+        25,
+        7,
+        0
+      ],
+      "points": 65.5,
+      "score": 0.255859375,
+      "source_state": "artifacts/arena/hero-epoch-v1-round-robin-first128-dfm16-vs-policy-v1/state.json",
+      "source_state_sha256": "2ac9a283d261439bfbcef9a9312bb20e68f6e50c1d5577fc79fce71fe998f9f8",
+      "wins": 12
+    },
+    {
+      "candidate": "dfm_16",
+      "candidate_mean_physical_call_ms": 66.30107539370472,
+      "direct_hoeffding_elo_95": [
+        258.17857294172995,
+        3999.999985609154
+      ],
+      "direct_logistic_elo": 464.7286294146703,
+      "draws": 33,
+      "games": 256,
+      "joint_model_predicted_score": 0.9389962811229088,
+      "joint_model_score_residual": -0.0034494061229087825,
+      "losses": 0,
+      "opponent": "raw_bt4",
+      "opponent_mean_physical_call_ms": 26.63162637750555,
+      "pentanomial": [
+        0,
+        0,
+        3,
+        27,
+        98
+      ],
+      "points": 239.5,
+      "score": 0.935546875,
+      "source_state": "artifacts/arena/hero-epoch-v1-round-robin-first128-dfm16-vs-raw-v1/state.json",
+      "source_state_sha256": "d9090d44794603a42b5bbc6d410e73daf3065366d350cbb4db2f0d16e72ec2f8",
+      "wins": 223
+    },
+    {
+      "candidate": "policy_only",
+      "candidate_mean_physical_call_ms": 27.190768325663992,
+      "direct_hoeffding_elo_95": [
+        336.61459186479135,
+        3999.999985609154
+      ],
+      "direct_logistic_elo": 891.8386110468384,
+      "draws": 3,
+      "games": 256,
+      "joint_model_predicted_score": 0.978097654217803,
+      "joint_model_score_residual": 0.016042970782196964,
+      "losses": 0,
+      "opponent": "raw_bt4",
+      "opponent_mean_physical_call_ms": 26.69602698958007,
+      "pentanomial": [
+        0,
+        0,
+        0,
+        3,
+        125
+      ],
+      "points": 254.5,
+      "score": 0.994140625,
+      "source_state": "artifacts/arena/hero-epoch-v1-round-robin-first128-policy-vs-raw-v1/state.json",
+      "source_state_sha256": "da02f24aaef10b043e1cca57db82c289619a24263379dc05c9b2dcc6ed3825b4",
+      "wins": 253
+    }
+  ],
+  "frozen_contract": {
+    "additional_ply_cap": 256,
+    "checkpoint_sha256": "665ac91ad37e14a6c8810068700dba021e39e9c0fe145c8bf620882bb5a71692",
+    "dfm_decoding": "per-pass greedy logits with confidence-ordered stable progressive unmasking; root logits are legality-masked",
+    "edges": 6,
+    "games_per_edge": 256,
+    "opening_pairs_per_edge": 128,
+    "opening_tier": "hero_development",
+    "ordered_fens_sha256": "013778d027d919da9e6a25957e1439c8351081b9cbadf28e29df1c5c7b06b0f2",
+    "physical_batch_size": 16,
+    "raw_bt4_sha256": "61e43e98d2c4cb747498c6bc13a5bbb3b07e985d3f5d87f0351a4db855fa0651",
+    "seed": 0,
+    "selection": "deterministic greedy legal argmax; no temperature, sampling, Gumbel noise, or stochastic tie breaking",
+    "total_games": 1536
+  },
+  "interpretation": {
+    "dfm_128_vs_dfm_16": "No measurable gain: the joint contrast is near zero and its matched-opening interval spans both directions.",
+    "dfm_vs_raw": "Both DFM settings remain far stronger than immutable raw BT4, so the DFM path is useful in absolute terms but damages the stronger jointly trained base policy.",
+    "policy_only_vs_dfm": "The same checkpoint's legal-greedy BT4 policy path is about 181-185 relative Elo above either DFM setting.",
+    "scope": "These are local, pool-relative Arena Elo differences, not an external human or engine rating."
+  },
+  "joint_bradley_terry": {
+    "anchor": "raw_bt4 = 0 Elo",
+    "bootstrap": {
+      "interval": "percentile 95%",
+      "samples": 5000,
+      "seed": 20260728,
+      "unit": "one opening-pair index resampled synchronously across all six edges"
+    },
+    "contrasts": {
+      "dfm_128_minus_dfm_16": {
+        "elo": 4.080298337948534,
+        "matched_opening_bootstrap_95": [
+          -20.029332886923523,
+          27.385310582221717
+        ]
+      },
+      "dfm_128_minus_policy_only": {
+        "elo": -180.9533116822114,
+        "matched_opening_bootstrap_95": [
+          -212.6719673350167,
+          -150.16112947727567
+        ]
+      },
+      "dfm_128_minus_raw_bt4": {
+        "elo": 479.0033228185515,
+        "matched_opening_bootstrap_95": [
+          439.5325858247651,
+          524.0759431896489
+        ]
+      },
+      "dfm_16_minus_policy_only": {
+        "elo": -185.03361002015993,
+        "matched_opening_bootstrap_95": [
+          -213.18749955453148,
+          -158.6478301255277
+        ]
+      },
+      "dfm_16_minus_raw_bt4": {
+        "elo": 474.923024480603,
+        "matched_opening_bootstrap_95": [
+          433.241580070484,
+          521.4487380150163
+        ]
+      },
+      "policy_only_minus_raw_bt4": {
+        "elo": 659.9566345007629,
+        "matched_opening_bootstrap_95": [
+          618.8969811274338,
+          706.3908373714296
+        ]
+      }
+    },
+    "likelihood_unit": "two game-points per color-reversed opening pair",
+    "max_absolute_score_residual": 0.01651219104277457,
+    "ratings": {
+      "dfm_128": {
+        "elo_vs_raw_bt4": 479.0033228185515,
+        "matched_opening_bootstrap_95": [
+          439.5325858247651,
+          524.0759431896489
+        ]
+      },
+      "dfm_16": {
+        "elo_vs_raw_bt4": 474.923024480603,
+        "matched_opening_bootstrap_95": [
+          433.241580070484,
+          521.4487380150163
+        ]
+      },
+      "policy_only": {
+        "elo_vs_raw_bt4": 659.9566345007629,
+        "matched_opening_bootstrap_95": [
+          618.8969811274338,
+          706.3908373714296
+        ]
+      },
+      "raw_bt4": {
+        "elo_vs_raw_bt4": 0.0,
+        "matched_opening_bootstrap_95": [
+          0.0,
+          0.0
+        ]
+      }
+    }
+  },
+  "question": "Does 128-pass DFM recover the terminal Hero checkpoint's policy-only strength, and how do DFM-128, DFM-16, policy-only, and immutable raw BT4 rank on one matched Arena?",
+  "schema_version": "hero-policy-round-robin-v1"
+}

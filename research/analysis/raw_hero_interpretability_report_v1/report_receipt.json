@@ -1,0 +1,31 @@
+{
+  "browser_attempts": [
+    {
+      "browser": "Playwright Chromium headless shell 145.0.7632.6",
+      "outcome": "reader_timeout",
+      "reader_state": "fallback"
+    },
+    {
+      "browser": "system Google Chrome 143.0.7499.146",
+      "outcome": "browser_environment_mismatch"
+    }
+  ],
+  "builder": "data-analytics build-report deliver_portable_artifact.mjs",
+  "counts": {
+    "blocks": 29,
+    "charts": 7,
+    "html": 0,
+    "metrics": 3,
+    "tables": 4
+  },
+  "output": "research/analysis/raw_hero_interpretability_report_v1/report.html",
+  "schema_version": "bt4-portable-report-receipt-v1",
+  "source_dialog": "not_verified",
+  "source_interaction": "not_verified",
+  "stages": {
+    "package": "passed",
+    "validation": "passed",
+    "verification": "structural_only"
+  },
+  "visual_qa": "not completed because neither installed headless browser satisfied the packaged verifier; semantic fallback content is retained"
+}

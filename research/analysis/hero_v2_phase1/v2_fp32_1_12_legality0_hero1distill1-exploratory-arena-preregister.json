@@ -1,0 +1,130 @@
+{
+  "schema_version": "chess-dfm-post-gate-exploratory-arena-preregister-v1",
+  "created_utc": "2026-08-09T19:17:22Z",
+  "status": "sealed_before_launch",
+  "authorization": {
+    "basis": "The user explicitly authorized an arena after reviewing the legality concern.",
+    "scope": "Post-gate exploratory evaluation of the already-trained fixed-Hero1-teacher checkpoint only.",
+    "prohibited_inference": "Arena results cannot retroactively pass the sealed frozen-validation gate, promote this arm, authorize Phase 2, or justify an unregistered coefficient sweep."
+  },
+  "rationale": {
+    "frozen_behavior_result": "The fixed-teacher candidate substantially improved legal root-move prediction and cleared the Hero1 DFM-root top-1 floor.",
+    "frozen_predictive_result": "The candidate failed predictive noninferiority solely on frozen JEPA positive loss among promotion metrics. The canonical predictive training-curve contrast was inconclusive.",
+    "legality_interpretation": "First legal probability mass is diagnostic only because deployed inference applies complete legal-action masking; it is not a promotion metric and is not the reason for the exploratory designation.",
+    "scientific_question": "Does the large legal-move ranking gain translate into stronger actual play despite the JEPA representation regression?"
+  },
+  "models": {
+    "candidate": {
+      "label": "hero-training-phase1-v2_fp32_1_12_legality0_hero1distill1-l40s-1712d50db9d0a488031b",
+      "checkpoint_state_sha256": "72a51f168b6b7146360e9aeb15bb1188b73890f642556f8be8255af88b488354",
+      "checkpoint_state_size_bytes": 712339608,
+      "optimizer_update": 554
+    },
+    "opponent": {
+      "label": "hero-training-phase1-hero1_exact-l40s-fae7b0ccef5ca3668ed5",
+      "checkpoint_manifest_sha256": "61276cee7db1871b3071fa39b31356b42744df213d00113bd62b372984b9a6fa",
+      "checkpoint_state_sha256": "e518083ee5476e7ff15e7c34caf9c0505f8fb7d330ea5a6882e4e9e5c1ef1912"
+    }
+  },
+  "prior_evidence": {
+    "candidate_frozen_validation_examples": 8192,
+    "candidate_dfm_root_legal_top1_accuracy": 0.5006103515625,
+    "hero1_dfm_root_legal_top1_floor": 0.455078125,
+    "candidate_root_legal_conditional_ce": 1.4795591020956635,
+    "legality_zero_root_legal_conditional_ce": 1.7252007573843002,
+    "candidate_jepa_positive_loss": 0.24133549444377422,
+    "legality_zero_jepa_positive_loss": 0.1971186987357214,
+    "jepa_noninferiority_bound": 0.20711869873572142,
+    "canonical_predictive_curve_candidate_minus_legality_zero": {
+      "mean": -0.017140145628077315,
+      "ci_95pct": [
+        -0.04165837658773923,
+        0.004304485439312007
+      ],
+      "classification": "inconclusive"
+    },
+    "sealed_gate_decision": {
+      "predictive_validation_passed": false,
+      "behavior_safe": true,
+      "eligible_for_movement_and_arena_under_original_preregister": false,
+      "phase2_authorized": false
+    }
+  },
+  "arena_contract": {
+    "sequence": [
+      "primary_dfm",
+      "mechanistic_policy_only_if_primary_completes_safely"
+    ],
+    "primary_dfm": {
+      "candidate_policy_mode": "dfm",
+      "opponent_policy_mode": "dfm",
+      "pair_count": 128,
+      "games": 256,
+      "refinement_passes": 1
+    },
+    "mechanistic_policy_only": {
+      "candidate_policy_mode": "policy_only",
+      "opponent_policy_mode": "policy_only",
+      "pair_count": 128,
+      "games": 256,
+      "refinement_passes": 1,
+      "interpretation": "Tests whether fixed checkpoint supervision preserved the native Hero1 policy; diagnostic only and cannot rescue a poor primary DFM result."
+    },
+    "shared": {
+      "color_reversed_pairs": true,
+      "opening_tier": "hero_development",
+      "deterministic_greedy": true,
+      "complete_legal_masking": true,
+      "additional_ply_cap": 256,
+      "block_pairs": 16,
+      "policy_batch_size_cap": 16,
+      "arena_source_tree_sha256": "91369f0556a07fc07b5b8125a06615110f4d4a99c7396244c2dfcee04a76b248"
+    }
+  },
+  "analysis_contract": {
+    "primary_estimand": "candidate points divided by 256 games",
+    "uncertainty": "pre-existing pair-aware 95% interval over 128 complete color-reversed pairs",
+    "classification": {
+      "confirmed_superior": "score lower bound > 0.5",
+      "promising_inconclusive": "point score > 0.5 and interval includes 0.5",
+      "parity_inconclusive": "point score <= 0.5 and interval includes 0.5",
+      "confirmed_inferior": "score upper bound < 0.5"
+    },
+    "safety_requirements": {
+      "fault_count": 0,
+      "cap_draw_rate": 0.0,
+      "representable_fraction": 1.0
+    },
+    "decision_use": "Use the primary arena and movement diagnostics to choose a new preregistered teacher weight or gradient-routing experiment. Do not extend this checkpoint to Phase 2 under the original preregistration."
+  },
+  "inputs": {
+    "fixed_teacher_preregister": {
+      "path": "research/analysis/hero_v2_phase1/v2_fp32_1_12_legality0_hero1distill1-preregister.json",
+      "sha256": "42405f66f38c0616f6ab5c37c29028bf93f5a89efe110af4cfe898048045aba6"
+    },
+    "comparison_vs_legality_zero": {
+      "path": "research/analysis/hero_v2_phase1/v2_fp32_1_12_legality0_hero1distill1-comparison-vs-legality0.json",
+      "sha256": "450097ecee605984b2ceb6628105c69ed5b99306d1a2209a8947475afc2d843b"
+    },
+    "comparison_vs_online_teacher": {
+      "path": "research/analysis/hero_v2_phase1/v2_fp32_1_12_legality0_hero1distill1-comparison-vs-online.json",
+      "sha256": "9d64e061f954b9b30102d76b088f9ea4f09b78254b7529c4f988b5b37cc4eab7"
+    },
+    "compact_manifest": {
+      "path": "research/analysis/hero_v2_phase1/v2_fp32_1_12_legality0_hero1distill1/compact_manifest.json",
+      "sha256": "e0c0a0b0354c1ec91c153dc148d9223960b767154b4bc5cc26d46eb235c993eb"
+    }
+  },
+  "implementation": {
+    "git_commit": "86ba0b37e3e188eab115b45a1460d079fac341f8",
+    "modal_arena_app_sha256": "72859873dcec65d3db29fae8ad09228b9c5d1e44afaa23b1d3384ede015cfa2f",
+    "evaluate_arena_sha256": "f5d37a83965a696c0fcbee01fe0d38b8cdd15dd7ad2c6e9791297be9baaf773c"
+  },
+  "cost_guard": {
+    "workspace_budget_usd": 42.5,
+    "repository_new_launch_stop_usd": 34.0,
+    "primary_attempt_cap_usd": 1.0,
+    "mechanistic_attempt_cap_usd": 1.0,
+    "fresh_billing_query_required_immediately_before_each_launch": true
+  }
+}

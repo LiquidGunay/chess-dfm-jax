@@ -1,0 +1,82 @@
+{
+  "analysis_config": {
+    "bootstrap_replicates": 20000,
+    "seed": 20260808,
+    "tail_count": 10
+  },
+  "environment": {
+    "device": "CPU",
+    "numpy": "2.2.6",
+    "provider_dollars": 0.0,
+    "python": "3.12.3"
+  },
+  "group_identity": {
+    "groups": {
+      "all_unique": true,
+      "count": 512,
+      "field": "group_id",
+      "ordered_sha256": "ddd9814d3a77c69edaab4787dcab1262413d9d2f7ab1476bb92c956124b21184",
+      "sorted_sha256": "0e137f992098c57ee5eaf44256fe71a85a07a1550d8efc3ec52549134d8f2ed5",
+      "unique_count": 512
+    },
+    "ordered_group_position_pairs_sha256": "9b4c4636d5e74814c41c19a871939f8cd28e1fd4f5df0175ce4051999bf55478",
+    "positions": {
+      "all_unique": true,
+      "count": 512,
+      "field": "position_id",
+      "ordered_sha256": "5988e130c9450801ee3cd51710452e1f823018f0124316390d4cae572cde3158",
+      "sorted_sha256": "5988e130c9450801ee3cd51710452e1f823018f0124316390d4cae572cde3158",
+      "unique_count": 512
+    }
+  },
+  "immutable_after_creation": true,
+  "input_artifact": {
+    "checksum_ledger_sha256": "aa85c1ba48c72d20d1359f125c461274238ab6c50ffefdde557b27af4ae94c32",
+    "group_identity": {
+      "all_unique": true,
+      "count": 512,
+      "field": "group_id",
+      "ordered_sha256": "ddd9814d3a77c69edaab4787dcab1262413d9d2f7ab1476bb92c956124b21184",
+      "sorted_sha256": "0e137f992098c57ee5eaf44256fe71a85a07a1550d8efc3ec52549134d8f2ed5",
+      "unique_count": 512
+    },
+    "ordered_group_position_pairs_sha256": "9b4c4636d5e74814c41c19a871939f8cd28e1fd4f5df0175ce4051999bf55478",
+    "path": "/home/ubuntu/chess-dfm-jax/research/analysis/published_lorsa_l14_transfer_dev512_v3",
+    "position_identity": {
+      "all_unique": true,
+      "count": 512,
+      "field": "position_id",
+      "ordered_sha256": "5988e130c9450801ee3cd51710452e1f823018f0124316390d4cae572cde3158",
+      "sorted_sha256": "5988e130c9450801ee3cd51710452e1f823018f0124316390d4cae572cde3158",
+      "unique_count": 512
+    },
+    "run_id": "sha256:e222c1cce5a2824c48168b5cdba3b2018211eb4c7817be95e354f9e5388e91f6",
+    "validated_transfer_contract": {
+      "all_required_gates_passed": true,
+      "metrics_identity": "5906d5235cb5c735f8d6e0c345057f072dea0c8682c05956d629b84b426941bc",
+      "ordered_positions_identity": "016fcf5775758f36f035685ddc4d0acd3cc45c426a13b18377a33748dd060d5f",
+      "run_id_recomputed": "sha256:e222c1cce5a2824c48168b5cdba3b2018211eb4c7817be95e354f9e5388e91f6",
+      "source_files_bound_in_run_id": true
+    },
+    "verified_files": {
+      "examples.jsonl": "7bd61a1bb6b3e9e2240311532331461651199fa3b6fff22f848fdeaee9150c3f",
+      "manifest.json": "ab156a88056cb99fdb7cccac90792ae519ee189f5fc6a463967977ca6205e544",
+      "metrics.json": "63da2ac0237dc95b86a55921d151a9b5f6cc56714ecec318f0bcffd700a362d4",
+      "run.log": "b40b8fb739270ddbd8b3d9fcc19001a0e26b99efbe252a55e39bc163f8db8c9e"
+    }
+  },
+  "payload_identities": {
+    "config": "2c269459f8bc96585607a978cb27ca3ea1b1ddfa8ff15592a14e696f7eb8dc4f",
+    "examples": "a5a95cd818bc93c0a4b9c7d39d613786f7f04bdc5e5acb2f8b256c025dd66629",
+    "input": "77238a633122a08df9f4ab6a5b6b0a9edd304577d9843db0f1eb30f7e8fa7377",
+    "metrics": "f9a96b4371415f14642e912e07dbb318bd0643d8dff7fb1a60db4b7cbd73671d",
+    "source_files": "b2d829cb42a576c05a722a7dda24522678f4857612be7d5a2d6329392291d514"
+  },
+  "run_id": "sha256:133adf9ce415c2ee5170eb4e41c33e8ddbfa19beb2448e7009e09f596201b5c2",
+  "schema_version": "bt4-published-lorsa-paired-bootstrap-run-v1",
+  "source_files": {
+    "research/interpretability/artifacts.py": "8dc06be6218e941599990b9276f08985835294b61d3d94acdb9671cf67161c20",
+    "research/interpretability/sparse/lorsa_transfer_analysis.py": "292b41e85885913590bc1bba281b02ee676cc5b84e1bdf5741c1fddd0f5e3c95"
+  },
+  "started_utc": "2026-08-08T14:22:34.191657+00:00"
+}

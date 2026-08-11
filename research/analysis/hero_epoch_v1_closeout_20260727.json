@@ -1,0 +1,493 @@
+{
+  "arena_points": [
+    {
+      "candidate": {
+        "amortized_ms_per_position": 4.913190097436015,
+        "call_seconds": 301.55195542023284,
+        "calls": 6736,
+        "draws": 536,
+        "losses": 0,
+        "mean_physical_call_ms": 44.767214284476374,
+        "model_id": "candidate-torch-hero-d833ddea6d0a",
+        "positions": 61376,
+        "wins": 1512
+      },
+      "cap_draw_count": 0,
+      "contract_sha256": "de9e8d5cda7f8c3d82ed8bcfba9e279265a80b554e3f3881e8df8f76c9ba0cae",
+      "epoch": 0.5,
+      "fault_counts": {},
+      "game_count": 2048,
+      "gameplay_seconds": 699.8502356780227,
+      "logistic_elo": 328.91408331204207,
+      "logistic_elo_lower": 271.4196925310655,
+      "logistic_elo_upper": 405.3005072384702,
+      "normalized_elo": 585.2102118358802,
+      "pair_count": 1024,
+      "pentanomial": [
+        0,
+        0,
+        69,
+        398,
+        557
+      ],
+      "reference": {
+        "amortized_ms_per_position": 2.801541015066492,
+        "call_seconds": 169.83501941536088,
+        "calls": 6703,
+        "draws": 536,
+        "losses": 1512,
+        "mean_physical_call_ms": 25.33716536108621,
+        "model_id": "raw-bt4-61e43e98d2c4",
+        "positions": 60622,
+        "wins": 0
+      },
+      "score": 0.869140625,
+      "score_lower": 0.8266999526331057,
+      "score_upper": 0.9115812973668943,
+      "state_sha256": "e6215cccdd5a3966b89e7d90bdc103d96850de9de0fed4337b356562b500cbaf",
+      "termination_counts": {
+        "normal": 2048
+      }
+    },
+    {
+      "candidate": {
+        "amortized_ms_per_position": 4.880774312450081,
+        "call_seconds": 291.12354541470995,
+        "calls": 6401,
+        "draws": 444,
+        "losses": 0,
+        "mean_physical_call_ms": 45.48094757299015,
+        "model_id": "candidate-torch-hero-665ac91ad37e",
+        "positions": 59647,
+        "wins": 1604
+      },
+      "cap_draw_count": 0,
+      "contract_sha256": "f7c26be73bb5849d1c341975f68915a59d479398caf1a25951bae70579339f4f",
+      "epoch": 1.0,
+      "fault_counts": {},
+      "game_count": 2048,
+      "gameplay_seconds": 675.9459431000869,
+      "logistic_elo": 366.0591194990566,
+      "logistic_elo_lower": 300.1904090969363,
+      "logistic_elo_upper": 460.44023296276373,
+      "normalized_elo": 670.3061329796876,
+      "pair_count": 1024,
+      "pentanomial": [
+        0,
+        0,
+        43,
+        358,
+        623
+      ],
+      "reference": {
+        "amortized_ms_per_position": 2.787188978544911,
+        "call_seconds": 164.12919737957418,
+        "calls": 6362,
+        "draws": 444,
+        "losses": 1604,
+        "mean_physical_call_ms": 25.79836488204561,
+        "model_id": "raw-bt4-61e43e98d2c4",
+        "positions": 58887,
+        "wins": 0
+      },
+      "score": 0.8916015625,
+      "score_lower": 0.8491608901331057,
+      "score_upper": 0.9340422348668943,
+      "state_sha256": "866c745ac2399a9988e37af845068787758cf035511de9ec8db46d7ad28406a5",
+      "termination_counts": {
+        "normal": 2048
+      }
+    }
+  ],
+  "fast_validation_note": "Repeated 8,192-position development pool; useful for curve shape, not a terminal generalization estimate.",
+  "fast_validation_points": [
+    {
+      "dfm_ce_loss": 5.372667204588652,
+      "dfm_ce_loss_by_horizon_h1": 2.765618810430169,
+      "epoch": 0.10000361284728494,
+      "first_legal_mass": 0.6853940854780376,
+      "loss": 6.67427160218358,
+      "root_legal_top1_accuracy": 0.4564208984375
+    },
+    {
+      "dfm_ce_loss": 5.0937468484044075,
+      "dfm_ce_loss_by_horizon_h1": 2.5415487606078386,
+      "epoch": 0.20000722569456988,
+      "first_legal_mass": 0.7680661487393081,
+      "loss": 6.2154750898480415,
+      "root_legal_top1_accuracy": 0.4512939453125
+    },
+    {
+      "dfm_ce_loss": 4.937200739979744,
+      "dfm_ce_loss_by_horizon_h1": 2.361944569274783,
+      "epoch": 0.30001083854185484,
+      "first_legal_mass": 0.8120678984560072,
+      "loss": 5.9284295700490475,
+      "root_legal_top1_accuracy": 0.458984375
+    },
+    {
+      "dfm_ce_loss": 4.829131595790386,
+      "dfm_ce_loss_by_horizon_h1": 2.2328784922137856,
+      "epoch": 0.40001445138913977,
+      "first_legal_mass": 0.8403129065409303,
+      "loss": 5.729573633521795,
+      "root_legal_top1_accuracy": 0.4742431640625
+    },
+    {
+      "dfm_ce_loss": 4.752290058881044,
+      "dfm_ce_loss_by_horizon_h1": 2.1394453207030892,
+      "epoch": 0.5000180642364247,
+      "first_legal_mass": 0.8609877489507198,
+      "loss": 5.583616457879543,
+      "root_legal_top1_accuracy": 0.4775390625
+    },
+    {
+      "dfm_ce_loss": 4.690009105950594,
+      "dfm_ce_loss_by_horizon_h1": 2.110912828706205,
+      "epoch": 0.6000216770837097,
+      "first_legal_mass": 0.8788428427651525,
+      "loss": 5.472039092332125,
+      "root_legal_top1_accuracy": 0.482666015625
+    },
+    {
+      "dfm_ce_loss": 4.63648035377264,
+      "dfm_ce_loss_by_horizon_h1": 2.0338504277169704,
+      "epoch": 0.7000252899309947,
+      "first_legal_mass": 0.8860431588254869,
+      "loss": 5.385413210839033,
+      "root_legal_top1_accuracy": 0.49169921875
+    },
+    {
+      "dfm_ce_loss": 4.604527965188026,
+      "dfm_ce_loss_by_horizon_h1": 2.0028969226405025,
+      "epoch": 0.8000289027782795,
+      "first_legal_mass": 0.8939536530524492,
+      "loss": 5.326298236846924,
+      "root_legal_top1_accuracy": 0.4932861328125
+    },
+    {
+      "dfm_ce_loss": 4.58528695255518,
+      "dfm_ce_loss_by_horizon_h1": 1.9867170276120305,
+      "epoch": 0.9000325156255645,
+      "first_legal_mass": 0.8984780884347856,
+      "loss": 5.290818866342306,
+      "root_legal_top1_accuracy": 0.4952392578125
+    },
+    {
+      "dfm_ce_loss": 4.58070483058691,
+      "dfm_ce_loss_by_horizon_h1": 1.982453721575439,
+      "epoch": 1.0,
+      "first_legal_mass": 0.8991441382095218,
+      "loss": 5.282552544027567,
+      "root_legal_top1_accuracy": 0.4962158203125
+    }
+  ],
+  "frozen_validation_points": [
+    {
+      "epoch": 0.0,
+      "evaluation_seconds": 655.1387728170084,
+      "examples": 65536,
+      "latent_alignment": {
+        "pred_target_centered_rms_ratio_max": null,
+        "pred_target_centered_rms_ratio_min": null,
+        "pred_target_effective_rank_ratio_max": null,
+        "pred_target_effective_rank_ratio_min": null
+      },
+      "metrics": {
+        "accuracy": 0.019611358642578125,
+        "dfm_ce_loss": 7.443514347076416,
+        "dfm_ce_loss_by_horizon_h1": 6.829364776611328,
+        "first_legal_mass": 0.0231468515121378,
+        "jepa_positive_loss": 0.7862174416077323,
+        "jepa_pred_sigreg_loss": 0.6683443976799026,
+        "jepa_sigreg_loss": 0.6935409357538447,
+        "loss": 13.472499867901206,
+        "root_legal_top1_accuracy": 0.2004852294921875,
+        "wdl_loss": 1.2460549618117511,
+        "z_pred_norm": 47.4176967330277,
+        "z_target_norm": 47.778234764933586
+      },
+      "pool": "primary",
+      "report_sha256": "9155673862b578fc1bcf3f9cfe20f496eea7e5ac6da170952a05affce6463dde",
+      "state": "hero_initialization"
+    },
+    {
+      "epoch": 0.5,
+      "evaluation_seconds": 660.724030597019,
+      "examples": 65536,
+      "latent_alignment": {
+        "pred_target_centered_rms_ratio_max": 1.0067416701931506,
+        "pred_target_centered_rms_ratio_min": 0.9962918471428566,
+        "pred_target_effective_rank_ratio_max": 1.028580323967617,
+        "pred_target_effective_rank_ratio_min": 1.0125368274748325
+      },
+      "metrics": {
+        "accuracy": 0.11962699890136719,
+        "dfm_ce_loss": 4.7523731286637485,
+        "dfm_ce_loss_by_horizon_h1": 2.088059329544194,
+        "first_legal_mass": 0.8595976608921774,
+        "jepa_positive_loss": 0.06776424836425576,
+        "jepa_pred_sigreg_loss": 0.040584247684819275,
+        "jepa_sigreg_loss": 0.03995387116992788,
+        "loss": 5.602847030386329,
+        "root_legal_top1_accuracy": 0.48443603515625,
+        "wdl_loss": 0.7096617846109439,
+        "z_pred_norm": 31.53863619826734,
+        "z_target_norm": 31.311346247792244
+      },
+      "pool": "primary",
+      "report_sha256": "5e3cb429633b727e7a99b16c1e1a0a6cfdca912dfa5589101faef87cb6a1d9dc",
+      "state": "hero_checkpoint_u13840"
+    },
+    {
+      "epoch": 1.0,
+      "evaluation_seconds": 660.9179225820117,
+      "examples": 65536,
+      "latent_alignment": {
+        "pred_target_centered_rms_ratio_max": 1.0080283100833185,
+        "pred_target_centered_rms_ratio_min": 0.9927966741961427,
+        "pred_target_effective_rank_ratio_max": 1.0158566982718185,
+        "pred_target_effective_rank_ratio_min": 1.0022662600968033
+      },
+      "metrics": {
+        "accuracy": 0.13055038452148438,
+        "dfm_ce_loss": 4.577526990324259,
+        "dfm_ce_loss_by_horizon_h1": 1.9398238020949066,
+        "first_legal_mass": 0.8984966020798311,
+        "jepa_positive_loss": 0.047360941496663145,
+        "jepa_pred_sigreg_loss": 0.03461620021153067,
+        "jepa_sigreg_loss": 0.03422194362428854,
+        "loss": 5.297094972804189,
+        "root_legal_top1_accuracy": 0.4957122802734375,
+        "wdl_loss": 0.7006409609748516,
+        "z_pred_norm": 31.266897704452276,
+        "z_target_norm": 31.174246180802584
+      },
+      "pool": "primary",
+      "report_sha256": "692971d460d748e2655dc92928a9404ed0bb75e8679aee4d8c67d3e0babca22f",
+      "state": "hero_checkpoint_u27679"
+    },
+    {
+      "epoch": 1.0,
+      "evaluation_seconds": 658.299472225015,
+      "examples": 65536,
+      "latent_alignment": {
+        "pred_target_centered_rms_ratio_max": 1.0083901709876955,
+        "pred_target_centered_rms_ratio_min": 0.9922272174153477,
+        "pred_target_effective_rank_ratio_max": 1.0144940968602896,
+        "pred_target_effective_rank_ratio_min": 1.0023847943521105
+      },
+      "metrics": {
+        "accuracy": 0.12888336181640625,
+        "dfm_ce_loss": 4.592184580862522,
+        "dfm_ce_loss_by_horizon_h1": 1.9597452973248437,
+        "first_legal_mass": 0.8967809999012388,
+        "jepa_positive_loss": 0.04773679181198531,
+        "jepa_pred_sigreg_loss": 0.03489629047908238,
+        "jepa_sigreg_loss": 0.03448338214366231,
+        "loss": 5.315828833729029,
+        "root_legal_top1_accuracy": 0.49273681640625,
+        "wdl_loss": 0.6918567430693656,
+        "z_pred_norm": 31.172169905155897,
+        "z_target_norm": 31.079644359648228
+      },
+      "pool": "blind",
+      "report_sha256": "f7595977c077df00ae7f1d01471128dba3b65afdf59bb45d83158d60f838154c",
+      "state": "hero_checkpoint_u27679"
+    }
+  ],
+  "interpretation": {
+    "arena_score_improves_halfway_to_terminal": true,
+    "elo_scope": "Relative only to the frozen raw-BT4 implementation and opening pool; not human or published-BT4 absolute Elo.",
+    "loss_elo_evidence_scope": "Positive within one run at two strength checkpoints; insufficient to establish a cross-recipe calibration.",
+    "pred_only_latent_collapse_detected": false,
+    "primary_dfm_ce_improves_halfway_to_terminal": true,
+    "terminal_blind_reproduces_primary": true
+  },
+  "jax_roundtrip": {
+    "halfway": {
+      "checkpoint_dir": "/mountpoint/.exp/chess-dfm-jax/research/runs/torch_hero_epoch_v1/checkpoints/update00013840",
+      "checkpoint_format": "chess-dfm-torch-training-v1",
+      "checkpoint_optimizer_update": 13840,
+      "checkpoint_state_sha256": "d833ddea6d0aa4056f6d6ec2bf88a8704bbc08004b447c0fc24e0181d9620094",
+      "checkpoint_tree": {
+        "combined_state_sha256": "aadbcb82c21a609510ca386c3ad101a0c0b1a1a9431d92d5087bbf7c26ef8b53",
+        "leaf_count": 462,
+        "nbytes": 712293144,
+        "safetensors_sha256": "d833ddea6d0aa4056f6d6ec2bf88a8704bbc08004b447c0fc24e0181d9620094",
+        "schema_version": "torch-checkpoint-pure-tree-v1"
+      },
+      "compatibility": {
+        "jax_hero_forward_parity_evaluated": false,
+        "jax_hero_training_resume_supported": false,
+        "jax_inference_state_materialization_supported": true,
+        "limitations": [
+          "The current JAX model stores the seven BT4 policy-head leaves as fixed Param variables.",
+          "The current JAX planner does not add the trained BT4 policy logits to the canonical root logits.",
+          "Optimizer state is intentionally not materialized by this model-only audit."
+        ]
+      },
+      "gate_pass": true,
+      "jax_backend": "cpu",
+      "jax_roundtrip": {
+        "bt4_policy_head_leaf_count": 7,
+        "combined_state_sha256": "aadbcb82c21a609510ca386c3ad101a0c0b1a1a9431d92d5087bbf7c26ef8b53",
+        "core_trainable_leaf_count": 455,
+        "exact_shape_dtype_and_value_match": true,
+        "leaf_count": 462,
+        "nbytes": 712293144,
+        "schema_version": "torch-hero-to-jax-model-roundtrip-v1"
+      },
+      "schema_version": "torch-hero-checkpoint-jax-roundtrip-audit-v1"
+    },
+    "terminal": {
+      "checkpoint_dir": "/mountpoint/.exp/chess-dfm-jax/research/runs/torch_hero_epoch_v1/checkpoint",
+      "checkpoint_format": "chess-dfm-torch-model-v1",
+      "checkpoint_optimizer_update": 27679,
+      "checkpoint_state_sha256": "665ac91ad37e14a6c8810068700dba021e39e9c0fe145c8bf620882bb5a71692",
+      "checkpoint_tree": {
+        "combined_state_sha256": "b9dd2c2d41412038da0100aa963537a250654306f27a783ead298140df43ed6e",
+        "leaf_count": 462,
+        "nbytes": 712293144,
+        "safetensors_sha256": "665ac91ad37e14a6c8810068700dba021e39e9c0fe145c8bf620882bb5a71692",
+        "schema_version": "torch-checkpoint-pure-tree-v1"
+      },
+      "compatibility": {
+        "jax_hero_forward_parity_evaluated": false,
+        "jax_hero_training_resume_supported": false,
+        "jax_inference_state_materialization_supported": true,
+        "limitations": [
+          "The current JAX model stores the seven BT4 policy-head leaves as fixed Param variables.",
+          "The current JAX planner does not add the trained BT4 policy logits to the canonical root logits.",
+          "Optimizer state is intentionally not materialized by this model-only audit."
+        ]
+      },
+      "gate_pass": true,
+      "jax_backend": "cpu",
+      "jax_roundtrip": {
+        "bt4_policy_head_leaf_count": 7,
+        "combined_state_sha256": "b9dd2c2d41412038da0100aa963537a250654306f27a783ead298140df43ed6e",
+        "core_trainable_leaf_count": 455,
+        "exact_shape_dtype_and_value_match": true,
+        "leaf_count": 462,
+        "nbytes": 712293144,
+        "schema_version": "torch-hero-to-jax-model-roundtrip-v1"
+      },
+      "schema_version": "torch-hero-checkpoint-jax-roundtrip-audit-v1"
+    }
+  },
+  "loss_contract": {
+    "dfm_ce_coeff": 1.0,
+    "jepa_positive_coeff": 1.0,
+    "legality_coeff": 2.0,
+    "pred_sigreg_coeff": 2.0,
+    "root_legal_ce_coeff": 0.08707768618513193,
+    "sigreg_example_count": 64,
+    "target_sigreg_coeff": 2.0,
+    "wdl_coeff": 0.25
+  },
+  "paired_terminal_minus_halfway": {
+    "delta_counts": {
+      "-0.25": 223,
+      "-0.5": 22,
+      "0.0": 467,
+      "0.25": 265,
+      "0.5": 47
+    },
+    "equal_pairs": 467,
+    "method_note": "Descriptive paired t interval over the frozen opening-pair scores; it is not a promotion decision.",
+    "pair_count": 1024,
+    "paired_standard_deviation": 0.21487544060017255,
+    "paired_standard_error": 0.006714857518755392,
+    "paired_t_95_lower": 0.00928446915296596,
+    "paired_t_95_upper": 0.03563740584703404,
+    "terminal_better_pairs": 312,
+    "terminal_minus_halfway_score": 0.0224609375,
+    "terminal_worse_pairs": 245
+  },
+  "plot": "research/analysis/hero_epoch_v1_closeout_20260727.png",
+  "run_id": "torch_hero_epoch_v1",
+  "schema_version": "torch-hero-epoch-closeout-v1",
+  "sources": {
+    "fast_validation": {
+      "path": "research/runs/torch_hero_epoch_v1/hero_validation_metrics.jsonl",
+      "sha256": "4f9bcde052ceec09168e0e3ed43de217828378773bbcb49688a9fd0640e873d8",
+      "size_bytes": 86326
+    },
+    "halfway_arena": {
+      "path": "artifacts/arena/hero-epoch-v1-halfway-vs-raw-bt4-1024pairs/state.json",
+      "sha256": "2daf98d516d75c1ce691f9234312752c4f83937a58b5d3557ab087d0e2e868c6",
+      "size_bytes": 49049
+    },
+    "halfway_jax_roundtrip": {
+      "path": "artifacts/pytorch/hero_epoch_v1_halfway_jax_roundtrip.json",
+      "sha256": "221526144895ca278fc401a0d13ee6980abfb59767465a91e3f2278c47ff7758",
+      "size_bytes": 1593
+    },
+    "halfway_primary": {
+      "path": "research/runs/torch_hero_epoch_v1_halfway_primary_eval_v1/report.json",
+      "sha256": "5e3cb429633b727e7a99b16c1e1a0a6cfdca912dfa5589101faef87cb6a1d9dc",
+      "size_bytes": 291506
+    },
+    "initial_primary": {
+      "path": "research/runs/torch_hero_init_primary_eval_v1/report.json",
+      "sha256": "9155673862b578fc1bcf3f9cfe20f496eea7e5ac6da170952a05affce6463dde",
+      "size_bytes": 136837
+    },
+    "terminal_arena": {
+      "path": "artifacts/arena/hero-epoch-v1-terminal-vs-raw-bt4-1024pairs/state.json",
+      "sha256": "50efd6aa037f30a47c66c54b3efd3e5ca7faae5fc4b95761e2283dfe90ed271b",
+      "size_bytes": 49000
+    },
+    "terminal_blind": {
+      "path": "research/runs/torch_hero_epoch_v1_terminal_blind_eval_v1/report.json",
+      "sha256": "f7595977c077df00ae7f1d01471128dba3b65afdf59bb45d83158d60f838154c",
+      "size_bytes": 146716
+    },
+    "terminal_jax_roundtrip": {
+      "path": "artifacts/pytorch/hero_epoch_v1_terminal_jax_roundtrip.json",
+      "sha256": "a58ebe9c8b18a929dfc659dfffcab73420feff26b6a3a2b4814500891c527cc5",
+      "size_bytes": 1574
+    },
+    "terminal_primary": {
+      "path": "research/runs/torch_hero_epoch_v1_terminal_primary_eval_v1/report.json",
+      "sha256": "692971d460d748e2655dc92928a9404ed0bb75e8679aee4d8c67d3e0babca22f",
+      "size_bytes": 146655
+    },
+    "training_config": {
+      "path": "research/runs/torch_hero_epoch_v1/run_config.json",
+      "sha256": "5d6138706269ae4a0f87879aa91ee4298df65b70443d1c5ac663989d9b5e3b43",
+      "size_bytes": 266145
+    },
+    "training_report": {
+      "path": "research/runs/torch_hero_epoch_v1/report.json",
+      "sha256": "c568642f6b22be9546e759df696bd9385d5ee8b79cae04f1472a312a260789e3",
+      "size_bytes": 126880
+    }
+  },
+  "training": {
+    "examples": 28343296,
+    "examples_per_second_end_to_end": 184.27672312247307,
+    "git_commit": "dd70c11e5e5e7f68c24ead14174a5025459c1902",
+    "peak_hbm_allocated_bytes": 20696324096,
+    "peak_hbm_reserved_bytes": 23072866304,
+    "terminal_checkpoint": {
+      "created_utc": "2026-07-27T14:01:52.859854+00:00",
+      "data_cursor": 27679,
+      "format": "chess-dfm-torch-model-v1",
+      "model_only": true,
+      "optimizer_resume_supported": false,
+      "optimizer_update": 27679,
+      "source_mapping_sha256": "c7a22e25a74e959357f294dfdda4a8f47372d79c96ada49131967bec75b2d93c",
+      "state": {
+        "leaf_count": 462,
+        "path": "model.safetensors",
+        "sha256": "665ac91ad37e14a6c8810068700dba021e39e9c0fe145c8bf620882bb5a71692",
+        "size_bytes": 712339616
+      }
+    },
+    "train_seconds": 153808.335202285,
+    "train_wall_seconds": 156602.70251162603,
+    "updates": 27679
+  }
+}

@@ -1,0 +1,69 @@
+{
+  "schema_version": "chess-dfm-modal-smoke-audit-v1",
+  "completed_utc": "2026-08-07T18:22:55Z",
+  "environment": "chess-dfm-research",
+  "workspace": "liquidgunay",
+  "app": "chess-dfm-interpretability",
+  "budget": {
+    "provider_workspace_hard_cap_dollars": 42.5,
+    "local_stop_launch_dollars": 34.0,
+    "control_plane_declared_attempt_cap_dollars": 0.01,
+    "gpu_smoke_declared_attempt_cap_dollars": 0.1,
+    "billing_observed_after_successes": {
+      "metered_cost_dollars": 0.00041203,
+      "billed_cost_dollars": 0.0,
+      "credits_dollars": 0.00041203,
+      "collection_lag_possible": true
+    },
+    "billing_observed_after_collection_delay": {
+      "observed_utc": "2026-08-07T18:29:38Z",
+      "metered_cost_dollars": 0.00186624,
+      "billed_cost_dollars": 0.0,
+      "credits_dollars": 0.00186624
+    }
+  },
+  "control_plane": {
+    "successful_app_id": "ap-rEg73Cx6HR2PuBtza9ptCA",
+    "bundle_sha256": "691d35245494c806e2f82d1204009f0e39a636cde8140389e4f7f8760df3e895",
+    "kind": "raw-hero-pilot-inputs",
+    "verified_files": 5,
+    "verified_bytes": 1048473285,
+    "bundle_manifest_sha256": "d8b296fe868f142aab4f1c0eba6ded5cedc7f716835251a51583b9ba35354578",
+    "credentials_exposed": false
+  },
+  "gpu": {
+    "successful_app_id": "ap-KycQm6C1gvY1nEvM9oM6NH",
+    "image": "pytorch/pytorch:2.5.1-cuda12.1-cudnn9-runtime",
+    "torch": "2.5.1+cu121",
+    "cuda_runtime": "12.1",
+    "device_name": "Tesla T4",
+    "compute_capability": [
+      7,
+      5
+    ],
+    "peak_allocated_bytes": 8581120,
+    "result_sha256": "ada925e10d69f7ccfca557eba1197b329d18a6f41819d0aa2e075782abc90ecb"
+  },
+  "reliability_findings": [
+    {
+      "app_id": "ap-Ib6q5GNHR4lhyBVSbq60ES",
+      "stage": "remote container hydration",
+      "failure": "only the app file was mounted, so a top-level local package import failed remotely",
+      "remediation": "defer local-only cost imports until the local entrypoint",
+      "scientific_payload_started": false
+    },
+    {
+      "app_id": "ap-ioRKUxf90E9efAgJBstQIh",
+      "stage": "result transport",
+      "failure": "TorchVersion in the successful remote result required torch to deserialize locally",
+      "remediation": "return only plain JSON primitives",
+      "cuda_function_reached_result": true
+    }
+  ],
+  "policy_hardening": {
+    "final_estimator_schema": "modal-job-cost-estimate-v2",
+    "reason": "Modal may reschedule crashed containers independently of declared function retries",
+    "mitigation": "declared-attempt estimate plus 20% reserve and provider-native hard cap"
+  },
+  "secrets_or_credential_values_retained": false
+}

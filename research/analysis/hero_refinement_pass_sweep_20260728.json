@@ -1,0 +1,599 @@
+{
+  "confirmation": {
+    "combined_first_256": {
+      "candidate_better_pairs": 72,
+      "candidate_minus_control_score": 0.0478515625,
+      "candidate_worse_pairs": 27,
+      "delta_counts": {
+        "-0.25": 27,
+        "0.0": 157,
+        "0.25": 68,
+        "0.5": 4
+      },
+      "equal_pairs": 157,
+      "method_note": "Descriptive paired t interval over the same frozen opening-pair scores. The preregistered non-worse Arena gate, not this post-hoc p-value, determines the screening decision.",
+      "pair_count": 256,
+      "paired_standard_deviation": 0.15781993163437383,
+      "paired_standard_error": 0.009863745727148364,
+      "paired_t_95_lower": 0.028426783781215183,
+      "paired_t_95_upper": 0.06727634121878481,
+      "paired_t_statistic": 4.851256695344073,
+      "paired_t_two_sided_p_value": 2.137413756960387e-06
+    },
+    "first_half_exact_reproduction": {
+      "pass_1": true,
+      "pass_8": true
+    },
+    "latency_ratio_pass_1_over_pass_8": 0.6401170737702868,
+    "latency_reduction_fraction": 0.3598829262297132,
+    "new_pairs_128_to_255": {
+      "candidate_better_pairs": 32,
+      "candidate_minus_control_score": 0.04296875,
+      "candidate_worse_pairs": 13,
+      "delta_counts": {
+        "-0.25": 13,
+        "0.0": 83,
+        "0.25": 29,
+        "0.5": 3
+      },
+      "equal_pairs": 83,
+      "method_note": "Descriptive paired t interval over the same frozen opening-pair scores. The preregistered non-worse Arena gate, not this post-hoc p-value, determines the screening decision.",
+      "pair_count": 128,
+      "paired_standard_deviation": 0.15720671668746708,
+      "paired_standard_error": 0.013895241927222543,
+      "paired_t_95_lower": 0.0154725738349899,
+      "paired_t_95_upper": 0.0704649261650101,
+      "paired_t_statistic": 3.0923355077264802,
+      "paired_t_two_sided_p_value": 0.002441888910193017
+    },
+    "pass_1": {
+      "candidate_model_id": "candidate-torch-hero-05068c96b2ba",
+      "cap_draw_count": 0,
+      "contract_sha256": "6eee708ebff084da92ddd21fb94b71dc1d6fcadc298db1c8705b47678b93a774",
+      "draws": 42,
+      "elo_lower": 336.6189395174804,
+      "elo_upper": 3999.999985609154,
+      "fault_counts": {},
+      "game_count": 512,
+      "gameplay_seconds": 133.29268016497372,
+      "logistic_elo": 547.5448789556197,
+      "losses": 0,
+      "mean_physical_call_ms": 28.902318199186613,
+      "pair_count": 256,
+      "payload_sha256": "44a46be250214c910557e7b96dbc16830c6396ba179e41364f59f5abfee03d6b",
+      "pentanomial": [
+        0,
+        0,
+        0,
+        42,
+        214
+      ],
+      "points": 491.0,
+      "reference_model_id": "raw-bt4-61e43e98d2c4",
+      "run_contract": {
+        "additional_ply_cap": 256,
+        "block_pairs": 16,
+        "collect_diagnostics": false,
+        "deterministic_greedy_policy": true,
+        "jepa_used_at_inference": false,
+        "opening_start_index": 0,
+        "pair_count": 256,
+        "policy_batch_size_cap": 16,
+        "policy_timeout_seconds": 30.0,
+        "refinement_passes": 1,
+        "seed": 0
+      },
+      "score": 0.958984375,
+      "score_lower": 0.8741030302662113,
+      "score_upper": 1.0,
+      "source": {
+        "path": "artifacts/arena/autoresearch-sigreg64-u1024-vs-raw-bt4-256pairs-p1-confirm-v1/state.json",
+        "sha256": "c5c1d6bc8818257ffab9fb182880a6a27830216b3a4062af2322c4aaaa157c17",
+        "size_bytes": 22545
+      },
+      "termination_counts": {
+        "normal": 512
+      },
+      "tier_contract": {
+        "histories_path": "/mountpoint/.exp/chess-dfm-jax/research/assets/arena/promotion-ply12-n2048-histories-v3.json",
+        "history_file_sha256": "bac58cc7380d9a4173e7618a765917aa0990355e1f8e460196affbe28580ed37",
+        "history_manifest_sha256": "d8781efb5d76066bcf2ce2e9ab2897f3261b20f7c4488c90992a8eadcc918a4b",
+        "name": "hero_development",
+        "ordered_fens_sha256": "013778d027d919da9e6a25957e1439c8351081b9cbadf28e29df1c5c7b06b0f2",
+        "pool_file_sha256": "5632cc726112c2ab700e0f4d935fa83d58418b406fc100262f3aa19ce3befe2e",
+        "pool_path": "/mountpoint/.exp/chess-dfm-jax/research/assets/arena/promotion-ply12-n2048-v3.json",
+        "pool_sha256": "e750e87643c482d28b4201668bd355234fe1fb27f2a690bf784706b1ddd37459",
+        "promotion_eligible": false
+      },
+      "wins": 470
+    },
+    "pass_8": {
+      "candidate_model_id": "candidate-torch-hero-05068c96b2ba",
+      "cap_draw_count": 0,
+      "contract_sha256": "a629707b311ecddce15ca45311ed4964ca7a4f9997a3c05acc42ac3031211043",
+      "draws": 89,
+      "elo_lower": 270.87643978827094,
+      "elo_upper": 959.0981395423116,
+      "fault_counts": {},
+      "game_count": 512,
+      "gameplay_seconds": 190.0412493192125,
+      "logistic_elo": 404.33610057016256,
+      "losses": 1,
+      "mean_physical_call_ms": 45.1516127025828,
+      "pair_count": 256,
+      "payload_sha256": "9fc2ae5d2d742c058b4f9dcceedcde6b9ce1b810e844919620a02a23691e0612",
+      "pentanomial": [
+        0,
+        0,
+        7,
+        77,
+        172
+      ],
+      "points": 466.5,
+      "reference_model_id": "raw-bt4-61e43e98d2c4",
+      "run_contract": {
+        "additional_ply_cap": 256,
+        "block_pairs": 16,
+        "collect_diagnostics": false,
+        "deterministic_greedy_policy": true,
+        "jepa_used_at_inference": false,
+        "opening_start_index": 0,
+        "pair_count": 256,
+        "policy_batch_size_cap": 16,
+        "policy_timeout_seconds": 30.0,
+        "refinement_passes": 8,
+        "seed": 0
+      },
+      "score": 0.9111328125,
+      "score_lower": 0.8262514677662113,
+      "score_upper": 0.9960141572337887,
+      "source": {
+        "path": "artifacts/arena/autoresearch-sigreg64-u1024-vs-raw-bt4-256pairs-p8-confirm-v1/state.json",
+        "sha256": "443dd3a31dca031a7103f728ca9b5b8c8415d6be72ab838013c3e428f264d16d",
+        "size_bytes": 22565
+      },
+      "termination_counts": {
+        "normal": 512
+      },
+      "tier_contract": {
+        "histories_path": "/mountpoint/.exp/chess-dfm-jax/research/assets/arena/promotion-ply12-n2048-histories-v3.json",
+        "history_file_sha256": "bac58cc7380d9a4173e7618a765917aa0990355e1f8e460196affbe28580ed37",
+        "history_manifest_sha256": "d8781efb5d76066bcf2ce2e9ab2897f3261b20f7c4488c90992a8eadcc918a4b",
+        "name": "hero_development",
+        "ordered_fens_sha256": "013778d027d919da9e6a25957e1439c8351081b9cbadf28e29df1c5c7b06b0f2",
+        "pool_file_sha256": "5632cc726112c2ab700e0f4d935fa83d58418b406fc100262f3aa19ce3befe2e",
+        "pool_path": "/mountpoint/.exp/chess-dfm-jax/research/assets/arena/promotion-ply12-n2048-v3.json",
+        "pool_sha256": "e750e87643c482d28b4201668bd355234fe1fb27f2a690bf784706b1ddd37459",
+        "promotion_eligible": false
+      },
+      "wins": 422
+    }
+  },
+  "decision": {
+    "all_preregistered_confirmation_gates_pass": true,
+    "confirmed_fast_strength_passes": 1,
+    "continuity_passes": 8,
+    "gates": {
+      "combined_256_interval_lower_positive": true,
+      "first_128_pair_scores_reproduce_exactly": true,
+      "new_128_pair_delta_positive": true,
+      "one_pass_latency_at_most_0p8x_eight": true,
+      "zero_faults_and_cap_draws": true
+    },
+    "scope": "Inference-count result for checkpoint SHA 05068c96b2bac8f10a3f3b853363bdb2ce49f935b026566705b3bdcd4d9060c9; future architectures must still report their own pass-count sensitivity.",
+    "status": "confirm_one_pass_for_checkpoint",
+    "training_horizon_unchanged": 8
+  },
+  "development_paired_against_eight": {
+    "pass_1": {
+      "candidate_better_pairs": 40,
+      "candidate_minus_control_score": 0.052734375,
+      "candidate_worse_pairs": 14,
+      "delta_counts": {
+        "-0.25": 14,
+        "0.0": 74,
+        "0.25": 39,
+        "0.5": 1
+      },
+      "equal_pairs": 74,
+      "method_note": "Descriptive paired t interval over the same frozen opening-pair scores. The preregistered non-worse Arena gate, not this post-hoc p-value, determines the screening decision.",
+      "pair_count": 128,
+      "paired_standard_deviation": 0.15889735627969764,
+      "paired_standard_error": 0.01404467476724863,
+      "paired_t_95_lower": 0.024942498212020155,
+      "paired_t_95_upper": 0.08052625178797984,
+      "paired_t_statistic": 3.754759428318947,
+      "paired_t_two_sided_p_value": 0.0002629948490679866
+    },
+    "pass_16": {
+      "candidate_better_pairs": 26,
+      "candidate_minus_control_score": 0.001953125,
+      "candidate_worse_pairs": 26,
+      "delta_counts": {
+        "-0.25": 26,
+        "0.0": 76,
+        "0.25": 25,
+        "0.5": 1
+      },
+      "equal_pairs": 76,
+      "method_note": "Descriptive paired t interval over the same frozen opening-pair scores. The preregistered non-worse Arena gate, not this post-hoc p-value, determines the screening decision.",
+      "pair_count": 128,
+      "paired_standard_deviation": 0.16450861497078595,
+      "paired_standard_error": 0.01454064465118119,
+      "paired_t_95_lower": -0.026820186682929906,
+      "paired_t_95_upper": 0.030726436682929906,
+      "paired_t_statistic": 0.13432176130109474,
+      "paired_t_two_sided_p_value": 0.893360780549538
+    },
+    "pass_2": {
+      "candidate_better_pairs": 35,
+      "candidate_minus_control_score": 0.029296875,
+      "candidate_worse_pairs": 20,
+      "delta_counts": {
+        "-0.25": 18,
+        "-0.5": 2,
+        "0.0": 73,
+        "0.25": 33,
+        "0.5": 2
+      },
+      "equal_pairs": 73,
+      "method_note": "Descriptive paired t interval over the same frozen opening-pair scores. The preregistered non-worse Arena gate, not this post-hoc p-value, determines the screening decision.",
+      "pair_count": 128,
+      "paired_standard_deviation": 0.17918531116748654,
+      "paired_standard_error": 0.015837893576943915,
+      "paired_t_95_lower": -0.0020434581986014735,
+      "paired_t_95_upper": 0.060637208198601474,
+      "paired_t_statistic": 1.8497961776084326,
+      "paired_t_two_sided_p_value": 0.06666742292671296
+    },
+    "pass_4": {
+      "candidate_better_pairs": 29,
+      "candidate_minus_control_score": 0.017578125,
+      "candidate_worse_pairs": 20,
+      "delta_counts": {
+        "-0.25": 19,
+        "-0.5": 1,
+        "0.0": 79,
+        "0.25": 28,
+        "0.5": 1
+      },
+      "equal_pairs": 79,
+      "method_note": "Descriptive paired t interval over the same frozen opening-pair scores. The preregistered non-worse Arena gate, not this post-hoc p-value, determines the screening decision.",
+      "pair_count": 128,
+      "paired_standard_deviation": 0.16357110276405432,
+      "paired_standard_error": 0.014457779496328054,
+      "paired_t_95_lower": -0.011031211495760342,
+      "paired_t_95_upper": 0.04618746149576034,
+      "paired_t_statistic": 1.2158246710336427,
+      "paired_t_two_sided_p_value": 0.22630686065162628
+    }
+  },
+  "development_screen": {
+    "pass_1": {
+      "candidate_model_id": "candidate-torch-hero-05068c96b2ba",
+      "cap_draw_count": 0,
+      "contract_sha256": "270616f77613f20bd79819862e4e0a11c01f3356bcd7fab59d66fd1170030e21",
+      "draws": 20,
+      "elo_lower": 289.2259699478626,
+      "elo_upper": 3999.999985609154,
+      "fault_counts": {},
+      "game_count": 256,
+      "gameplay_seconds": 66.879386671877,
+      "logistic_elo": 556.3740428413516,
+      "losses": 0,
+      "mean_physical_call_ms": 28.955080340514638,
+      "pair_count": 128,
+      "payload_sha256": "a2309a6eb3f189c8be6899d531d1e9ed621612b04aea320423975e17c17636e3",
+      "pentanomial": [
+        0,
+        0,
+        0,
+        20,
+        108
+      ],
+      "points": 246.0,
+      "reference_model_id": "raw-bt4-61e43e98d2c4",
+      "run_contract": {
+        "additional_ply_cap": 256,
+        "block_pairs": 16,
+        "collect_diagnostics": false,
+        "deterministic_greedy_policy": true,
+        "jepa_used_at_inference": false,
+        "opening_start_index": 0,
+        "pair_count": 128,
+        "policy_batch_size_cap": 16,
+        "policy_timeout_seconds": 30.0,
+        "refinement_passes": 1,
+        "seed": 0
+      },
+      "score": 0.9609375,
+      "score_lower": 0.84089715108501,
+      "score_upper": 1.0,
+      "source": {
+        "path": "artifacts/arena/autoresearch-sigreg64-u1024-vs-raw-bt4-128pairs-p1-v1/state.json",
+        "sha256": "4227530cc25923e3c9ff0947690efd2f541aaf17f963fa581a7e8f31a6d1957c",
+        "size_bytes": 17849
+      },
+      "termination_counts": {
+        "normal": 256
+      },
+      "tier_contract": {
+        "histories_path": "/mountpoint/.exp/chess-dfm-jax/research/assets/arena/promotion-ply12-n2048-histories-v3.json",
+        "history_file_sha256": "bac58cc7380d9a4173e7618a765917aa0990355e1f8e460196affbe28580ed37",
+        "history_manifest_sha256": "d8781efb5d76066bcf2ce2e9ab2897f3261b20f7c4488c90992a8eadcc918a4b",
+        "name": "hero_development",
+        "ordered_fens_sha256": "013778d027d919da9e6a25957e1439c8351081b9cbadf28e29df1c5c7b06b0f2",
+        "pool_file_sha256": "5632cc726112c2ab700e0f4d935fa83d58418b406fc100262f3aa19ce3befe2e",
+        "pool_path": "/mountpoint/.exp/chess-dfm-jax/research/assets/arena/promotion-ply12-n2048-v3.json",
+        "pool_sha256": "e750e87643c482d28b4201668bd355234fe1fb27f2a690bf784706b1ddd37459",
+        "promotion_eligible": false
+      },
+      "wins": 236
+    },
+    "pass_16": {
+      "candidate_model_id": "candidate-torch-hero-05068c96b2ba",
+      "cap_draw_count": 0,
+      "contract_sha256": "7a3c13f134dd4074d6d3082579173149908667f4065a8cbb553b7aa531f02901",
+      "draws": 46,
+      "elo_lower": 230.28450597326736,
+      "elo_upper": 3999.999985609154,
+      "fault_counts": {},
+      "game_count": 256,
+      "gameplay_seconds": 110.51717106095748,
+      "logistic_elo": 402.2512340033704,
+      "losses": 0,
+      "mean_physical_call_ms": 65.19798833450342,
+      "pair_count": 128,
+      "payload_sha256": "9faed2c65e0e4dfb442776769b97ce6b0b970788d54ba50da9b7d6d811386345",
+      "pentanomial": [
+        0,
+        0,
+        5,
+        36,
+        87
+      ],
+      "points": 233.0,
+      "reference_model_id": "raw-bt4-61e43e98d2c4",
+      "run_contract": {
+        "additional_ply_cap": 256,
+        "block_pairs": 16,
+        "collect_diagnostics": false,
+        "deterministic_greedy_policy": true,
+        "jepa_used_at_inference": false,
+        "opening_start_index": 0,
+        "pair_count": 128,
+        "policy_batch_size_cap": 16,
+        "policy_timeout_seconds": 30.0,
+        "refinement_passes": 16,
+        "seed": 0
+      },
+      "score": 0.91015625,
+      "score_lower": 0.79011590108501,
+      "score_upper": 1.0,
+      "source": {
+        "path": "artifacts/arena/autoresearch-sigreg64-u1024-vs-raw-bt4-128pairs-p16-v1/state.json",
+        "sha256": "e2e23267b49f3eaf1ccb4576de97c3a4b3a2086fc6cdebd583575a9fe9f61a93",
+        "size_bytes": 17866
+      },
+      "termination_counts": {
+        "normal": 256
+      },
+      "tier_contract": {
+        "histories_path": "/mountpoint/.exp/chess-dfm-jax/research/assets/arena/promotion-ply12-n2048-histories-v3.json",
+        "history_file_sha256": "bac58cc7380d9a4173e7618a765917aa0990355e1f8e460196affbe28580ed37",
+        "history_manifest_sha256": "d8781efb5d76066bcf2ce2e9ab2897f3261b20f7c4488c90992a8eadcc918a4b",
+        "name": "hero_development",
+        "ordered_fens_sha256": "013778d027d919da9e6a25957e1439c8351081b9cbadf28e29df1c5c7b06b0f2",
+        "pool_file_sha256": "5632cc726112c2ab700e0f4d935fa83d58418b406fc100262f3aa19ce3befe2e",
+        "pool_path": "/mountpoint/.exp/chess-dfm-jax/research/assets/arena/promotion-ply12-n2048-v3.json",
+        "pool_sha256": "e750e87643c482d28b4201668bd355234fe1fb27f2a690bf784706b1ddd37459",
+        "promotion_eligible": false
+      },
+      "wins": 210
+    },
+    "pass_2": {
+      "candidate_model_id": "candidate-torch-hero-05068c96b2ba",
+      "cap_draw_count": 0,
+      "contract_sha256": "2019bd609ce2b82c8990fdedb107cb0d4480ba5ec65e6a51b9e871abbdabe7eb",
+      "draws": 32,
+      "elo_lower": 260.4429796949722,
+      "elo_upper": 3999.999985609154,
+      "fault_counts": {},
+      "game_count": 256,
+      "gameplay_seconds": 74.62827548704809,
+      "logistic_elo": 470.43650362227254,
+      "losses": 0,
+      "mean_physical_call_ms": 31.0594632554317,
+      "pair_count": 128,
+      "payload_sha256": "bb2cd58eb994f20da51a61977fdade84c7a71fedc368e53712367b1446317180",
+      "pentanomial": [
+        0,
+        0,
+        4,
+        24,
+        100
+      ],
+      "points": 240.0,
+      "reference_model_id": "raw-bt4-61e43e98d2c4",
+      "run_contract": {
+        "additional_ply_cap": 256,
+        "block_pairs": 16,
+        "collect_diagnostics": false,
+        "deterministic_greedy_policy": true,
+        "jepa_used_at_inference": false,
+        "opening_start_index": 0,
+        "pair_count": 128,
+        "policy_batch_size_cap": 16,
+        "policy_timeout_seconds": 30.0,
+        "refinement_passes": 2,
+        "seed": 0
+      },
+      "score": 0.9375,
+      "score_lower": 0.81745965108501,
+      "score_upper": 1.0,
+      "source": {
+        "path": "artifacts/arena/autoresearch-sigreg64-u1024-vs-raw-bt4-128pairs-p2-v1/state.json",
+        "sha256": "b81ddf4d6a1619116cd980c731d7c31159ba97a993de3abe391a785d98081315",
+        "size_bytes": 17847
+      },
+      "termination_counts": {
+        "normal": 256
+      },
+      "tier_contract": {
+        "histories_path": "/mountpoint/.exp/chess-dfm-jax/research/assets/arena/promotion-ply12-n2048-histories-v3.json",
+        "history_file_sha256": "bac58cc7380d9a4173e7618a765917aa0990355e1f8e460196affbe28580ed37",
+        "history_manifest_sha256": "d8781efb5d76066bcf2ce2e9ab2897f3261b20f7c4488c90992a8eadcc918a4b",
+        "name": "hero_development",
+        "ordered_fens_sha256": "013778d027d919da9e6a25957e1439c8351081b9cbadf28e29df1c5c7b06b0f2",
+        "pool_file_sha256": "5632cc726112c2ab700e0f4d935fa83d58418b406fc100262f3aa19ce3befe2e",
+        "pool_path": "/mountpoint/.exp/chess-dfm-jax/research/assets/arena/promotion-ply12-n2048-v3.json",
+        "pool_sha256": "e750e87643c482d28b4201668bd355234fe1fb27f2a690bf784706b1ddd37459",
+        "promotion_eligible": false
+      },
+      "wins": 224
+    },
+    "pass_4": {
+      "candidate_model_id": "candidate-torch-hero-05068c96b2ba",
+      "cap_draw_count": 0,
+      "contract_sha256": "023e873f2d999387394b934b9b91f69d6343b9a87c7c8c345cb7045e74f71085",
+      "draws": 38,
+      "elo_lower": 247.1256159990213,
+      "elo_upper": 3999.999985609154,
+      "fault_counts": {},
+      "game_count": 256,
+      "gameplay_seconds": 79.79946038610069,
+      "logistic_elo": 438.39789802290994,
+      "losses": 0,
+      "mean_physical_call_ms": 36.41475587259125,
+      "pair_count": 128,
+      "payload_sha256": "16151469af4c2990f5b4e10a99b275619b7914d46487f2f18478fe95088c5e70",
+      "pentanomial": [
+        0,
+        0,
+        3,
+        32,
+        93
+      ],
+      "points": 237.0,
+      "reference_model_id": "raw-bt4-61e43e98d2c4",
+      "run_contract": {
+        "additional_ply_cap": 256,
+        "block_pairs": 16,
+        "collect_diagnostics": false,
+        "deterministic_greedy_policy": true,
+        "jepa_used_at_inference": false,
+        "opening_start_index": 0,
+        "pair_count": 128,
+        "policy_batch_size_cap": 16,
+        "policy_timeout_seconds": 30.0,
+        "refinement_passes": 4,
+        "seed": 0
+      },
+      "score": 0.92578125,
+      "score_lower": 0.80574090108501,
+      "score_upper": 1.0,
+      "source": {
+        "path": "artifacts/arena/autoresearch-sigreg64-u1024-vs-raw-bt4-128pairs-p4-v1/state.json",
+        "sha256": "f08f2ec877aad3be5ef2da60c47d2d8653482a78bddaacd395604dec49fd41db",
+        "size_bytes": 17857
+      },
+      "termination_counts": {
+        "normal": 256
+      },
+      "tier_contract": {
+        "histories_path": "/mountpoint/.exp/chess-dfm-jax/research/assets/arena/promotion-ply12-n2048-histories-v3.json",
+        "history_file_sha256": "bac58cc7380d9a4173e7618a765917aa0990355e1f8e460196affbe28580ed37",
+        "history_manifest_sha256": "d8781efb5d76066bcf2ce2e9ab2897f3261b20f7c4488c90992a8eadcc918a4b",
+        "name": "hero_development",
+        "ordered_fens_sha256": "013778d027d919da9e6a25957e1439c8351081b9cbadf28e29df1c5c7b06b0f2",
+        "pool_file_sha256": "5632cc726112c2ab700e0f4d935fa83d58418b406fc100262f3aa19ce3befe2e",
+        "pool_path": "/mountpoint/.exp/chess-dfm-jax/research/assets/arena/promotion-ply12-n2048-v3.json",
+        "pool_sha256": "e750e87643c482d28b4201668bd355234fe1fb27f2a690bf784706b1ddd37459",
+        "promotion_eligible": false
+      },
+      "wins": 218
+    },
+    "pass_8": {
+      "candidate_model_id": "candidate-torch-hero-05068c96b2ba",
+      "cap_draw_count": 0,
+      "contract_sha256": "7ab56a8169526555e372e2d032c993c7e492a025937e575425530200e6011456",
+      "draws": 45,
+      "elo_lower": 228.24545735610508,
+      "elo_upper": 3999.999985609154,
+      "fault_counts": {},
+      "game_count": 256,
+      "gameplay_seconds": 91.97287655394757,
+      "logistic_elo": 398.14203798169456,
+      "losses": 1,
+      "mean_physical_call_ms": 44.585867599515176,
+      "pair_count": 128,
+      "payload_sha256": "daa1f8234e65e3601b03c5f678e4a4326df36050a590e6a857047ed28c38cafc",
+      "pentanomial": [
+        0,
+        0,
+        2,
+        43,
+        83
+      ],
+      "points": 232.5,
+      "reference_model_id": "raw-bt4-61e43e98d2c4",
+      "run_contract": {
+        "additional_ply_cap": 256,
+        "block_pairs": 16,
+        "collect_diagnostics": false,
+        "deterministic_greedy_policy": true,
+        "jepa_used_at_inference": false,
+        "opening_start_index": 0,
+        "pair_count": 128,
+        "policy_batch_size_cap": 16,
+        "policy_timeout_seconds": 30.0,
+        "refinement_passes": 8,
+        "seed": 0
+      },
+      "score": 0.908203125,
+      "score_lower": 0.78816277608501,
+      "score_upper": 1.0,
+      "source": {
+        "path": "artifacts/arena/autoresearch-sigreg64-u1024-vs-raw-bt4-128pairs-v1/state.json",
+        "sha256": "3b7f241fb8b185745bba4d48527569e064db524208d69ccf113c36dfca247b9b",
+        "size_bytes": 17831
+      },
+      "termination_counts": {
+        "normal": 256
+      },
+      "tier_contract": {
+        "histories_path": "/mountpoint/.exp/chess-dfm-jax/research/assets/arena/promotion-ply12-n2048-histories-v3.json",
+        "history_file_sha256": "bac58cc7380d9a4173e7618a765917aa0990355e1f8e460196affbe28580ed37",
+        "history_manifest_sha256": "d8781efb5d76066bcf2ce2e9ab2897f3261b20f7c4488c90992a8eadcc918a4b",
+        "name": "hero_development",
+        "ordered_fens_sha256": "013778d027d919da9e6a25957e1439c8351081b9cbadf28e29df1c5c7b06b0f2",
+        "pool_file_sha256": "5632cc726112c2ab700e0f4d935fa83d58418b406fc100262f3aa19ce3befe2e",
+        "pool_path": "/mountpoint/.exp/chess-dfm-jax/research/assets/arena/promotion-ply12-n2048-v3.json",
+        "pool_sha256": "e750e87643c482d28b4201668bd355234fe1fb27f2a690bf784706b1ddd37459",
+        "promotion_eligible": false
+      },
+      "wins": 210
+    }
+  },
+  "guarded_pre_game_stops": {
+    "cause": "Two duplicated legacy pass-equals-horizon guards were generalized only for feedback-off inference and retained as exact-eight guards for final-pass JEPA feedback.",
+    "count": 2,
+    "model_or_game_state_written": false
+  },
+  "model": {
+    "checkpoint": {
+      "path": "research/runs/torch_autoresearch_sigreg64_u1024_v1/checkpoint/model.safetensors",
+      "sha256": "05068c96b2bac8f10a3f3b853363bdb2ce49f935b026566705b3bdcd4d9060c9",
+      "size_bytes": 712339608
+    },
+    "expected_sha256": "05068c96b2bac8f10a3f3b853363bdb2ce49f935b026566705b3bdcd4d9060c9",
+    "jepa_feedback_mode": "none",
+    "training_horizon": 8
+  },
+  "plot": {
+    "path": "research/analysis/hero_refinement_pass_sweep_20260728.png",
+    "sha256": "5b4b8335e140fb0c6fca217d8d6396ba969c60e0a651e539912eefb8fd1e4980"
+  },
+  "question": "How does DFM refinement count trade searchless strength for latency on the retained hero checkpoint?",
+  "schema_version": "hero-refinement-pass-sweep-v1"
+}

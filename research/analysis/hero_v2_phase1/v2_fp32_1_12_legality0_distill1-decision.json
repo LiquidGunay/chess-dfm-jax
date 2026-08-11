@@ -1,0 +1,68 @@
+{
+  "schema_version": "chess-dfm-hero-v2-phase1-decision-v1",
+  "created_utc": "2026-08-09T18:39:29Z",
+  "arm": "v2_fp32_1_12_legality0_distill1",
+  "status": "rejected_as_hero1_policy_preservation_intervention",
+  "training_intervention": {
+    "teacher_mode": "online_stopped_current_encoder_and_policy_head",
+    "policy_distill_coeff": 1.0,
+    "legality_coeff": 0.0,
+    "candidate_checkpoint_state_sha256": "0b15dd3a0af88a6ea99cb7873fb96b9a8828ffe5ce652e7df16e1d942592da95"
+  },
+  "preregistered_evidence": {
+    "comparison_path": "research/analysis/hero_v2_phase1/v2_fp32_1_12_legality0_distill1-comparison.json",
+    "comparison_sha256": "08ab834b79903e0adcac6401ae259b5c64c7b998c9bd52a4f936b0c19c5464a3",
+    "canonical_predictive_mean_delta": 0.0017557880430305595,
+    "canonical_predictive_interval_95pct": [-0.01789959746253193, 0.025613014197517964],
+    "strict_predictive_speed_gate_passed": false,
+    "frozen_predictive_noninferiority_passed": true,
+    "candidate_dfm_root_legal_top1_accuracy": 0.4603271484375,
+    "candidate_policy_only_root_legal_top1_accuracy": 0.4666748046875,
+    "hero1_root_legal_top1_accuracy": 0.455078125,
+    "behavior_gate_passed": true,
+    "phase2_authorized": false,
+    "legality_probability_mass_is_diagnostic_only": true
+  },
+  "dfm_arena": {
+    "role": "user_authorized_post_gate_strength_check",
+    "state_path": "research/analysis/hero_v2_phase1/arena/v2_fp32_1_12_legality0_distill1_vs_hero1/128p/state.json",
+    "state_sha256": "b9a143e95bd698c64538731e3655c5faba9bd61060180f37a8835d04f37b2215",
+    "pair_count": 128,
+    "game_count": 256,
+    "candidate_wins_draws_losses": [45, 158, 53],
+    "candidate_score": 0.484375,
+    "pair_aware_score_interval_95pct": [0.36433465108500995, 0.60441534891499],
+    "fault_counts": {},
+    "cap_draw_count": 0,
+    "complete_legal_action_coverage": true,
+    "classification": "parity_inconclusive"
+  },
+  "policy_only_arena": {
+    "role": "mechanistic_test_of_inherited_policy_preservation",
+    "state_path": "research/analysis/hero_v2_phase1/arena/v2_fp32_1_12_legality0_distill1_policy_only_vs_hero1_policy_only/128p/state.json",
+    "state_sha256": "acb038612832c46ae747f134b56e281a27f7774b06f43d96995d472c582eaee0",
+    "pair_count": 128,
+    "game_count": 256,
+    "candidate_wins_draws_losses": [24, 117, 115],
+    "candidate_score": 0.322265625,
+    "pair_aware_score_interval_95pct": [0.20222527608500993, 0.44230597391499005],
+    "fault_counts": {},
+    "cap_draw_count": 0,
+    "complete_legal_action_coverage": true,
+    "classification": "confirmed_inferior"
+  },
+  "movement_audit": {
+    "comparison_with_movement_path": "research/analysis/hero_v2_phase1/v2_fp32_1_12_legality0_distill1-comparison-with-movement.json",
+    "comparison_with_movement_sha256": "a20aa68de4d0e84a918577e3b6cdc5650a629cf8eccd57dd9a78516ccf1b864f",
+    "candidate_trunk_relative_delta_l2": 0.004012618014561268,
+    "legality_zero_control_trunk_relative_delta_l2": 0.004101642629955192,
+    "candidate_to_control_ratio": 0.9782953749447214,
+    "healthier_visible_encoder_movement": false
+  },
+  "causal_update": {
+    "conclusion": "A stopped teacher that shares the moving candidate encoder is not a fixed Hero1 constraint. It recovered frozen DFM root ranking and DFM arena parity, but decisively failed to preserve Hero1 policy-only play and barely reduced encoder movement.",
+    "next_experiment": "v2_fp32_1_12_legality0_hero1distill1",
+    "next_preregister_path": "research/analysis/hero_v2_phase1/v2_fp32_1_12_legality0_hero1distill1-preregister.json",
+    "next_preregister_sha256": "42405f66f38c0616f6ab5c37c29028bf93f5a89efe110af4cfe898048045aba6"
+  }
+}

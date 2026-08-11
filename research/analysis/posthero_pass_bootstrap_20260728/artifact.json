@@ -1,0 +1,1084 @@
+{
+  "manifest": {
+    "blocks": [
+      {
+        "body": "# Inference-Pass Scaling and Horizon Initialization Audit",
+        "id": "title",
+        "type": "markdown"
+      },
+      {
+        "body": "## Technical summary\n\nThe `0.509766` centered score compared the JEPA-broadcast candidate with the **matched 1,024-update control**, not the one-epoch Hero. It is a near tie, so the candidate should be called **not promoted / inconclusive**, not chess-rejected. An exact replay reproduced its checkpoint and every retained scientific scalar. Both short models still weaken overall with more passes, but the one-epoch Hero improves monotonically from `0.664062` at one pass to `0.935547` at sixteen. Initialization is asymmetric: H1 inherits the current-board BT4 policy while H2\u2013H8 begin uniform and JEPA begins at the identity.",
+        "id": "technical_summary",
+        "sourceId": "audit_record",
+        "type": "markdown"
+      },
+      {
+        "cardIds": [
+          "direct_card",
+          "replay_card",
+          "hero_transition_card"
+        ],
+        "id": "headline_metrics",
+        "type": "metric-strip"
+      },
+      {
+        "body": "## Refinement behavior changes during training\n\nAt 1,024 updates, sixteen passes remain about `0.05` score worse than one for both the control and broadcast candidate. By one epoch the sign has reversed: every measured increase in passes helps, and sixteen beats one by `0.271484`. Useful iterative denoising therefore emerges during training rather than being guaranteed by the DFM architecture at initialization.",
+        "id": "pass_finding",
+        "sourceId": "audit_record",
+        "type": "markdown"
+      },
+      {
+        "chartId": "pass_scaling_chart",
+        "id": "pass_chart_block",
+        "type": "chart"
+      },
+      {
+        "body": "## The broadcast candidate has mixed evidence\n\nAgainst raw BT4 it exceeds the control at all five pass counts, with descriptive paired intervals excluding zero at 1, 4, and 8 passes. Yet their direct centered Arena is a tie and the candidate worsens held-out DFM CE, legal mass, accuracy, and latent rank. Raw-BT4 play is near a ceiling and these openings were reused, so this may include style or non-transitivity. A disjoint centered confirmation is required before extending or closing the architecture.",
+        "id": "candidate_finding",
+        "sourceId": "arena_source",
+        "type": "markdown"
+      },
+      {
+        "id": "pass_table_block",
+        "tableId": "pass_comparison_table",
+        "type": "table"
+      },
+      {
+        "body": "## Long-horizon JEPA error needs a normalized baseline\n\nAt initialization, recurrent JEPA exactly matches the identity baseline at every horizon. After one epoch H8 raw MSE is about twice H1, but the H8 target has moved about `5.3\u00d7` farther from the identity. H8 error is only `2.7%` of identity error versus `7.4%` at H1. The more persistent long-horizon weakness is action CE: `5.61` at H8 versus `1.96` at H1.",
+        "id": "horizon_finding",
+        "sourceId": "evaluation_source",
+        "type": "markdown"
+      },
+      {
+        "chartId": "horizon_ratio_chart",
+        "id": "horizon_chart_block",
+        "type": "chart"
+      },
+      {
+        "id": "horizon_table_block",
+        "tableId": "one_epoch_horizon_table",
+        "type": "table"
+      },
+      {
+        "body": "## The initialization asymmetry is real\n\nThe learned DFM output projection starts at zero. H1 is still exactly useful because current-board BT4 policy logits are added as a permanent residual; H2\u2013H8 have no future-board residual and start uniform. Separately, JEPA conditioning starts at zero and its residual down-projection is tiny, making the recurrent transition approximately identity.",
+        "id": "initialization_finding",
+        "sourceId": "code_source",
+        "type": "markdown"
+      },
+      {
+        "body": "## Recommended first bootstrap\n\nUse **training-only future-policy distillation**. The already encoded sampled future state supplies stopped-gradient BT4 legal-policy targets for the aligned H2\u2013H8 DFM slot, requiring no extra encoder call and no teacher at inference. Profile the additional policy-head forward, calibrate its initial weighted contribution, and decay the auxiliary to zero so LC0-MCTS action labels remain the terminal objective. Test teacher-forced adjacent JEPA as a separate later candidate; do not combine both first.",
+        "id": "bootstrap_recommendation",
+        "sourceId": "code_source",
+        "type": "markdown"
+      },
+      {
+        "body": "## Scope and methodology\n\nAll pass curves use deterministic greedy policies, strict root legality masking, the same first 128 color-reversed `hero_development` pairs, seed 0, policy batch cap 16, and 256 additional plies. Every run has zero faults, cap draws, or abnormal terminations. The candidate replay matches the sealed checkpoint hash and 53,248 scientific scalar comparisons exactly.",
+        "id": "scope",
+        "sourceId": "arena_source",
+        "type": "markdown"
+      },
+      {
+        "body": "## Limitations\n\nThe opening pool is reused development data and raw-BT4 scores are ceiling-prone; descriptive paired intervals are not promotion tests or absolute Elo. Pass count also changes the deterministic reveal/revision schedule, not only FLOPs. The horizon audit diagnoses association and initialization geometry; it does not prove which auxiliary will improve chess strength.",
+        "id": "limitations",
+        "sourceId": "audit_record",
+        "type": "markdown"
+      },
+      {
+        "body": "## Next steps\n\n1. Keep the matched control as incumbent and retain the replayed broadcast tensor.\n2. Run a disjoint centered confirmation before a longer broadcast extension.\n3. Profile future-policy distillation with the frozen systems contract.\n4. If opened, test it alone with one-pass Elo primary and the full pass curve as a refinement diagnostic.",
+        "id": "next_steps",
+        "sourceId": "audit_record",
+        "type": "markdown"
+      },
+      {
+        "body": "## Further questions\n\n- At what update does the pass-gradient sign flip?\n- Does future-policy distillation move that transition earlier without sacrificing final LC0 imitation?\n- Is the broadcast candidate\u2019s raw-BT4 gain reproduced in disjoint direct play?\n- Which horizon-weighted CE best predicts multi-pass Elo?",
+        "id": "further_questions",
+        "type": "markdown"
+      }
+    ],
+    "cards": [
+      {
+        "dataset": "headline",
+        "description": "Centered candidate score and descriptive paired interval against the matched short control.",
+        "id": "direct_card",
+        "metrics": [
+          {
+            "field": "direct_candidate_score",
+            "format": "number",
+            "label": "Direct score vs control"
+          },
+          {
+            "field": "direct_interval_lower",
+            "format": "number",
+            "label": "Interval lower"
+          },
+          {
+            "field": "direct_interval_upper",
+            "format": "number",
+            "label": "Interval upper"
+          }
+        ],
+        "source": {
+          "id": "headline_source",
+          "label": "Derived headline dataset",
+          "path": "research/analysis/posthero_pass_bootstrap_20260728/derived/headline.json",
+          "query": {
+            "description": "Reads the compact headline metrics derived from the immutable audit record.",
+            "engine": "DuckDB",
+            "executed_at": "2026-07-28T09:20:46Z",
+            "id": "read-headline-20260728",
+            "language": "sql",
+            "metric_definitions": [
+              "Arena score is candidate points divided by two games per color-reversed opening pair.",
+              "MSE / identity is recurrent JEPA MSE divided by the current-state identity baseline MSE."
+            ],
+            "sql": "SELECT *\nFROM read_json_auto('research/analysis/posthero_pass_bootstrap_20260728/derived/headline.json');",
+            "tables_used": [
+              "research/analysis/posthero_pass_bootstrap_20260728/derived/headline.json"
+            ]
+          }
+        },
+        "sourceId": "audit_record"
+      },
+      {
+        "dataset": "headline",
+        "description": "Bit-exact scientific scalar comparisons in the restored 1,024-update candidate replay.",
+        "id": "replay_card",
+        "metrics": [
+          {
+            "field": "replay_comparisons",
+            "format": "compact",
+            "label": "Replay comparisons"
+          },
+          {
+            "field": "replay_mismatches",
+            "format": "number",
+            "label": "Mismatches"
+          }
+        ],
+        "source": {
+          "id": "headline_source",
+          "label": "Derived headline dataset",
+          "path": "research/analysis/posthero_pass_bootstrap_20260728/derived/headline.json",
+          "query": {
+            "description": "Reads the compact headline metrics derived from the immutable audit record.",
+            "engine": "DuckDB",
+            "executed_at": "2026-07-28T09:20:46Z",
+            "id": "read-headline-20260728",
+            "language": "sql",
+            "metric_definitions": [
+              "Arena score is candidate points divided by two games per color-reversed opening pair.",
+              "MSE / identity is recurrent JEPA MSE divided by the current-state identity baseline MSE."
+            ],
+            "sql": "SELECT *\nFROM read_json_auto('research/analysis/posthero_pass_bootstrap_20260728/derived/headline.json');",
+            "tables_used": [
+              "research/analysis/posthero_pass_bootstrap_20260728/derived/headline.json"
+            ]
+          }
+        },
+        "sourceId": "audit_record"
+      },
+      {
+        "dataset": "headline",
+        "description": "One-epoch Hero score versus raw BT4 at one and sixteen refinement passes.",
+        "id": "hero_transition_card",
+        "metrics": [
+          {
+            "field": "hero_one_pass_score",
+            "format": "number",
+            "label": "Hero @ 1 pass"
+          },
+          {
+            "field": "hero_sixteen_pass_score",
+            "format": "number",
+            "label": "Hero @ 16 passes"
+          },
+          {
+            "field": "hero_sixteen_minus_one",
+            "format": "number",
+            "label": "16 minus 1",
+            "signed": true
+          }
+        ],
+        "source": {
+          "id": "headline_source",
+          "label": "Derived headline dataset",
+          "path": "research/analysis/posthero_pass_bootstrap_20260728/derived/headline.json",
+          "query": {
+            "description": "Reads the compact headline metrics derived from the immutable audit record.",
+            "engine": "DuckDB",
+            "executed_at": "2026-07-28T09:20:46Z",
+            "id": "read-headline-20260728",
+            "language": "sql",
+            "metric_definitions": [
+              "Arena score is candidate points divided by two games per color-reversed opening pair.",
+              "MSE / identity is recurrent JEPA MSE divided by the current-state identity baseline MSE."
+            ],
+            "sql": "SELECT *\nFROM read_json_auto('research/analysis/posthero_pass_bootstrap_20260728/derived/headline.json');",
+            "tables_used": [
+              "research/analysis/posthero_pass_bootstrap_20260728/derived/headline.json"
+            ]
+          }
+        },
+        "sourceId": "audit_record"
+      }
+    ],
+    "charts": [
+      {
+        "dataset": "pass_scaling",
+        "encodings": {
+          "color": {
+            "field": "series",
+            "label": "Model",
+            "type": "nominal"
+          },
+          "tooltip": [
+            {
+              "field": "mean_call_ms",
+              "label": "Mean policy call (ms)",
+              "type": "quantitative"
+            }
+          ],
+          "x": {
+            "field": "passes",
+            "label": "Refinement passes",
+            "type": "quantitative"
+          },
+          "y": {
+            "field": "score",
+            "format": "number",
+            "label": "Score versus raw BT4",
+            "type": "quantitative"
+          }
+        },
+        "id": "pass_scaling_chart",
+        "source": {
+          "id": "pass_scaling_source",
+          "label": "Derived pass scaling dataset",
+          "path": "research/analysis/posthero_pass_bootstrap_20260728/derived/pass_scaling.json",
+          "query": {
+            "description": "Reads the tidy model-by-pass Arena score and latency dataset.",
+            "engine": "DuckDB",
+            "executed_at": "2026-07-28T09:20:46Z",
+            "id": "read-pass_scaling-20260728",
+            "language": "sql",
+            "metric_definitions": [
+              "Arena score is candidate points divided by two games per color-reversed opening pair.",
+              "MSE / identity is recurrent JEPA MSE divided by the current-state identity baseline MSE."
+            ],
+            "sql": "SELECT *\nFROM read_json_auto('research/analysis/posthero_pass_bootstrap_20260728/derived/pass_scaling.json');",
+            "tables_used": [
+              "research/analysis/posthero_pass_bootstrap_20260728/derived/pass_scaling.json"
+            ]
+          }
+        },
+        "sourceId": "arena_source",
+        "subtitle": "Only the one-epoch model improves monotonically with additional refinement.",
+        "title": "Score versus raw BT4 by refinement passes",
+        "type": "line"
+      },
+      {
+        "dataset": "horizon_ratio",
+        "encodings": {
+          "color": {
+            "field": "stage",
+            "label": "Training stage",
+            "type": "nominal"
+          },
+          "tooltip": [
+            {
+              "field": "jepa_mse",
+              "label": "JEPA MSE",
+              "type": "quantitative"
+            },
+            {
+              "field": "identity_mse",
+              "label": "Identity MSE",
+              "type": "quantitative"
+            },
+            {
+              "field": "dfm_ce",
+              "label": "DFM CE",
+              "type": "quantitative"
+            }
+          ],
+          "x": {
+            "field": "horizon",
+            "label": "Prediction horizon",
+            "type": "quantitative"
+          },
+          "y": {
+            "field": "mse_over_identity",
+            "format": "number",
+            "label": "JEPA MSE / identity MSE",
+            "type": "quantitative"
+          }
+        },
+        "id": "horizon_ratio_chart",
+        "source": {
+          "id": "horizon_ratio_source",
+          "label": "Derived horizon ratio dataset",
+          "path": "research/analysis/posthero_pass_bootstrap_20260728/derived/horizon_ratio.json",
+          "query": {
+            "description": "Reads horizon-level JEPA error, identity baseline, and DFM cross-entropy by training stage.",
+            "engine": "DuckDB",
+            "executed_at": "2026-07-28T09:20:46Z",
+            "id": "read-horizon_ratio-20260728",
+            "language": "sql",
+            "metric_definitions": [
+              "Arena score is candidate points divided by two games per color-reversed opening pair.",
+              "MSE / identity is recurrent JEPA MSE divided by the current-state identity baseline MSE."
+            ],
+            "sql": "SELECT *\nFROM read_json_auto('research/analysis/posthero_pass_bootstrap_20260728/derived/horizon_ratio.json');",
+            "tables_used": [
+              "research/analysis/posthero_pass_bootstrap_20260728/derived/horizon_ratio.json"
+            ]
+          }
+        },
+        "sourceId": "evaluation_source",
+        "subtitle": "After one epoch, relative error falls with horizon even though absolute H8 MSE remains larger than H1.",
+        "title": "JEPA MSE relative to the identity baseline by horizon",
+        "type": "line"
+      }
+    ],
+    "description": "Technical audit of checkpoint identity, refinement-pass scaling, horizon initialization, and target-safe bootstrap options.",
+    "generatedAt": "2026-07-28T09:20:46Z",
+    "sources": [
+      {
+        "id": "audit_record",
+        "label": "Immutable post-Hero audit record",
+        "path": "research/analysis/posthero_pass_bootstrap_audit_20260728.json",
+        "query": {
+          "description": "Checks model identities and frozen contracts, reconstructs pass curves, computes paired opening deltas, verifies the deterministic replay, and extracts horizon diagnostics.",
+          "engine": "Repository source and immutable JSON audit",
+          "executed_at": "2026-07-28T09:20:46Z",
+          "id": "audit_record",
+          "language": "sql",
+          "metric_definitions": [
+            "Arena score is candidate points divided by two games per color-reversed opening pair; it is descriptive on the reused development pool.",
+            "MSE / identity divides recurrent JEPA prediction MSE by the MSE obtained by retaining the current-state latent."
+          ],
+          "sql": "SELECT *\nFROM read_json_auto('research/analysis/posthero_pass_bootstrap_audit_20260728.json');",
+          "tables_used": [
+            "research/analysis/posthero_pass_bootstrap_audit_20260728.json"
+          ]
+        }
+      },
+      {
+        "id": "arena_source",
+        "label": "Frozen Arena states",
+        "path": "artifacts/arena",
+        "query": {
+          "description": "Reads immutable state.json records for matched 1/2/4/8/16-pass raw-BT4 Arenas.",
+          "engine": "Repository source and immutable JSON audit",
+          "executed_at": "2026-07-28T09:20:46Z",
+          "id": "arena_source",
+          "language": "sql",
+          "metric_definitions": [
+            "Arena score is candidate points divided by two games per color-reversed opening pair; it is descriptive on the reused development pool.",
+            "MSE / identity divides recurrent JEPA prediction MSE by the MSE obtained by retaining the current-state latent."
+          ],
+          "sql": "SELECT *\nFROM read_json_auto('research/analysis/posthero_pass_bootstrap_20260728/derived/pass_comparison.json');",
+          "tables_used": [
+            "artifacts/arena/*128pairs*/state.json",
+            "artifacts/arena/hero-epoch-v1-terminal-vs-raw-bt4-1024pairs/state.json"
+          ]
+        }
+      },
+      {
+        "id": "evaluation_source",
+        "label": "Frozen horizon evaluations",
+        "path": "research/runs",
+        "query": {
+          "description": "Reads initialization, matched 1,024-update, and one-epoch frozen evaluation reports.",
+          "engine": "Repository source and immutable JSON audit",
+          "executed_at": "2026-07-28T09:20:46Z",
+          "id": "evaluation_source",
+          "language": "sql",
+          "metric_definitions": [
+            "Arena score is candidate points divided by two games per color-reversed opening pair; it is descriptive on the reused development pool.",
+            "MSE / identity divides recurrent JEPA prediction MSE by the MSE obtained by retaining the current-state latent."
+          ],
+          "sql": "SELECT *\nFROM read_json_auto('research/analysis/posthero_pass_bootstrap_20260728/derived/horizon_ratio.json');",
+          "tables_used": [
+            "research/runs/torch_hero_init_primary_eval_v1/report.json",
+            "research/runs/torch_autoresearch_sigreg64_u1024_v1_fast_eval_v1/report.json",
+            "research/runs/torch_autoresearch_jepa_condition_u1024_v1_fast_eval_v1/report.json",
+            "research/runs/torch_hero_epoch_v1_terminal_blind_eval_v1/report.json"
+          ]
+        }
+      },
+      {
+        "id": "code_source",
+        "label": "Torch model and trajectory alignment audit",
+        "path": "research/train_torch.py",
+        "query": {
+          "description": "Audits zero initialization, H1 BT4 residual policy, recurrent JEPA transition, DFM reveal schedule, and future-plane/action alignment.",
+          "engine": "Repository source and immutable JSON audit",
+          "executed_at": "2026-07-28T09:20:46Z",
+          "id": "code_source",
+          "language": "sql",
+          "metric_definitions": [
+            "Arena score is candidate points divided by two games per color-reversed opening pair; it is descriptive on the reused development pool.",
+            "MSE / identity divides recurrent JEPA prediction MSE by the MSE obtained by retaining the current-state latent."
+          ],
+          "sql": "SELECT 'research/train_torch.py' AS path\nUNION ALL\nSELECT 'chess_dfm_jax/data/trajectory.py' AS path;",
+          "tables_used": [
+            "research/train_torch.py",
+            "chess_dfm_jax/data/trajectory.py"
+          ]
+        }
+      }
+    ],
+    "surface": "report",
+    "tables": [
+      {
+        "columns": [
+          {
+            "field": "passes",
+            "label": "Passes",
+            "type": "number"
+          },
+          {
+            "field": "control_score",
+            "format": "number",
+            "label": "Control score"
+          },
+          {
+            "field": "candidate_score",
+            "format": "number",
+            "label": "Broadcast score"
+          },
+          {
+            "field": "candidate_minus_control",
+            "format": "number",
+            "label": "Broadcast \u2212 control"
+          },
+          {
+            "field": "paired_lower",
+            "format": "number",
+            "label": "Paired lower"
+          },
+          {
+            "field": "paired_upper",
+            "format": "number",
+            "label": "Paired upper"
+          },
+          {
+            "field": "hero_score",
+            "format": "number",
+            "label": "One-epoch score"
+          },
+          {
+            "field": "candidate_call_ms",
+            "format": "number",
+            "label": "Broadcast call (ms)"
+          }
+        ],
+        "dataset": "pass_comparison",
+        "defaultSort": {
+          "direction": "asc",
+          "field": "passes"
+        },
+        "id": "pass_comparison_table",
+        "source": {
+          "id": "pass_comparison_source",
+          "label": "Derived pass comparison dataset",
+          "path": "research/analysis/posthero_pass_bootstrap_20260728/derived/pass_comparison.json",
+          "query": {
+            "description": "Reads matched pass-count scores, candidate-control paired deltas, intervals, and latency.",
+            "engine": "DuckDB",
+            "executed_at": "2026-07-28T09:20:46Z",
+            "id": "read-pass_comparison-20260728",
+            "language": "sql",
+            "metric_definitions": [
+              "Arena score is candidate points divided by two games per color-reversed opening pair.",
+              "MSE / identity is recurrent JEPA MSE divided by the current-state identity baseline MSE."
+            ],
+            "sql": "SELECT *\nFROM read_json_auto('research/analysis/posthero_pass_bootstrap_20260728/derived/pass_comparison.json');",
+            "tables_used": [
+              "research/analysis/posthero_pass_bootstrap_20260728/derived/pass_comparison.json"
+            ]
+          }
+        },
+        "sourceId": "arena_source",
+        "subtitle": "Candidate-minus-control intervals are descriptive on the same 128 opening pairs.",
+        "title": "Matched pass-count comparison"
+      },
+      {
+        "columns": [
+          {
+            "field": "horizon",
+            "label": "Horizon",
+            "type": "number"
+          },
+          {
+            "field": "jepa_mse",
+            "format": "number",
+            "label": "JEPA MSE"
+          },
+          {
+            "field": "identity_mse",
+            "format": "number",
+            "label": "Identity MSE"
+          },
+          {
+            "field": "mse_over_identity",
+            "format": "number",
+            "label": "MSE / identity"
+          },
+          {
+            "field": "dfm_ce",
+            "format": "number",
+            "label": "DFM CE"
+          },
+          {
+            "field": "pred_target_cosine",
+            "format": "number",
+            "label": "Pred/target cosine"
+          },
+          {
+            "field": "pred_effective_rank",
+            "format": "number",
+            "label": "Prediction eff. rank"
+          }
+        ],
+        "dataset": "one_epoch_horizons",
+        "defaultSort": {
+          "direction": "asc",
+          "field": "horizon"
+        },
+        "id": "one_epoch_horizon_table",
+        "source": {
+          "id": "one_epoch_horizons_source",
+          "label": "Derived one epoch horizons dataset",
+          "path": "research/analysis/posthero_pass_bootstrap_20260728/derived/one_epoch_horizons.json",
+          "query": {
+            "description": "Reads the one-epoch horizon-level JEPA, identity, action-CE, cosine, and rank diagnostics.",
+            "engine": "DuckDB",
+            "executed_at": "2026-07-28T09:20:46Z",
+            "id": "read-one_epoch_horizons-20260728",
+            "language": "sql",
+            "metric_definitions": [
+              "Arena score is candidate points divided by two games per color-reversed opening pair.",
+              "MSE / identity is recurrent JEPA MSE divided by the current-state identity baseline MSE."
+            ],
+            "sql": "SELECT *\nFROM read_json_auto('research/analysis/posthero_pass_bootstrap_20260728/derived/one_epoch_horizons.json');",
+            "tables_used": [
+              "research/analysis/posthero_pass_bootstrap_20260728/derived/one_epoch_horizons.json"
+            ]
+          }
+        },
+        "sourceId": "evaluation_source",
+        "subtitle": "Absolute JEPA MSE, identity-normalized error, and action cross-entropy use the same frozen evaluation.",
+        "title": "One-epoch horizon diagnostics"
+      }
+    ],
+    "title": "Inference-Pass Scaling and Horizon Initialization Audit",
+    "version": 1
+  },
+  "package_info": {
+    "analysisVersion": 1,
+    "origin": "chess-dfm-jax/research/analysis/posthero_pass_bootstrap_20260728"
+  },
+  "snapshot": {
+    "datasets": {
+      "headline": [
+        {
+          "direct_candidate_score": 0.509765625,
+          "direct_interval_lower": 0.467119,
+          "direct_interval_upper": 0.552412,
+          "hero_one_pass_score": 0.6640625,
+          "hero_sixteen_minus_one": 0.271484375,
+          "hero_sixteen_pass_score": 0.935546875,
+          "replay_comparisons": 53248,
+          "replay_mismatches": 0
+        }
+      ],
+      "horizon_ratio": [
+        {
+          "dfm_ce": 3.1961207054555416,
+          "horizon": 1,
+          "identity_mse": 0.07624013486201875,
+          "jepa_mse": 0.07206940211472102,
+          "mse_over_identity": 0.9452947879113012,
+          "stage": "1,024-update JEPA broadcast"
+        },
+        {
+          "dfm_ce": 5.984591484069824,
+          "horizon": 2,
+          "identity_mse": 0.09022128782817163,
+          "jepa_mse": 0.06491724689840339,
+          "mse_over_identity": 0.7195335874836954,
+          "stage": "1,024-update JEPA broadcast"
+        },
+        {
+          "dfm_ce": 5.881481170654297,
+          "horizon": 3,
+          "identity_mse": 0.16978010087041184,
+          "jepa_mse": 0.1068874909542501,
+          "mse_over_identity": 0.62956430350948,
+          "stage": "1,024-update JEPA broadcast"
+        },
+        {
+          "dfm_ce": 6.119183540344238,
+          "horizon": 4,
+          "identity_mse": 0.22274941427167505,
+          "jepa_mse": 0.11145843286067247,
+          "mse_over_identity": 0.5003758740516051,
+          "stage": "1,024-update JEPA broadcast"
+        },
+        {
+          "dfm_ce": 6.062087535858154,
+          "horizon": 5,
+          "identity_mse": 0.3178454387234524,
+          "jepa_mse": 0.14871283253887668,
+          "mse_over_identity": 0.4678778249458133,
+          "stage": "1,024-update JEPA broadcast"
+        },
+        {
+          "dfm_ce": 6.202858924865723,
+          "horizon": 6,
+          "identity_mse": 0.3916435942519456,
+          "jepa_mse": 0.15746133268112317,
+          "mse_over_identity": 0.40205261873842313,
+          "stage": "1,024-update JEPA broadcast"
+        },
+        {
+          "dfm_ce": 6.190971374511719,
+          "horizon": 7,
+          "identity_mse": 0.49781766696833074,
+          "jepa_mse": 0.19173345039598644,
+          "mse_over_identity": 0.3851479429479223,
+          "stage": "1,024-update JEPA broadcast"
+        },
+        {
+          "dfm_ce": 6.282967567443848,
+          "horizon": 8,
+          "identity_mse": 0.5818412553053349,
+          "jepa_mse": 0.20715603476855904,
+          "mse_over_identity": 0.3560353152679918,
+          "stage": "1,024-update JEPA broadcast"
+        },
+        {
+          "dfm_ce": 3.1439960561692715,
+          "horizon": 1,
+          "identity_mse": 0.08171184489037842,
+          "jepa_mse": 0.07766566114150919,
+          "mse_over_identity": 0.9504822862059052,
+          "stage": "Matched 1,024-update control"
+        },
+        {
+          "dfm_ce": 5.929671764373779,
+          "horizon": 2,
+          "identity_mse": 0.096555394702591,
+          "jepa_mse": 0.06589305590023287,
+          "mse_over_identity": 0.6824378493112272,
+          "stage": "Matched 1,024-update control"
+        },
+        {
+          "dfm_ce": 5.851617336273193,
+          "horizon": 3,
+          "identity_mse": 0.1856325175613165,
+          "jepa_mse": 0.1104642009595409,
+          "mse_over_identity": 0.5950692390036317,
+          "stage": "Matched 1,024-update control"
+        },
+        {
+          "dfm_ce": 6.083935737609863,
+          "horizon": 4,
+          "identity_mse": 0.24401075800415128,
+          "jepa_mse": 0.11133843119023368,
+          "mse_over_identity": 0.45628492817656635,
+          "stage": "Matched 1,024-update control"
+        },
+        {
+          "dfm_ce": 6.036972522735596,
+          "horizon": 5,
+          "identity_mse": 0.35026008321437985,
+          "jepa_mse": 0.14855375711340457,
+          "mse_over_identity": 0.4241241415524957,
+          "stage": "Matched 1,024-update control"
+        },
+        {
+          "dfm_ce": 6.174836158752441,
+          "horizon": 6,
+          "identity_mse": 0.42831274576019496,
+          "jepa_mse": 0.1572146825492382,
+          "mse_over_identity": 0.3670558116831294,
+          "stage": "Matched 1,024-update control"
+        },
+        {
+          "dfm_ce": 6.168432712554932,
+          "horizon": 7,
+          "identity_mse": 0.5466984317172319,
+          "jepa_mse": 0.19058250624220818,
+          "mse_over_identity": 0.3486062794136255,
+          "stage": "Matched 1,024-update control"
+        },
+        {
+          "dfm_ce": 6.260928153991699,
+          "horizon": 8,
+          "identity_mse": 0.6363292862661183,
+          "jepa_mse": 0.20380575000308454,
+          "mse_over_identity": 0.3202834670693614,
+          "stage": "Matched 1,024-update control"
+        },
+        {
+          "dfm_ce": 1.9597452973248437,
+          "horizon": 1,
+          "identity_mse": 0.46243972427328117,
+          "jepa_mse": 0.03406219370299368,
+          "mse_over_identity": 0.0736575858756988,
+          "stage": "One-epoch Hero"
+        },
+        {
+          "dfm_ce": 3.8602957874536514,
+          "horizon": 2,
+          "identity_mse": 0.4994179666027776,
+          "jepa_mse": 0.027633224375676946,
+          "mse_over_identity": 0.05533085756535387,
+          "stage": "One-epoch Hero"
+        },
+        {
+          "dfm_ce": 4.489439971745014,
+          "horizon": 3,
+          "identity_mse": 1.141014435183024,
+          "jepa_mse": 0.04323845403996529,
+          "mse_over_identity": 0.037894747609419716,
+          "stage": "One-epoch Hero"
+        },
+        {
+          "dfm_ce": 4.910861939191818,
+          "horizon": 4,
+          "identity_mse": 1.2849647892580833,
+          "jepa_mse": 0.04056595664224005,
+          "mse_over_identity": 0.03156970290653812,
+          "stage": "One-epoch Hero"
+        },
+        {
+          "dfm_ce": 5.109421074390411,
+          "horizon": 5,
+          "identity_mse": 1.9354198873625137,
+          "jepa_mse": 0.05284450728322554,
+          "mse_over_identity": 0.027303898047280683,
+          "stage": "One-epoch Hero"
+        },
+        {
+          "dfm_ce": 5.338536500930786,
+          "horizon": 6,
+          "identity_mse": 2.0102173978229985,
+          "jepa_mse": 0.05314935776186758,
+          "mse_over_identity": 0.026439606889994405,
+          "stage": "One-epoch Hero"
+        },
+        {
+          "dfm_ce": 5.457741737365723,
+          "horizon": 7,
+          "identity_mse": 2.5240384338540025,
+          "jepa_mse": 0.06404829839448212,
+          "mse_over_identity": 0.025375326118424253,
+          "stage": "One-epoch Hero"
+        },
+        {
+          "dfm_ce": 5.61143434047699,
+          "horizon": 8,
+          "identity_mse": 2.4474745982442982,
+          "jepa_mse": 0.06635234255736577,
+          "mse_over_identity": 0.02711053369255141,
+          "stage": "One-epoch Hero"
+        },
+        {
+          "dfm_ce": 6.829364776611328,
+          "horizon": 1,
+          "identity_mse": 0.9016191667178646,
+          "jepa_mse": 0.9016129303199705,
+          "mse_over_identity": 0.9999930831129991,
+          "stage": "Initialization"
+        },
+        {
+          "dfm_ce": 7.53125,
+          "horizon": 2,
+          "identity_mse": 0.4098959241528064,
+          "jepa_mse": 0.40989329732838087,
+          "mse_over_identity": 0.999993591484397,
+          "stage": "Initialization"
+        },
+        {
+          "dfm_ce": 7.53125,
+          "horizon": 3,
+          "identity_mse": 0.9469089085469022,
+          "jepa_mse": 0.946893185027875,
+          "mse_over_identity": 0.999983394897983,
+          "stage": "Initialization"
+        },
+        {
+          "dfm_ce": 7.53125,
+          "horizon": 4,
+          "identity_mse": 0.5573735130019486,
+          "jepa_mse": 0.5573691114550456,
+          "mse_over_identity": 0.9999921030569263,
+          "stage": "Initialization"
+        },
+        {
+          "dfm_ce": 7.53125,
+          "horizon": 5,
+          "identity_mse": 0.9975760185625404,
+          "jepa_mse": 0.9975531031377614,
+          "mse_over_identity": 0.9999770288936857,
+          "stage": "Initialization"
+        },
+        {
+          "dfm_ce": 7.53125,
+          "horizon": 6,
+          "identity_mse": 0.665728052117629,
+          "jepa_mse": 0.6657232837751508,
+          "mse_over_identity": 0.9999928374019045,
+          "stage": "Initialization"
+        },
+        {
+          "dfm_ce": 7.53125,
+          "horizon": 7,
+          "identity_mse": 1.052724283596035,
+          "jepa_mse": 1.0526971656945534,
+          "mse_over_identity": 0.9999742402622375,
+          "stage": "Initialization"
+        },
+        {
+          "dfm_ce": 7.53125,
+          "horizon": 8,
+          "identity_mse": 0.7580032444966491,
+          "jepa_mse": 0.7579974533291534,
+          "mse_over_identity": 0.9999923599700425,
+          "stage": "Initialization"
+        }
+      ],
+      "one_epoch_horizons": [
+        {
+          "dfm_ce": 1.9597452973248437,
+          "horizon": 1,
+          "identity_mse": 0.46243972427328117,
+          "jepa_mse": 0.03406219370299368,
+          "mse_over_identity": 0.0736575858756988,
+          "pred_effective_rank": 9.202596656046808,
+          "pred_target_cosine": 0.9759887676918879
+        },
+        {
+          "dfm_ce": 3.8602957874536514,
+          "horizon": 2,
+          "identity_mse": 0.4994179666027776,
+          "jepa_mse": 0.027633224375676946,
+          "mse_over_identity": 0.05533085756535387,
+          "pred_effective_rank": 10.907469630707055,
+          "pred_target_cosine": 0.9804296596557833
+        },
+        {
+          "dfm_ce": 4.489439971745014,
+          "horizon": 3,
+          "identity_mse": 1.141014435183024,
+          "jepa_mse": 0.04323845403996529,
+          "mse_over_identity": 0.037894747609419716,
+          "pred_effective_rank": 12.453078392893076,
+          "pred_target_cosine": 0.9678250240394846
+        },
+        {
+          "dfm_ce": 4.910861939191818,
+          "horizon": 4,
+          "identity_mse": 1.2849647892580833,
+          "jepa_mse": 0.04056595664224005,
+          "mse_over_identity": 0.03156970290653812,
+          "pred_effective_rank": 13.646126410458237,
+          "pred_target_cosine": 0.9695057896897197
+        },
+        {
+          "dfm_ce": 5.109421074390411,
+          "horizon": 5,
+          "identity_mse": 1.9354198873625137,
+          "jepa_mse": 0.05284450728322554,
+          "mse_over_identity": 0.027303898047280683,
+          "pred_effective_rank": 14.346557614393532,
+          "pred_target_cosine": 0.958868631219957
+        },
+        {
+          "dfm_ce": 5.338536500930786,
+          "horizon": 6,
+          "identity_mse": 2.0102173978229985,
+          "jepa_mse": 0.05314935776186758,
+          "mse_over_identity": 0.026439606889994405,
+          "pred_effective_rank": 14.703566420823336,
+          "pred_target_cosine": 0.9581529137212783
+        },
+        {
+          "dfm_ce": 5.457741737365723,
+          "horizon": 7,
+          "identity_mse": 2.5240384338540025,
+          "jepa_mse": 0.06404829839448212,
+          "mse_over_identity": 0.025375326118424253,
+          "pred_effective_rank": 14.796473110094666,
+          "pred_target_cosine": 0.9484492149204016
+        },
+        {
+          "dfm_ce": 5.61143434047699,
+          "horizon": 8,
+          "identity_mse": 2.4474745982442982,
+          "jepa_mse": 0.06635234255736577,
+          "mse_over_identity": 0.02711053369255141,
+          "pred_effective_rank": 14.865809816867113,
+          "pred_target_cosine": 0.9463706253445707
+        }
+      ],
+      "pass_comparison": [
+        {
+          "candidate_call_ms": 31.021174344325274,
+          "candidate_minus_control": 0.025390625,
+          "candidate_score": 0.986328125,
+          "control_call_ms": 28.955080340514638,
+          "control_score": 0.9609375,
+          "hero_score": 0.6640625,
+          "paired_lower": 0.006509523115147277,
+          "paired_upper": 0.04427172688485272,
+          "passes": 1
+        },
+        {
+          "candidate_call_ms": 33.47501994601891,
+          "candidate_minus_control": 0.005859375,
+          "candidate_score": 0.943359375,
+          "control_call_ms": 31.0594632554317,
+          "control_score": 0.9375,
+          "hero_score": 0.70703125,
+          "paired_lower": -0.025405810426631786,
+          "paired_upper": 0.037124560426631786,
+          "passes": 2
+        },
+        {
+          "candidate_call_ms": 37.3540578647829,
+          "candidate_minus_control": 0.033203125,
+          "candidate_score": 0.958984375,
+          "control_call_ms": 36.41475587259125,
+          "control_score": 0.92578125,
+          "hero_score": 0.82421875,
+          "paired_lower": 0.004495290999280331,
+          "paired_upper": 0.06191095900071967,
+          "passes": 4
+        },
+        {
+          "candidate_call_ms": 47.27216999871229,
+          "candidate_minus_control": 0.037109375,
+          "candidate_score": 0.9453125,
+          "control_call_ms": 44.585867599515176,
+          "control_score": 0.908203125,
+          "hero_score": 0.904296875,
+          "paired_lower": 0.006513447727404219,
+          "paired_upper": 0.06770530227259577,
+          "passes": 8
+        },
+        {
+          "candidate_call_ms": 67.1305594143119,
+          "candidate_minus_control": 0.0234375,
+          "candidate_score": 0.93359375,
+          "control_call_ms": 65.19798833450342,
+          "control_score": 0.91015625,
+          "hero_score": 0.935546875,
+          "paired_lower": -0.0073290182596899844,
+          "paired_upper": 0.054204018259689984,
+          "passes": 16
+        }
+      ],
+      "pass_scaling": [
+        {
+          "mean_call_ms": 31.021174344325274,
+          "passes": 1,
+          "score": 0.986328125,
+          "series": "1,024-update JEPA broadcast"
+        },
+        {
+          "mean_call_ms": 33.47501994601891,
+          "passes": 2,
+          "score": 0.943359375,
+          "series": "1,024-update JEPA broadcast"
+        },
+        {
+          "mean_call_ms": 37.3540578647829,
+          "passes": 4,
+          "score": 0.958984375,
+          "series": "1,024-update JEPA broadcast"
+        },
+        {
+          "mean_call_ms": 47.27216999871229,
+          "passes": 8,
+          "score": 0.9453125,
+          "series": "1,024-update JEPA broadcast"
+        },
+        {
+          "mean_call_ms": 67.1305594143119,
+          "passes": 16,
+          "score": 0.93359375,
+          "series": "1,024-update JEPA broadcast"
+        },
+        {
+          "mean_call_ms": 28.955080340514638,
+          "passes": 1,
+          "score": 0.9609375,
+          "series": "Matched 1,024-update control"
+        },
+        {
+          "mean_call_ms": 31.0594632554317,
+          "passes": 2,
+          "score": 0.9375,
+          "series": "Matched 1,024-update control"
+        },
+        {
+          "mean_call_ms": 36.41475587259125,
+          "passes": 4,
+          "score": 0.92578125,
+          "series": "Matched 1,024-update control"
+        },
+        {
+          "mean_call_ms": 44.585867599515176,
+          "passes": 8,
+          "score": 0.908203125,
+          "series": "Matched 1,024-update control"
+        },
+        {
+          "mean_call_ms": 65.19798833450342,
+          "passes": 16,
+          "score": 0.91015625,
+          "series": "Matched 1,024-update control"
+        },
+        {
+          "mean_call_ms": 29.10714685323558,
+          "passes": 1,
+          "score": 0.6640625,
+          "series": "One-epoch Hero"
+        },
+        {
+          "mean_call_ms": 32.245850339448744,
+          "passes": 2,
+          "score": 0.70703125,
+          "series": "One-epoch Hero"
+        },
+        {
+          "mean_call_ms": 36.50962208558142,
+          "passes": 4,
+          "score": 0.82421875,
+          "series": "One-epoch Hero"
+        },
+        {
+          "mean_call_ms": 45.48094757299015,
+          "passes": 8,
+          "score": 0.904296875,
+          "series": "One-epoch Hero"
+        },
+        {
+          "mean_call_ms": 65.29697090039629,
+          "passes": 16,
+          "score": 0.935546875,
+          "series": "One-epoch Hero"
+        }
+      ]
+    },
+    "generatedAt": "2026-07-28T09:20:46Z",
+    "status": "ready",
+    "version": 1
+  },
+  "surface": "report"
+}

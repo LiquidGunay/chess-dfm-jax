@@ -756,6 +756,7 @@ def joint_stage1_loss_fn(
     batch: dict[str, jnp.ndarray],
     rng: jnp.ndarray,
     sigreg_axis_name: str | None = None,
+    compute_fp32_legality: bool = False,
 ) -> tuple[jnp.ndarray, dict[str, jnp.ndarray]]:
     actions = batch["action_indices"][:, : model.config.horizon]
     batch_size, horizon = actions.shape
@@ -818,6 +819,26 @@ def joint_stage1_loss_fn(
         jnp.sum((1.0 - first_legal_mass) * first_slot_valid)
         / jnp.maximum(jnp.sum(first_slot_valid), 1.0)
     )
+    if compute_fp32_legality:
+        first_probs_fp32 = jax.nn.softmax(
+            jnp.asarray(logits[:, :1], dtype=jnp.float32),
+            axis=-1,
+        )
+        first_legal_mass_fp32_by_sample = jnp.clip(
+            legal_mass_from_indices(
+                first_probs_fp32,
+                batch["legal_idx"][:, :1],
+                batch["legal_count"][:, :1],
+            )[:, 0],
+            0.0,
+            1.0,
+        )
+        first_legality_loss_fp32 = (
+            jnp.sum((1.0 - first_legal_mass_fp32_by_sample) * first_slot_valid)
+            / jnp.maximum(jnp.sum(first_slot_valid), 1.0)
+        )
+    else:
+        first_legality_loss_fp32 = first_legality_loss
     horizon_legality_loss = jnp.asarray(0.0, dtype=jnp.float32)
     legality_loss = first_legality_loss
     weighted_legality_loss = model.config.first_legality_coeff * first_legality_loss
@@ -1004,6 +1025,8 @@ def joint_stage1_loss_fn(
         "dfm_mask_fraction_by_horizon": dfm_mask_fraction_by_horizon,
         "legality_loss": legality_loss,
         "first_legality_loss": first_legality_loss,
+        "first_legality_loss_fp32": first_legality_loss_fp32,
+        "first_legal_mass_fp32": 1.0 - first_legality_loss_fp32,
         "horizon_legality_loss": horizon_legality_loss,
         "weighted_legality_loss": weighted_legality_loss,
         "first_legal_mass": 1.0 - first_legality_loss,

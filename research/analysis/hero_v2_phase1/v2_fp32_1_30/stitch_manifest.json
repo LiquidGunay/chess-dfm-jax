@@ -1,0 +1,126 @@
+{
+  "authoritative_loss_summary": "loss_summary.json",
+  "authoritative_training_curve": "metrics.jsonl",
+  "merged_record_count": 554,
+  "merged_update_range": [
+    1,
+    554
+  ],
+  "operational_metric_keys_ignored_in_overlap": [
+    "backward_cuda_seconds",
+    "checkpoint_write_seconds",
+    "data_prefetch_hidden_seconds",
+    "data_prepare_seconds",
+    "data_seconds",
+    "data_wait_seconds",
+    "elapsed_seconds",
+    "examples_per_second_end_to_end",
+    "examples_per_second_step",
+    "forward_cuda_seconds",
+    "gpu_memory_allocated_bytes",
+    "gpu_memory_reserved_bytes",
+    "gpu_peak_memory_allocated_bytes",
+    "gpu_peak_memory_reserved_bytes",
+    "host_overhead_in_step_seconds",
+    "optimizer_cuda_seconds",
+    "recovery_checkpoint_path",
+    "segment_examples",
+    "segment_update",
+    "step_seconds",
+    "transfer_seconds"
+  ],
+  "output_sha256": {
+    "loss_summary.json": "bb19208516c736c2bf35c21f5123f7b79e8813545f67127c4bea29b383e9e345",
+    "metrics.jsonl": "79e7a0ef503bbc97a6cab78c356046b3d6639945547b1fc217056d8b147793de",
+    "modal_run.json": "30bab937112ac7758e0451f07468caaf836bd2af854416a8a1d90a794ec152ec",
+    "optimizer_partition.json": "61247f172152e150064c7dbac9cfcc090c22a2d0324777f85c302a7a621c70ea",
+    "report.json": "ce4bc0026c02b0d459d2358954ec28a7a48429f836a74d1fa36bc929e0ccabba",
+    "run_config.json": "c7b9a523f49b07bcb87bdbc48daed9ec08a375209b59beafec2c1a47bf3832e3",
+    "validation_metrics.jsonl": "404004d8b75966d11466507888cf3a604050bfe8575471774416df548eea370c"
+  },
+  "overlap_record_count": 14,
+  "overlap_semantic_sha256": "3028c0a74180a73298b6fc86951558c88d50d1fecc0e17c88a90a621246f9570",
+  "overlap_updates": [
+    501,
+    502,
+    503,
+    504,
+    505,
+    506,
+    507,
+    508,
+    509,
+    510,
+    511,
+    512,
+    513,
+    514
+  ],
+  "schema_version": "chess-dfm-training-segment-stitch-v1",
+  "segments": [
+    {
+      "allowed_config_differences": [
+        "args.max_checkpoints",
+        "args.resume_checkpoint",
+        "args.save_updates",
+        "created_utc",
+        "restore_seconds",
+        "resume.checkpoint_dir",
+        "resume.checkpoint_state_sha256",
+        "resume.enabled",
+        "resume.next_data_cursor",
+        "resume.optimizer_update"
+      ],
+      "metrics_sha256": "3b9a24140ff4d34c47eb047c02ec4b36d3b5cc3514029483a101cf38f3f95a33",
+      "name": "attempt000",
+      "optimizer_partition_sha256": "61247f172152e150064c7dbac9cfcc090c22a2d0324777f85c302a7a621c70ea",
+      "record_count": 514,
+      "resume_enabled": false,
+      "resume_update": null,
+      "run_config_sha256": "3711156681fd3b4e64385dd628d6e6fcb630ef26de2befba08fd5c950c78fe7f",
+      "update_range": [
+        1,
+        514
+      ]
+    },
+    {
+      "allowed_config_differences": [],
+      "metrics_sha256": "54bdddf07224242b3b77e4229cb9b00f01990898ba7d017e5e10702a9d57bd80",
+      "name": "terminal",
+      "optimizer_partition_sha256": "61247f172152e150064c7dbac9cfcc090c22a2d0324777f85c302a7a621c70ea",
+      "record_count": 54,
+      "resume_enabled": true,
+      "resume_update": 500,
+      "run_config_sha256": "c7b9a523f49b07bcb87bdbc48daed9ec08a375209b59beafec2c1a47bf3832e3",
+      "update_range": [
+        501,
+        554
+      ]
+    }
+  ],
+  "selection_rule": "chronological_later_segment_wins_only_after_exact_nonoperational_overlap_match",
+  "terminal_model_state_sha256": "e7dd27f5eb31ce2c7adc42b4c51c958a659d4a7171d493b396b0285802a1ed2b",
+  "terminal_report_curve_scope": "terminal_segment_only_unmodified",
+  "terminal_report_retained_for": [
+    "validation",
+    "checkpoint_provenance"
+  ],
+  "terminal_segment": "terminal",
+  "terminal_update": 554,
+  "update_owner_ranges": [
+    {
+      "name": "attempt000",
+      "updates": [
+        1,
+        500
+      ]
+    },
+    {
+      "name": "terminal",
+      "updates": [
+        501,
+        554
+      ]
+    }
+  ]
+}

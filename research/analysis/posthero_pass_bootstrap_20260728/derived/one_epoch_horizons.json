@@ -1,0 +1,74 @@
+[
+  {
+    "dfm_ce": 1.9597452973248437,
+    "horizon": 1,
+    "identity_mse": 0.46243972427328117,
+    "jepa_mse": 0.03406219370299368,
+    "mse_over_identity": 0.0736575858756988,
+    "pred_effective_rank": 9.202596656046808,
+    "pred_target_cosine": 0.9759887676918879
+  },
+  {
+    "dfm_ce": 3.8602957874536514,
+    "horizon": 2,
+    "identity_mse": 0.4994179666027776,
+    "jepa_mse": 0.027633224375676946,
+    "mse_over_identity": 0.05533085756535387,
+    "pred_effective_rank": 10.907469630707055,
+    "pred_target_cosine": 0.9804296596557833
+  },
+  {
+    "dfm_ce": 4.489439971745014,
+    "horizon": 3,
+    "identity_mse": 1.141014435183024,
+    "jepa_mse": 0.04323845403996529,
+    "mse_over_identity": 0.037894747609419716,
+    "pred_effective_rank": 12.453078392893076,
+    "pred_target_cosine": 0.9678250240394846
+  },
+  {
+    "dfm_ce": 4.910861939191818,
+    "horizon": 4,
+    "identity_mse": 1.2849647892580833,
+    "jepa_mse": 0.04056595664224005,
+    "mse_over_identity": 0.03156970290653812,
+    "pred_effective_rank": 13.646126410458237,
+    "pred_target_cosine": 0.9695057896897197
+  },
+  {
+    "dfm_ce": 5.109421074390411,
+    "horizon": 5,
+    "identity_mse": 1.9354198873625137,
+    "jepa_mse": 0.05284450728322554,
+    "mse_over_identity": 0.027303898047280683,
+    "pred_effective_rank": 14.346557614393532,
+    "pred_target_cosine": 0.958868631219957
+  },
+  {
+    "dfm_ce": 5.338536500930786,
+    "horizon": 6,
+    "identity_mse": 2.0102173978229985,
+    "jepa_mse": 0.05314935776186758,
+    "mse_over_identity": 0.026439606889994405,
+    "pred_effective_rank": 14.703566420823336,
+    "pred_target_cosine": 0.9581529137212783
+  },
+  {
+    "dfm_ce": 5.457741737365723,
+    "horizon": 7,
+    "identity_mse": 2.5240384338540025,
+    "jepa_mse": 0.06404829839448212,
+    "mse_over_identity": 0.025375326118424253,
+    "pred_effective_rank": 14.796473110094666,
+    "pred_target_cosine": 0.9484492149204016
+  },
+  {
+    "dfm_ce": 5.61143434047699,
+    "horizon": 8,
+    "identity_mse": 2.4474745982442982,
+    "jepa_mse": 0.06635234255736577,
+    "mse_over_identity": 0.02711053369255141,
+    "pred_effective_rank": 14.865809816867113,
+    "pred_target_cosine": 0.9463706253445707
+  }
+]

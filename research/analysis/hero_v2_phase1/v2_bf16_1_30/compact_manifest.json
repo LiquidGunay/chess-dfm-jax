@@ -1,0 +1,39 @@
+{
+  "checkpoint_files_downloaded": 0,
+  "environment": "chess-dfm-research",
+  "files": {
+    "loss_summary.json": {
+      "sha256": "c2ef1110453d99bdc3606a36e3ab35287253ebe8a02cfd0ad0789f85e431bc2d",
+      "size_bytes": 7315
+    },
+    "metrics.jsonl": {
+      "sha256": "a221824711b5808adddb93361b9b7107e0bbeee3b5159669ab2f3dca6a59a6ad",
+      "size_bytes": 1651180
+    },
+    "modal_run.json": {
+      "sha256": "2354aed9497e666de2b1eaa32036687cdb55970b00abbd5d63d29d94c5a969f0",
+      "size_bytes": 2585
+    },
+    "optimizer_partition.json": {
+      "sha256": "323ffb40c5a65242ab30d091d61e4810b273cb0cdeef37f84e02a38078d66c1b",
+      "size_bytes": 168294
+    },
+    "report.json": {
+      "sha256": "ce2afd6d22f8f9b7a551c3deda89dd1cb391f87a2c7438ed55d440237b4f66ad",
+      "size_bytes": 37381
+    },
+    "run_config.json": {
+      "sha256": "a95c9f9e0c72c0a863320da9815e58435531e0d635b02ae2ab898033d8dfdb24",
+      "size_bytes": 329036
+    },
+    "validation_metrics.jsonl": {
+      "sha256": "bcc64c44a97c6f7455a82bd2b051e3c8572ec37892395b3b63f312077f89b25f",
+      "size_bytes": 18150
+    }
+  },
+  "remote_root": "runs/hero-training-phase1-v2_bf16_1_30-l40s-ac05a6bc26a71939c6a9",
+  "result_label": "hero-training-phase1-v2_bf16_1_30-l40s-ac05a6bc26a71939c6a9",
+  "schema_version": "chess-dfm-modal-training-compact-pull-v1",
+  "total_size_bytes": 2213941,
+  "volume": "chess-dfm-training-results"
+}

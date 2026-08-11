@@ -1,0 +1,67 @@
+{
+  "schema_version": "chess-dfm-hero-v2-phase1-preregister-v1",
+  "created_utc": "2026-08-09T12:44:47Z",
+  "status": "sealed_before_launch",
+  "parent_decision_record": {
+    "path": "research/analysis/hero_v2_phase1/post_hybrid_decision_tree-preregister.json",
+    "sha256": "c8ad3ba1cfbde0a530e3bc374feb7b2b63a91a107db4997989fdbcdc1153d59b"
+  },
+  "triggered_branch": "hybrid_behavior_regresses_and_matches_whole_encoder",
+  "trigger_evidence": {
+    "hero1_root_legal_top1_accuracy": 0.455078125,
+    "noninferiority_floor": 0.445078125,
+    "v2_encoder_fp32_1_12_root_legal_top1_accuracy": 0.413330078125,
+    "v2_fp32_1_12_root_legal_top1_accuracy": 0.41455078125,
+    "hybrid_minus_whole_fp32_root_top1": -0.001220703125,
+    "hybrid_mean_paired_loss_delta_vs_hero1": -1.002780366048939,
+    "whole_fp32_mean_paired_loss_delta_vs_hero1": -1.0013666615087031,
+    "hybrid_frozen_validation_passed": false,
+    "hybrid_additional_failed_metric": "jepa_positive_loss"
+  },
+  "arm": {
+    "name": "v2_trunk_fp32_1_12",
+    "profile": "phase1",
+    "gpu": "L40S",
+    "updates": 554,
+    "examples_per_update": 1024,
+    "recipe": "hero_v2",
+    "main_lr_multiplier": 1.0,
+    "encoder_lr_ratio": 0.08333333333333333,
+    "optimizer_precision": "encoder_trunk_fp32_master",
+    "fp32_scope": "encoder.* except encoder.policy_head.*",
+    "parameter_precision_scope": "encoder.policy_head.* and every non-encoder parameter",
+    "weight_decay_mode": "decoupled",
+    "schedule_kind": "warmup_stable_linear_decay",
+    "wsd_decay_fraction": 0.2
+  },
+  "question": "Is the four-point root-policy regression caused specifically by applying FP32 optimizer state/master weights to the pretrained encoder policy head, rather than by visible adaptation in the encoder trunk?",
+  "predictions": {
+    "if_policy_head_precision_is_causal": "legal root top-1 returns to at least 0.445078125 while trunk movement and non-legality loss acceleration remain materially above Hero 1",
+    "if_encoder_trunk_or_objective_interference_is_causal": "legal root top-1 remains below 0.445078125 even with the policy head restored to direct parameter-precision updates"
+  },
+  "decision_gates": {
+    "root_legal_top1_noninferiority_floor": 0.445078125,
+    "root_legal_top1_tolerance": 0.01,
+    "max_trunk_relative_delta_l2": 0.005,
+    "max_global_relative_delta_l2": 0.01,
+    "requires_frozen_validation_comparator": true,
+    "requires_arena_before_phase2": true,
+    "loss_alone_cannot_promote": true,
+    "phase2_only_if_behavior_is_not_materially_worse": true
+  },
+  "source_identity": {
+    "compile_source_tree_sha256": "d8f4f831da0f1ed97737db96984e15191a6286554f541f084696e16b16756e92",
+    "full_source_tree_sha256": "441a6883ca26ff6ffc71c4de43b8e37f785138673ce09516d38e9545b8497ba3"
+  },
+  "verification": {
+    "targeted_tests": "87 passed, 1 skipped",
+    "ruff": "passed",
+    "modal_metered_spend_before_launch_usd": 12.72730459,
+    "workspace_native_hard_budget_usd": 42.5,
+    "repository_new_launch_stop_usd": 34.0
+  },
+  "multiplicity": {
+    "additional_phase1_training_arms_before_reassessment": 1,
+    "arm_selected_without_inspecting_its_outcome": true
+  }
+}

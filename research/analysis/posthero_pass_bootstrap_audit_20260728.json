@@ -1,0 +1,1742 @@
+{
+  "bootstrap_recommendation": {
+    "alignment": "future_planes[s] is the board after action s+1; for s in 0..6, its stopped-gradient BT4 legal policy supervises DFM slot s+1 (H2-H8). The sampled H8 future board has no in-chunk next-action slot and is ineligible.",
+    "do_not_combine_first": true,
+    "extra_encoder_calls": 0,
+    "extra_training_work": "one frozen policy-head forward on the selected future tokens plus legal KL; profile before training",
+    "first_candidate": "training-only future-policy distillation from the already encoded sampled future BT4 tokens",
+    "no_inference_leakage": true,
+    "schedule": "calibrate the initial weighted contribution, use it only as a warm-start auxiliary, and decay it to zero so LC0-MCTS actions remain the terminal objective",
+    "separate_second_candidate": "teacher-forced adjacent JEPA transition T(z_target[h-1], action[h]) -> z_target[h], followed by scheduled transition to free recurrent rollout"
+  },
+  "candidate_vs_control_paired_by_pass": {
+    "pass_1": {
+      "candidate_better_pairs": 19,
+      "candidate_minus_control_score": 0.025390625,
+      "candidate_worse_pairs": 6,
+      "delta_counts": {
+        "-0.25": 6,
+        "0.0": 103,
+        "0.25": 19
+      },
+      "equal_pairs": 103,
+      "method_note": "Descriptive paired t interval over the same frozen opening-pair scores. The preregistered non-worse Arena gate, not this post-hoc p-value, determines the screening decision.",
+      "pair_count": 128,
+      "paired_standard_deviation": 0.10795086622031587,
+      "paired_standard_error": 0.009541598692418394,
+      "paired_t_95_lower": 0.006509523115147277,
+      "paired_t_95_upper": 0.04427172688485272,
+      "paired_t_statistic": 2.6610451579959022,
+      "paired_t_two_sided_p_value": 0.008795732450777274
+    },
+    "pass_16": {
+      "candidate_better_pairs": 31,
+      "candidate_minus_control_score": 0.0234375,
+      "candidate_worse_pairs": 21,
+      "delta_counts": {
+        "-0.25": 20,
+        "-0.5": 1,
+        "0.0": 76,
+        "0.25": 28,
+        "0.5": 3
+      },
+      "equal_pairs": 76,
+      "method_note": "Descriptive paired t interval over the same frozen opening-pair scores. The preregistered non-worse Arena gate, not this post-hoc p-value, determines the screening decision.",
+      "pair_count": 128,
+      "paired_standard_deviation": 0.1759045799854072,
+      "paired_standard_error": 0.01554791516868161,
+      "paired_t_95_lower": -0.0073290182596899844,
+      "paired_t_95_upper": 0.054204018259689984,
+      "paired_t_statistic": 1.5074368328951586,
+      "paired_t_two_sided_p_value": 0.13418224182739205
+    },
+    "pass_2": {
+      "candidate_better_pairs": 25,
+      "candidate_minus_control_score": 0.005859375,
+      "candidate_worse_pairs": 22,
+      "delta_counts": {
+        "-0.25": 19,
+        "-0.5": 3,
+        "0.0": 81,
+        "0.25": 22,
+        "0.5": 3
+      },
+      "equal_pairs": 81,
+      "method_note": "Descriptive paired t interval over the same frozen opening-pair scores. The preregistered non-worse Arena gate, not this post-hoc p-value, determines the screening decision.",
+      "pair_count": 128,
+      "paired_standard_deviation": 0.17875566107989485,
+      "paired_standard_error": 0.01579991751563473,
+      "paired_t_95_lower": -0.025405810426631786,
+      "paired_t_95_upper": 0.037124560426631786,
+      "paired_t_statistic": 0.3708484550126217,
+      "paired_t_two_sided_p_value": 0.7113682681052097
+    },
+    "pass_4": {
+      "candidate_better_pairs": 32,
+      "candidate_minus_control_score": 0.033203125,
+      "candidate_worse_pairs": 16,
+      "delta_counts": {
+        "-0.25": 15,
+        "-0.5": 1,
+        "0.0": 80,
+        "0.25": 30,
+        "0.5": 2
+      },
+      "equal_pairs": 80,
+      "method_note": "Descriptive paired t interval over the same frozen opening-pair scores. The preregistered non-worse Arena gate, not this post-hoc p-value, determines the screening decision.",
+      "pair_count": 128,
+      "paired_standard_deviation": 0.16413425268219706,
+      "paired_standard_error": 0.014507555387070976,
+      "paired_t_95_lower": 0.004495290999280331,
+      "paired_t_95_upper": 0.06191095900071967,
+      "paired_t_statistic": 2.288678148324726,
+      "paired_t_two_sided_p_value": 0.02374984688353461
+    },
+    "pass_8": {
+      "candidate_better_pairs": 37,
+      "candidate_minus_control_score": 0.037109375,
+      "candidate_worse_pairs": 19,
+      "delta_counts": {
+        "-0.25": 18,
+        "-0.5": 1,
+        "0.0": 72,
+        "0.25": 35,
+        "0.5": 2
+      },
+      "equal_pairs": 72,
+      "method_note": "Descriptive paired t interval over the same frozen opening-pair scores. The preregistered non-worse Arena gate, not this post-hoc p-value, determines the screening decision.",
+      "pair_count": 128,
+      "paired_standard_deviation": 0.17492924258515877,
+      "paired_standard_error": 0.015461706707474043,
+      "paired_t_95_lower": 0.006513447727404219,
+      "paired_t_95_upper": 0.06770530227259577,
+      "paired_t_statistic": 2.400082714158695,
+      "paired_t_two_sided_p_value": 0.01784272277279043
+    }
+  },
+  "decision": {
+    "candidate_status": "not promoted; current evidence is scientifically inconclusive, with favorable reused-pool pass curves but failed offline gates",
+    "close_all_state_action_coupling": false,
+    "delete_candidate_checkpoint": false,
+    "next_training_priority": "confirm whether future-policy distillation improves long-horizon CE/pass scaling without degrading one-pass Elo"
+  },
+  "deterministic_candidate_replay": {
+    "checkpoint_matches_sealed_original": true,
+    "checkpoint_sha256": "eb20c698fea1eabd4ebf71c13a1c195204736183f7b173079bd34f2a6e9a995f",
+    "first_mismatches": [],
+    "mismatch_count": 0,
+    "original_updates": 1024,
+    "replay_updates": 1024,
+    "scientific_scalar_comparisons": 53248,
+    "scientific_scalar_keys": [
+      "accuracy",
+      "bt4_learning_rate",
+      "dfm_ce_loss",
+      "dfm_jepa_conditioning_ratio",
+      "dfm_jepa_conditioning_rms",
+      "dfm_jepa_conditioning_state_rms",
+      "dfm_jepa_conditioning_weight_rms",
+      "examples",
+      "first_legal_mass",
+      "first_legality_loss",
+      "gradient_clip_scale",
+      "gradient_global_norm",
+      "jepa_feedback_active",
+      "jepa_feedback_applied_rms",
+      "jepa_feedback_cap_fraction",
+      "jepa_feedback_conditioned_planner_calls",
+      "jepa_feedback_delta_rms",
+      "jepa_feedback_dfm_ce_improvement",
+      "jepa_feedback_gate",
+      "jepa_feedback_preliminary_dfm_ce_loss",
+      "jepa_feedback_preliminary_planner_calls",
+      "jepa_feedback_raw_rms",
+      "jepa_feedback_state_rms",
+      "jepa_norm_loss",
+      "jepa_positive_loss",
+      "jepa_pred_sigreg_loss",
+      "jepa_pred_sigreg_valid_count",
+      "jepa_raw_mse",
+      "jepa_sigreg_loss",
+      "jepa_sigreg_valid_count",
+      "jepa_target_mean_horizon",
+      "learning_rate",
+      "loss",
+      "loss_clip_scale",
+      "mask_prob",
+      "optimizer_skipped_nonfinite",
+      "optimizer_update",
+      "recovery_checkpoint_path",
+      "root_legal_conditional_ce",
+      "schema_version",
+      "unclipped_loss",
+      "update",
+      "wdl_accuracy",
+      "wdl_expected_value_mse",
+      "wdl_loss",
+      "wdl_valid_count",
+      "wdl_weighted_loss",
+      "weighted_legality_loss",
+      "weighted_root_legal_conditional_ce",
+      "z_pred_norm",
+      "z_state_norm",
+      "z_target_norm"
+    ],
+    "sources": {
+      "original_metrics": {
+        "path": "research/runs/torch_autoresearch_jepa_condition_u1024_v1/metrics.jsonl",
+        "sha256": "536e8a748843d68ed82189f319f250a3bbaceeab512de2e3a4bb2e2ed9453911",
+        "size_bytes": 2910533
+      },
+      "replay_metrics": {
+        "path": "research/runs/torch_autoresearch_jepa_condition_u1024_replay_v1/metrics.jsonl",
+        "sha256": "75e336b64169ce1f9daecaad48ae16dc39e8d47f6dd1dc5eae0f588009303b29",
+        "size_bytes": 2910400
+      }
+    }
+  },
+  "direct_candidate_screen": {
+    "candidate_wins_draws_losses": [
+      66,
+      129,
+      61
+    ],
+    "descriptive_paired_t_95": [
+      0.467119,
+      0.552412
+    ],
+    "interpretation": "Chess-inconclusive near tie. The candidate failed preregistered offline policy/rank promotion gates; that is not evidence that the architecture is weaker at chess.",
+    "opponent": "matched control_1024, not hero_one_epoch",
+    "score": 0.509765625
+  },
+  "horizon_audit": {
+    "candidate_1024": [
+      {
+        "dfm_ce": 3.1961207054555416,
+        "horizon": 1,
+        "identity_mse": 0.07624013486201875,
+        "jepa_mse": 0.07206940211472102,
+        "mse_over_identity": 0.9452947879113012,
+        "pred_effective_rank": 7.390277627855539,
+        "pred_stable_rank": 2.59852053783834,
+        "pred_target_cosine": 0.9438431393355131
+      },
+      {
+        "dfm_ce": 5.984591484069824,
+        "horizon": 2,
+        "identity_mse": 0.09022128782817163,
+        "jepa_mse": 0.06491724689840339,
+        "mse_over_identity": 0.7195335874836954,
+        "pred_effective_rank": 7.886787541210651,
+        "pred_stable_rank": 2.8111285911872983,
+        "pred_target_cosine": 0.9483151533640921
+      },
+      {
+        "dfm_ce": 5.881481170654297,
+        "horizon": 3,
+        "identity_mse": 0.16978010087041184,
+        "jepa_mse": 0.1068874909542501,
+        "mse_over_identity": 0.62956430350948,
+        "pred_effective_rank": 8.284440953284502,
+        "pred_stable_rank": 3.0228863582015038,
+        "pred_target_cosine": 0.9171391953714192
+      },
+      {
+        "dfm_ce": 6.119183540344238,
+        "horizon": 4,
+        "identity_mse": 0.22274941427167505,
+        "jepa_mse": 0.11145843286067247,
+        "mse_over_identity": 0.5003758740516051,
+        "pred_effective_rank": 8.826949778944254,
+        "pred_stable_rank": 3.3183336183428764,
+        "pred_target_cosine": 0.9127771793864667
+      },
+      {
+        "dfm_ce": 6.062087535858154,
+        "horizon": 5,
+        "identity_mse": 0.3178454387234524,
+        "jepa_mse": 0.14871283253887668,
+        "mse_over_identity": 0.4678778249458133,
+        "pred_effective_rank": 9.257572058588266,
+        "pred_stable_rank": 3.5978964138776064,
+        "pred_target_cosine": 0.8854129598475993
+      },
+      {
+        "dfm_ce": 6.202858924865723,
+        "horizon": 6,
+        "identity_mse": 0.3916435942519456,
+        "jepa_mse": 0.15746133268112317,
+        "mse_over_identity": 0.40205261873842313,
+        "pred_effective_rank": 9.748140949755907,
+        "pred_stable_rank": 3.9282399602234364,
+        "pred_target_cosine": 0.8778569768182933
+      },
+      {
+        "dfm_ce": 6.190971374511719,
+        "horizon": 7,
+        "identity_mse": 0.49781766696833074,
+        "jepa_mse": 0.19173345039598644,
+        "mse_over_identity": 0.3851479429479223,
+        "pred_effective_rank": 10.111949790269136,
+        "pred_stable_rank": 4.188033636659384,
+        "pred_target_cosine": 0.8531597089022398
+      },
+      {
+        "dfm_ce": 6.282967567443848,
+        "horizon": 8,
+        "identity_mse": 0.5818412553053349,
+        "jepa_mse": 0.20715603476855904,
+        "mse_over_identity": 0.3560353152679918,
+        "pred_effective_rank": 10.512659169733524,
+        "pred_stable_rank": 4.404738284647465,
+        "pred_target_cosine": 0.840043296571821
+      }
+    ],
+    "control_1024": [
+      {
+        "dfm_ce": 3.1439960561692715,
+        "horizon": 1,
+        "identity_mse": 0.08171184489037842,
+        "jepa_mse": 0.07766566114150919,
+        "mse_over_identity": 0.9504822862059052,
+        "pred_effective_rank": 8.055023197084665,
+        "pred_stable_rank": 2.8217282593250275,
+        "pred_target_cosine": 0.9432175918482244
+      },
+      {
+        "dfm_ce": 5.929671764373779,
+        "horizon": 2,
+        "identity_mse": 0.096555394702591,
+        "jepa_mse": 0.06589305590023287,
+        "mse_over_identity": 0.6824378493112272,
+        "pred_effective_rank": 8.654930092394352,
+        "pred_stable_rank": 3.1340540079399943,
+        "pred_target_cosine": 0.9514491888694465
+      },
+      {
+        "dfm_ce": 5.851617336273193,
+        "horizon": 3,
+        "identity_mse": 0.1856325175613165,
+        "jepa_mse": 0.1104642009595409,
+        "mse_over_identity": 0.5950692390036317,
+        "pred_effective_rank": 9.167749855667353,
+        "pred_stable_rank": 3.4578218953683972,
+        "pred_target_cosine": 0.9192073689773679
+      },
+      {
+        "dfm_ce": 6.083935737609863,
+        "horizon": 4,
+        "identity_mse": 0.24401075800415128,
+        "jepa_mse": 0.11133843119023368,
+        "mse_over_identity": 0.45628492817656635,
+        "pred_effective_rank": 9.757072169333696,
+        "pred_stable_rank": 3.8510387800633907,
+        "pred_target_cosine": 0.9177944967523217
+      },
+      {
+        "dfm_ce": 6.036972522735596,
+        "horizon": 5,
+        "identity_mse": 0.35026008321437985,
+        "jepa_mse": 0.14855375711340457,
+        "mse_over_identity": 0.4241241415524957,
+        "pred_effective_rank": 10.210907720029354,
+        "pred_stable_rank": 4.195420194417238,
+        "pred_target_cosine": 0.8905515028163791
+      },
+      {
+        "dfm_ce": 6.174836158752441,
+        "horizon": 6,
+        "identity_mse": 0.42831274576019496,
+        "jepa_mse": 0.1572146825492382,
+        "mse_over_identity": 0.3670558116831294,
+        "pred_effective_rank": 10.643156252801418,
+        "pred_stable_rank": 4.476980520412326,
+        "pred_target_cosine": 0.8836632156744599
+      },
+      {
+        "dfm_ce": 6.168432712554932,
+        "horizon": 7,
+        "identity_mse": 0.5466984317172319,
+        "jepa_mse": 0.19058250624220818,
+        "mse_over_identity": 0.3486062794136255,
+        "pred_effective_rank": 10.918665677309036,
+        "pred_stable_rank": 4.62588026560843,
+        "pred_target_cosine": 0.8578394073992968
+      },
+      {
+        "dfm_ce": 6.260928153991699,
+        "horizon": 8,
+        "identity_mse": 0.6363292862661183,
+        "jepa_mse": 0.20380575000308454,
+        "mse_over_identity": 0.3202834670693614,
+        "pred_effective_rank": 11.16523652523756,
+        "pred_stable_rank": 4.684468189254403,
+        "pred_target_cosine": 0.8458565520122647
+      }
+    ],
+    "hero_one_epoch": [
+      {
+        "dfm_ce": 1.9597452973248437,
+        "horizon": 1,
+        "identity_mse": 0.46243972427328117,
+        "jepa_mse": 0.03406219370299368,
+        "mse_over_identity": 0.0736575858756988,
+        "pred_effective_rank": 9.202596656046808,
+        "pred_stable_rank": 2.765626812935807,
+        "pred_target_cosine": 0.9759887676918879
+      },
+      {
+        "dfm_ce": 3.8602957874536514,
+        "horizon": 2,
+        "identity_mse": 0.4994179666027776,
+        "jepa_mse": 0.027633224375676946,
+        "mse_over_identity": 0.05533085756535387,
+        "pred_effective_rank": 10.907469630707055,
+        "pred_stable_rank": 3.419697043369524,
+        "pred_target_cosine": 0.9804296596557833
+      },
+      {
+        "dfm_ce": 4.489439971745014,
+        "horizon": 3,
+        "identity_mse": 1.141014435183024,
+        "jepa_mse": 0.04323845403996529,
+        "mse_over_identity": 0.037894747609419716,
+        "pred_effective_rank": 12.453078392893076,
+        "pred_stable_rank": 4.202070242026821,
+        "pred_target_cosine": 0.9678250240394846
+      },
+      {
+        "dfm_ce": 4.910861939191818,
+        "horizon": 4,
+        "identity_mse": 1.2849647892580833,
+        "jepa_mse": 0.04056595664224005,
+        "mse_over_identity": 0.03156970290653812,
+        "pred_effective_rank": 13.646126410458237,
+        "pred_stable_rank": 5.008756474009715,
+        "pred_target_cosine": 0.9695057896897197
+      },
+      {
+        "dfm_ce": 5.109421074390411,
+        "horizon": 5,
+        "identity_mse": 1.9354198873625137,
+        "jepa_mse": 0.05284450728322554,
+        "mse_over_identity": 0.027303898047280683,
+        "pred_effective_rank": 14.346557614393532,
+        "pred_stable_rank": 5.606086980784312,
+        "pred_target_cosine": 0.958868631219957
+      },
+      {
+        "dfm_ce": 5.338536500930786,
+        "horizon": 6,
+        "identity_mse": 2.0102173978229985,
+        "jepa_mse": 0.05314935776186758,
+        "mse_over_identity": 0.026439606889994405,
+        "pred_effective_rank": 14.703566420823336,
+        "pred_stable_rank": 5.949301421176642,
+        "pred_target_cosine": 0.9581529137212783
+      },
+      {
+        "dfm_ce": 5.457741737365723,
+        "horizon": 7,
+        "identity_mse": 2.5240384338540025,
+        "jepa_mse": 0.06404829839448212,
+        "mse_over_identity": 0.025375326118424253,
+        "pred_effective_rank": 14.796473110094666,
+        "pred_stable_rank": 6.042782555799931,
+        "pred_target_cosine": 0.9484492149204016
+      },
+      {
+        "dfm_ce": 5.61143434047699,
+        "horizon": 8,
+        "identity_mse": 2.4474745982442982,
+        "jepa_mse": 0.06635234255736577,
+        "mse_over_identity": 0.02711053369255141,
+        "pred_effective_rank": 14.865809816867113,
+        "pred_stable_rank": 6.134436114225537,
+        "pred_target_cosine": 0.9463706253445707
+      }
+    ],
+    "initialization": [
+      {
+        "dfm_ce": 6.829364776611328,
+        "horizon": 1,
+        "identity_mse": 0.9016191667178646,
+        "jepa_mse": 0.9016129303199705,
+        "mse_over_identity": 0.9999930831129991,
+        "pred_effective_rank": 10.331176773179322,
+        "pred_stable_rank": null,
+        "pred_target_cosine": 0.7894731030100957
+      },
+      {
+        "dfm_ce": 7.53125,
+        "horizon": 2,
+        "identity_mse": 0.4098959241528064,
+        "jepa_mse": 0.40989329732838087,
+        "mse_over_identity": 0.999993591484397,
+        "pred_effective_rank": 10.331152327824384,
+        "pred_stable_rank": null,
+        "pred_target_cosine": 0.8994182326132432
+      },
+      {
+        "dfm_ce": 7.53125,
+        "horizon": 3,
+        "identity_mse": 0.9469089085469022,
+        "jepa_mse": 0.946893185027875,
+        "mse_over_identity": 0.999983394897983,
+        "pred_effective_rank": 10.33115223608911,
+        "pred_stable_rank": null,
+        "pred_target_cosine": 0.7778835125500336
+      },
+      {
+        "dfm_ce": 7.53125,
+        "horizon": 4,
+        "identity_mse": 0.5573735130019486,
+        "jepa_mse": 0.5573691114550456,
+        "mse_over_identity": 0.9999921030569263,
+        "pred_effective_rank": 10.331174194812775,
+        "pred_stable_rank": null,
+        "pred_target_cosine": 0.8634594511240721
+      },
+      {
+        "dfm_ce": 7.53125,
+        "horizon": 5,
+        "identity_mse": 0.9975760185625404,
+        "jepa_mse": 0.9975531031377614,
+        "mse_over_identity": 0.9999770288936857,
+        "pred_effective_rank": 10.331220411229879,
+        "pred_stable_rank": null,
+        "pred_target_cosine": 0.765135737019591
+      },
+      {
+        "dfm_ce": 7.53125,
+        "horizon": 6,
+        "identity_mse": 0.665728052117629,
+        "jepa_mse": 0.6657232837751508,
+        "mse_over_identity": 0.9999928374019045,
+        "pred_effective_rank": 10.33128734305501,
+        "pred_stable_rank": null,
+        "pred_target_cosine": 0.8376482415478677
+      },
+      {
+        "dfm_ce": 7.53125,
+        "horizon": 7,
+        "identity_mse": 1.052724283596035,
+        "jepa_mse": 1.0526971656945534,
+        "mse_over_identity": 0.9999742402622375,
+        "pred_effective_rank": 10.331377772148699,
+        "pred_stable_rank": null,
+        "pred_target_cosine": 0.7520171862561256
+      },
+      {
+        "dfm_ce": 7.53125,
+        "horizon": 8,
+        "identity_mse": 0.7580032444966491,
+        "jepa_mse": 0.7579974533291534,
+        "mse_over_identity": 0.9999923599700425,
+        "pred_effective_rank": 10.331491622142494,
+        "pred_stable_rank": null,
+        "pred_target_cosine": 0.8164492617943324
+      }
+    ]
+  },
+  "initialization": {
+    "dfm_h1": "Learned output projection starts at zero and current-board BT4 policy logits are permanently added to H1.",
+    "dfm_h2_h8": "Learned output projection starts at zero with no future BT4 residual, so H2-H8 begin uniform.",
+    "jepa": "Conditioning modulation starts at zero and transition down-projection uses tiny scale, so recurrent predictions begin approximately as the current-state identity."
+  },
+  "model_identities": {
+    "candidate_1024": {
+      "checkpoint_sha256": "eb20c698fea1eabd4ebf71c13a1c195204736183f7b173079bd34f2a6e9a995f",
+      "examples": 1048576,
+      "sole_architecture_change": "zero-initialized broadcast residual from current JEPA state into every DFM state token",
+      "updates": 1024
+    },
+    "control_1024": {
+      "checkpoint_sha256": "05068c96b2bac8f10a3f3b853363bdb2ce49f935b026566705b3bdcd4d9060c9",
+      "examples": 1048576,
+      "updates": 1024
+    },
+    "hero_one_epoch": {
+      "checkpoint_sha256": "665ac91ad37e14a6c8810068700dba021e39e9c0fe145c8bf620882bb5a71692",
+      "examples": 28343296,
+      "updates": 27679
+    }
+  },
+  "pass_curves": {
+    "candidate_1024": [
+      {
+        "candidate_model_id": "candidate-torch-hero-eb20c698fea1",
+        "cap_draw_count": 0,
+        "contract_sha256": "e4579042a8810cd192b627e0f9d0151a1b916f4122dfff9222ed50f1457b330f",
+        "draws": 7,
+        "elo_lower": 324.5964296616827,
+        "elo_upper": 3999.999985609154,
+        "fault_counts": {},
+        "game_count": 256,
+        "gameplay_seconds": 63.8911536228843,
+        "logistic_elo": 743.2773352417618,
+        "losses": 0,
+        "mean_physical_call_ms": 31.021174344325274,
+        "pair_count": 128,
+        "passes": 1,
+        "payload_sha256": "c66b1f694f9e8e577370d30a5cee603ed45d183a23473f1e734de3b98c86c088",
+        "pentanomial": [
+          0,
+          0,
+          0,
+          7,
+          121
+        ],
+        "points": 252.5,
+        "reference_model_id": "raw-bt4-61e43e98d2c4",
+        "run_contract": {
+          "additional_ply_cap": 256,
+          "block_pairs": 16,
+          "collect_diagnostics": false,
+          "deterministic_greedy_policy": true,
+          "jepa_used_at_inference": true,
+          "opening_start_index": 0,
+          "pair_count": 128,
+          "policy_batch_size_cap": 16,
+          "policy_timeout_seconds": 30.0,
+          "refinement_passes": 1,
+          "seed": 0
+        },
+        "score": 0.986328125,
+        "score_lower": 0.86628777608501,
+        "score_upper": 1.0,
+        "termination_counts": {
+          "normal": 256
+        },
+        "tier_contract": {
+          "histories_path": "/mountpoint/.exp/chess-dfm-jax/research/assets/arena/promotion-ply12-n2048-histories-v3.json",
+          "history_file_sha256": "bac58cc7380d9a4173e7618a765917aa0990355e1f8e460196affbe28580ed37",
+          "history_manifest_sha256": "d8781efb5d76066bcf2ce2e9ab2897f3261b20f7c4488c90992a8eadcc918a4b",
+          "name": "hero_development",
+          "ordered_fens_sha256": "013778d027d919da9e6a25957e1439c8351081b9cbadf28e29df1c5c7b06b0f2",
+          "pool_file_sha256": "5632cc726112c2ab700e0f4d935fa83d58418b406fc100262f3aa19ce3befe2e",
+          "pool_path": "/mountpoint/.exp/chess-dfm-jax/research/assets/arena/promotion-ply12-n2048-v3.json",
+          "pool_sha256": "e750e87643c482d28b4201668bd355234fe1fb27f2a690bf784706b1ddd37459",
+          "promotion_eligible": false
+        },
+        "wins": 249
+      },
+      {
+        "candidate_model_id": "candidate-torch-hero-eb20c698fea1",
+        "cap_draw_count": 0,
+        "contract_sha256": "0caec69eba6e60f3bc29bbb19c52d7533533b7c1a91f1d3fa005fb2d03cf72a2",
+        "draws": 29,
+        "elo_lower": 267.35134683836935,
+        "elo_upper": 3999.999985609154,
+        "fault_counts": {},
+        "game_count": 256,
+        "gameplay_seconds": 68.7963161089574,
+        "logistic_elo": 488.6196531410224,
+        "losses": 0,
+        "mean_physical_call_ms": 33.47501994601891,
+        "pair_count": 128,
+        "passes": 2,
+        "payload_sha256": "570a83568c1ad784d7c77484736d26df6c537b5376ff339fcc9120f2a66deb96",
+        "pentanomial": [
+          0,
+          0,
+          4,
+          21,
+          103
+        ],
+        "points": 241.5,
+        "reference_model_id": "raw-bt4-61e43e98d2c4",
+        "run_contract": {
+          "additional_ply_cap": 256,
+          "block_pairs": 16,
+          "collect_diagnostics": false,
+          "deterministic_greedy_policy": true,
+          "jepa_used_at_inference": true,
+          "opening_start_index": 0,
+          "pair_count": 128,
+          "policy_batch_size_cap": 16,
+          "policy_timeout_seconds": 30.0,
+          "refinement_passes": 2,
+          "seed": 0
+        },
+        "score": 0.943359375,
+        "score_lower": 0.82331902608501,
+        "score_upper": 1.0,
+        "termination_counts": {
+          "normal": 256
+        },
+        "tier_contract": {
+          "histories_path": "/mountpoint/.exp/chess-dfm-jax/research/assets/arena/promotion-ply12-n2048-histories-v3.json",
+          "history_file_sha256": "bac58cc7380d9a4173e7618a765917aa0990355e1f8e460196affbe28580ed37",
+          "history_manifest_sha256": "d8781efb5d76066bcf2ce2e9ab2897f3261b20f7c4488c90992a8eadcc918a4b",
+          "name": "hero_development",
+          "ordered_fens_sha256": "013778d027d919da9e6a25957e1439c8351081b9cbadf28e29df1c5c7b06b0f2",
+          "pool_file_sha256": "5632cc726112c2ab700e0f4d935fa83d58418b406fc100262f3aa19ce3befe2e",
+          "pool_path": "/mountpoint/.exp/chess-dfm-jax/research/assets/arena/promotion-ply12-n2048-v3.json",
+          "pool_sha256": "e750e87643c482d28b4201668bd355234fe1fb27f2a690bf784706b1ddd37459",
+          "promotion_eligible": false
+        },
+        "wins": 227
+      },
+      {
+        "candidate_model_id": "candidate-torch-hero-eb20c698fea1",
+        "cap_draw_count": 0,
+        "contract_sha256": "f59d8e91978a4e64386ecd53a25148f9fce7a5a252674a326c39dadd44a1b5e4",
+        "draws": 21,
+        "elo_lower": 286.70245900503727,
+        "elo_upper": 3999.999985609154,
+        "fault_counts": {},
+        "game_count": 256,
+        "gameplay_seconds": 76.68574883107794,
+        "logistic_elo": 547.5448789556197,
+        "losses": 0,
+        "mean_physical_call_ms": 37.3540578647829,
+        "pair_count": 128,
+        "passes": 4,
+        "payload_sha256": "c3e589dd3a59f949c7fdaec3992b1b64ecf5993d0fc5aa84a955fbc5b2527992",
+        "pentanomial": [
+          0,
+          0,
+          2,
+          17,
+          109
+        ],
+        "points": 245.5,
+        "reference_model_id": "raw-bt4-61e43e98d2c4",
+        "run_contract": {
+          "additional_ply_cap": 256,
+          "block_pairs": 16,
+          "collect_diagnostics": false,
+          "deterministic_greedy_policy": true,
+          "jepa_used_at_inference": true,
+          "opening_start_index": 0,
+          "pair_count": 128,
+          "policy_batch_size_cap": 16,
+          "policy_timeout_seconds": 30.0,
+          "refinement_passes": 4,
+          "seed": 0
+        },
+        "score": 0.958984375,
+        "score_lower": 0.83894402608501,
+        "score_upper": 1.0,
+        "termination_counts": {
+          "normal": 256
+        },
+        "tier_contract": {
+          "histories_path": "/mountpoint/.exp/chess-dfm-jax/research/assets/arena/promotion-ply12-n2048-histories-v3.json",
+          "history_file_sha256": "bac58cc7380d9a4173e7618a765917aa0990355e1f8e460196affbe28580ed37",
+          "history_manifest_sha256": "d8781efb5d76066bcf2ce2e9ab2897f3261b20f7c4488c90992a8eadcc918a4b",
+          "name": "hero_development",
+          "ordered_fens_sha256": "013778d027d919da9e6a25957e1439c8351081b9cbadf28e29df1c5c7b06b0f2",
+          "pool_file_sha256": "5632cc726112c2ab700e0f4d935fa83d58418b406fc100262f3aa19ce3befe2e",
+          "pool_path": "/mountpoint/.exp/chess-dfm-jax/research/assets/arena/promotion-ply12-n2048-v3.json",
+          "pool_sha256": "e750e87643c482d28b4201668bd355234fe1fb27f2a690bf784706b1ddd37459",
+          "promotion_eligible": false
+        },
+        "wins": 235
+      },
+      {
+        "candidate_model_id": "candidate-torch-hero-eb20c698fea1",
+        "cap_draw_count": 0,
+        "contract_sha256": "922eac7ab6c6c6c7bdbbd118437263a8421be67790ee697457cdefc32be13b41",
+        "draws": 28,
+        "elo_lower": 269.6940238857714,
+        "elo_upper": 3999.999985609154,
+        "fault_counts": {},
+        "game_count": 256,
+        "gameplay_seconds": 87.05936499504605,
+        "logistic_elo": 495.07493212087724,
+        "losses": 0,
+        "mean_physical_call_ms": 47.27216999871229,
+        "pair_count": 128,
+        "passes": 8,
+        "payload_sha256": "e006d1a0bd3535eff13dbd3efc2b8d4d7fc0171b5257de2c28ea39d4288c120f",
+        "pentanomial": [
+          0,
+          0,
+          4,
+          20,
+          104
+        ],
+        "points": 242.0,
+        "reference_model_id": "raw-bt4-61e43e98d2c4",
+        "run_contract": {
+          "additional_ply_cap": 256,
+          "block_pairs": 16,
+          "collect_diagnostics": false,
+          "deterministic_greedy_policy": true,
+          "jepa_used_at_inference": true,
+          "opening_start_index": 0,
+          "pair_count": 128,
+          "policy_batch_size_cap": 16,
+          "policy_timeout_seconds": 30.0,
+          "refinement_passes": 8,
+          "seed": 0
+        },
+        "score": 0.9453125,
+        "score_lower": 0.82527215108501,
+        "score_upper": 1.0,
+        "termination_counts": {
+          "normal": 256
+        },
+        "tier_contract": {
+          "histories_path": "/mountpoint/.exp/chess-dfm-jax/research/assets/arena/promotion-ply12-n2048-histories-v3.json",
+          "history_file_sha256": "bac58cc7380d9a4173e7618a765917aa0990355e1f8e460196affbe28580ed37",
+          "history_manifest_sha256": "d8781efb5d76066bcf2ce2e9ab2897f3261b20f7c4488c90992a8eadcc918a4b",
+          "name": "hero_development",
+          "ordered_fens_sha256": "013778d027d919da9e6a25957e1439c8351081b9cbadf28e29df1c5c7b06b0f2",
+          "pool_file_sha256": "5632cc726112c2ab700e0f4d935fa83d58418b406fc100262f3aa19ce3befe2e",
+          "pool_path": "/mountpoint/.exp/chess-dfm-jax/research/assets/arena/promotion-ply12-n2048-v3.json",
+          "pool_sha256": "e750e87643c482d28b4201668bd355234fe1fb27f2a690bf784706b1ddd37459",
+          "promotion_eligible": false
+        },
+        "wins": 228
+      },
+      {
+        "candidate_model_id": "candidate-torch-hero-eb20c698fea1",
+        "cap_draw_count": 0,
+        "contract_sha256": "eefca581ad44b3dc7dddf9517515420c977975e03618c85d23a33c29fdd29da8",
+        "draws": 34,
+        "elo_lower": 255.93263978302704,
+        "elo_upper": 3999.999985609154,
+        "fault_counts": {},
+        "game_count": 256,
+        "gameplay_seconds": 103.19115226296708,
+        "logistic_elo": 459.17959182794556,
+        "losses": 0,
+        "mean_physical_call_ms": 67.1305594143119,
+        "pair_count": 128,
+        "passes": 16,
+        "payload_sha256": "74ba5aec03c69bd89b3dd3f27131038c5ef61ae7266c1e0867a2d8c7ce80621d",
+        "pentanomial": [
+          0,
+          0,
+          2,
+          30,
+          96
+        ],
+        "points": 239.0,
+        "reference_model_id": "raw-bt4-61e43e98d2c4",
+        "run_contract": {
+          "additional_ply_cap": 256,
+          "block_pairs": 16,
+          "collect_diagnostics": false,
+          "deterministic_greedy_policy": true,
+          "jepa_used_at_inference": true,
+          "opening_start_index": 0,
+          "pair_count": 128,
+          "policy_batch_size_cap": 16,
+          "policy_timeout_seconds": 30.0,
+          "refinement_passes": 16,
+          "seed": 0
+        },
+        "score": 0.93359375,
+        "score_lower": 0.81355340108501,
+        "score_upper": 1.0,
+        "termination_counts": {
+          "normal": 256
+        },
+        "tier_contract": {
+          "histories_path": "/mountpoint/.exp/chess-dfm-jax/research/assets/arena/promotion-ply12-n2048-histories-v3.json",
+          "history_file_sha256": "bac58cc7380d9a4173e7618a765917aa0990355e1f8e460196affbe28580ed37",
+          "history_manifest_sha256": "d8781efb5d76066bcf2ce2e9ab2897f3261b20f7c4488c90992a8eadcc918a4b",
+          "name": "hero_development",
+          "ordered_fens_sha256": "013778d027d919da9e6a25957e1439c8351081b9cbadf28e29df1c5c7b06b0f2",
+          "pool_file_sha256": "5632cc726112c2ab700e0f4d935fa83d58418b406fc100262f3aa19ce3befe2e",
+          "pool_path": "/mountpoint/.exp/chess-dfm-jax/research/assets/arena/promotion-ply12-n2048-v3.json",
+          "pool_sha256": "e750e87643c482d28b4201668bd355234fe1fb27f2a690bf784706b1ddd37459",
+          "promotion_eligible": false
+        },
+        "wins": 222
+      }
+    ],
+    "control_1024": [
+      {
+        "candidate_model_id": "candidate-torch-hero-05068c96b2ba",
+        "cap_draw_count": 0,
+        "contract_sha256": "270616f77613f20bd79819862e4e0a11c01f3356bcd7fab59d66fd1170030e21",
+        "draws": 20,
+        "elo_lower": 289.2259699478626,
+        "elo_upper": 3999.999985609154,
+        "fault_counts": {},
+        "game_count": 256,
+        "gameplay_seconds": 66.879386671877,
+        "logistic_elo": 556.3740428413516,
+        "losses": 0,
+        "mean_physical_call_ms": 28.955080340514638,
+        "pair_count": 128,
+        "passes": 1,
+        "payload_sha256": "a2309a6eb3f189c8be6899d531d1e9ed621612b04aea320423975e17c17636e3",
+        "pentanomial": [
+          0,
+          0,
+          0,
+          20,
+          108
+        ],
+        "points": 246.0,
+        "reference_model_id": "raw-bt4-61e43e98d2c4",
+        "run_contract": {
+          "additional_ply_cap": 256,
+          "block_pairs": 16,
+          "collect_diagnostics": false,
+          "deterministic_greedy_policy": true,
+          "jepa_used_at_inference": false,
+          "opening_start_index": 0,
+          "pair_count": 128,
+          "policy_batch_size_cap": 16,
+          "policy_timeout_seconds": 30.0,
+          "refinement_passes": 1,
+          "seed": 0
+        },
+        "score": 0.9609375,
+        "score_lower": 0.84089715108501,
+        "score_upper": 1.0,
+        "termination_counts": {
+          "normal": 256
+        },
+        "tier_contract": {
+          "histories_path": "/mountpoint/.exp/chess-dfm-jax/research/assets/arena/promotion-ply12-n2048-histories-v3.json",
+          "history_file_sha256": "bac58cc7380d9a4173e7618a765917aa0990355e1f8e460196affbe28580ed37",
+          "history_manifest_sha256": "d8781efb5d76066bcf2ce2e9ab2897f3261b20f7c4488c90992a8eadcc918a4b",
+          "name": "hero_development",
+          "ordered_fens_sha256": "013778d027d919da9e6a25957e1439c8351081b9cbadf28e29df1c5c7b06b0f2",
+          "pool_file_sha256": "5632cc726112c2ab700e0f4d935fa83d58418b406fc100262f3aa19ce3befe2e",
+          "pool_path": "/mountpoint/.exp/chess-dfm-jax/research/assets/arena/promotion-ply12-n2048-v3.json",
+          "pool_sha256": "e750e87643c482d28b4201668bd355234fe1fb27f2a690bf784706b1ddd37459",
+          "promotion_eligible": false
+        },
+        "wins": 236
+      },
+      {
+        "candidate_model_id": "candidate-torch-hero-05068c96b2ba",
+        "cap_draw_count": 0,
+        "contract_sha256": "2019bd609ce2b82c8990fdedb107cb0d4480ba5ec65e6a51b9e871abbdabe7eb",
+        "draws": 32,
+        "elo_lower": 260.4429796949722,
+        "elo_upper": 3999.999985609154,
+        "fault_counts": {},
+        "game_count": 256,
+        "gameplay_seconds": 74.62827548704809,
+        "logistic_elo": 470.43650362227254,
+        "losses": 0,
+        "mean_physical_call_ms": 31.0594632554317,
+        "pair_count": 128,
+        "passes": 2,
+        "payload_sha256": "bb2cd58eb994f20da51a61977fdade84c7a71fedc368e53712367b1446317180",
+        "pentanomial": [
+          0,
+          0,
+          4,
+          24,
+          100
+        ],
+        "points": 240.0,
+        "reference_model_id": "raw-bt4-61e43e98d2c4",
+        "run_contract": {
+          "additional_ply_cap": 256,
+          "block_pairs": 16,
+          "collect_diagnostics": false,
+          "deterministic_greedy_policy": true,
+          "jepa_used_at_inference": false,
+          "opening_start_index": 0,
+          "pair_count": 128,
+          "policy_batch_size_cap": 16,
+          "policy_timeout_seconds": 30.0,
+          "refinement_passes": 2,
+          "seed": 0
+        },
+        "score": 0.9375,
+        "score_lower": 0.81745965108501,
+        "score_upper": 1.0,
+        "termination_counts": {
+          "normal": 256
+        },
+        "tier_contract": {
+          "histories_path": "/mountpoint/.exp/chess-dfm-jax/research/assets/arena/promotion-ply12-n2048-histories-v3.json",
+          "history_file_sha256": "bac58cc7380d9a4173e7618a765917aa0990355e1f8e460196affbe28580ed37",
+          "history_manifest_sha256": "d8781efb5d76066bcf2ce2e9ab2897f3261b20f7c4488c90992a8eadcc918a4b",
+          "name": "hero_development",
+          "ordered_fens_sha256": "013778d027d919da9e6a25957e1439c8351081b9cbadf28e29df1c5c7b06b0f2",
+          "pool_file_sha256": "5632cc726112c2ab700e0f4d935fa83d58418b406fc100262f3aa19ce3befe2e",
+          "pool_path": "/mountpoint/.exp/chess-dfm-jax/research/assets/arena/promotion-ply12-n2048-v3.json",
+          "pool_sha256": "e750e87643c482d28b4201668bd355234fe1fb27f2a690bf784706b1ddd37459",
+          "promotion_eligible": false
+        },
+        "wins": 224
+      },
+      {
+        "candidate_model_id": "candidate-torch-hero-05068c96b2ba",
+        "cap_draw_count": 0,
+        "contract_sha256": "023e873f2d999387394b934b9b91f69d6343b9a87c7c8c345cb7045e74f71085",
+        "draws": 38,
+        "elo_lower": 247.1256159990213,
+        "elo_upper": 3999.999985609154,
+        "fault_counts": {},
+        "game_count": 256,
+        "gameplay_seconds": 79.79946038610069,
+        "logistic_elo": 438.39789802290994,
+        "losses": 0,
+        "mean_physical_call_ms": 36.41475587259125,
+        "pair_count": 128,
+        "passes": 4,
+        "payload_sha256": "16151469af4c2990f5b4e10a99b275619b7914d46487f2f18478fe95088c5e70",
+        "pentanomial": [
+          0,
+          0,
+          3,
+          32,
+          93
+        ],
+        "points": 237.0,
+        "reference_model_id": "raw-bt4-61e43e98d2c4",
+        "run_contract": {
+          "additional_ply_cap": 256,
+          "block_pairs": 16,
+          "collect_diagnostics": false,
+          "deterministic_greedy_policy": true,
+          "jepa_used_at_inference": false,
+          "opening_start_index": 0,
+          "pair_count": 128,
+          "policy_batch_size_cap": 16,
+          "policy_timeout_seconds": 30.0,
+          "refinement_passes": 4,
+          "seed": 0
+        },
+        "score": 0.92578125,
+        "score_lower": 0.80574090108501,
+        "score_upper": 1.0,
+        "termination_counts": {
+          "normal": 256
+        },
+        "tier_contract": {
+          "histories_path": "/mountpoint/.exp/chess-dfm-jax/research/assets/arena/promotion-ply12-n2048-histories-v3.json",
+          "history_file_sha256": "bac58cc7380d9a4173e7618a765917aa0990355e1f8e460196affbe28580ed37",
+          "history_manifest_sha256": "d8781efb5d76066bcf2ce2e9ab2897f3261b20f7c4488c90992a8eadcc918a4b",
+          "name": "hero_development",
+          "ordered_fens_sha256": "013778d027d919da9e6a25957e1439c8351081b9cbadf28e29df1c5c7b06b0f2",
+          "pool_file_sha256": "5632cc726112c2ab700e0f4d935fa83d58418b406fc100262f3aa19ce3befe2e",
+          "pool_path": "/mountpoint/.exp/chess-dfm-jax/research/assets/arena/promotion-ply12-n2048-v3.json",
+          "pool_sha256": "e750e87643c482d28b4201668bd355234fe1fb27f2a690bf784706b1ddd37459",
+          "promotion_eligible": false
+        },
+        "wins": 218
+      },
+      {
+        "candidate_model_id": "candidate-torch-hero-05068c96b2ba",
+        "cap_draw_count": 0,
+        "contract_sha256": "7ab56a8169526555e372e2d032c993c7e492a025937e575425530200e6011456",
+        "draws": 45,
+        "elo_lower": 228.24545735610508,
+        "elo_upper": 3999.999985609154,
+        "fault_counts": {},
+        "game_count": 256,
+        "gameplay_seconds": 91.97287655394757,
+        "logistic_elo": 398.14203798169456,
+        "losses": 1,
+        "mean_physical_call_ms": 44.585867599515176,
+        "pair_count": 128,
+        "passes": 8,
+        "payload_sha256": "daa1f8234e65e3601b03c5f678e4a4326df36050a590e6a857047ed28c38cafc",
+        "pentanomial": [
+          0,
+          0,
+          2,
+          43,
+          83
+        ],
+        "points": 232.5,
+        "reference_model_id": "raw-bt4-61e43e98d2c4",
+        "run_contract": {
+          "additional_ply_cap": 256,
+          "block_pairs": 16,
+          "collect_diagnostics": false,
+          "deterministic_greedy_policy": true,
+          "jepa_used_at_inference": false,
+          "opening_start_index": 0,
+          "pair_count": 128,
+          "policy_batch_size_cap": 16,
+          "policy_timeout_seconds": 30.0,
+          "refinement_passes": 8,
+          "seed": 0
+        },
+        "score": 0.908203125,
+        "score_lower": 0.78816277608501,
+        "score_upper": 1.0,
+        "termination_counts": {
+          "normal": 256
+        },
+        "tier_contract": {
+          "histories_path": "/mountpoint/.exp/chess-dfm-jax/research/assets/arena/promotion-ply12-n2048-histories-v3.json",
+          "history_file_sha256": "bac58cc7380d9a4173e7618a765917aa0990355e1f8e460196affbe28580ed37",
+          "history_manifest_sha256": "d8781efb5d76066bcf2ce2e9ab2897f3261b20f7c4488c90992a8eadcc918a4b",
+          "name": "hero_development",
+          "ordered_fens_sha256": "013778d027d919da9e6a25957e1439c8351081b9cbadf28e29df1c5c7b06b0f2",
+          "pool_file_sha256": "5632cc726112c2ab700e0f4d935fa83d58418b406fc100262f3aa19ce3befe2e",
+          "pool_path": "/mountpoint/.exp/chess-dfm-jax/research/assets/arena/promotion-ply12-n2048-v3.json",
+          "pool_sha256": "e750e87643c482d28b4201668bd355234fe1fb27f2a690bf784706b1ddd37459",
+          "promotion_eligible": false
+        },
+        "wins": 210
+      },
+      {
+        "candidate_model_id": "candidate-torch-hero-05068c96b2ba",
+        "cap_draw_count": 0,
+        "contract_sha256": "7a3c13f134dd4074d6d3082579173149908667f4065a8cbb553b7aa531f02901",
+        "draws": 46,
+        "elo_lower": 230.28450597326736,
+        "elo_upper": 3999.999985609154,
+        "fault_counts": {},
+        "game_count": 256,
+        "gameplay_seconds": 110.51717106095748,
+        "logistic_elo": 402.2512340033704,
+        "losses": 0,
+        "mean_physical_call_ms": 65.19798833450342,
+        "pair_count": 128,
+        "passes": 16,
+        "payload_sha256": "9faed2c65e0e4dfb442776769b97ce6b0b970788d54ba50da9b7d6d811386345",
+        "pentanomial": [
+          0,
+          0,
+          5,
+          36,
+          87
+        ],
+        "points": 233.0,
+        "reference_model_id": "raw-bt4-61e43e98d2c4",
+        "run_contract": {
+          "additional_ply_cap": 256,
+          "block_pairs": 16,
+          "collect_diagnostics": false,
+          "deterministic_greedy_policy": true,
+          "jepa_used_at_inference": false,
+          "opening_start_index": 0,
+          "pair_count": 128,
+          "policy_batch_size_cap": 16,
+          "policy_timeout_seconds": 30.0,
+          "refinement_passes": 16,
+          "seed": 0
+        },
+        "score": 0.91015625,
+        "score_lower": 0.79011590108501,
+        "score_upper": 1.0,
+        "termination_counts": {
+          "normal": 256
+        },
+        "tier_contract": {
+          "histories_path": "/mountpoint/.exp/chess-dfm-jax/research/assets/arena/promotion-ply12-n2048-histories-v3.json",
+          "history_file_sha256": "bac58cc7380d9a4173e7618a765917aa0990355e1f8e460196affbe28580ed37",
+          "history_manifest_sha256": "d8781efb5d76066bcf2ce2e9ab2897f3261b20f7c4488c90992a8eadcc918a4b",
+          "name": "hero_development",
+          "ordered_fens_sha256": "013778d027d919da9e6a25957e1439c8351081b9cbadf28e29df1c5c7b06b0f2",
+          "pool_file_sha256": "5632cc726112c2ab700e0f4d935fa83d58418b406fc100262f3aa19ce3befe2e",
+          "pool_path": "/mountpoint/.exp/chess-dfm-jax/research/assets/arena/promotion-ply12-n2048-v3.json",
+          "pool_sha256": "e750e87643c482d28b4201668bd355234fe1fb27f2a690bf784706b1ddd37459",
+          "promotion_eligible": false
+        },
+        "wins": 210
+      }
+    ],
+    "hero_one_epoch": [
+      {
+        "candidate_model_id": "candidate-torch-hero-665ac91ad37e",
+        "cap_draw_count": 0,
+        "contract_sha256": "55a3b53b8f0598fe4fcd7982c80bcec2555b135b866fad32d41f1d101f9a4408",
+        "draws": 172,
+        "elo_lower": 30.669135151913945,
+        "elo_upper": 224.0504480998835,
+        "fault_counts": {},
+        "game_count": 256,
+        "gameplay_seconds": 62.25196090299869,
+        "logistic_elo": 118.38018805388248,
+        "losses": 0,
+        "mean_physical_call_ms": 29.10714685323558,
+        "pair_count": 128,
+        "passes": 1,
+        "payload_sha256": "16a488ad46936a6b15a9c8a9eab6732ae500b914b805d1f283e89db420038e28",
+        "pentanomial": [
+          0,
+          0,
+          60,
+          52,
+          16
+        ],
+        "points": 170.0,
+        "reference_model_id": "raw-bt4-61e43e98d2c4",
+        "run_contract": {
+          "additional_ply_cap": 256,
+          "block_pairs": 16,
+          "collect_diagnostics": false,
+          "deterministic_greedy_policy": true,
+          "jepa_used_at_inference": false,
+          "opening_start_index": 0,
+          "pair_count": 128,
+          "policy_batch_size_cap": 16,
+          "policy_timeout_seconds": 30.0,
+          "refinement_passes": 1,
+          "seed": 0
+        },
+        "score": 0.6640625,
+        "score_lower": 0.54402215108501,
+        "score_upper": 0.78410284891499,
+        "termination_counts": {
+          "normal": 256
+        },
+        "tier_contract": {
+          "histories_path": "/mountpoint/.exp/chess-dfm-jax/research/assets/arena/promotion-ply12-n2048-histories-v3.json",
+          "history_file_sha256": "bac58cc7380d9a4173e7618a765917aa0990355e1f8e460196affbe28580ed37",
+          "history_manifest_sha256": "d8781efb5d76066bcf2ce2e9ab2897f3261b20f7c4488c90992a8eadcc918a4b",
+          "name": "hero_development",
+          "ordered_fens_sha256": "013778d027d919da9e6a25957e1439c8351081b9cbadf28e29df1c5c7b06b0f2",
+          "pool_file_sha256": "5632cc726112c2ab700e0f4d935fa83d58418b406fc100262f3aa19ce3befe2e",
+          "pool_path": "/mountpoint/.exp/chess-dfm-jax/research/assets/arena/promotion-ply12-n2048-v3.json",
+          "pool_sha256": "e750e87643c482d28b4201668bd355234fe1fb27f2a690bf784706b1ddd37459",
+          "promotion_eligible": false
+        },
+        "wins": 84
+      },
+      {
+        "candidate_model_id": "candidate-torch-hero-665ac91ad37e",
+        "cap_draw_count": 0,
+        "contract_sha256": "a54279e3fc0ca449c9754dd6249054546a9122a873b543f5181045959cfb5375",
+        "draws": 150,
+        "elo_lower": 61.068699885375366,
+        "elo_upper": 271.8707126955616,
+        "fault_counts": {},
+        "game_count": 256,
+        "gameplay_seconds": 66.94469875696814,
+        "logistic_elo": 153.0469245909938,
+        "losses": 0,
+        "mean_physical_call_ms": 32.245850339448744,
+        "pair_count": 128,
+        "passes": 2,
+        "payload_sha256": "dc96734309905de67fb2920a61c4752ffee473c834930f37038d029049759105",
+        "pentanomial": [
+          0,
+          0,
+          45,
+          60,
+          23
+        ],
+        "points": 181.0,
+        "reference_model_id": "raw-bt4-61e43e98d2c4",
+        "run_contract": {
+          "additional_ply_cap": 256,
+          "block_pairs": 16,
+          "collect_diagnostics": false,
+          "deterministic_greedy_policy": true,
+          "jepa_used_at_inference": false,
+          "opening_start_index": 0,
+          "pair_count": 128,
+          "policy_batch_size_cap": 16,
+          "policy_timeout_seconds": 30.0,
+          "refinement_passes": 2,
+          "seed": 0
+        },
+        "score": 0.70703125,
+        "score_lower": 0.58699090108501,
+        "score_upper": 0.82707159891499,
+        "termination_counts": {
+          "normal": 256
+        },
+        "tier_contract": {
+          "histories_path": "/mountpoint/.exp/chess-dfm-jax/research/assets/arena/promotion-ply12-n2048-histories-v3.json",
+          "history_file_sha256": "bac58cc7380d9a4173e7618a765917aa0990355e1f8e460196affbe28580ed37",
+          "history_manifest_sha256": "d8781efb5d76066bcf2ce2e9ab2897f3261b20f7c4488c90992a8eadcc918a4b",
+          "name": "hero_development",
+          "ordered_fens_sha256": "013778d027d919da9e6a25957e1439c8351081b9cbadf28e29df1c5c7b06b0f2",
+          "pool_file_sha256": "5632cc726112c2ab700e0f4d935fa83d58418b406fc100262f3aa19ce3befe2e",
+          "pool_path": "/mountpoint/.exp/chess-dfm-jax/research/assets/arena/promotion-ply12-n2048-v3.json",
+          "pool_sha256": "e750e87643c482d28b4201668bd355234fe1fb27f2a690bf784706b1ddd37459",
+          "promotion_eligible": false
+        },
+        "wins": 106
+      },
+      {
+        "candidate_model_id": "candidate-torch-hero-665ac91ad37e",
+        "cap_draw_count": 0,
+        "contract_sha256": "1b9db6e35dc45e9b1c10288fd6b8fdd47e4cd12a938e36135dbda8431d1a5935",
+        "draws": 90,
+        "elo_lower": 150.661127976661,
+        "elo_upper": 491.56687733320393,
+        "fault_counts": {},
+        "game_count": 256,
+        "gameplay_seconds": 74.9983314780402,
+        "logistic_elo": 268.4279766089396,
+        "losses": 0,
+        "mean_physical_call_ms": 36.50962208558142,
+        "pair_count": 128,
+        "passes": 4,
+        "payload_sha256": "1ee3adae3737c9f3690ffbff11567f63dd7b8036493bc43f096ec9356a863df8",
+        "pentanomial": [
+          0,
+          0,
+          15,
+          60,
+          53
+        ],
+        "points": 211.0,
+        "reference_model_id": "raw-bt4-61e43e98d2c4",
+        "run_contract": {
+          "additional_ply_cap": 256,
+          "block_pairs": 16,
+          "collect_diagnostics": false,
+          "deterministic_greedy_policy": true,
+          "jepa_used_at_inference": false,
+          "opening_start_index": 0,
+          "pair_count": 128,
+          "policy_batch_size_cap": 16,
+          "policy_timeout_seconds": 30.0,
+          "refinement_passes": 4,
+          "seed": 0
+        },
+        "score": 0.82421875,
+        "score_lower": 0.70417840108501,
+        "score_upper": 0.94425909891499,
+        "termination_counts": {
+          "normal": 256
+        },
+        "tier_contract": {
+          "histories_path": "/mountpoint/.exp/chess-dfm-jax/research/assets/arena/promotion-ply12-n2048-histories-v3.json",
+          "history_file_sha256": "bac58cc7380d9a4173e7618a765917aa0990355e1f8e460196affbe28580ed37",
+          "history_manifest_sha256": "d8781efb5d76066bcf2ce2e9ab2897f3261b20f7c4488c90992a8eadcc918a4b",
+          "name": "hero_development",
+          "ordered_fens_sha256": "013778d027d919da9e6a25957e1439c8351081b9cbadf28e29df1c5c7b06b0f2",
+          "pool_file_sha256": "5632cc726112c2ab700e0f4d935fa83d58418b406fc100262f3aa19ce3befe2e",
+          "pool_path": "/mountpoint/.exp/chess-dfm-jax/research/assets/arena/promotion-ply12-n2048-v3.json",
+          "pool_sha256": "e750e87643c482d28b4201668bd355234fe1fb27f2a690bf784706b1ddd37459",
+          "promotion_eligible": false
+        },
+        "wins": 166
+      },
+      {
+        "full_run_mean_physical_call_ms": 45.48094757299015,
+        "full_run_pair_count": 1024,
+        "pair_count": 128,
+        "passes": 8,
+        "points": 231.5,
+        "score": 0.904296875
+      },
+      {
+        "candidate_model_id": "candidate-torch-hero-665ac91ad37e",
+        "cap_draw_count": 0,
+        "contract_sha256": "536eec907eece505ee2eb1da1eba102d40497e4c481b359c26e0785a3607d181",
+        "draws": 33,
+        "elo_lower": 258.17857294172995,
+        "elo_upper": 3999.999985609154,
+        "fault_counts": {},
+        "game_count": 256,
+        "gameplay_seconds": 96.08892906497931,
+        "logistic_elo": 464.7286294146703,
+        "losses": 0,
+        "mean_physical_call_ms": 65.29697090039629,
+        "pair_count": 128,
+        "passes": 16,
+        "payload_sha256": "077edcae9bf980056d6beba52e74d8bfb74ea75dee1f7df09bfbc7cd16f94ee1",
+        "pentanomial": [
+          0,
+          0,
+          3,
+          27,
+          98
+        ],
+        "points": 239.5,
+        "reference_model_id": "raw-bt4-61e43e98d2c4",
+        "run_contract": {
+          "additional_ply_cap": 256,
+          "block_pairs": 16,
+          "collect_diagnostics": false,
+          "deterministic_greedy_policy": true,
+          "jepa_used_at_inference": false,
+          "opening_start_index": 0,
+          "pair_count": 128,
+          "policy_batch_size_cap": 16,
+          "policy_timeout_seconds": 30.0,
+          "refinement_passes": 16,
+          "seed": 0
+        },
+        "score": 0.935546875,
+        "score_lower": 0.81550652608501,
+        "score_upper": 1.0,
+        "termination_counts": {
+          "normal": 256
+        },
+        "tier_contract": {
+          "histories_path": "/mountpoint/.exp/chess-dfm-jax/research/assets/arena/promotion-ply12-n2048-histories-v3.json",
+          "history_file_sha256": "bac58cc7380d9a4173e7618a765917aa0990355e1f8e460196affbe28580ed37",
+          "history_manifest_sha256": "d8781efb5d76066bcf2ce2e9ab2897f3261b20f7c4488c90992a8eadcc918a4b",
+          "name": "hero_development",
+          "ordered_fens_sha256": "013778d027d919da9e6a25957e1439c8351081b9cbadf28e29df1c5c7b06b0f2",
+          "pool_file_sha256": "5632cc726112c2ab700e0f4d935fa83d58418b406fc100262f3aa19ce3befe2e",
+          "pool_path": "/mountpoint/.exp/chess-dfm-jax/research/assets/arena/promotion-ply12-n2048-v3.json",
+          "pool_sha256": "e750e87643c482d28b4201668bd355234fe1fb27f2a690bf784706b1ddd37459",
+          "promotion_eligible": false
+        },
+        "wins": 223
+      }
+    ]
+  },
+  "question": "Which model the 0.509765625 candidate faced, how inference-pass scaling changes with training, and which target-safe initialization bootstrap should be tested next.",
+  "schema_version": "posthero-pass-bootstrap-audit-v1",
+  "sources": {
+    "arenas": {
+      "candidate_1024": {
+        "pass_1": {
+          "path": "artifacts/arena/autoresearch-jepa-condition-u1024-replay-vs-raw-bt4-128pairs-p1-v1/state.json",
+          "sha256": "9e900bcaa42ed379be26eda827fef73ce4fe699c10741e4787b69546713f809f",
+          "size_bytes": 18115
+        },
+        "pass_16": {
+          "path": "artifacts/arena/autoresearch-jepa-condition-u1024-replay-vs-raw-bt4-128pairs-p16-v1/state.json",
+          "sha256": "f7ee20af0290979253512c4dcdbe3de6f780daf3a0baf7e1554e9a5de484cdd3",
+          "size_bytes": 18122
+        },
+        "pass_2": {
+          "path": "artifacts/arena/autoresearch-jepa-condition-u1024-replay-vs-raw-bt4-128pairs-p2-v1/state.json",
+          "sha256": "56926b5a7a602a0dc3e87c81a6bc95440779a1001281c95acaa3401d6b94bda3",
+          "size_bytes": 18118
+        },
+        "pass_4": {
+          "path": "artifacts/arena/autoresearch-jepa-condition-u1024-replay-vs-raw-bt4-128pairs-p4-v1/state.json",
+          "sha256": "870290610b07fbb9a0d5af760167de97c8a4230f2996c0f04c6e50456d9be966",
+          "size_bytes": 18120
+        },
+        "pass_8": {
+          "path": "artifacts/arena/autoresearch-jepa-condition-u1024-replay-vs-raw-bt4-128pairs-p8-v1/state.json",
+          "sha256": "a7a17704d4ecc50de1f0b344958f6c7c3a1bd81cd02c6c8ae804aa1fb7febd1c",
+          "size_bytes": 18116
+        }
+      },
+      "control_1024": {
+        "pass_1": {
+          "path": "artifacts/arena/autoresearch-sigreg64-u1024-vs-raw-bt4-128pairs-p1-v1/state.json",
+          "sha256": "4227530cc25923e3c9ff0947690efd2f541aaf17f963fa581a7e8f31a6d1957c",
+          "size_bytes": 17849
+        },
+        "pass_16": {
+          "path": "artifacts/arena/autoresearch-sigreg64-u1024-vs-raw-bt4-128pairs-p16-v1/state.json",
+          "sha256": "e2e23267b49f3eaf1ccb4576de97c3a4b3a2086fc6cdebd583575a9fe9f61a93",
+          "size_bytes": 17866
+        },
+        "pass_2": {
+          "path": "artifacts/arena/autoresearch-sigreg64-u1024-vs-raw-bt4-128pairs-p2-v1/state.json",
+          "sha256": "b81ddf4d6a1619116cd980c731d7c31159ba97a993de3abe391a785d98081315",
+          "size_bytes": 17847
+        },
+        "pass_4": {
+          "path": "artifacts/arena/autoresearch-sigreg64-u1024-vs-raw-bt4-128pairs-p4-v1/state.json",
+          "sha256": "f08f2ec877aad3be5ef2da60c47d2d8653482a78bddaacd395604dec49fd41db",
+          "size_bytes": 17857
+        },
+        "pass_8": {
+          "path": "artifacts/arena/autoresearch-sigreg64-u1024-vs-raw-bt4-128pairs-v1/state.json",
+          "sha256": "3b7f241fb8b185745bba4d48527569e064db524208d69ccf113c36dfca247b9b",
+          "size_bytes": 17831
+        }
+      },
+      "hero_one_epoch": {
+        "pass_1": {
+          "path": "artifacts/arena/hero-epoch-v1-terminal-vs-raw-bt4-128pairs-p1-v1/state.json",
+          "sha256": "0e48283a177f85eb2aab794a1e9b26ae7754ad79ff346fa36b2e22732cab9c4c",
+          "size_bytes": 17742
+        },
+        "pass_16": {
+          "path": "artifacts/arena/hero-epoch-v1-terminal-vs-raw-bt4-128pairs-p16-v1/state.json",
+          "sha256": "cd9e2f7417e28c7c7d3e3dfffade9e7200416816410af4151b72cf822fef04a8",
+          "size_bytes": 17739
+        },
+        "pass_2": {
+          "path": "artifacts/arena/hero-epoch-v1-terminal-vs-raw-bt4-128pairs-p2-v1/state.json",
+          "sha256": "42a198f0a8efa3269caf5a1c7eadf719cbbe009502a8197913ef05978ae655f7",
+          "size_bytes": 17744
+        },
+        "pass_4": {
+          "path": "artifacts/arena/hero-epoch-v1-terminal-vs-raw-bt4-128pairs-p4-v1/state.json",
+          "sha256": "b888bf0675a4825721c40a0b64b62ebb6e591cde37525563614f57f6b4845de4",
+          "size_bytes": 17740
+        },
+        "pass_8": {
+          "path": "artifacts/arena/hero-epoch-v1-terminal-vs-raw-bt4-1024pairs/state.json",
+          "sha256": "50efd6aa037f30a47c66c54b3efd3e5ca7faae5fc4b95761e2283dfe90ed271b",
+          "size_bytes": 49000
+        }
+      }
+    },
+    "audit_plan": {
+      "path": "research/experiment_posthero_pass_and_bootstrap_audit.md",
+      "sha256": "8121599eee2357158506d0a4f073afe5d82ca2340df2d71130d1542af89d8b79",
+      "size_bytes": 9453
+    },
+    "evaluations": {
+      "candidate_1024": {
+        "path": "research/runs/torch_autoresearch_jepa_condition_u1024_v1_fast_eval_v1/report.json",
+        "sha256": "642d407995af5b7efc5694f283bee5ee1b6d8c5c47af9cf910c7fbe7b7a2235a",
+        "size_bytes": 147489
+      },
+      "control_1024": {
+        "path": "research/runs/torch_autoresearch_sigreg64_u1024_v1_fast_eval_v1/report.json",
+        "sha256": "b7fe2e893a083fdb68bf22f8f75696a0e4b6b64f2676c746002707dc35d6bc13",
+        "size_bytes": 146592
+      },
+      "hero_one_epoch": {
+        "path": "research/runs/torch_hero_epoch_v1_terminal_blind_eval_v1/report.json",
+        "sha256": "f7595977c077df00ae7f1d01471128dba3b65afdf59bb45d83158d60f838154c",
+        "size_bytes": 146716
+      },
+      "initialization": {
+        "path": "research/runs/torch_hero_init_primary_eval_v1/report.json",
+        "sha256": "9155673862b578fc1bcf3f9cfe20f496eea7e5ac6da170952a05affce6463dde",
+        "size_bytes": 136837
+      }
+    }
+  },
+  "within_series_vs_one_pass": {
+    "candidate_1024": {
+      "pass_16": {
+        "candidate_better_pairs": 4,
+        "candidate_minus_control_score": -0.052734375,
+        "candidate_worse_pairs": 29,
+        "delta_counts": {
+          "-0.25": 27,
+          "-0.5": 2,
+          "0.0": 95,
+          "0.25": 4
+        },
+        "equal_pairs": 95,
+        "method_note": "Descriptive paired t interval over the same frozen opening-pair scores. The preregistered non-worse Arena gate, not this post-hoc p-value, determines the screening decision.",
+        "pair_count": 128,
+        "paired_standard_deviation": 0.12802383417216395,
+        "paired_standard_error": 0.011315815162079896,
+        "paired_t_95_lower": -0.07512633109381044,
+        "paired_t_95_upper": -0.03034241890618956,
+        "paired_t_statistic": -4.660236513646551,
+        "paired_t_two_sided_p_value": 7.862868352590828e-06
+      },
+      "pass_2": {
+        "candidate_better_pairs": 5,
+        "candidate_minus_control_score": -0.04296875,
+        "candidate_worse_pairs": 25,
+        "delta_counts": {
+          "-0.25": 23,
+          "-0.5": 2,
+          "0.0": 98,
+          "0.25": 5
+        },
+        "equal_pairs": 98,
+        "method_note": "Descriptive paired t interval over the same frozen opening-pair scores. The preregistered non-worse Arena gate, not this post-hoc p-value, determines the screening decision.",
+        "pair_count": 128,
+        "paired_standard_deviation": 0.12591935536333607,
+        "paired_standard_error": 0.011129803757506699,
+        "paired_t_95_lower": -0.06499262309276348,
+        "paired_t_95_upper": -0.02094487690723652,
+        "paired_t_statistic": -3.8606925096068245,
+        "paired_t_two_sided_p_value": 0.00017911785864289665
+      },
+      "pass_4": {
+        "candidate_better_pairs": 6,
+        "candidate_minus_control_score": -0.02734375,
+        "candidate_worse_pairs": 19,
+        "delta_counts": {
+          "-0.25": 18,
+          "-0.5": 1,
+          "0.0": 103,
+          "0.25": 6
+        },
+        "equal_pairs": 103,
+        "method_note": "Descriptive paired t interval over the same frozen opening-pair scores. The preregistered non-worse Arena gate, not this post-hoc p-value, determines the screening decision.",
+        "pair_count": 128,
+        "paired_standard_deviation": 0.11413132631170678,
+        "paired_standard_error": 0.010087879347602812,
+        "paired_t_95_lower": -0.04730584271676193,
+        "paired_t_95_upper": -0.007381657283238075,
+        "paired_t_statistic": -2.7105548210682864,
+        "paired_t_two_sided_p_value": 0.007646242750862046
+      },
+      "pass_8": {
+        "candidate_better_pairs": 5,
+        "candidate_minus_control_score": -0.041015625,
+        "candidate_worse_pairs": 23,
+        "delta_counts": {
+          "-0.25": 20,
+          "-0.5": 3,
+          "0.0": 100,
+          "0.25": 5
+        },
+        "equal_pairs": 100,
+        "method_note": "Descriptive paired t interval over the same frozen opening-pair scores. The preregistered non-worse Arena gate, not this post-hoc p-value, determines the screening decision.",
+        "pair_count": 128,
+        "paired_standard_deviation": 0.12850343813378973,
+        "paired_standard_error": 0.011358206563773586,
+        "paired_t_95_lower": -0.06349146602758535,
+        "paired_t_95_upper": -0.018539783972414653,
+        "paired_t_statistic": -3.611100464647053,
+        "paired_t_two_sided_p_value": 0.00043751043894261327
+      }
+    },
+    "control_1024": {
+      "pass_16": {
+        "candidate_better_pairs": 12,
+        "candidate_minus_control_score": -0.05078125,
+        "candidate_worse_pairs": 33,
+        "delta_counts": {
+          "-0.25": 28,
+          "-0.5": 5,
+          "0.0": 83,
+          "0.25": 12
+        },
+        "equal_pairs": 83,
+        "method_note": "Descriptive paired t interval over the same frozen opening-pair scores. The preregistered non-worse Arena gate, not this post-hoc p-value, determines the screening decision.",
+        "pair_count": 128,
+        "paired_standard_deviation": 0.1640991124314431,
+        "paired_standard_error": 0.014504449398370886,
+        "paired_t_95_lower": -0.07948293780960536,
+        "paired_t_95_upper": -0.022079562190394635,
+        "paired_t_statistic": -3.501080848039889,
+        "paired_t_two_sided_p_value": 0.0006399859771579385
+      },
+      "pass_2": {
+        "candidate_better_pairs": 15,
+        "candidate_minus_control_score": -0.0234375,
+        "candidate_worse_pairs": 23,
+        "delta_counts": {
+          "-0.25": 19,
+          "-0.5": 4,
+          "0.0": 90,
+          "0.25": 15
+        },
+        "equal_pairs": 90,
+        "method_note": "Descriptive paired t interval over the same frozen opening-pair scores. The preregistered non-worse Arena gate, not this post-hoc p-value, determines the screening decision.",
+        "pair_count": 128,
+        "paired_standard_deviation": 0.1550891920164489,
+        "paired_standard_error": 0.013708077420446699,
+        "paired_t_95_lower": -0.050563311382799035,
+        "paired_t_95_upper": 0.003688311382799035,
+        "paired_t_statistic": -1.709758362251521,
+        "paired_t_two_sided_p_value": 0.08975272128716982
+      },
+      "pass_4": {
+        "candidate_better_pairs": 13,
+        "candidate_minus_control_score": -0.03515625,
+        "candidate_worse_pairs": 28,
+        "delta_counts": {
+          "-0.25": 25,
+          "-0.5": 3,
+          "0.0": 87,
+          "0.25": 13
+        },
+        "equal_pairs": 87,
+        "method_note": "Descriptive paired t interval over the same frozen opening-pair scores. The preregistered non-worse Arena gate, not this post-hoc p-value, determines the screening decision.",
+        "pair_count": 128,
+        "paired_standard_deviation": 0.15284176561058377,
+        "paired_standard_error": 0.01350943111397108,
+        "paired_t_95_lower": -0.06188897619104851,
+        "paired_t_95_upper": -0.008423523808951491,
+        "paired_t_statistic": -2.6023486631973998,
+        "paired_t_two_sided_p_value": 0.01035945053803048
+      },
+      "pass_8": {
+        "candidate_better_pairs": 14,
+        "candidate_minus_control_score": -0.052734375,
+        "candidate_worse_pairs": 40,
+        "delta_counts": {
+          "-0.25": 39,
+          "-0.5": 1,
+          "0.0": 74,
+          "0.25": 14
+        },
+        "equal_pairs": 74,
+        "method_note": "Descriptive paired t interval over the same frozen opening-pair scores. The preregistered non-worse Arena gate, not this post-hoc p-value, determines the screening decision.",
+        "pair_count": 128,
+        "paired_standard_deviation": 0.15889735627969764,
+        "paired_standard_error": 0.01404467476724863,
+        "paired_t_95_lower": -0.08052625178797984,
+        "paired_t_95_upper": -0.024942498212020155,
+        "paired_t_statistic": -3.754759428318947,
+        "paired_t_two_sided_p_value": 0.0002629948490679866
+      }
+    },
+    "hero_one_epoch": {
+      "pass_16": {
+        "candidate_better_pairs": 94,
+        "candidate_minus_control_score": 0.271484375,
+        "candidate_worse_pairs": 4,
+        "delta_counts": {
+          "-0.25": 4,
+          "0.0": 30,
+          "0.25": 45,
+          "0.5": 49
+        },
+        "equal_pairs": 30,
+        "method_note": "Descriptive paired t interval over the same frozen opening-pair scores. The preregistered non-worse Arena gate, not this post-hoc p-value, determines the screening decision.",
+        "pair_count": 128,
+        "paired_standard_deviation": 0.21514356987706795,
+        "paired_standard_error": 0.019016184648594572,
+        "paired_t_95_lower": 0.23385477734184454,
+        "paired_t_95_upper": 0.30911397265815543,
+        "paired_t_statistic": 14.276490264310963,
+        "paired_t_two_sided_p_value": 3.5472759053095928e-28
+      },
+      "pass_2": {
+        "candidate_better_pairs": 50,
+        "candidate_minus_control_score": 0.04296875,
+        "candidate_worse_pairs": 28,
+        "delta_counts": {
+          "-0.25": 22,
+          "-0.5": 6,
+          "0.0": 50,
+          "0.25": 44,
+          "0.5": 6
+        },
+        "equal_pairs": 50,
+        "method_note": "Descriptive paired t interval over the same frozen opening-pair scores. The preregistered non-worse Arena gate, not this post-hoc p-value, determines the screening decision.",
+        "pair_count": 128,
+        "paired_standard_deviation": 0.23289806960722464,
+        "paired_standard_error": 0.020585475543065637,
+        "paired_t_95_lower": 0.0022338088642338758,
+        "paired_t_95_upper": 0.08370369113576612,
+        "paired_t_statistic": 2.0873333681365613,
+        "paired_t_two_sided_p_value": 0.038857066916132894
+      },
+      "pass_4": {
+        "candidate_better_pairs": 73,
+        "candidate_minus_control_score": 0.16015625,
+        "candidate_worse_pairs": 15,
+        "delta_counts": {
+          "-0.25": 15,
+          "0.0": 40,
+          "0.25": 49,
+          "0.5": 24
+        },
+        "equal_pairs": 40,
+        "method_note": "Descriptive paired t interval over the same frozen opening-pair scores. The preregistered non-worse Arena gate, not this post-hoc p-value, determines the screening decision.",
+        "pair_count": 128,
+        "paired_standard_deviation": 0.22997426893041478,
+        "paired_standard_error": 0.02032704563238938,
+        "paired_t_95_lower": 0.11993269501983157,
+        "paired_t_95_upper": 0.20037980498016844,
+        "paired_t_statistic": 7.878973309569638,
+        "paired_t_two_sided_p_value": 1.2858707847827853e-12
+      },
+      "pass_8": {
+        "candidate_better_pairs": 91,
+        "candidate_minus_control_score": 0.240234375,
+        "candidate_worse_pairs": 5,
+        "delta_counts": {
+          "-0.25": 5,
+          "0.0": 32,
+          "0.25": 54,
+          "0.5": 37
+        },
+        "equal_pairs": 32,
+        "method_note": "Descriptive paired t interval over the same frozen opening-pair scores. The preregistered non-worse Arena gate, not this post-hoc p-value, determines the screening decision.",
+        "pair_count": 128,
+        "paired_standard_deviation": 0.20905285035637755,
+        "paired_standard_error": 0.01847783601417139,
+        "paired_t_95_lower": 0.20367007213612173,
+        "paired_t_95_upper": 0.27679867786387824,
+        "paired_t_statistic": 13.001218043917842,
+        "paired_t_two_sided_p_value": 4.2651681941447895e-25
+      }
+    }
+  }
+}

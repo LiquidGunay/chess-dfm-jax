@@ -1,0 +1,54 @@
+{
+  "charts": [
+    {
+      "caveat": "128-position development pilot; projected CKA sketch.",
+      "chart_id": "cka_chart",
+      "dataset": "model_diff.activation_depth",
+      "question": "Where do corresponding Raw and Hero representations diverge?",
+      "source": "research/analysis/raw_hero_pilot_v1/metrics.json"
+    },
+    {
+      "caveat": "Displays AUROC; paired intervals use threshold accuracy.",
+      "chart_id": "legal_chart",
+      "dataset": "concept_metrics filtered to Legal destination",
+      "question": "Where is legal-destination information linearly accessible?",
+      "source": "research/analysis/raw_hero_interpretability_report_v1/validation.json"
+    },
+    {
+      "caveat": "Displays R²; paired intervals use negative MAE.",
+      "chart_id": "attack_chart",
+      "dataset": "concept_metrics filtered to Opponent attack count",
+      "question": "Where is opponent attack count linearly decodable?",
+      "source": "research/analysis/raw_hero_interpretability_report_v1/validation.json"
+    },
+    {
+      "caveat": "Square-level accuracy; exploratory layer scan.",
+      "chart_id": "piece_chart",
+      "dataset": "concept_metrics filtered to Piece code",
+      "question": "How is explicit piece identity retained across depth?",
+      "source": "research/analysis/raw_hero_interpretability_report_v1/validation.json"
+    },
+    {
+      "caveat": "Public puzzle continuation, not fresh engine-PV labels.",
+      "chart_id": "destination_chart",
+      "dataset": "lookahead_metrics filtered to destination",
+      "question": "Where is the public-continuation third-ply destination encoded?",
+      "source": "research/analysis/raw_hero_interpretability_report_v1/validation.json"
+    },
+    {
+      "caveat": "One learned-probe seed; test split unopened.",
+      "chart_id": "joint_chart",
+      "dataset": "lookahead_metrics filtered to joint move",
+      "question": "Where is the full third-ply move encoded?",
+      "source": "research/analysis/raw_hero_interpretability_report_v1/validation.json"
+    },
+    {
+      "caveat": "Eight development positions; whole-residual intervention.",
+      "chart_id": "patch_chart",
+      "dataset": "literature.patching",
+      "question": "How much of the fixed-head policy delta is mediated by each residual boundary?",
+      "source": "research/analysis/raw_hero_literature_pilot_v2/metrics.json"
+    }
+  ],
+  "schema_version": "bt4-interpretability-chart-map-v1"
+}

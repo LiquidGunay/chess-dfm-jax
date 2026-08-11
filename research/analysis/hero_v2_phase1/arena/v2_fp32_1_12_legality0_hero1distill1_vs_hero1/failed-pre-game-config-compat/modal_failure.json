@@ -1,0 +1,8 @@
+{
+  "arena_label": "hero-arena-128p-pass1-e55103de25b8665c56a1",
+  "arena_source_tree_sha256": "91369f0556a07fc07b5b8125a06615110f4d4a99c7396244c2dfcee04a76b248",
+  "returncode": 1,
+  "schema_version": "chess-dfm-modal-torch-arena-failure-v1",
+  "stdout_log_sha256": "e72cd08a40c66bb82336d5be974cfc16e819d72b1a296713e03fd84f762e22e5",
+  "stdout_log_size_bytes": 933
+}

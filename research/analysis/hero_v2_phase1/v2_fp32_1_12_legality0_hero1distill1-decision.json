@@ -1,0 +1,176 @@
+{
+  "schema_version": "chess-dfm-hero-v2-phase1-decision-v2",
+  "created_utc": "2026-08-09T19:51:11Z",
+  "arm": "v2_fp32_1_12_legality0_hero1distill1",
+  "status": "retained_as_confirmed_phase1_development_arena_winner_but_not_phase2_authorized",
+  "training_intervention": {
+    "teacher_mode": "immutable_hero1_checkpoint",
+    "policy_distill_coeff": 1.0,
+    "legality_coeff": 0.0,
+    "candidate_result_label": "hero-training-phase1-v2_fp32_1_12_legality0_hero1distill1-l40s-1712d50db9d0a488031b",
+    "candidate_checkpoint_state_sha256": "72a51f168b6b7146360e9aeb15bb1188b73890f642556f8be8255af88b488354",
+    "teacher_checkpoint_state_sha256": "e518083ee5476e7ff15e7c34caf9c0505f8fb7d330ea5a6882e4e9e5c1ef1912",
+    "teacher_trainable_parameter_count": 0,
+    "completed_updates": 554,
+    "nonfinite_or_skipped_updates": 0
+  },
+  "sealed_phase1_decision": {
+    "preregister_path": "research/analysis/hero_v2_phase1/v2_fp32_1_12_legality0_hero1distill1-preregister.json",
+    "preregister_sha256": "42405f66f38c0616f6ab5c37c29028bf93f5a89efe110af4cfe898048045aba6",
+    "comparison_with_movement_vs_legality_zero_path": "research/analysis/hero_v2_phase1/v2_fp32_1_12_legality0_hero1distill1-comparison-with-movement-vs-legality0.json",
+    "comparison_with_movement_vs_legality_zero_sha256": "d29fc964c4f61d5e0e01c91e84b2aea84db6b1da84fe54337666be63e342cc8a",
+    "comparison_with_movement_vs_online_path": "research/analysis/hero_v2_phase1/v2_fp32_1_12_legality0_hero1distill1-comparison-with-movement-vs-online.json",
+    "comparison_with_movement_vs_online_sha256": "b69ec3f6dd0eaa167b7937161007c14f36e1f84b5428bb23ce83932a107dfe51",
+    "canonical_predictive_curve_vs_legality_zero": {
+      "mean_candidate_minus_control": -0.017140145628077315,
+      "interval_95pct": [
+        -0.04165837658773923,
+        0.004304485439312007
+      ],
+      "classification": "inconclusive"
+    },
+    "frozen_validation": {
+      "dfm_ce_loss": 5.7949284091591835,
+      "jepa_positive_loss": 0.24133549444377422,
+      "root_legal_conditional_ce": 1.4795591020956635,
+      "root_legal_top1_accuracy": 0.5006103515625,
+      "wdl_accuracy": 0.542938232421875,
+      "wdl_loss": 1.0294343000277877,
+      "wdl_brier_score": 0.6051598403137177,
+      "wdl_ece_15": 0.1769926259876229,
+      "first_legal_mass": 0.37379868514835835
+    },
+    "hero1_dfm_root_top1_floor": 0.455078125,
+    "behavior_gate_passed": true,
+    "predictive_noninferiority_passed": false,
+    "failed_promotion_metric": "jepa_positive_loss",
+    "jepa_noninferiority_bound_vs_legality_zero": 0.20711869873572142,
+    "legality_probability_mass_is_diagnostic_only": true,
+    "phase2_authorized": false,
+    "sealed_outcome": "reject_before_arena_or_phase2 under the original preregistration"
+  },
+  "exploratory_authorization": {
+    "arena_preregister_path": "research/analysis/hero_v2_phase1/v2_fp32_1_12_legality0_hero1distill1-exploratory-arena-preregister.json",
+    "arena_preregister_sha256": "7265f72711dd209fc9c9a29a1a7e9129eb5bb72ea5e44bb035cea34fe6a60705",
+    "retry_preregister_path": "research/analysis/hero_v2_phase1/v2_fp32_1_12_legality0_hero1distill1-exploratory-arena-retry-preregister.json",
+    "retry_preregister_sha256": "e080b2feaf1382936ee9ae7f9a56077c53887af706c275cfe9cb8622baf2024a",
+    "interpretation_boundary": "The exploratory arenas cannot retroactively pass frozen validation, promote the arm, or authorize Phase 2."
+  },
+  "reliability_event": {
+    "failed_attempt_app_id": "ap-tGf3rJAw4ifUa3kSEgr7zG",
+    "failed_attempt_function_call_id": "fc-01KZKZJ8NT03CJSDX864BX790T",
+    "games_completed": 0,
+    "cause": "legacy Hero1 run config predated two policy-teacher provenance fields",
+    "failure_record_path": "research/analysis/hero_v2_phase1/arena/v2_fp32_1_12_legality0_hero1distill1_vs_hero1/failed-pre-game-config-compat/modal_failure.json",
+    "failure_record_sha256": "a39b817325a0c2263da9c2ef68fb64c986f80c9ba175622af74be6bcb011e0c4",
+    "fix": "Allow those fields to be absent in legacy model configs while preserving explicit fixed-teacher fields on the candidate.",
+    "verification": "10 maintained Torch arena tests passed and the exact sealed Hero1 config validated unchanged",
+    "retry_source_tree_sha256": "614267c6eb03c569f19095572120d25b775b4b9c4e6b5e862f4b948a27ce0324"
+  },
+  "dfm_arena": {
+    "role": "user_authorized_post_gate_strength_check_vs_matched_hero1_phase1",
+    "tier": "hero_development",
+    "promotion_eligible": false,
+    "state_path": "research/analysis/hero_v2_phase1/arena/v2_fp32_1_12_legality0_hero1distill1_vs_hero1/128p/state.json",
+    "state_sha256": "37dd55a464b5f2ca6599fdfd094f44e5487e6334a4f401ee1d1cee99f28ec36e",
+    "modal_wrapper_sha256": "e88d942aff118cf99473eb2e791abf48a01a185554a9827bb19db3b6cb3d9f61",
+    "modal_app_id": "ap-sGUj5rNBYPx9OtDVTVPnfu",
+    "function_call_id": "fc-01KZM083AK9Q80DXFWGSY8GP6Y",
+    "pair_count": 128,
+    "game_count": 256,
+    "candidate_wins_draws_losses": [
+      127,
+      111,
+      18
+    ],
+    "candidate_score": 0.712890625,
+    "pair_aware_score_interval_95pct": [
+      0.59285027608501,
+      0.83293097391499
+    ],
+    "paired_logistic_elo": 157.99021188331943,
+    "paired_logistic_elo_interval_95pct": [
+      65.2763527249742,
+      279.0852285639974
+    ],
+    "fault_counts": {},
+    "cap_draw_count": 0,
+    "complete_legal_action_coverage": true,
+    "classification": "confirmed_superior"
+  },
+  "policy_only_arena": {
+    "role": "mechanistic_test_of_inherited_policy_preservation",
+    "tier": "hero_development",
+    "promotion_eligible": false,
+    "state_path": "research/analysis/hero_v2_phase1/arena/v2_fp32_1_12_legality0_hero1distill1_policy_only_vs_hero1_policy_only/128p/state.json",
+    "state_sha256": "f89bbdf88b8a6bae8ad3eeedc862b95bb99a3e5f3a6fd129ffb8cf735009b8ab",
+    "modal_wrapper_sha256": "0583cb7acaa534fe58563c148570e28ce9c920391608ed5b4311251ddf652acd",
+    "modal_app_id": "ap-PWGcEwQiosofmDZ5uCdqtK",
+    "function_call_id": "fc-01KZM0NVJD0Q6JFEFM7655K39F",
+    "pair_count": 128,
+    "game_count": 256,
+    "candidate_wins_draws_losses": [
+      51,
+      125,
+      80
+    ],
+    "candidate_score": 0.443359375,
+    "pair_aware_score_interval_95pct": [
+      0.32331902608500995,
+      0.56339972391499
+    ],
+    "paired_logistic_elo": -39.52760112615499,
+    "fault_counts": {},
+    "cap_draw_count": 0,
+    "complete_legal_action_coverage": true,
+    "classification": "parity_inconclusive"
+  },
+  "movement_audit": {
+    "preregister_path": "research/analysis/hero_v2_phase1/v2_fp32_1_12_legality0_hero1distill1-movement-preregister.json",
+    "preregister_sha256": "b2c10eb76db95fae8314810c71c872f9c8a55951902393a7d77826bd21decb2f",
+    "report_path": "research/analysis/hero_v2_phase1/v2_fp32_1_12_legality0_hero1distill1/parameter_diff.json",
+    "report_sha256": "effad9fe192d8ace358cb20badc9f2a5f5d7379fd26c933d4cdc177e34bdfabe",
+    "trunk_relative_delta_l2": 0.003781577332923385,
+    "trunk_changed_fraction": 0.34429603621251703,
+    "trunk_relative_l2_reduction_vs_legality_zero_pct": 7.803344316111316,
+    "trunk_relative_l2_reduction_vs_online_teacher_pct": 5.757853869953888,
+    "embedding_relative_l2_reduction_vs_online_teacher_pct": 14.742340043879276,
+    "policy_head_relative_l2_reduction_vs_online_teacher_pct": 14.222574750706872,
+    "interpretation": "The immutable teacher constrained update magnitude modestly more than the moving teacher, but did not simply freeze the trunk; visible changed fraction remained comparable."
+  },
+  "causal_update": {
+    "supported": [
+      "Immutable Hero1 supervision can turn the faster FP32/WSD recipe into a much stronger one-pass DFM player than the matched 554-update Hero1 Phase-1 control on the sealed development arena.",
+      "The gain is not explained by a stronger native policy alone: policy-only play is inconclusive at 0.443 while full DFM play is confirmed superior at 0.713.",
+      "The fixed teacher constrains encoder and policy-head movement more than the moving teacher."
+    ],
+    "not_supported": [
+      "Formal model promotion or Phase 2 continuation under the sealed preregistration.",
+      "Superiority to the terminal one-epoch Hero1 artifact, which was not the arena opponent.",
+      "A claim of absolute Elo or held-out generalization beyond the frozen development opening pool.",
+      "A claim that illegal probability mass caused the JEPA regression or matters directly after legal masking."
+    ],
+    "remaining_risks": [
+      "Frozen JEPA positive loss regressed from 0.19712 to 0.24134 and exceeded its 0.20712 noninferiority bound.",
+      "WDL ECE worsened even though WDL loss, accuracy, and Brier score were acceptable or improved.",
+      "The DFM arena is development-tier and its first 128 pairs have now been inspected.",
+      "Both arena participants are 554-update Phase-1 checkpoints, so terminal full-run strength remains unmeasured."
+    ]
+  },
+  "next_step": {
+    "checkpoint_role": "retain as the Hero2 Phase-1 continuation candidate and a targeted Raw/matched-Hero1-Phase1/candidate diff target",
+    "formal_promotion_requirement": "Run a newly preregistered non-overlapping Phase-1 strength confirmation, then require equivalent-boundary and ultimately terminal one-epoch Hero1 comparisons before calling a full-run artifact promoted Hero2.",
+    "training_requirement": "Before any coefficient arm, extend the no-update gradient audit to decompose immutable-teacher KL versus JEPA and the remaining representation objectives by parameter group.",
+    "single_followup_rule": "Use that audit to preregister one balancing intervention: either a lower or decaying teacher coefficient if conflict is broadly scalar, or stop/scale teacher gradients into the encoder if conflict is trunk-localized. Do not run a post-hoc coefficient sweep.",
+    "interpretability_rule": "Targeted Raw/matched-Hero1-Phase1/candidate model diffing may start now; reserve the full Raw/terminal-Hero1/Hero2 confirmatory stack for the longer artifact that clears independent strength confirmation and the chosen representation guardrail."
+  },
+  "cost": {
+    "workspace_budget_usd": 42.5,
+    "repository_new_launch_stop_usd": 34.0,
+    "metered_before_exploratory_arena_usd": 20.91953571,
+    "metered_after_all_arenas_and_movement_usd": 21.10530926,
+    "observed_increment_usd": 0.18577355,
+    "billed_after_credits_usd": 0.0,
+    "all_remote_workers_stopped": true
+  }
+}

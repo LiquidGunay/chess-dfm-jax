@@ -1,0 +1,253 @@
+{
+  "artifact_policy": {
+    "persistent_during_run": [
+      "immutable input tar and raw BT4 encoder",
+      "converted LC0 corpus",
+      "six exact model-and-optimizer recovery checkpoints",
+      "one terminal model-only checkpoint",
+      "compact metrics, validation, logs, heartbeats, and receipts"
+    ],
+    "promote_to_railway": [
+      "update-6219 pre-decay recovery checkpoint",
+      "update-7774 terminal model checkpoint",
+      "compact run evidence and checksums"
+    ],
+    "runpod_cleanup": "Delete the Pod immediately after a terminal receipt; delete the temporary network volume only after Railway promotion is checksum-verified."
+  },
+  "checkpoint_contract": {
+    "estimated_recovery_state_gib": 3.0,
+    "final_model_only": true,
+    "max_checkpoints": 7,
+    "pre_decay_update": 6219,
+    "recovery_updates": [
+      1000,
+      2500,
+      4000,
+      5500,
+      6219,
+      7000
+    ],
+    "resume_policy": "Start a new attempt directory from the highest checksum-valid recovery update and retain the exact original Git commit and resume contract."
+  },
+  "created_utc": "2026-08-10T19:08:11Z",
+  "data_contract": {
+    "audit": {
+      "gate_pass": true,
+      "path": "research/analysis/lc0_test80_sequential_audit_20260810.json",
+      "sha256": "247a1c44766a273aa479fb825f065f874508cbdfdc54ca39ad2870ab7e120ebe",
+      "storage_bytes": 8635794032
+    },
+    "raw_bt4": {
+      "logical_name": "models/raw/BT4_exported.pb.gz",
+      "railway_bundle_sha256": "c8b25fa7d151aa82ab1c91f395a1a2f6c238d0a2f88e06ed1c04aa873080fe7a",
+      "receipt_path": "research/analysis/raw_bt4_railway_source_bundle_20260810.json",
+      "receipt_sha256": "aa0276f18f7cc0c013fda064854a60eb95042841ccca0a43cc12953d87d46d04",
+      "sha256": "61e43e98d2c4cb747498c6bc13a5bbb3b07e985d3f5d87f0351a4db855fa0651",
+      "size_bytes": 335916563
+    },
+    "source_tar": {
+      "logical_name": "source/training-run1-test80-20240401-0117.tar",
+      "railway_bundle_sha256": "cf83360c179fa939176bda91f9e8ffa7cb0e115e463dbdb5c06cf1a3b502d3aa",
+      "receipt_path": "research/analysis/lc0_test80_railway_source_bundle_20260810.json",
+      "receipt_sha256": "7b99dd68d20ae63702009cd5fce32a249d04f31bb04860423158b10e0a907491",
+      "sha256": "1c5e5d0d1d335bfeca9693700a1ad1415abfb190772bd051d1f00cb193eb3c2f",
+      "size_bytes": 1773731840
+    },
+    "train_scheduler": {
+      "batch_size": 1024,
+      "file_manifest_sha256": "63602198610284b1cbe710e0e112a9149384502579353693f827be019b4063b5",
+      "seed": 0,
+      "shard_count": 254,
+      "shuffle_batches": true,
+      "steps_per_epoch": 7774
+    },
+    "validation_scheduler": {
+      "available_full_batches": 1147,
+      "batch_size": 64,
+      "evaluation_batches": 128,
+      "evaluation_examples": 8192,
+      "file_manifest_sha256": "9240e014a2d9126e9a937cb2c908af68bf1aab28f51e692bc2a645111d859629",
+      "seed": 20000,
+      "selected_slots_sha256": "629bb68af7d0ec4bb4546320083664547bc023ebe5917ee4c1263e9bd8558333",
+      "selection": "seeded_batch_permutation_prefix",
+      "shard_count": 243
+    }
+  },
+  "execution_contract": {
+    "absolute_auto_terminate_hours": 9,
+    "cloud": "SECURE",
+    "container_disk_gb": 40,
+    "expected_gpu": "NVIDIA L40S",
+    "gpu_count": 1,
+    "heartbeat_interval_seconds": 30,
+    "image": "pytorch/pytorch:2.5.1-cuda12.1-cudnn9-runtime",
+    "maximum_accepted_gpu_rate_dollars_per_hour": 1.25,
+    "network_volume_gb": 60,
+    "network_volume_mount": "/workspace",
+    "network_volume_required": true,
+    "provider": "Runpod",
+    "stale_heartbeat_terminate_seconds": 600,
+    "startup_gate": "Inputs, bootstrap, launch manifest, exact Git commit, volume identity, GPU identity, and quoted hourly price must verify before conversion or training.",
+    "success_shutdown": "The worker writes and syncs the terminal receipt, then deletes its own Pod with the Runpod-provided Pod-scoped API key."
+  },
+  "forbidden_training_features": {
+    "dfm_closed_loop_mode": "none",
+    "future_jepa_teacher_forcing": false,
+    "jepa_inference_feedback": false,
+    "legality_auxiliary_coefficient": 0.0,
+    "policy_teacher_checkpoint": null,
+    "teacher_kl_coefficient": 0.0
+  },
+  "launch_binding": {
+    "git_branch": "research/local-gpu-autoresearch",
+    "git_commit": "resolved_from_a_clean_pushed_checkout_at_staging",
+    "network_volume_id": "resolved_at_staging",
+    "pod_id": "resolved_at_launch",
+    "status": "prepared_not_launched"
+  },
+  "model_contract": {
+    "architecture": "Proposal A open-loop z0 -> DFM(a0..a7) -> action-conditioned JEPA(z1..z8), with current and future WDL heads",
+    "compute_dtype": "bfloat16",
+    "encoder_learning_rate_ratio": 1.0,
+    "horizon": 8,
+    "main_learning_rate": 0.00005,
+    "optimizer_precision": "fp32_master",
+    "recipe": "hero_v2",
+    "weight_decay": 0.05622851404690516,
+    "weight_decay_mode": "decoupled",
+    "wdl_include_current_state": true
+  },
+  "observability_contract": {
+    "compact_files": [
+      "run_config.json",
+      "optimizer_partition.json",
+      "metrics.jsonl",
+      "validation_metrics.jsonl",
+      "loss_summary.json",
+      "report.json"
+    ],
+    "external_monitor": "Poll exact heartbeat/status object keys and Pod state; terminate a stale or over-price Pod without recursively listing the network volume.",
+    "validation_updates": [
+      6219,
+      7774
+    ]
+  },
+  "pricing_snapshot": {
+    "expected_runtime_hours_including_setup_validation_and_checkpointing": 6.25,
+    "expected_secure_l40s_compute_dollars": 7.4375,
+    "full_nine_hour_compute_cap_dollars": 10.71,
+    "full_month_60gb_network_volume_dollars": 4.2,
+    "runpod_secure_l40s_dollars_per_hour": 1.19,
+    "snapshot_date": "2026-08-10"
+  },
+  "schedule_contract": {
+    "batch_size": 1024,
+    "decay_examples": 1592115,
+    "decay_fraction": 0.2,
+    "lr_schedule": "warmup_stable_linear_decay",
+    "steps": 7774,
+    "total_examples": 7960576,
+    "warmup_examples": 159212,
+    "warmup_fraction": 0.02
+  },
+  "schema_version": "proposal-a-one-epoch-preregister-v1",
+  "selection_evidence": {
+    "decay_analysis": {
+      "path": "research/analysis/proposal_a_tuning/decay_analysis.json",
+      "sha256": "4fcb60b9e8f9f6c380414bcd313503b4b6a04677ac3df01e205dfcd0a70c6bc8",
+      "winner_arm": "proposal_a_equal_lr_5em5_wd1"
+    },
+    "learning_rate_analysis": {
+      "path": "research/analysis/proposal_a_tuning/lr_analysis.json",
+      "sha256": "c207c3706273db700e94d6dfaf573ed1908ba662d31c7d0403b8d5ed7685f8c1",
+      "winner_arm": "proposal_a_equal_lr_5em5_wd0"
+    },
+    "selection_policy": "Honor the preregistered selectors. Cautious decay remains a documented secondary result and is not promoted after inspection."
+  },
+  "training_command": [
+    "python",
+    "-m",
+    "research.train_torch",
+    "train",
+    "--recipe",
+    "hero_v2",
+    "--remat-mode",
+    "bt4-projector",
+    "--attention-impl",
+    "sdpa-all",
+    "--bt4-norm-impl",
+    "eager",
+    "--compile-regions",
+    "fresh",
+    "--raw-bt4-path",
+    "{raw_bt4_path}",
+    "--data-root",
+    "{dataset_root}",
+    "--data-format",
+    "lc0_sequential",
+    "--output-dir",
+    "{attempt_output_dir}",
+    "--batch-size",
+    "1024",
+    "--steps",
+    "7774",
+    "--train-seconds",
+    "0",
+    "--data-start",
+    "0",
+    "--seed",
+    "0",
+    "--threads",
+    "2",
+    "--log-every",
+    "10",
+    "--prefetch-depth",
+    "1",
+    "--prefetch-launch",
+    "step-start",
+    "--gpu-monitor-interval-ms",
+    "100",
+    "--profile-update",
+    "0",
+    "--save-every",
+    "0",
+    "--save-updates",
+    "1000",
+    "2500",
+    "4000",
+    "5500",
+    "6219",
+    "7000",
+    "--save-final",
+    "--max-checkpoints",
+    "7",
+    "--validation-updates",
+    "6219",
+    "7774",
+    "--validation-example-count",
+    "8192",
+    "--main-lr-multiplier",
+    "0.1",
+    "--encoder-lr-ratio",
+    "1.0",
+    "--lr-total-examples",
+    "7960576",
+    "--lr-schedule-kind",
+    "warmup_stable_linear_decay",
+    "--wsd-decay-fraction",
+    "0.2",
+    "--optimizer-precision",
+    "fp32_master",
+    "--weight-decay-multiplier",
+    "1.0",
+    "--weight-decay-mode",
+    "decoupled",
+    "--legality-coeff",
+    "0.0",
+    "--policy-distill-coeff",
+    "0.0",
+    "--wdl-include-current-state",
+    "--dfm-closed-loop-mode",
+    "none"
+  ]
+}

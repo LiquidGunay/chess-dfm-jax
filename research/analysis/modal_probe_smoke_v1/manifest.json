@@ -1,0 +1,102 @@
+{
+  "cost": {
+    "backend": "Modal T4 with CPU-staged immutable Volume inputs",
+    "declared_attempt_upper_bound_dollars": 0.453456,
+    "input_bundle_sha256": "8be17957ad779e3756092306daa95ad9c1c7f5d482b6409bda7a16bc6d6c7a44",
+    "provider_dollars": null
+  },
+  "elapsed_seconds": 21.594325720999997,
+  "environment": {
+    "cuda_runtime": "12.1",
+    "device": "cuda",
+    "gpu": {
+      "name": "Tesla T4",
+      "peak_allocated_bytes": 920624128,
+      "peak_reserved_bytes": 1027604480,
+      "total_memory_bytes": 15637086208
+    },
+    "numpy": "2.2.6",
+    "python": "3.11.10",
+    "torch": "2.5.1+cu121"
+  },
+  "experiment": {
+    "activation_boundary": "resid_post_after_ln",
+    "activation_storage_dtype": "float16 ephemeral CPU only",
+    "bootstrap_samples": 100,
+    "causal_dose": 1.0,
+    "concepts": [
+      "piece_code",
+      "legal_destination",
+      "opponent_attack_count"
+    ],
+    "confirmatory": false,
+    "future_ply_zero_indexed": 2,
+    "layers": [
+      14
+    ],
+    "linear_probe_l2_grid": [
+      0.0,
+      1e-05
+    ],
+    "lookahead_replication": "rank-32, five epochs, Adam 1e-2, scalar bias",
+    "probe_epochs": 2,
+    "seed": 20260808,
+    "test_split_opened": false
+  },
+  "git": {
+    "branch": null,
+    "commit": null,
+    "git_available": false,
+    "status": [],
+    "status_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "worktree_clean": true
+  },
+  "model_lattice": {
+    "arm_semantics": "first letter encoder; second letter policy head",
+    "arms": [
+      "RR",
+      "HR",
+      "RH",
+      "HH"
+    ],
+    "encoder_layout_sha256": "c8c7fdcab3dfb1b6af5f1ac3a54f9347dd52e3d4673ad6f88e8d9407523d8bbb",
+    "hero_leaf_count": 462,
+    "hero_state_sha256": "665ac91ad37e14a6c8810068700dba021e39e9c0fe145c8bf620882bb5a71692",
+    "on_disk_mixed_checkpoints": false,
+    "raw_asset_sha256": "61e43e98d2c4cb747498c6bc13a5bbb3b07e985d3f5d87f0351a4db855fa0651",
+    "raw_mapping_sha256": "c7a22e25a74e959357f294dfdda4a8f47372d79c96ada49131967bec75b2d93c",
+    "resident_parameter_bytes": 793834496,
+    "schema_version": "bt4-raw-hero-comparison-models-v1"
+  },
+  "payload_identities": {
+    "hero": "665ac91ad37e14a6c8810068700dba021e39e9c0fe145c8bf620882bb5a71692",
+    "metrics": "112adaf4811d6f39e5b75989b96267a8f57641b87b5d30a73f59af48f2c916d9",
+    "predictions": "8556caef275cb010ca28966c02395b56cb3c38fe13e7f6cbcfbc8d0bd6bd061c",
+    "raw": "61e43e98d2c4cb747498c6bc13a5bbb3b07e985d3f5d87f0351a4db855fa0651",
+    "splits": {
+      "evaluation": "eda0d91603748e7d51c8b8c386265e21d5eaf02b27475c9ce9c74c5940195ee3",
+      "fit": "06786e9b1f07466edce8ddbc5fb34d1e35ee224c539a968a86b989c7882c725d",
+      "selection": "0e823b69ecaafdae3fd5cf7e054df29c4cba09e3be57dfd37c5a750834a7a9ff"
+    },
+    "weights": "cff5e6613b2cb63736a1c7f179c4a12747e6e64388d1ea6a5f21fbc0554deba2"
+  },
+  "public_corpus_manifest": {
+    "integrity_sha256": "9195f857f60ab123b353095b6b931c589ae69098750ea6b26e53e7d871f349d0",
+    "path": "/__modal/volumes/vo-vjlUmWtQ06Rs2sx80uZT8x/bundles/8be17957ad779e3756092306daa95ad9c1c7f5d482b6409bda7a16bc6d6c7a44/corpus/manifest.json",
+    "split_policy": "train fit + train selection; development evaluation; test untouched",
+    "split_position_sha256": {
+      "evaluation": "eda0d91603748e7d51c8b8c386265e21d5eaf02b27475c9ce9c74c5940195ee3",
+      "fit": "06786e9b1f07466edce8ddbc5fb34d1e35ee224c539a968a86b989c7882c725d",
+      "selection": "0e823b69ecaafdae3fd5cf7e054df29c4cba09e3be57dfd37c5a750834a7a9ff"
+    }
+  },
+  "run_id": "sha256:7c0099ed94d1121f8d9cbd35fa6beb2aa491d323574f659cb8c51f4271dcff4c",
+  "schema_version": "bt4-raw-hero-probe-lookahead-run-v1",
+  "source_files": {
+    "research/interpretability/lookahead.py": "1fe2e1a2adabf33d78ffbf41052c8e72c62506160ce31f7325fdeb8e6367ce90",
+    "research/interpretability/probe_pilot.py": "80b00c45f3ef6c78eb77be22230232095b6c1813c30492e916f00f0733f6a581",
+    "research/interpretability/probes.py": "90db5d4ac5c75b3da9f5f1a88dc01bd673b21736af2ba8b84183edf2d2851047",
+    "research/train_torch.py": "c9ce7531f43a4e7bc0a6e1fa02a238dac8abb8eddf76da3530aa3b960904b4a3"
+  },
+  "started_utc": "2026-08-08T07:01:53.022153+00:00"
+}

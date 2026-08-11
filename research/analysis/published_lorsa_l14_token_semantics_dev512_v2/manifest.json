@@ -1,0 +1,170 @@
+{
+  "cost": {
+    "backend": "local GTX 1660 Ti zero-provider-cost semantic run",
+    "provider_dollars": 0.0
+  },
+  "elapsed_seconds": 91.03072406200226,
+  "environment": {
+    "cuda_runtime": "12.1",
+    "device": "cuda",
+    "gpu": {
+      "name": "NVIDIA GeForce GTX 1660 Ti",
+      "total_memory_bytes": 6442123264
+    },
+    "numpy": "2.2.6",
+    "python": "3.12.3",
+    "torch": "2.5.1+cu121"
+  },
+  "experiment": {
+    "autocast": false,
+    "batch_size": 1,
+    "compute_dtype": "float32",
+    "confirmatory": false,
+    "exploratory": true,
+    "fit_fraction": 0.5,
+    "layer": 14,
+    "position_count": 512,
+    "seed": 20260808,
+    "tf32": false
+  },
+  "git": {
+    "commit": "86ba0b37e3e188eab115b45a1460d079fac341f8",
+    "git_available": true,
+    "status_sha256": "835f4348b22bcf1a037aaf26e30cc0268da50980c1dab0057bc8f498955b3626",
+    "worktree_clean": false
+  },
+  "lorsa": {
+    "manifest_sha256": "2fe2d2cf6a132e4a205b25373c50b74e4462caf44057ccb98c0e7e7a3f736b61",
+    "parameters_frozen": true,
+    "weights_sha256_after": "2dc7c7cd90550bc3489e4940bb39746e8a3cdcfdc613ac73e9bb2e4bdfe5b8fd",
+    "weights_sha256_before": "2dc7c7cd90550bc3489e4940bb39746e8a3cdcfdc613ac73e9bb2e4bdfe5b8fd"
+  },
+  "payload_identities": {
+    "corpus": "9195f857f60ab123b353095b6b931c589ae69098750ea6b26e53e7d871f349d0",
+    "hero": "665ac91ad37e14a6c8810068700dba021e39e9c0fe145c8bf620882bb5a71692",
+    "lorsa": "2dc7c7cd90550bc3489e4940bb39746e8a3cdcfdc613ac73e9bb2e4bdfe5b8fd",
+    "metrics": "d734dcde860c0f6ae8fa9ccf20b55f48551bf93ce342ae68dc8caedf7d6c17fc",
+    "positions": "dc3dc26a8239a9d78fdcd13efef7b56f0c7696c878ccb3482be57b1c7e520724",
+    "raw": "61e43e98d2c4cb747498c6bc13a5bbb3b07e985d3f5d87f0351a4db855fa0651",
+    "selection": "5a2d772f052870b51f1f5f00d91669228ae1c861680e5131ff6fb708b63b1ce2",
+    "source_files": "0fb54f50cffd5a81fdfc37c46fced0ffe270fed90cd6a615702b1cb35b505870",
+    "source_transfer_checksums": "9e40c817562955070418d2dae1587eba2cfea3bc5baa71a83f4dfdb72b80d18e",
+    "source_transfer_run": "sha256:b7b67d80087f5beec16a1ce3fe331cf228457394ea15cd50d56ee21213209e0c"
+  },
+  "resource_usage": {
+    "cuda_peak_allocated_bytes": 1113334784,
+    "cuda_peak_reserved_bytes": 1140850688,
+    "wall_seconds": 91.03072406200226
+  },
+  "run_id": "sha256:7a4c9b8b9749f4bbe3ea1ca5b27c1d855d018296fd1eb288c489a94a470a866e",
+  "runtime_model_identity_gate": {
+    "criteria": {
+      "encoder_layout_matches_source_transfer": true,
+      "hero_runtime_identity_matches": true,
+      "no_mixed_checkpoint_written": true,
+      "raw_runtime_identity_matches": true
+    },
+    "descriptor": {
+      "arm_semantics": "first letter encoder; second letter policy head",
+      "arms": [
+        "RR",
+        "HR",
+        "RH",
+        "HH"
+      ],
+      "encoder_layout_sha256": "c8c7fdcab3dfb1b6af5f1ac3a54f9347dd52e3d4673ad6f88e8d9407523d8bbb",
+      "hero_leaf_count": 462,
+      "hero_state_sha256": "665ac91ad37e14a6c8810068700dba021e39e9c0fe145c8bf620882bb5a71692",
+      "on_disk_mixed_checkpoints": false,
+      "raw_asset_sha256": "61e43e98d2c4cb747498c6bc13a5bbb3b07e985d3f5d87f0351a4db855fa0651",
+      "raw_mapping_sha256": "c7a22e25a74e959357f294dfdda4a8f47372d79c96ada49131967bec75b2d93c",
+      "resident_parameter_bytes": 793834496,
+      "schema_version": "bt4-raw-hero-comparison-models-v1"
+    },
+    "passed": true
+  },
+  "schema_version": "bt4-lorsa-token-semantics-run-v2",
+  "source_files": {
+    "research/interpretability/chess_concepts.py": "1159cfcc2e25a2a52620be2056f3a4d45a9e08680bcd35bf3da067fafafe82e3",
+    "research/interpretability/chessbench.py": "ea4a19cf9e8a1af40212bdfc531c98f94db9d237021e5a0285399687c0d9c854",
+    "research/interpretability/models.py": "a3f8fddf06c74104e2fb15717fa4b612a45f5501c2791b62df7f329697270f03",
+    "research/interpretability/sparse/feature_semantics.py": "547764dd6255864b57fa264bc103dc46fe43eafcadc9bf8533dab2ee9bca9b52",
+    "research/interpretability/sparse/lorsa.py": "932b53e494773da90359300e9a3bc76249fbef6329e19537a0dbebfb5f9f9566",
+    "research/interpretability/sparse/lorsa_token_semantics.py": "2f9191ae6e5e4621cc8ce5ac19109c1458799c83a979c263eed43b9a67c89ad1",
+    "research/train_torch.py": "c9ce7531f43a4e7bc0a6e1fa02a238dac8abb8eddf76da3530aa3b960904b4a3"
+  },
+  "source_identities": {
+    "corpus_integrity": "9195f857f60ab123b353095b6b931c589ae69098750ea6b26e53e7d871f349d0",
+    "hero": "665ac91ad37e14a6c8810068700dba021e39e9c0fe145c8bf620882bb5a71692",
+    "lorsa_manifest": "2fe2d2cf6a132e4a205b25373c50b74e4462caf44057ccb98c0e7e7a3f736b61",
+    "lorsa_weights": "2dc7c7cd90550bc3489e4940bb39746e8a3cdcfdc613ac73e9bb2e4bdfe5b8fd",
+    "raw": "61e43e98d2c4cb747498c6bc13a5bbb3b07e985d3f5d87f0351a4db855fa0651"
+  },
+  "source_transfer_gate": {
+    "criteria": {
+      "artifact_contract_passed": true,
+      "checksum_inventory_exact": true,
+      "corpus_identity_matches": true,
+      "development_split_only": true,
+      "examples_unique_and_complete": true,
+      "feature_width_exact": true,
+      "hero_identity_matches": true,
+      "hero_transfer_complete": true,
+      "hero_transfer_declared_interpretable": true,
+      "layer_exact": true,
+      "lorsa_before_after_frozen": true,
+      "lorsa_manifest_identity_matches": true,
+      "lorsa_payload_identity_matches": true,
+      "main_environment_pickle_excluded": true,
+      "manifest_schema_exact": true,
+      "metrics_identity_matches": true,
+      "metrics_schema_exact": true,
+      "position_counts_match": true,
+      "positions_identity_matches": true,
+      "raw_identity_matches": true,
+      "run_identity_matches": true,
+      "source_compatibility_passed": true,
+      "source_lorsa_frozen": true,
+      "source_stage_complete": true,
+      "source_test_split_unopened": true,
+      "token_width_exact": true
+    },
+    "failure_action": "abort before loading models or evaluating semantic features",
+    "passed": true,
+    "position_count": 512,
+    "schema_version": "bt4-lorsa-source-transfer-verification-v1",
+    "source_transfer_checksum_identity": "9e40c817562955070418d2dae1587eba2cfea3bc5baa71a83f4dfdb72b80d18e",
+    "source_transfer_metrics_identity": "5906d5235cb5c735f8d6e0c345057f072dea0c8682c05956d629b84b426941bc",
+    "source_transfer_positions_identity": "016fcf5775758f36f035685ddc4d0acd3cc45c426a13b18377a33748dd060d5f",
+    "source_transfer_run_id": "sha256:b7b67d80087f5beec16a1ce3fe331cf228457394ea15cd50d56ee21213209e0c"
+  },
+  "started_utc": "2026-08-08T13:36:02.271428+00:00",
+  "storage_contract": {
+    "concept_label_tensors_persisted": false,
+    "cpu_sufficient_statistics_persisted": false,
+    "feature_summaries_persisted": false,
+    "features_persisted": false,
+    "forbidden_tensor_suffixes": [
+      ".npy",
+      ".npz",
+      ".pt",
+      ".pth",
+      ".safetensors"
+    ],
+    "planes_persisted": false,
+    "retained_files": [
+      "metrics.json",
+      "selection.json",
+      "positions.json",
+      "manifest.json",
+      "run.log",
+      "checksums.sha256"
+    ]
+  },
+  "test_split_contract": {
+    "corpus_container_contains_reserved_test_rows": true,
+    "test_concepts_evaluated": false,
+    "test_confirmatory_claims_permitted": false,
+    "test_rows_selected": 0
+  }
+}

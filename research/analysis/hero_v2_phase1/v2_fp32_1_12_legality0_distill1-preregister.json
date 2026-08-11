@@ -1,0 +1,100 @@
+{
+  "schema_version": "chess-dfm-hero-v2-policy-distillation-preregister-v1",
+  "created_utc": "2026-08-09T15:48:57Z",
+  "status": "sealed_before_candidate_launch",
+  "parents": {
+    "legality_zero_preregister": {
+      "path": "research/analysis/hero_v2_phase1/v2_fp32_1_12_legality0-preregister.json",
+      "sha256": "2ae4821c40ff4ec01b67b50d9a280d84deea194c63ae5ddf2939b8762e501f4f"
+    },
+    "legality_zero_comparison": {
+      "path": "research/analysis/hero_v2_phase1/v2_fp32_1_12_legality0-comparison.json",
+      "sha256": "ba75e806328db8feee1d80faf75055e2e0851000e702785b5a7f0a142d4f8eda"
+    },
+    "matched_control_contract": {
+      "path": "research/analysis/hero_v2_phase1/v2_fp32_1_12_legality0_distill1-control-contract.json",
+      "sha256": "5c3cfe6af5a3510c2a400565eb7a3df4e92a752772e32c281b0d0ab78e1e282f"
+    }
+  },
+  "causal_motivation": {
+    "control_canonical_predictive_delta_vs_hero1": -0.236923,
+    "control_canonical_predictive_interval_95pct": [-0.322222, -0.147549],
+    "control_frozen_root_legal_top1": 0.43603515625,
+    "hero1_frozen_root_legal_top1": 0.455078125,
+    "noninferiority_floor": 0.445078125,
+    "prior_terminal_round_robin": "The inherited Hero policy-only path beat the final DFM-128 path by 180.95 joint-model Elo on the sealed first-128 paired opening pool.",
+    "hypothesis": "The legality-zero optimizer recipe learns the shared predictive tasks faster, but its DFM residual damages the stronger inherited legal-move ranking. A stopped online policy-head teacher can constrain only the final DFM root distribution and recover behavior without reducing encoder learning rate or adding inference cost."
+  },
+  "arm": {
+    "name": "v2_fp32_1_12_legality0_distill1",
+    "profile": "phase1",
+    "gpu": "L40S",
+    "updates": 554,
+    "examples_per_update": 1024,
+    "recipe": "hero_v2",
+    "main_lr_multiplier": 1.0,
+    "encoder_lr_ratio": 0.08333333333333333,
+    "optimizer_precision": "fp32_master",
+    "schedule_kind": "warmup_stable_linear_decay",
+    "wsd_decay_fraction": 0.2,
+    "weight_decay_mode": "decoupled",
+    "legality_coeff": 0.0,
+    "policy_distill_coeff": 1.0,
+    "only_change_from_control": "policy_distill_coeff: 0.0 -> 1.0"
+  },
+  "distillation_contract": {
+    "teacher": "stopped online native BT4 root policy head",
+    "student": "final one-pass DFM root logits",
+    "support": "complete board-specific legal action set",
+    "direction": "KL(teacher || student)",
+    "weighting": "same valid-root example weight as root legal CE",
+    "teacher_gradient": false,
+    "illegal_student_logit_gradient": 0.0,
+    "inference_graph_change": false,
+    "coefficient_rationale": "The zero-initialized DFM residual makes KL exactly zero at update zero, so an update-zero scale sweep is uninformative. Unit weight gives one nat of policy divergence the same Lagrangian scale as one nat of DFM CE. No coefficient sweep is authorized before reassessment."
+  },
+  "analysis_contract": {
+    "command": "compare-policy-distillation",
+    "total_training_loss_comparable": false,
+    "primary_estimand": {
+      "name": "canonical_predictive_loss",
+      "formula": "dfm_ce + root_legal_ce_coeff*root_legal_conditional_ce + jepa_positive + 2*target_sigreg + 2*pred_sigreg + 0.25*wdl_ce",
+      "excluded_terms": ["policy_distillation", "root_illegal_mass"],
+      "paired_inference": "updates 101-554; 32-update moving-block bootstrap; 10000 replicates; seed 20260809",
+      "success": "candidate-minus-control 95% interval wholly below zero"
+    },
+    "frozen_validation": "All predictive noninferiority bounds are inherited verbatim from the content-bound matched control contract.",
+    "behavior_gate": {
+      "metric": "root_legal_top1_accuracy",
+      "floor": 0.445078125,
+      "failure_action": "reject; do not run Phase 2",
+      "success_action": "run movement audit and a new 128-pair one-pass masked-play arena before any Phase 2 decision"
+    },
+    "distillation_diagnostics": [
+      "base_policy_root_legal_conditional_ce",
+      "base_policy_dfm_root_legal_kl",
+      "weighted_base_policy_dfm_root_legal_kl",
+      "base_policy_root_legal_top1_accuracy",
+      "base_policy_dfm_root_legal_top1_agreement"
+    ],
+    "phase2_authorized_by_phase1_result": false
+  },
+  "multiplicity": {
+    "new_training_arms_before_reassessment": 1,
+    "coefficient_sweep_authorized": false,
+    "selected_before_candidate_metrics": true
+  },
+  "implementation": {
+    "train_torch_sha256": "0ce1a9c96c15133e64d1e8f7291b7a6787dadc1e28e42fde434a89af33347dbd",
+    "modal_train_app_sha256": "e71ea15fbd8b0295c0e5c017df2661393df010f12bba2eb5fd880d232e4da188",
+    "comparison_sha256": "d8c720a10e01dc6965876141c095eafc8c81acdbd89dcca1294d41703f8362f8",
+    "tests": "78 focused training/Modal tests plus 8 comparator tests passed",
+    "ruff": "passed"
+  },
+  "cost_guard": {
+    "workspace_budget_usd": 42.5,
+    "repository_new_launch_stop_usd": 34.0,
+    "phase1_attempt_cap_usd": 4.2,
+    "fresh_billing_query_required_immediately_before_launch": true
+  }
+}

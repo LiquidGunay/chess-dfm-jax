@@ -1,0 +1,53 @@
+{
+  "schema_version": "chess-dfm-fixed-teacher-movement-diagnostic-preregister-v1",
+  "created_utc": "2026-08-09T19:34:19Z",
+  "status": "sealed_before_launch",
+  "purpose": "Measure which inherited BT4 parameter groups moved under immutable Hero1 policy distillation and distinguish policy preservation from merely matching DFM outputs.",
+  "interpretation_boundary": "This is a descriptive post-gate mechanism audit. It cannot rescue the failed JEPA noninferiority gate, promote the arm, or authorize Phase 2.",
+  "candidate": {
+    "label": "hero-training-phase1-v2_fp32_1_12_legality0_hero1distill1-l40s-1712d50db9d0a488031b",
+    "checkpoint_state_sha256": "72a51f168b6b7146360e9aeb15bb1188b73890f642556f8be8255af88b488354",
+    "optimizer_update": 554
+  },
+  "matched_references": {
+    "legality_zero": {
+      "path": "research/analysis/hero_v2_phase1/v2_fp32_1_12_legality0/parameter_diff.json",
+      "sha256": "c1763962c9670c31fc9f178c30bdca023abd4869c5ff27db1feee7157d31a9b1",
+      "trunk_relative_delta_l2": 0.004101642629955192,
+      "trunk_changed_fraction": 0.3435891803439579
+    },
+    "online_teacher": {
+      "path": "research/analysis/hero_v2_phase1/v2_fp32_1_12_legality0_distill1/parameter_diff.json",
+      "sha256": "6d0bf4b63b31554a72e9aeb01120397b1a266f275af729d53f0b9a26981df7ea",
+      "trunk_relative_delta_l2": 0.004012618014561268,
+      "trunk_changed_fraction": 0.3394798538627603
+    }
+  },
+  "analysis_contract": {
+    "primary_diagnostics": [
+      "trunk relative_delta_l2",
+      "trunk unchanged_fraction",
+      "embedding relative_delta_l2",
+      "layers relative_delta_l2",
+      "policy_head relative_delta_l2"
+    ],
+    "derived_contrasts": [
+      "fixed teacher minus legality-zero",
+      "fixed teacher minus online teacher",
+      "percent reduction in trunk relative_delta_l2"
+    ],
+    "hypothesis": "An immutable Hero1 teacher should reduce trunk drift more than the moving online teacher and should especially constrain the inherited native-policy behavior.",
+    "classification": "Report magnitudes and directions without a significance or promotion claim. Interpret together with DFM and policy-only arenas."
+  },
+  "implementation": {
+    "git_commit": "86ba0b37e3e188eab115b45a1460d079fac341f8",
+    "movement_source_tree_sha256": "aa8516ad4aea65f493a7cad6b405033d83ee81415c07d1a101f8e239bc3827a7",
+    "raw_bt4_sha256": "61e43e98d2c4cb747498c6bc13a5bbb3b07e985d3f5d87f0351a4db855fa0651"
+  },
+  "cost_guard": {
+    "workspace_budget_usd": 42.5,
+    "repository_new_launch_stop_usd": 34.0,
+    "attempt_cap_usd": 0.3,
+    "fresh_billing_query_required_immediately_before_launch": true
+  }
+}

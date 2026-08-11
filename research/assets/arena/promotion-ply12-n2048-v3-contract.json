@@ -1,0 +1,108 @@
+{
+  "asset_version": "promotion-ply12-n2048-v3",
+  "contract_sha256": "b3b282d454bfa332af5634c0eb735814335f84528d6fc0c63cd099e2c10fd3c0",
+  "disjointness": {
+    "assertion": "all_valid_val_ply12_fens_excluded_from_test_selection",
+    "test_selected_fens": 2048,
+    "val_test_selected_overlap_count": 0
+  },
+  "histories": {
+    "file_sha256": "bac58cc7380d9a4173e7618a765917aa0990355e1f8e460196affbe28580ed37",
+    "history_convention": "chronological_standard_initial_through_root_inclusive",
+    "history_count": 2048,
+    "manifest_sha256": "d8781efb5d76066bcf2ce2e9ab2897f3261b20f7c4488c90992a8eadcc918a4b",
+    "path": "research/assets/arena/promotion-ply12-n2048-histories-v3.json",
+    "pool_sha256": "e750e87643c482d28b4201668bd355234fe1fb27f2a690bf784706b1ddd37459"
+  },
+  "history_filter": {
+    "filter_passes": 2,
+    "final_exact_replay_count": 2048,
+    "final_terminal_root_count": 0,
+    "policy": "reject_before_reselection; never_skip_or_replace_at_arena_runtime",
+    "rejected_opening_count": 8,
+    "rejection_counts": {
+      "history_does_not_begin_at_standard_initial": 4,
+      "history_root_terminal_threefold_repetition": 1,
+      "invalid_standard_history_fen": 3
+    },
+    "rejections": [
+      {
+        "fen": "rnbbkn1r/pp2p1qp/2pp2p1/8/4pP2/2NPN3/PPP2QPP/R1BBK2R w KQkq - 0 7",
+        "reason": "history_does_not_begin_at_standard_initial",
+        "selection_hash": "039624cb1f14d3f0fbb450e03226ebb7b526b4359e0e472a51417d8701671b46",
+        "source_row": 432,
+        "source_shard": "test/chunk_000754.npz"
+      },
+      {
+        "fen": "r2nkbbr/ppqp2pp/1np2p2/8/4P2P/2P1N3/PP3PP1/RQN1KBBR w KQkq - 1 7",
+        "reason": "history_does_not_begin_at_standard_initial",
+        "selection_hash": "07736f4287055315dd119b76536bead00099e9298f94da3b44555d4e639b1d84",
+        "source_row": 1004,
+        "source_shard": "test/chunk_001376.npz"
+      },
+      {
+        "fen": "rqbnkb1r/pp3ppp/2p5/2npP3/8/2P1NN2/PP3PPP/RQB1KB1R w KQkq - 2 7",
+        "reason": "history_does_not_begin_at_standard_initial",
+        "selection_hash": "078002adb5b07d4894665c40bcadf62af577c7a7b7ad9028c6b0541977004976",
+        "source_row": 569,
+        "source_shard": "test/chunk_001330.npz"
+      },
+      {
+        "fen": "rb1qknnr/pp3pp1/2p1p2p/3p1B2/3P4/2P2N2/PP2PPPP/R1BQK2R w KQkq - 0 7",
+        "reason": "history_does_not_begin_at_standard_initial",
+        "selection_hash": "0be2b55e608d34fdbf32e6069a4a7f141fba5859b7664d641e4ef070aae8ce5e",
+        "source_row": 24,
+        "source_shard": "test/chunk_000248.npz"
+      },
+      {
+        "fen": "bnkrqnrb/p1pp2p1/1p2p2p/8/4pP2/1P1P2P1/P1P4P/BNKRQNRB w - - 0 7",
+        "reason": "invalid_standard_history_fen",
+        "selection_hash": "158bf1780ce923cc50fc57fd878f1deccada5495ebcbfc3e462da56ff76f39cd",
+        "source_row": 444,
+        "source_shard": "test/chunk_000104.npz"
+      },
+      {
+        "fen": "rnbqkb1r/pppp1ppp/4pn2/8/3P4/2P5/PP1BPPPP/RN1QKBNR w KQkq - 8 7",
+        "reason": "history_root_terminal_threefold_repetition",
+        "selection_hash": "1ddc50de9cd38d63b7dbbae76c1d52edf89cbdf6f1eac5bb2e2a248e109a941e",
+        "source_row": 12,
+        "source_shard": "test/chunk_000960.npz"
+      },
+      {
+        "fen": "br1qnrkb/pp1npp1p/3p2p1/2pP4/2P5/N5P1/PP2PP1P/B1RQNRKB w - - 1 7",
+        "reason": "invalid_standard_history_fen",
+        "selection_hash": "25237dab92b8b83e5da82824667b971583aa020de3e236fcb2aff7d262700eae",
+        "source_row": 1021,
+        "source_shard": "test/chunk_001397.npz"
+      },
+      {
+        "fen": "1nqbrrk1/ppn1pbpp/3p1p2/2p5/2P2P2/2NP4/PP2PBPP/N1QBRRK1 w - - 4 7",
+        "reason": "invalid_standard_history_fen",
+        "selection_hash": "2accaa261f2d156de39343a7079aaa39fd095db328a01f0f47b33e2dcf56093b",
+        "source_row": 534,
+        "source_shard": "test/chunk_000439.npz"
+      }
+    ]
+  },
+  "opening_ply": 12,
+  "pair_count": 2048,
+  "pool": {
+    "file_sha256": "5632cc726112c2ab700e0f4d935fa83d58418b406fc100262f3aa19ce3befe2e",
+    "ordered_fens_sha256": "013778d027d919da9e6a25957e1439c8351081b9cbadf28e29df1c5c7b06b0f2",
+    "path": "research/assets/arena/promotion-ply12-n2048-v3.json",
+    "pool_sha256": "e750e87643c482d28b4201668bd355234fe1fb27f2a690bf784706b1ddd37459",
+    "selection_contract_sha256": "629eac11fa34c7913d7c0658a0309aaea9370bdb80f535eb467a186a7ef1378d",
+    "source_manifest_sha256": "54099c5714ee24ea64695ab45cb48c4912eb630355c8e9d5e7dbdf77b12f08b7"
+  },
+  "schema_version": "chess-dfm-promotion-opening-assets-v3",
+  "selection_algorithm": "sha256-seed-canonical-fen-v1",
+  "selection_seed": 2026071802,
+  "source_dataset": {
+    "test_shard_count": 1523,
+    "test_source_manifest_sha256": "54099c5714ee24ea64695ab45cb48c4912eb630355c8e9d5e7dbdf77b12f08b7",
+    "trajectory_archive_sha256": "d8feffa259580563c8097fa4a604ca415469dd80da66dabda170ac9ce929b968",
+    "val_fen_universe_count": 12297,
+    "val_fen_universe_sha256": "30927f0f322fa5305352bd7f1e05ea6c3762a18d734087c2ee12536ff6f5a202",
+    "val_shard_count": 1524
+  }
+}

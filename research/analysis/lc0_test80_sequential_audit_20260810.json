@@ -1,0 +1,63 @@
+{
+  "best_missing_from_legal": 0,
+  "checks": {
+    "all_best_actions_present_in_legal_policy": true,
+    "all_games_accounted_for": true,
+    "all_played_actions_present_in_legal_policy": true,
+    "float16_policy_mass_error_below_1e-3": true,
+    "game_splits_disjoint": true,
+    "no_padded_played_actions": true,
+    "required_value_fields_finite": true,
+    "root_qd_defines_valid_wdl": true,
+    "root_totals_reproduced": true,
+    "source_sha256_recorded": true
+  },
+  "dataset_root": "/home/ubuntu/chess-dfm-jax/data/lc0_sequential/test80_20240401_0117",
+  "dataset_schema_version": "lc0-sequential-v1",
+  "duplicate_game_names": [],
+  "gate_pass": true,
+  "invalid_wdl": 0,
+  "legal_count": {
+    "maximum": 74,
+    "minimum": 1
+  },
+  "padded_played_actions": 0,
+  "played_d_vs_successor_root_d": {
+    "correlation": 0.9966518572380431,
+    "count": 8239830,
+    "mae": 0.02171184067950931
+  },
+  "played_missing_from_legal": 0,
+  "played_q_vs_negative_successor_root_q": {
+    "correlation": 0.9970441377357183,
+    "count": 8239830,
+    "mae": 0.032214495971415284
+  },
+  "policy_mass_max_absolute_error": 0.0004444122314453125,
+  "required_value_nonfinite": 0,
+  "schema_version": "lc0-sequential-audit-v1",
+  "source_sha256": "1c5e5d0d1d335bfeca9693700a1ad1415abfb190772bd051d1f00cb193eb3c2f",
+  "split_totals": {
+    "test": {
+      "games": 771,
+      "positions": 84626,
+      "shards": 248,
+      "trainable_starts": 83855
+    },
+    "train": {
+      "games": 73908,
+      "positions": 8148759,
+      "shards": 254,
+      "trainable_starts": 8074851
+    },
+    "validation": {
+      "games": 745,
+      "positions": 81869,
+      "shards": 243,
+      "trainable_starts": 81124
+    }
+  },
+  "storage_bytes": 8635794032,
+  "unique_game_count": 75424,
+  "wall_seconds": 22.57723803294357
+}

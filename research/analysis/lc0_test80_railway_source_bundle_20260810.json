@@ -1,0 +1,16 @@
+{
+  "bundle_sha256": "cf83360c179fa939176bda91f9e8ffa7cb0e115e463dbdb5c06cf1a3b502d3aa",
+  "created_utc": "2026-08-10T17:47:12Z",
+  "file_count": 1,
+  "kind": "lc0-sequential-source",
+  "manifest_key": "chess-dfm/v1/bundles/sha256/cf83360c179fa939176bda91f9e8ffa7cb0e115e463dbdb5c06cf1a3b502d3aa/bundle.json",
+  "remote_head_verified_after_upload": true,
+  "schema_version": "chess-dfm-lc0-railway-source-receipt-v1",
+  "source": {
+    "logical_name": "source/training-run1-test80-20240401-0117.tar",
+    "sha256": "1c5e5d0d1d335bfeca9693700a1ad1415abfb190772bd051d1f00cb193eb3c2f",
+    "size_bytes": 1773731840
+  },
+  "storage_role": "immutable transfer source; reconstruct sequential shards once on the stateful training volume",
+  "uploaded_files": 1
+}

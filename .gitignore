@@ -5,6 +5,7 @@ uv.lock
 __pycache__/
 *.pyc
 node_modules/
+.local/
 
 # Logs
 *.log
@@ -12,10 +13,17 @@ runs/
 sweep_runs/
 wandb/
 docs/*.local.json
+research/notebooks/__marimo__/
 
 # Artifacts
 models/
 artifacts/
+checkpoints/
+data/
+!chess_dfm_jax/data/
+!chess_dfm_jax/data/*.py
+research/runs/
 *.pb.gz
 *.npz
+!research/eval/interpretability_pilot_v1/positions.npz
 *.csv

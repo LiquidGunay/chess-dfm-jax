@@ -1,0 +1,7 @@
+segment,source_run,inherited_updates,global_batch,examples_in_final_lineage,epochs_in_final_lineage,optimizer_start,main_learning_rate,jepa_sigreg_coefficient,notes
+A — fresh joint training,initial_b256,221432,256,56686592,2.0,fresh,0.0006,0.1,20k teacher-forcing steps; raw BT4 initialization
+B — inherited prefix only,continuation_b512,10000,512,5120000,0.18064236424726327,fresh (model-only checkpoint load),0.0003,0.05,"Steps 10,001–15,176 formed a 0.0935-epoch side branch and were not inherited"
+C1 — final run prefix,final_reused_run,10000,512,5120000,0.18064236424726327,fresh (model-only checkpoint load),0.0003,0.05,"The later 8,192-batch resume appears to restart from step 10,000"
+C2 — large-batch continuation to retained checkpoint,final_reused_run,255000,8192,2088960000,73.70208461288341,resumed within run,0.0003,0.05 through step 175k; 0.01 thereafter,Validation best at step 255k; retained checkpoint is step 265k
+Retained final model — total,three-run lineage,496432,,2155886592,76.06336934137794,three optimizer phases,"6e-4, then 3e-4",0.1 → 0.05 → 0.01,Exact under the high-confidence step-10k resume reconstruction
+W&B endpoint — not retained locally,final_reused_run,498590,,2173564928,76.68709129665089,,,0.01,Training signal was unstable; run state is crashed

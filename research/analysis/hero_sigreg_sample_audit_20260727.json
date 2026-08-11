@@ -1,0 +1,396 @@
+{
+  "created_utc": "2026-07-27T19:03:22.094964+00:00",
+  "decision": {
+    "adopt_without_training_comparison": false,
+    "automatic_coefficient_rescale": false,
+    "baseline_sample_count": 64,
+    "candidate_sample_count": 256,
+    "full_batch_1024_status": "Deferred until 256 has training evidence. Full-batch statistics may remove useful stochastic regularization and require a bounded/chunked implementation audit.",
+    "next_gate": "Run seed/data-matched fresh-initialization 64 and 256 sample experiments with every other model, loss, schedule, runtime, validation, and Arena setting frozen.",
+    "rationale": [
+      "Count 256 reduces weighted-statistic subset dispersion by 69.6% at initialization and 79.5% at the hero terminal state.",
+      "Count 256 adds 3.233 ms to the isolated fresh-state statistic and does not increase representative peak allocated HBM.",
+      "The estimator is normalized by selected-example count; its fresh-state weighted mean and shared gradient norm remain close to count 64, so the coefficient stays 2.0.",
+      "The terminal gradient direction changes materially, so larger samples are an objective/noise ablation whose quality must be measured, not a semantics-preserving systems change."
+    ],
+    "shared_coefficient": 2.0
+  },
+  "direct_128_to_256": {
+    "fresh_initialization": {
+      "forward_backward_wall_ms": {
+        "128": 3741.997729986906,
+        "256": 3869.7855880018324
+      },
+      "forward_backward_wall_ms_delta_256_vs_128": 127.78785801492631,
+      "gradient_256_vs_128": {
+        "all": {
+          "cosine": 0.9767085811085616,
+          "norm_ratio": 0.9667546230067959
+        },
+        "dfm_policy": {
+          "cosine": null,
+          "norm_ratio": null
+        },
+        "dfm_state_projector": {
+          "cosine": null,
+          "norm_ratio": null
+        },
+        "jepa": {
+          "cosine": 0.9938999905506546,
+          "norm_ratio": 0.9700065573989958
+        },
+        "raw_bt4": {
+          "cosine": 0.8919360610662492,
+          "norm_ratio": 0.9490677184189974
+        },
+        "state_projector": {
+          "cosine": 0.9982997133766753,
+          "norm_ratio": 0.9713058420128975
+        },
+        "value_wdl": {
+          "cosine": null,
+          "norm_ratio": null
+        }
+      },
+      "state": "fresh_initialization"
+    },
+    "hero_epoch_terminal": {
+      "forward_backward_wall_ms": {
+        "128": 3743.189667002298,
+        "256": 3748.080238001421
+      },
+      "forward_backward_wall_ms_delta_256_vs_128": 4.890570999123156,
+      "gradient_256_vs_128": {
+        "all": {
+          "cosine": 0.870912032065225,
+          "norm_ratio": 0.7023676077450168
+        },
+        "dfm_policy": {
+          "cosine": 0.727902262792499,
+          "norm_ratio": 0.7908524423095525
+        },
+        "dfm_state_projector": {
+          "cosine": 0.7935098751746091,
+          "norm_ratio": 0.7476472625316114
+        },
+        "jepa": {
+          "cosine": 0.8733340455292725,
+          "norm_ratio": 0.7109951491290863
+        },
+        "raw_bt4": {
+          "cosine": 0.8523711539911984,
+          "norm_ratio": 0.5641736283191989
+        },
+        "state_projector": {
+          "cosine": 0.8968862529209904,
+          "norm_ratio": 0.7605061860022658
+        },
+        "value_wdl": {
+          "cosine": null,
+          "norm_ratio": null
+        }
+      },
+      "state": "checkpoint_u27679"
+    }
+  },
+  "fixed_contract": {
+    "coefficient_rescaled": false,
+    "nested_deterministic_subsets": true,
+    "optimizer_updates_performed": 0,
+    "physical_batch_size": 1024,
+    "prediction_sigreg_coefficient": 2.0,
+    "sample_counts": [
+      64,
+      128,
+      256
+    ],
+    "target_sigreg_coefficient": 2.0
+  },
+  "inputs": {
+    "fresh_counts": {
+      "path": "artifacts/profiles/hero_sigreg_sample_audit_fresh_b1024_v1.json",
+      "sha256": "fa25f2ae09e207a2f947ee6f7d0a5303af5080f5da51b5058fce9953e3082f56"
+    },
+    "fresh_pair_128_256": {
+      "path": "artifacts/profiles/hero_sigreg_sample_audit_fresh_pair128_256_b1024_v1.json",
+      "sha256": "6e4b70ceada2c9b7c546a110a1afb0ec3ab033ed7729b94b348d237f87cebcd6"
+    },
+    "terminal_counts": {
+      "path": "artifacts/profiles/hero_sigreg_sample_audit_terminal_b1024_v1.json",
+      "sha256": "51696d4f6019dd323df0901aa44e119e03690b52f3f65ef8a786870bc106543e"
+    },
+    "terminal_pair_128_256": {
+      "path": "artifacts/profiles/hero_sigreg_sample_audit_terminal_pair128_256_b1024_v1.json",
+      "sha256": "4277c08f8efffca001ef6dbf7243ed14e44a77e58e71742daf660310bd646463"
+    }
+  },
+  "schema_version": "torch-hero-sigreg-sample-decision-v1",
+  "states": {
+    "fresh_initialization": {
+      "batch_size": 1024,
+      "counts": {
+        "128": {
+          "gradient_vs_64": {
+            "all": {
+              "cosine": 0.9526231527085723,
+              "norm_ratio": 1.0018897452358282
+            },
+            "dfm_policy": {
+              "cosine": null,
+              "norm_ratio": null
+            },
+            "dfm_state_projector": {
+              "cosine": null,
+              "norm_ratio": null
+            },
+            "jepa": {
+              "cosine": 0.9921521812809397,
+              "norm_ratio": 0.9493478903614533
+            },
+            "raw_bt4": {
+              "cosine": 0.7897909387679057,
+              "norm_ratio": 0.9792748553394073
+            },
+            "state_projector": {
+              "cosine": 0.99625435045801,
+              "norm_ratio": 1.0088887396835762
+            },
+            "value_wdl": {
+              "cosine": null,
+              "norm_ratio": null
+            }
+          },
+          "mean_statistic_cuda_ms": 3.4936319589614864,
+          "peak_allocated_bytes": 17340809728,
+          "representative_backward_cuda_ms": 2100.48193359375,
+          "representative_forward_cuda_ms": 1645.534912109375,
+          "shared_sigreg_gradient_norm": 135.26755893413616,
+          "weighted_shared_sigreg_mean": 2.8368956446647644,
+          "weighted_shared_sigreg_sample_std": 0.13189890564432427
+        },
+        "256": {
+          "gradient_vs_64": {
+            "all": {
+              "cosine": 0.9495826957963008,
+              "norm_ratio": 0.9685815429498379
+            },
+            "dfm_policy": {
+              "cosine": null,
+              "norm_ratio": null
+            },
+            "dfm_state_projector": {
+              "cosine": null,
+              "norm_ratio": null
+            },
+            "jepa": {
+              "cosine": 0.9866660671604857,
+              "norm_ratio": 0.9208736789035126
+            },
+            "raw_bt4": {
+              "cosine": 0.7818641680821037,
+              "norm_ratio": 0.9293981526620649
+            },
+            "state_projector": {
+              "cosine": 0.9937192399514478,
+              "norm_ratio": 0.979939526795687
+            },
+            "value_wdl": {
+              "cosine": null,
+              "norm_ratio": null
+            }
+          },
+          "mean_statistic_cuda_ms": 5.553664028644562,
+          "peak_allocated_bytes": 17340035584,
+          "representative_backward_cuda_ms": 2199.38623046875,
+          "representative_forward_cuda_ms": 1647.270263671875,
+          "shared_sigreg_gradient_norm": 130.77053794242036,
+          "weighted_shared_sigreg_mean": 2.8553723990917206,
+          "weighted_shared_sigreg_sample_std": 0.04758970118758427
+        },
+        "64": {
+          "gradient_vs_64": {
+            "all": {
+              "cosine": 1.0,
+              "norm_ratio": 1.0
+            },
+            "dfm_policy": {
+              "cosine": null,
+              "norm_ratio": null
+            },
+            "dfm_state_projector": {
+              "cosine": null,
+              "norm_ratio": null
+            },
+            "jepa": {
+              "cosine": 1.0,
+              "norm_ratio": 1.0
+            },
+            "raw_bt4": {
+              "cosine": 1.0,
+              "norm_ratio": 1.0
+            },
+            "state_projector": {
+              "cosine": 1.0,
+              "norm_ratio": 1.0
+            },
+            "value_wdl": {
+              "cosine": null,
+              "norm_ratio": null
+            }
+          },
+          "mean_statistic_cuda_ms": 2.3207679837942123,
+          "peak_allocated_bytes": 17340809728,
+          "representative_backward_cuda_ms": 2098.779052734375,
+          "representative_forward_cuda_ms": 1642.587158203125,
+          "shared_sigreg_gradient_norm": 135.0124198569339,
+          "weighted_shared_sigreg_mean": 2.9458099752664566,
+          "weighted_shared_sigreg_sample_std": 0.1564203131170321
+        }
+      },
+      "dispersion_reduction_vs_64": {
+        "128": 0.15676613212224666,
+        "256": 0.6957575378846216
+      },
+      "gate_pass": true,
+      "peak_allocated_bytes_delta_256_vs_64": -774144,
+      "replicates": 8,
+      "shared_coefficient": 2.0,
+      "state": "fresh_initialization",
+      "statistic_cuda_ms_delta_256_vs_64": 3.2328960448503494,
+      "weighted_mean_ratio_256_vs_64": 0.9692995892694825
+    },
+    "hero_epoch_terminal": {
+      "batch_size": 1024,
+      "counts": {
+        "128": {
+          "gradient_vs_64": {
+            "all": {
+              "cosine": 0.8560144171783078,
+              "norm_ratio": 0.909797579521172
+            },
+            "dfm_policy": {
+              "cosine": 0.7660754102423698,
+              "norm_ratio": 0.8847454873239561
+            },
+            "dfm_state_projector": {
+              "cosine": 0.8065892178442398,
+              "norm_ratio": 0.9755322216657873
+            },
+            "jepa": {
+              "cosine": 0.86938191081052,
+              "norm_ratio": 0.9488342370924079
+            },
+            "raw_bt4": {
+              "cosine": 0.8352614555800298,
+              "norm_ratio": 0.7209830888111339
+            },
+            "state_projector": {
+              "cosine": 0.8238386512828355,
+              "norm_ratio": 0.9049321952896487
+            },
+            "value_wdl": {
+              "cosine": null,
+              "norm_ratio": null
+            }
+          },
+          "mean_statistic_cuda_ms": 3.1633919775485992,
+          "peak_allocated_bytes": 17340678656,
+          "representative_backward_cuda_ms": 2100.568115234375,
+          "representative_forward_cuda_ms": 1641.6829833984375,
+          "shared_sigreg_gradient_norm": 0.8748945445136662,
+          "weighted_shared_sigreg_mean": 0.1219650600105524,
+          "weighted_shared_sigreg_sample_std": 0.006819220516323858
+        },
+        "256": {
+          "gradient_vs_64": {
+            "all": {
+              "cosine": 0.7907378073495007,
+              "norm_ratio": 0.6390123494604923
+            },
+            "dfm_policy": {
+              "cosine": 0.7186955686816394,
+              "norm_ratio": 0.6997031294725059
+            },
+            "dfm_state_projector": {
+              "cosine": 0.7483266389104838,
+              "norm_ratio": 0.7293539950398071
+            },
+            "jepa": {
+              "cosine": 0.8169121890215824,
+              "norm_ratio": 0.6746165399002994
+            },
+            "raw_bt4": {
+              "cosine": 0.7162360880251738,
+              "norm_ratio": 0.40675964517136065
+            },
+            "state_projector": {
+              "cosine": 0.7756631667007565,
+              "norm_ratio": 0.6882065324303883
+            },
+            "value_wdl": {
+              "cosine": null,
+              "norm_ratio": null
+            }
+          },
+          "mean_statistic_cuda_ms": 5.525888085365296,
+          "peak_allocated_bytes": 17340678656,
+          "representative_backward_cuda_ms": 2227.401611328125,
+          "representative_forward_cuda_ms": 1644.0780029296875,
+          "shared_sigreg_gradient_norm": 0.6144975882592298,
+          "weighted_shared_sigreg_mean": 0.10824088146910071,
+          "weighted_shared_sigreg_sample_std": 0.003525017438390535
+        },
+        "64": {
+          "gradient_vs_64": {
+            "all": {
+              "cosine": 1.0,
+              "norm_ratio": 1.0
+            },
+            "dfm_policy": {
+              "cosine": 1.0,
+              "norm_ratio": 1.0
+            },
+            "dfm_state_projector": {
+              "cosine": 1.0,
+              "norm_ratio": 1.0
+            },
+            "jepa": {
+              "cosine": 1.0,
+              "norm_ratio": 1.0
+            },
+            "raw_bt4": {
+              "cosine": 1.0,
+              "norm_ratio": 1.0
+            },
+            "state_projector": {
+              "cosine": 1.0,
+              "norm_ratio": 1.0
+            },
+            "value_wdl": {
+              "cosine": null,
+              "norm_ratio": null
+            }
+          },
+          "mean_statistic_cuda_ms": 2.0264959782361984,
+          "peak_allocated_bytes": 17340678656,
+          "representative_backward_cuda_ms": 2098.05517578125,
+          "representative_forward_cuda_ms": 1641.2261962890625,
+          "shared_sigreg_gradient_norm": 0.9616364828911994,
+          "weighted_shared_sigreg_mean": 0.14241509372368455,
+          "weighted_shared_sigreg_sample_std": 0.01717879301320704
+        }
+      },
+      "dispersion_reduction_vs_64": {
+        "128": 0.603044258634396,
+        "256": 0.7948041264784723
+      },
+      "gate_pass": true,
+      "peak_allocated_bytes_delta_256_vs_64": 0,
+      "replicates": 8,
+      "shared_coefficient": 2.0,
+      "state": "checkpoint_u27679",
+      "statistic_cuda_ms_delta_256_vs_64": 3.499392107129098,
+      "weighted_mean_ratio_256_vs_64": 0.7600379892254325
+    }
+  }
+}

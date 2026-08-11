@@ -1,0 +1,45 @@
+{
+  "schema_version": "chess-dfm-policy-distillation-implementation-addendum-v1",
+  "created_utc": "2026-08-09T16:02:51Z",
+  "status": "sealed_after_invalid_diagnostic_and_before_corrected_relaunch",
+  "parent_preregister": {
+    "path": "research/analysis/hero_v2_phase1/v2_fp32_1_12_legality0_distill1-preregister.json",
+    "sha256": "b9128d361b778d37749e1db0316bc2b8caa8e6fd527d5ed9056b2cfe2e7a1014"
+  },
+  "correction": {
+    "problem": "The detached teacher probability branch was stopped, but final DFM logits include the native base-policy logits additively. KL therefore still had a student-side gradient path into the shared policy head.",
+    "scientific_violation": "This contradicted the preregistered requirement that policy_distillation gradients update the DFM/encoder student but not its policy-head teacher.",
+    "fix": "Use final_root + stop_gradient(base_root) - base_root as the student logits for KL. Its forward value is bit-identical to final_root, while the additive base-head gradient cancels exactly; DFM residual and encoder paths remain trainable.",
+    "contract_changes": false,
+    "coefficient_changes": false,
+    "analysis_changes": false
+  },
+  "quarantined_diagnostic": {
+    "result_label": "hero-training-diagnostic-v2_fp32_1_12_legality0_distill1-l40s-9148d0445ce7684748de",
+    "app_id": "ap-9lwRcOFzRI7AKaO6LaNeM4",
+    "updates": 10,
+    "checkpoint_saved": false,
+    "compile_source_tree_sha256": "af24067f67b1c16f13928f7a2b3160358f8ac7bac470a8cedb87a389182bfe3e",
+    "disposition": "engineering evidence only; excluded from coefficient selection, matched comparison, promotion, and all candidate claims"
+  },
+  "corrected_implementation": {
+    "train_torch_sha256": "ca5b72b173fff302738aa7989f2b1f46df859c3ca440aca36c63eb838667b263",
+    "shared_graph_regression_test_sha256": "64a40c8cda452612ececd8be3312ed0ab7ce3f4e6da38eb5f68b325aeb06a9ac",
+    "test_contract": {
+      "forward_student": "base + residual",
+      "teacher_base_gradient": "exactly zero",
+      "student_residual_gradient": "nonzero on legal logits",
+      "illegal_student_gradient": "exactly zero"
+    },
+    "focused_tests": "78 passed",
+    "ruff": "passed",
+    "git_diff_check": "passed"
+  },
+  "relaunch_rule": {
+    "run_new_10_update_diagnostic": true,
+    "require_nonzero_finite_kl_after_update_one": true,
+    "require_no_nonfinite_optimizer_skip": true,
+    "require_peak_reserved_memory_below_47GiB_L40S_capacity": true,
+    "phase1_launch_only_after_corrected_diagnostic_passes": true
+  }
+}

@@ -1,0 +1,74 @@
+{
+  "schema_version": "chess-dfm-hero-v2-phase1-preregister-v1",
+  "created_utc": "2026-08-09T13:25:15Z",
+  "status": "sealed_before_launch",
+  "parent_decision_record": {
+    "path": "research/analysis/hero_v2_phase1/post_trunk_decision_tree-preregister.json",
+    "sha256": "0ea54815aee4233374f1d8073d4d0d04ba6adf47dd196146bb6893fac4079d33"
+  },
+  "triggered_branch": "trunk_behavior_regresses",
+  "trigger_evidence": {
+    "hero1_root_legal_top1_accuracy": 0.455078125,
+    "noninferiority_floor": 0.445078125,
+    "v2_trunk_fp32_1_12_root_legal_top1_accuracy": 0.3990478515625,
+    "v2_trunk_fp32_1_12_mean_paired_loss_delta_vs_hero1": -0.9454088284580718,
+    "v2_trunk_fp32_1_12_frozen_dfm_ce_loss": 5.67217930406332,
+    "v2_trunk_fp32_1_12_frozen_jepa_positive_loss": 0.12288976303534582,
+    "v2_trunk_fp32_1_12_frozen_validation_comparator_passed": true,
+    "v2_trunk_fp32_1_12_checkpoint_state_sha256": "664af3a4ec9f5abe0e4b248bd768a6da366aef73edac1b4d89030269bb46d582",
+    "interpretation": "Trunk-only FP32 improves conventional loss metrics but loses 5.60 percentage points of legal-masked greedy root accuracy, so loss and legality gains cannot authorize an arena or continuation."
+  },
+  "arm": {
+    "name": "v2_main_fp32_1_30",
+    "profile": "phase1",
+    "gpu": "L40S",
+    "updates": 554,
+    "examples_per_update": 1024,
+    "recipe": "hero_v2",
+    "main_lr_multiplier": 1.0,
+    "encoder_lr_ratio": 0.03333333333333333,
+    "optimizer_precision": "main_fp32_master",
+    "fp32_scope": "every parameter not under encoder.*",
+    "parameter_precision_scope": "all encoder.* parameters, including encoder.policy_head.*",
+    "weight_decay_mode": "decoupled",
+    "schedule_kind": "warmup_stable_linear_decay",
+    "wsd_decay_fraction": 0.2
+  },
+  "question": "Can FP32 accumulation teach the newly initialized planning and predictive heads while the pretrained chess encoder remains behaviorally anchored on its Hero-like BF16 path?",
+  "predictions": {
+    "if_encoder_drift_caused_the_regression": "legal-masked root top-1 returns to at least 0.445078125 while one or more of DFM CE, JEPA loss, or WDL loss improves materially over Hero 1",
+    "if_nonencoder_planner_learning_also_harms_greedy_play": "legal-masked root top-1 remains below 0.445078125 despite Hero-like encoder updates"
+  },
+  "decision_gates": {
+    "root_legal_top1_noninferiority_floor": 0.445078125,
+    "root_legal_top1_tolerance": 0.01,
+    "max_trunk_relative_delta_l2": 0.005,
+    "max_global_relative_delta_l2": 0.01,
+    "requires_frozen_validation_comparator": true,
+    "requires_arena_before_phase2": true,
+    "loss_alone_cannot_promote": true,
+    "phase2_only_if_behavior_is_not_materially_worse": true
+  },
+  "source_identity": {
+    "compile_source_tree_sha256": "20e45806435a5fba9efcfbf30953e957402e4a1186aa0263f9ac10bbc8e31225",
+    "full_source_tree_sha256": "d0788e7a9625a1929c029c8f2759032d8bdae4dfea30672e14b101263668a284"
+  },
+  "verification": {
+    "targeted_tests": "83 passed, 1 skipped",
+    "ruff": "passed",
+    "git_diff_check": "passed",
+    "modal_metered_spend_before_launch_usd": 14.210409,
+    "workspace_native_hard_budget_usd": 42.5,
+    "repository_new_launch_stop_usd": 34.0
+  },
+  "multiplicity": {
+    "additional_phase1_training_arms_before_reassessment": 1,
+    "arm_selected_without_inspecting_its_outcome": true,
+    "no_other_precision_partition_arm_is_permitted_before_reassessment": true
+  },
+  "post_terminal_rule": {
+    "behavior_safe": "run the movement audit and paired arena; Phase 2 requires arena play not clearly worse and a material predictive-objective gain",
+    "behavior_unsafe": "stop precision-partition experiments and preregister an objective intervention that removes unnecessary root-legality pressure or explicitly preserves the pretrained greedy policy",
+    "artifact_ambiguous": "launch nothing and audit provenance"
+  }
+}

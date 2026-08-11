@@ -72,6 +72,10 @@ def bt4_forward(params: dict, planes: jnp.ndarray, *, capture: bool = False):
     save("attn_body", x)
 
     for idx, layer in enumerate(params["encoder"]):
+        save(
+            f"blocks.{idx}.hook_attn_in",
+            x.reshape((batch, 64, embedding_size)),
+        )
         x_in = x
         d_model = layer["d_model"]
         depth = layer["depth"]
@@ -113,13 +117,29 @@ def bt4_forward(params: dict, planes: jnp.ndarray, *, capture: bool = False):
         out = jnp.matmul(attn, v)
         out = out.transpose(0, 2, 1, 3).reshape((-1, d_model))
         out = out @ layer["mha"]["dense_w"] + layer["mha"]["dense_b"]
+        save(
+            f"blocks.{idx}.hook_attn_out",
+            out.reshape((batch, 64, embedding_size)),
+        )
         out = out * alpha
         x = layer_norm(out + x_in, layer["ln1"]["scale"], layer["ln1"]["bias"], eps)
+        save(
+            f"blocks.{idx}.resid_mid_after_ln",
+            x.reshape((batch, 64, embedding_size)),
+        )
 
         ffn = mish(x @ layer["ffn"]["dense1_w"] + layer["ffn"]["dense1_b"])
         ffn = ffn @ layer["ffn"]["dense2_w"] + layer["ffn"]["dense2_b"]
+        save(
+            f"blocks.{idx}.hook_mlp_out",
+            ffn.reshape((batch, 64, embedding_size)),
+        )
         ffn = ffn * alpha
         x = layer_norm(ffn + x, layer["ln2"]["scale"], layer["ln2"]["bias"], eps)
+        save(
+            f"blocks.{idx}.resid_post_after_ln",
+            x.reshape((batch, 64, embedding_size)),
+        )
         save(f"encoder_{idx}", x)
 
     save("trunk", x)

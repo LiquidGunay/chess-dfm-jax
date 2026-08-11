@@ -1,0 +1,70 @@
+{
+  "schema_version": "chess-dfm-policy-only-arena-preregister-v1",
+  "created_utc": "2026-08-09T17:22:47Z",
+  "status": "sealed_before_launch",
+  "hypothesis": "The higher-rate FP32 encoder learned a stronger inherited BT4 policy, while the DFM residual is now the main source of remaining root-policy degradation. A matched policy-only arena isolates that hypothesis without retraining or changing either checkpoint.",
+  "prior_evidence": {
+    "candidate_frozen_root_top1": {
+      "policy_only": 0.4666748046875,
+      "dfm": 0.4603271484375
+    },
+    "candidate_policy_dfm_top1_agreement": 0.8521728515625,
+    "matched_dfm_arena": {
+      "state_path": "research/analysis/hero_v2_phase1/arena/v2_fp32_1_12_legality0_distill1_vs_hero1/128p/state.json",
+      "state_sha256": "b9a143e95bd698c64538731e3655c5faba9bd61060180f37a8835d04f37b2215",
+      "candidate_score": 0.484375
+    }
+  },
+  "models": {
+    "candidate": {
+      "label": "hero-training-phase1-v2_fp32_1_12_legality0_distill1-l40s-f3c3887f52d699a4206b",
+      "state_sha256": "0b15dd3a0af88a6ea99cb7873fb96b9a8828ffe5ce652e7df16e1d942592da95",
+      "policy_mode": "policy_only"
+    },
+    "opponent": {
+      "label": "hero-training-phase1-hero1_exact-l40s-fae7b0ccef5ca3668ed5",
+      "state_sha256": "e518083ee5476e7ff15e7c34caf9c0505f8fb7d330ea5a6882e4e9e5c1ef1912",
+      "policy_mode": "policy_only"
+    }
+  },
+  "arena_contract": {
+    "pair_count": 128,
+    "color_reversed_pairs": true,
+    "refinement_passes": 1,
+    "opening_tier": "hero_development",
+    "deterministic_greedy": true,
+    "complete_legal_masking": true,
+    "additional_ply_cap": 256,
+    "policy_batch_size_cap": 16,
+    "arena_source_tree_sha256": "78800a777f841a6f0054cde6b1d2d50d8cbd95ed2430e9b72757d267bd87ad24"
+  },
+  "analysis_contract": {
+    "primary_estimand": "candidate points divided by 256 games",
+    "uncertainty": "pre-existing pair-aware Hoeffding/logistic 95% interval over 128 complete color-reversed pairs",
+    "classification": {
+      "confirmed_superior": "score lower bound > 0.5",
+      "promising_inconclusive": "point score > 0.5 and interval includes 0.5",
+      "parity_inconclusive": "point score <= 0.5 and interval includes 0.5",
+      "confirmed_inferior": "score upper bound < 0.5"
+    },
+    "safety_requirements": {
+      "fault_count": 0,
+      "cap_draw_rate": 0,
+      "representable_fraction": 1.0
+    },
+    "interpretation_boundary": "This is an exploratory, newly preregistered inference-mode test. It does not retroactively alter the sealed Phase-1 distillation learning-speed decision or by itself authorize Phase 2."
+  },
+  "inputs": {
+    "distillation_comparison": {
+      "path": "research/analysis/hero_v2_phase1/v2_fp32_1_12_legality0_distill1-comparison.json",
+      "sha256": "08ab834b79903e0adcac6401ae259b5c64c7b998c9bd52a4f936b0c19c5464a3"
+    }
+  },
+  "cost_guard": {
+    "workspace_budget_usd": 42.5,
+    "repository_new_launch_stop_usd": 34.0,
+    "last_observed_metered_spend_usd": 18.99810510,
+    "per_attempt_cap_usd": 1.0,
+    "fresh_billing_required_at_launch": true
+  }
+}
