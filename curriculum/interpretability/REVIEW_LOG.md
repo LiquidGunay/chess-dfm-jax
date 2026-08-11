@@ -112,10 +112,15 @@ Date: 2026-08-11.
 | Static binding | 11/11 HTML editions embed their exact Python source |
 | Static payload | 2,164,882 bytes |
 | Snapshot SHA-256 | `e75d545dafa1e32bf6dcf334bafa9a30c01cf7667838f3fbe44eeaad616fa68f` |
-| Reviewed implementation commit | recorded in the audit-only follow-up commit after the content commit |
+| Reviewed implementation commit | `ca5828d02ab51aee05bc1206757ac708038cab08` |
 
 Publication decision: **approve for merge into this repository and for the
 documented network-backed static edition**. A standalone public-course
 redistribution remains conditional on adding a root license text that matches
 the repository's Apache-2.0 metadata. No external checkpoint, sparse weight,
 or training corpus is bundled.
+
+The reviewed implementation commit above was validated from a clean worktree:
+39 course tests passed and the full source/snapshot/static validator passed.
+This audit-only follow-up changes only this identity record; it does not alter
+a notebook, support module, evidence artifact, test, or static edition.
