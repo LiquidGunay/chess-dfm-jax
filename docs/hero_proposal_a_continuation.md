@@ -20,10 +20,20 @@ z0 -> one DFM call -> proposed actions a0...a7
 z0...z8 -> shared WDL value head
 ```
 
-The model predicts an eight-ply action trajectory and the corresponding future
-state embeddings. At inference, the standard searchless path makes one DFM
-trajectory proposal and one JEPA rollout. There is no optimization through the
-JEPA at inference and no recurrent refinement loop.
+The training objective predicts an eight-ply action trajectory and corresponding
+future state embeddings. Its recurrent JEPA rollout consumes its own preceding
+predicted latent, so no future target latent is fed back. It is nevertheless
+**teacher-action-conditioned** during training and the frozen full-horizon
+validation: it receives the recorded eight-action line and hidden states from a
+clean, bidirectional DFM call, which may contextualize an early action with later
+recorded actions. Those metrics are not inference-matched predicted-action
+rollouts.
+
+The current open-loop p1/p8 searchless arena exercises DFM refinement only; JEPA
+does not choose or revise its moves. Thus a p8-over-p1 gain is evidence about
+iterative masked-action completion, not by itself evidence of JEPA planning. A
+JEPA rollout can be evaluated after a predicted line, but there is no
+optimization through JEPA at inference and no recurrent action-refinement loop.
 
 The frozen scientific choices are:
 
@@ -39,7 +49,8 @@ The frozen scientific choices are:
 - no Hero teacher checkpoint or teacher KL;
 - no legality auxiliary (`legality_coeff = 0`);
 - no JEPA-to-DFM inference feedback or closed loop;
-- no future JEPA teacher forcing; and
+- no future **latent-target** teacher forcing, while deliberately retaining
+  recorded-action conditioning during training; and
 - no value-based action selection during DFM denoising.
 
 Do not reinterpret an earlier fixed-Hero-teacher or closed-loop diagnostic as
@@ -69,6 +80,11 @@ metrics, but missed the preregistered total-loss improvement threshold. It is a
 useful secondary result, not permission to replace the selected ordinary
 decoupled-decay recipe after inspection.
 
+Treat both short-prefix selectors as exploratory. Their 1,152-position
+validation sample contains only 15 games, so position count is not an
+independence count and the small weight-decay differences are not robustly
+established. The full 8,192-position validation subset contains 167 games.
+
 The immutable data inputs are:
 
 | Input | Identity |
@@ -78,6 +94,15 @@ The immutable data inputs are:
 | Converted corpus | 8,635,794,032 bytes; audit SHA-256 `247a1c44766a273aa479fb825f065f874508cbdfdc54ca39ad2870ab7e120ebe` |
 | Train order | 254 shards; manifest SHA-256 `63602198610284b1cbe710e0e112a9149384502579353693f827be019b4063b5`; seed 0 |
 | Validation pool | 243 shards; manifest SHA-256 `9240e014a2d9126e9a937cb2c908af68bf1aab28f51e692bc2a645111d859629`; seed 20,000 |
+
+The split unit is the complete game: a content audit found no exact duplicate
+games across train/validation/test, but repeated opening histories mean about
+4.38% of unique validation inputs and 4.14% of unique test inputs also occur in
+training. Describe these as **held-out games**, not unseen positions. The
+converted-corpus audit digest binds the audit report, paths, counts, and
+invariants; it does not yet cryptographically bind every shard byte. Generate
+and retain a per-file SHA-256 inventory (or equivalent Merkle root) before
+deleting either the source tar or the last cloud volume.
 
 One epoch is 7,774 complete updates and 7,960,576 consumed examples. Retain
 exact recovery states at updates 1,000, 2,500, 4,000, 5,500, 6,219, and 7,000.
@@ -183,6 +208,16 @@ If an attempt is interrupted, do not restart from weights alone. The worker
 must resume from the highest checksum-valid exact recovery state while keeping
 the original Git commit and resume contract. If no recovery state verifies,
 start a new attempt directory from update zero and retain the failed evidence.
+There is no signal-triggered save: a pause between milestones can discard up to
+1,499 updates. Deliberately stop only after the intended recovery manifest and
+state checksum have been verified remotely.
+
+Historical recovery checkpoints remain bound to their exact scientific source
+mapping. In particular, the retained earlier Modal Phase-1 artifact has a
+different compile-source digest from the current tree. Do not waive that guard:
+resume it only with its packaged historical source, or after a separately
+reviewed compatibility attestation. This does not affect the fresh-from-raw
+Proposal A epoch specified here.
 
 ## After the epoch: evidence before promotion
 
@@ -197,16 +232,45 @@ A completed training process is not a promoted Hero. In order:
 3. Run a non-overlapping paired searchless arena against both terminal Hero 1
    and raw BT4. Report Proposal A p1 and p8 as distinct agents; do not select
    the better pass count after seeing the same games.
-4. Implement and validate the LC0 backend contract: legal-order policy priors,
+4. Run the mandatory inference-matched predicted-action diagnostic below. Do
+   not describe the JEPA as planning before it passes this gate.
+5. Implement and validate the LC0 backend contract: legal-order policy priors,
    `q = P(win) - P(loss)`, `d = P(draw)`, side-to-move orientation, and no
    moves-left head initially.
-5. Compare matched LC0 MCTS using raw BT4, Proposal A's root DFM policy plus
+6. Compare matched LC0 MCTS using raw BT4, Proposal A's root DFM policy plus
    `z0` WDL value, and the updated encoder's native heads. Freeze nodes,
    threads, cache, batching, openings, colors, temperature, MLH, and all search
    parameters.
 
 Only call the new artifact stronger if the preregistered behavioral evidence
 supports that claim. A loss improvement alone is insufficient.
+
+### Mandatory predicted-action JEPA diagnostic
+
+Evaluate p1 and p8 on the same held-out games and preserve each complete
+eight-token DFM proposal, not only its root move. After decoding, make one clean
+`t=1` DFM call on that predicted line to obtain the action hidden states used by
+the training interface, then roll JEPA from `z0` using only predicted actions,
+those hidden states, and its own preceding predicted latent. This costs two DFM
+calls plus one JEPA rollout for p1 and nine DFM calls plus one JEPA rollout for
+p8. Report any lower-cost last-pass-hidden variant separately.
+
+Replay each predicted move from a source position with recoverable board
+history. Encode the exact state reached at every legal prefix solely as an
+evaluation target; it must never enter action decoding or JEPA recurrence. At
+each horizon report legal-prefix survival, the first-illegal-ply distribution,
+latent MSE/cosine and improvement over the `z0` identity baseline, WDL
+KL/Brier, expected-Q MAE/bias, and the corresponding recorded-action-conditioned
+metrics. Pair p1-minus-p8 estimates and bootstrap by game.
+
+An illegal or undecodable move invalidates that horizon and all later horizons;
+never substitute the played move. LC0 WDL labels apply only while a generated
+prefix matches the recorded line, with coverage reported. For off-trajectory
+states, use exact-state-head self-consistency unless they are freshly rescored.
+Required tests must prove full-line decoder/root parity and call counts, exact
+action replay, no target-latent consumption, illegal-prefix masking, correct
+side-to-move WDL orientation and denominators, deterministic batched/single
+execution, and invariance of predictions to perturbed future targets.
 
 ## Interpretability restart after promotion
 

@@ -63,6 +63,7 @@ from research.infra.modal_train_app import (
     TRAINING_ARMS,
     TRAINING_PROFILES,
     _archive_partial_result,
+    _completed_run_summary,
     _extract_streaming_tar,
     _compile_source_tree_sha256,
     _latest_recovery_checkpoint,
@@ -77,6 +78,7 @@ from research.infra.modal_train_app import (
     _retarget_hero_eval_manifest,
     _spec,
     _training_command,
+    _training_metric_segments,
 )
 from research.interpretability.remote_cost import estimate_modal_job
 
@@ -515,6 +517,81 @@ def test_partial_result_archives_and_selects_latest_nonterminal_recovery(
         (archive_dir,),
         before_update=554,
     ) == (100, archive_dir / "checkpoints" / "update00000100")
+
+
+def test_continuation_metric_segments_include_predecessor_first(
+    tmp_path: Path,
+) -> None:
+    predecessor = tmp_path / "phase1"
+    attempt = tmp_path / "attempt000"
+    terminal = tmp_path / "phase2"
+    for directory in (predecessor, attempt, terminal):
+        directory.mkdir()
+        for name in (
+            "metrics.jsonl",
+            "run_config.json",
+            "optimizer_partition.json",
+        ):
+            (directory / name).write_text("{}\n", encoding="utf-8")
+
+    assert _training_metric_segments(
+        continuation_predecessor_root=predecessor,
+        attempt_roots=(attempt,),
+        output_dir=terminal,
+    ) == (
+        ("predecessor", predecessor),
+        ("attempt000", attempt),
+        ("terminal", terminal),
+    )
+
+
+def test_unstitched_resumed_summary_does_not_claim_full_curve(
+    tmp_path: Path,
+) -> None:
+    output = tmp_path / "resumed"
+    output.mkdir()
+    (output / "run_config.json").write_text("{}\n", encoding="utf-8")
+    (output / "optimizer_partition.json").write_text(
+        "{}\n",
+        encoding="utf-8",
+    )
+    (output / "loss_summary.json").write_text(
+        json.dumps({"terminal": {"update": 4}}),
+        encoding="utf-8",
+    )
+    (output / "report.json").write_text(
+        json.dumps(
+            {
+                "updates": 4,
+                "examples": 4096,
+                "train_seconds": 1.0,
+                "train_wall_seconds": 1.0,
+                "examples_per_second_end_to_end": 4096.0,
+                "gpu_peak_memory_allocated_bytes": 1,
+                "gpu_peak_memory_reserved_bytes": 2,
+            }
+        ),
+        encoding="utf-8",
+    )
+    (output / "modal_run.json").write_text(
+        json.dumps(
+            {
+                "profile": "phase2",
+                "arm": "v2_fp32_1_10",
+                "gpu": "L40S",
+                "device_name": "NVIDIA L40S",
+                "source_tree_sha256": "a" * 64,
+                "compile_source_tree_sha256": "b" * 64,
+                "resume_update": 2,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    summary = _completed_run_summary(output)
+
+    assert summary["training_curve_scope"] == "terminal_segment_only"
+    assert summary["timing_scope"] == "terminal_segment_only"
 
 
 def test_safe_tar_paths_reject_absolute_and_parent_traversal() -> None:

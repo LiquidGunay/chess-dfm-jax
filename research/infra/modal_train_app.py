@@ -1011,6 +1011,43 @@ def _run_file_hashes(output_dir: Path) -> dict[str, str]:
     return {name: _sha256_file(output_dir / name) for name in retained}
 
 
+_METRIC_SEGMENT_FILES = (
+    "metrics.jsonl",
+    "run_config.json",
+    "optimizer_partition.json",
+)
+
+
+def _training_metric_segments(
+    *,
+    continuation_predecessor_root: Path | None,
+    attempt_roots: tuple[Path, ...],
+    output_dir: Path,
+) -> tuple[tuple[str, Path], ...]:
+    segments: list[tuple[str, Path]] = []
+    if continuation_predecessor_root is not None:
+        if not all(
+            (continuation_predecessor_root / name).is_file()
+            for name in _METRIC_SEGMENT_FILES
+        ):
+            raise RuntimeError(
+                "Continuation predecessor is missing metric provenance"
+            )
+        segments.append(("predecessor", continuation_predecessor_root))
+    segments.extend(
+        (path.name, path)
+        for path in attempt_roots
+        if all((path / name).is_file() for name in _METRIC_SEGMENT_FILES)
+    )
+    if not all((output_dir / name).is_file() for name in _METRIC_SEGMENT_FILES):
+        raise RuntimeError("Terminal training segment is incomplete")
+    segments.append(("terminal", output_dir))
+    names = [name for name, _ in segments]
+    if len(names) != len(set(names)):
+        raise RuntimeError("Training metric segment names are not unique")
+    return tuple(segments)
+
+
 def _recovery_checkpoint_candidate(
     checkpoint_dir: Path,
 ) -> tuple[int, Path] | None:
@@ -1093,6 +1130,7 @@ def _completed_run_summary(output_dir: Path) -> dict[str, Any]:
         (output_dir / "loss_summary.json").read_text(encoding="utf-8")
     )
     stitched = (output_dir / "stitch_manifest.json").is_file()
+    resumed = int(modal_run.get("resume_update", 0) or 0) > 0
     return {
         "schema_version": "chess-dfm-modal-training-result-v1",
         "result_label": output_dir.name,
@@ -1111,8 +1149,16 @@ def _completed_run_summary(output_dir: Path) -> dict[str, Any]:
         "gpu_peak_memory_allocated_bytes": report["gpu_peak_memory_allocated_bytes"],
         "gpu_peak_memory_reserved_bytes": report["gpu_peak_memory_reserved_bytes"],
         "loss_summary": loss_summary,
-        "training_curve_scope": "stitched_full_run" if stitched else "full_run",
-        "timing_scope": "terminal_segment_only" if stitched else "full_run",
+        "training_curve_scope": (
+            "stitched_full_run"
+            if stitched
+            else "terminal_segment_only" if resumed else "full_run"
+        ),
+        "timing_scope": (
+            "terminal_segment_only"
+            if stitched or resumed
+            else "full_run"
+        ),
         "file_sha256": _run_file_hashes(output_dir),
     }
 
@@ -1200,6 +1246,7 @@ def _run_training(
     resume_result_label = None
     resume_checkpoint = None
     resume_update = 0
+    continuation_predecessor_root: Path | None = None
     if profile.resume_from_profile is not None:
         predecessor_profile = TRAINING_PROFILES[profile.resume_from_profile]
         if predecessor_profile.steps >= profile.steps:
@@ -1213,6 +1260,7 @@ def _run_training(
         predecessor_root = (
             Path(TRAINING_RESULT_MOUNT) / "runs" / resume_result_label
         )
+        continuation_predecessor_root = predecessor_root
         predecessor_run_path = predecessor_root / "modal_run.json"
         predecessor_report_path = predecessor_root / "report.json"
         if (
@@ -1384,6 +1432,11 @@ def _run_training(
             training_result_volume.commit()
         raise RuntimeError(f"Hero training subprocess exited with status {returncode}")
 
+    metric_segments = _training_metric_segments(
+        continuation_predecessor_root=continuation_predecessor_root,
+        attempt_roots=attempt_roots,
+        output_dir=output_dir,
+    )
     modal_run = {
         "schema_version": "chess-dfm-modal-training-run-v1",
         "runner_revision": RUNNER_REVISION,
@@ -1408,6 +1461,11 @@ def _run_training(
         "raw_bt4_sha256": RAW_BT4_SHA256,
         "declared_attempt_upper_bound_dollars": declared_attempt_upper_bound_dollars,
         "resumed_from_result_label": resume_result_label,
+        "continuation_predecessor_result_label": (
+            None
+            if continuation_predecessor_root is None
+            else continuation_predecessor_root.name
+        ),
         "resume_checkpoint": None if resume_checkpoint is None else str(resume_checkpoint),
         "policy_distill_teacher_checkpoint": (
             None
@@ -1416,44 +1474,25 @@ def _run_training(
         ),
         "resume_update": resume_update,
         "archived_attempts": [str(path) for path in attempt_roots],
-        "metric_segments": [
-            str(path)
-            for path in (*attempt_roots, output_dir)
-            if all(
-                (path / name).is_file()
-                for name in (
-                    "metrics.jsonl",
-                    "run_config.json",
-                    "optimizer_partition.json",
-                )
-            )
-        ],
+        "metric_segments": [str(path) for _, path in metric_segments],
         "remote_function_seconds": time.perf_counter() - started,
     }
     (output_dir / "modal_run.json").write_text(
         json.dumps(modal_run, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
-    metric_attempt_roots = tuple(
-        path
-        for path in attempt_roots
-        if all(
-            (path / name).is_file()
-            for name in (
-                "metrics.jsonl",
-                "run_config.json",
-                "optimizer_partition.json",
-            )
-        )
-    )
-    if metric_attempt_roots:
+    if len(metric_segments) > 1:
         from research.stitch_training_segments import stitch_training_segments
 
         stitch_training_segments(
-            tuple((path.name, path) for path in metric_attempt_roots)
-            + (("terminal", output_dir),),
+            metric_segments,
             terminal_segment="terminal",
             output_dir=output_dir,
+            continuation_predecessor_segment=(
+                "predecessor"
+                if continuation_predecessor_root is not None
+                else None
+            ),
         )
     training_result_volume.commit()
     summary = _completed_run_summary(output_dir)

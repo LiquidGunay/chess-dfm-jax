@@ -53,6 +53,12 @@ _ALLOWED_CONFIG_DIFFERENCE_PREFIXES = (
     ("args", "resume_checkpoint"),
     ("args", "save_updates"),
 )
+_TRAINING_CHECKPOINT_FORMATS = frozenset(
+    {
+        "chess-dfm-torch-training-v1",
+        "chess-dfm-torch-training-v2",
+    }
+)
 
 
 def _canonical_json_bytes(value: Any) -> bytes:
@@ -67,6 +73,16 @@ def _canonical_json_bytes(value: Any) -> bytes:
 
 def _sha256_bytes(value: bytes) -> str:
     return hashlib.sha256(value).hexdigest()
+
+
+def _json_sha256(value: Any) -> str:
+    payload = json.dumps(
+        value,
+        allow_nan=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    return _sha256_bytes(payload)
 
 
 def _sha256_file(path: Path) -> str:
@@ -158,6 +174,223 @@ def _validate_run_config(
     return [".".join(path) for path in differences]
 
 
+def _validated_resume_contract(
+    run_config: Mapping[str, Any],
+    *,
+    segment_name: str,
+) -> dict[str, Any]:
+    contract = run_config.get("resume_contract")
+    if not isinstance(contract, Mapping):
+        raise ValueError(
+            f"Continuation segment {segment_name} has no resume contract"
+        )
+    normalized = dict(contract)
+    if run_config.get("resume_contract_sha256") != _json_sha256(normalized):
+        raise ValueError(
+            f"Continuation segment {segment_name} resume-contract digest mismatch"
+        )
+
+    # The run config is human-facing provenance while the resume contract is
+    # checkpoint-facing provenance. Bind their duplicated scientific fields so
+    # a stale or edited display record cannot authorize a continuation stitch.
+    for key in (
+        "framework",
+        "recipe",
+        "config",
+        "git_commit",
+        "torch_version",
+        "cuda_version",
+        "data",
+        "optimizer_policy",
+        "policy_distill_teacher",
+    ):
+        if key in normalized and run_config.get(key) != normalized[key]:
+            raise ValueError(
+                f"Continuation segment {segment_name} run/contract drift at {key}"
+            )
+
+    expected_source_mapping = normalized.get("source_mapping_sha256")
+    if expected_source_mapping is not None:
+        source = run_config.get("source")
+        if not isinstance(source, Mapping):
+            raise ValueError(
+                f"Continuation segment {segment_name} has no source provenance"
+            )
+        observed_source_mapping = source.get(
+            "combined_sha256",
+            source.get("mapping_sha256"),
+        )
+        if observed_source_mapping != expected_source_mapping:
+            raise ValueError(
+                f"Continuation segment {segment_name} source mapping drift"
+            )
+
+    recorded_partition = run_config.get("optimizer_partition")
+    contract_partition = normalized.get("optimizer_partition")
+    if isinstance(recorded_partition, Mapping):
+        if not isinstance(contract_partition, Mapping) or any(
+            contract_partition.get(key) != value
+            for key, value in recorded_partition.items()
+        ):
+            raise ValueError(
+                f"Continuation segment {segment_name} optimizer provenance drift"
+            )
+    return normalized
+
+
+def _validate_continuation_run_config(
+    predecessor: Mapping[str, Any],
+    terminal: Mapping[str, Any],
+    *,
+    segment_name: str,
+) -> list[str]:
+    from research.train_torch import _resume_contract_comparison_payload
+
+    predecessor_contract = _validated_resume_contract(
+        predecessor,
+        segment_name=segment_name,
+    )
+    terminal_contract = _validated_resume_contract(
+        terminal,
+        segment_name="terminal",
+    )
+    predecessor_payload = _resume_contract_comparison_payload(
+        predecessor_contract
+    )
+    terminal_payload = _resume_contract_comparison_payload(terminal_contract)
+    if predecessor_payload != terminal_payload:
+        changed = _difference_paths(predecessor_payload, terminal_payload)
+        raise ValueError(
+            f"Continuation resume contract drift in segment {segment_name}: "
+            f"{['.'.join(path) for path in changed[:20]]}"
+        )
+    return [
+        ".".join(path)
+        for path in _difference_paths(predecessor, terminal)
+    ]
+
+
+def _validated_nested_stitch(
+    directory: Path,
+    records: Sequence[Mapping[str, Any]],
+) -> dict[str, Any] | None:
+    manifest_path = directory / "stitch_manifest.json"
+    if not manifest_path.is_file():
+        return None
+    manifest = _load_object(manifest_path)
+    expected_range = [1, int(records[-1]["update"])]
+    output_hashes = manifest.get("output_sha256")
+    if (
+        manifest.get("schema_version") != SCHEMA_VERSION
+        or manifest.get("authoritative_training_curve") != "metrics.jsonl"
+        or int(manifest.get("terminal_update", -1)) != expected_range[-1]
+        or int(manifest.get("merged_record_count", -1)) != len(records)
+        or manifest.get("merged_update_range") != expected_range
+        or not isinstance(output_hashes, Mapping)
+        or output_hashes.get("metrics.jsonl")
+        != _sha256_file(directory / "metrics.jsonl")
+    ):
+        raise ValueError(f"Nested stitch manifest drift in {directory}")
+    return manifest
+
+
+def _validate_resume_binding(
+    *,
+    destination_name: str,
+    destination_config: Mapping[str, Any],
+    prior_segments: Sequence[tuple[str, Path]],
+) -> dict[str, Any]:
+    from research.train_torch import _resume_contract_comparison_payload
+
+    resume = destination_config.get("resume")
+    if not isinstance(resume, Mapping) or resume.get("enabled") is not True:
+        raise ValueError(
+            f"Continuation segment {destination_name} is not an exact resume"
+        )
+    try:
+        resume_update = int(resume["optimizer_update"])
+        next_data_cursor = int(resume["next_data_cursor"])
+        checkpoint_state_sha256 = str(resume["checkpoint_state_sha256"])
+        recorded_checkpoint = Path(str(resume["checkpoint_dir"])).resolve(
+            strict=True
+        )
+    except (KeyError, OSError, TypeError, ValueError) as exc:
+        raise ValueError(
+            f"Continuation segment {destination_name} has invalid resume provenance"
+        ) from exc
+    expected_name = f"update{resume_update:08d}"
+    candidates: list[tuple[str, Path]] = []
+    for source_name, source_dir in prior_segments:
+        checkpoint_dir = source_dir / "checkpoints" / expected_name
+        if (
+            checkpoint_dir.is_dir()
+            and checkpoint_dir.resolve() == recorded_checkpoint
+        ):
+            candidates.append((source_name, checkpoint_dir))
+    if len(candidates) != 1:
+        raise ValueError(
+            f"Continuation segment {destination_name} does not bind exactly one "
+            "prior checkpoint"
+        )
+    source_name, checkpoint_dir = candidates[0]
+    manifest = _load_object(checkpoint_dir / "manifest.json")
+    state = manifest.get("state")
+    checkpoint_contract = manifest.get("resume_contract")
+    if (
+        manifest.get("format") not in _TRAINING_CHECKPOINT_FORMATS
+        or manifest.get("model_only") is not False
+        or manifest.get("optimizer_resume_supported") is not True
+        or int(manifest.get("optimizer_update", -1)) != resume_update
+        or int(manifest.get("next_data_cursor", -1)) != next_data_cursor
+        or not isinstance(state, Mapping)
+        or state.get("sha256") != checkpoint_state_sha256
+        or not isinstance(checkpoint_contract, Mapping)
+        or manifest.get("resume_contract_sha256")
+        != _json_sha256(checkpoint_contract)
+    ):
+        raise ValueError(
+            f"Continuation checkpoint provenance drift for segment {destination_name}"
+        )
+    relative_state = state.get("path")
+    if (
+        not isinstance(relative_state, str)
+        or Path(relative_state).name != relative_state
+    ):
+        raise ValueError(
+            f"Continuation checkpoint state path is unsafe for {destination_name}"
+        )
+    state_path = checkpoint_dir / relative_state
+    if (
+        not state_path.is_file()
+        or state_path.stat().st_size != int(state.get("size_bytes", -1))
+        or _sha256_file(state_path) != state.get("sha256")
+    ):
+        raise ValueError(
+            f"Continuation checkpoint state inventory drift for {destination_name}"
+        )
+
+    destination_contract = _validated_resume_contract(
+        destination_config,
+        segment_name=destination_name,
+    )
+    if _resume_contract_comparison_payload(
+        checkpoint_contract
+    ) != _resume_contract_comparison_payload(destination_contract):
+        raise ValueError(
+            f"Continuation checkpoint contract drift for segment {destination_name}"
+        )
+    return {
+        "source_segment": source_name,
+        "destination_segment": destination_name,
+        "optimizer_update": resume_update,
+        "next_data_cursor": next_data_cursor,
+        "checkpoint_state_sha256": checkpoint_state_sha256,
+        "checkpoint_manifest_sha256": _sha256_file(
+            checkpoint_dir / "manifest.json"
+        ),
+    }
+
+
 def _semantic_metric_record(record: Mapping[str, Any]) -> dict[str, Any]:
     return {
         key: value
@@ -187,6 +420,7 @@ def stitch_training_segments(
     *,
     terminal_segment: str,
     output_dir: Path,
+    continuation_predecessor_segment: str | None = None,
 ) -> dict[str, Any]:
     """Verify and merge chronologically ordered exact-resume metric segments.
 
@@ -203,6 +437,14 @@ def stitch_training_segments(
         raise ValueError("Terminal segment is not present in the segment list")
     if names[-1] != terminal_segment:
         raise ValueError("Terminal segment must be chronologically last")
+    if continuation_predecessor_segment is not None and (
+        continuation_predecessor_segment == terminal_segment
+        or continuation_predecessor_segment not in names
+        or names[0] != continuation_predecessor_segment
+    ):
+        raise ValueError(
+            "Continuation predecessor must be the first nonterminal segment"
+        )
 
     terminal_dir = dict(segments)[terminal_segment]
     terminal_report = _load_object(terminal_dir / "report.json")
@@ -219,29 +461,52 @@ def stitch_training_segments(
     overlap_updates: set[int] = set()
     overlap_semantics: list[dict[str, Any]] = []
     segment_records: list[dict[str, Any]] = []
-    for name, directory in segments:
+    resume_bindings: list[dict[str, Any]] = []
+    for segment_index, (name, directory) in enumerate(segments):
         records = _load_records(directory / "metrics.jsonl")
         config = _load_object(directory / "run_config.json")
-        config_differences = _validate_run_config(
-            terminal_config,
-            config,
-            segment_name=name,
-        )
+        if name == continuation_predecessor_segment:
+            config_differences = _validate_continuation_run_config(
+                config,
+                terminal_config,
+                segment_name=name,
+            )
+            config_validation = "normalized_exact_resume_contract"
+        else:
+            config_differences = _validate_run_config(
+                terminal_config,
+                config,
+                segment_name=name,
+            )
+            config_validation = "same_profile_allowlist"
         partition_sha256 = _sha256_file(directory / "optimizer_partition.json")
         if partition_sha256 != terminal_partition_sha256:
             raise ValueError(f"Optimizer partition drift in segment {name}")
         resume = config.get("resume")
         resume = resume if isinstance(resume, Mapping) else {}
         resume_enabled = resume.get("enabled") is True
+        nested_stitch = _validated_nested_stitch(directory, records)
         expected_start = (
-            int(resume.get("optimizer_update", -1)) + 1
-            if resume_enabled
-            else 1
+            1
+            if nested_stitch is not None
+            else (
+                int(resume.get("optimizer_update", -1)) + 1
+                if resume_enabled
+                else 1
+            )
         )
         first_update = int(records[0]["update"])
         if first_update != expected_start:
             raise ValueError(
                 f"Segment {name} starts at {first_update}, expected {expected_start}"
+            )
+        if continuation_predecessor_segment is not None and segment_index > 0:
+            resume_bindings.append(
+                _validate_resume_binding(
+                    destination_name=name,
+                    destination_config=config,
+                    prior_segments=segments[:segment_index],
+                )
             )
         for record in records:
             update = int(record["update"])
@@ -273,6 +538,12 @@ def stitch_training_segments(
                 "resume_update": (
                     int(resume["optimizer_update"])
                     if resume_enabled
+                    else None
+                ),
+                "config_validation": config_validation,
+                "nested_stitch_manifest_sha256": (
+                    _sha256_file(directory / "stitch_manifest.json")
+                    if nested_stitch is not None
                     else None
                 ),
                 "allowed_config_differences": config_differences,
@@ -336,6 +607,10 @@ def stitch_training_segments(
         ],
         "segments": segment_records,
         "terminal_segment": terminal_segment,
+        "continuation_predecessor_segment": (
+            continuation_predecessor_segment
+        ),
+        "resume_bindings": resume_bindings,
         "terminal_update": terminal_update,
         "terminal_model_state_sha256": state.get("sha256"),
         "merged_record_count": len(records),
@@ -385,12 +660,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="Chronological metric segment as NAME=PATH; repeat for each segment.",
     )
     parser.add_argument("--terminal-segment", required=True)
+    parser.add_argument("--continuation-predecessor-segment")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args(argv)
     manifest = stitch_training_segments(
         args.segment,
         terminal_segment=args.terminal_segment,
         output_dir=args.output,
+        continuation_predecessor_segment=(
+            args.continuation_predecessor_segment
+        ),
     )
     print(json.dumps(manifest, sort_keys=True))
     return 0

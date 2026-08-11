@@ -242,4 +242,3 @@ maintained kernel path remain.
 9. Record the final immutable config and launch exactly one epoch.
 10. Complete terminal validation, paired Elo, cross-framework checkpoint
     audit, compact retention, and the loss/Elo report before any ablation.
-

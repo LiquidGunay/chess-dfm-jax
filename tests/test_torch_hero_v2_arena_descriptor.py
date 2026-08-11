@@ -24,8 +24,16 @@ def workspace_tmp() -> Path:
         yield Path(directory)
 
 
+@pytest.mark.parametrize(
+    "checkpoint_format",
+    (
+        "chess-dfm-torch-training-v1",
+        "chess-dfm-torch-training-v2",
+    ),
+)
 def test_torch_hero_v2_descriptor_binds_run_and_recovery_recipe(
     workspace_tmp: Path,
+    checkpoint_format: str,
 ) -> None:
     models_dir = workspace_tmp / "models"
     models_dir.mkdir()
@@ -60,7 +68,7 @@ def test_torch_hero_v2_descriptor_binds_run_and_recovery_recipe(
         "runtime": {"compiled_regions": compile_regions},
     }
     manifest = {
-        "format": "chess-dfm-torch-training-v1",
+        "format": checkpoint_format,
         "model_only": False,
         "optimizer_resume_supported": True,
         "optimizer_update": 554,

@@ -3227,8 +3227,11 @@ def full_horizon_evaluation_aux(
 
     Training deliberately encodes one balanced future target per physical
     example. Validation retains the historical contract: encode every future
-    horizon, fully mask the action sequence at t=0, and diagnose the complete
-    free-running JEPA rollout.
+    horizon, fully mask the action sequence at t=0, and diagnose a recurrent
+    latent rollout under the recorded action sequence. Future target latents
+    are never consumed by the recurrence, but clean bidirectional DFM hidden
+    states may contextualize each action with the complete recorded line; this
+    is therefore not an inference-matched predicted-action rollout.
     """
 
     config = model.config
@@ -5713,12 +5716,17 @@ def _verified_training_checkpoint(
 def _resume_contract_comparison_payload(
     contract: Mapping[str, Any],
 ) -> dict[str, Any]:
-    """Remove a run's mutable stop boundary from resume compatibility.
+    """Normalize state-independent additions for resume compatibility.
 
     ``--steps`` is only a process stop condition.  The optimizer schedule is
     pinned independently by ``config.lr_total_examples`` and the restored
     example counter, so extending a completed prefix must not invalidate an
-    otherwise exact model/optimizer/data resume.
+    otherwise exact model/optimizer/data resume.  Live validation is likewise
+    observational and serializes no training state.
+
+    The first retained Hero-v2 checkpoint predates explicit policy-distillation
+    provenance.  Its behavior is exactly the current zero-coefficient, online
+    teacher default, so only those absent legacy defaults are filled here.
     """
 
     payload = json.loads(
@@ -5731,6 +5739,24 @@ def _resume_contract_comparison_payload(
     schedule = payload.get("schedule")
     if isinstance(schedule, dict):
         schedule.pop("target_updates", None)
+    runtime = payload.get("runtime")
+    if isinstance(runtime, dict):
+        # Validation is observational and serializes no training state.  The
+        # retained Phase-1 contract predates this field entirely, while its
+        # full validation provenance remains recorded in run_config.json.
+        runtime.pop("live_validation", None)
+    config = payload.get("config")
+    if isinstance(config, dict):
+        config.setdefault("policy_distill_coeff", 0.0)
+        config.setdefault("policy_distill_teacher_mode", "online")
+        config.setdefault("policy_distill_teacher_state_sha256", "")
+    teacher = payload.get("policy_distill_teacher")
+    if teacher is None:
+        payload["policy_distill_teacher"] = {"mode": "online"}
+    elif isinstance(teacher, dict) and teacher.get("mode") == "online":
+        # Schema/checksum fields added to the online record are provenance,
+        # not teacher state. Checkpoint-backed teachers remain exact below.
+        payload["policy_distill_teacher"] = {"mode": "online"}
     # Hero-v2 checkpoints pin the exact scientific source tree by content.
     # A Git commit is useful provenance, but it is not a compatibility input
     # once that stronger digest is present: committing an unchanged dirty
@@ -5903,7 +5929,10 @@ def load_checkpoint_model_for_evaluation(
             checkpoint_dir=root,
             model=model,
         )
-    if checkpoint_format != "chess-dfm-torch-training-v1":
+    if checkpoint_format not in {
+        "chess-dfm-torch-training-v1",
+        "chess-dfm-torch-training-v2",
+    }:
         raise ValueError(f"Unsupported evaluation checkpoint format: {checkpoint_format!r}")
 
     from safetensors import safe_open
@@ -6138,7 +6167,10 @@ def load_checkpoint_numpy_tree_for_evaluation(
             checkpoint_dir=root,
             model=model,
         )
-    if checkpoint_format != "chess-dfm-torch-training-v1":
+    if checkpoint_format not in {
+        "chess-dfm-torch-training-v1",
+        "chess-dfm-torch-training-v2",
+    }:
         raise ValueError(f"Unsupported evaluation checkpoint format: {checkpoint_format!r}")
 
     from safetensors import safe_open

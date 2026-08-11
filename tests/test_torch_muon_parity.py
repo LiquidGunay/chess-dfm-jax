@@ -695,6 +695,33 @@ def test_fp32_master_training_checkpoint_is_exactly_resumable(checkpoint_workspa
     assert manifest["format"] == "chess-dfm-torch-training-v2"
     assert manifest["state"]["master_parameter_count"] == 1
 
+    evaluation_model = TinyAdamModel(
+        np.zeros(4, dtype=np.float32)
+    ).to(torch.bfloat16)
+    evaluation_manifest = load_checkpoint_model_for_evaluation(
+        checkpoint_dir=tmp_path / "checkpoints" / "update00000001",
+        model=evaluation_model,
+    )
+    assert evaluation_manifest == manifest
+    torch.testing.assert_close(
+        evaluation_model.vector,
+        model.vector,
+        rtol=0.0,
+        atol=0.0,
+    )
+    evaluation_tree, tree_manifest, tree_summary = (
+        load_checkpoint_numpy_tree_for_evaluation(
+            checkpoint_dir=tmp_path / "checkpoints" / "update00000001",
+            model=evaluation_model,
+        )
+    )
+    assert tree_manifest == manifest
+    assert tree_summary["leaf_count"] == 1
+    np.testing.assert_array_equal(
+        evaluation_tree["vector"].view(np.uint16),
+        model.vector.detach().view(torch.uint16).numpy(),
+    )
+
     resumed_model = TinyAdamModel(np.zeros(4, dtype=np.float32)).to(torch.bfloat16)
     resumed_optimizer = MuonAdamW(
         resumed_model,
@@ -813,16 +840,52 @@ def test_training_loss_summary_preserves_terminal_and_fixed_window_metrics():
 
 
 def test_v2_resume_compatibility_uses_source_digest_not_commit_label():
+    validation_contract = {
+        "enabled": True,
+        "manifest_path": "/workspace/frozen-validation/manifest.json",
+        "fast_validation": {"batch_size": 64, "pool": "fast"},
+    }
     first = {
         "schema_version": "torch-training-resume-contract-v1",
         "git_commit": "a" * 40,
         "source_tree_sha256": "c" * 64,
+        "config": {"learning_rate": 5e-4},
         "schedule": {"target_updates": 554},
+        "runtime": {
+            "attention_impl": "sdpa",
+            "live_validation": {
+                **validation_contract,
+                "updates": [554],
+                "observed_percentages": [2.001197610575099],
+            }
+        },
     }
     extended = {
         **first,
         "git_commit": "b" * 40,
+        "config": {
+            **first["config"],
+            "policy_distill_coeff": 0.0,
+            "policy_distill_teacher_mode": "online",
+            "policy_distill_teacher_state_sha256": "",
+        },
+        "policy_distill_teacher": {
+            "schema_version": "torch-policy-distill-online-teacher-v1",
+            "mode": "online",
+            "checkpoint_state_sha256": None,
+        },
         "schedule": {"target_updates": 2_768},
+        "runtime": {
+            "attention_impl": "sdpa",
+            "live_validation": {
+                **validation_contract,
+                "updates": [1_384, 2_768],
+                "observed_percentages": [
+                    5.000828416896065,
+                    10.00165683379213,
+                ],
+            }
+        },
     }
     assert train_torch_module._resume_contract_comparison_payload(
         first
@@ -833,4 +896,60 @@ def test_v2_resume_compatibility_uses_source_digest_not_commit_label():
         legacy
     ) != train_torch_module._resume_contract_comparison_payload(
         {**legacy, "git_commit": "b" * 40}
+    )
+    legacy_without_validation_contract = {
+        **first,
+        "runtime": {"attention_impl": "sdpa"},
+    }
+    assert train_torch_module._resume_contract_comparison_payload(
+        legacy_without_validation_contract
+    ) == train_torch_module._resume_contract_comparison_payload(extended)
+    validation_drift = {
+        **extended,
+        "runtime": {
+            "attention_impl": "sdpa",
+            "live_validation": {
+                **extended["runtime"]["live_validation"],
+                "manifest_path": "/workspace/different-validation/manifest.json",
+            }
+        },
+    }
+    assert train_torch_module._resume_contract_comparison_payload(
+        first
+    ) == train_torch_module._resume_contract_comparison_payload(
+        validation_drift
+    )
+    runtime_drift = {
+        **extended,
+        "runtime": {
+            **extended["runtime"],
+            "attention_impl": "eager",
+        },
+    }
+    assert train_torch_module._resume_contract_comparison_payload(
+        first
+    ) != train_torch_module._resume_contract_comparison_payload(runtime_drift)
+    distillation_drift = {
+        **extended,
+        "config": {
+            **extended["config"],
+            "policy_distill_coeff": 1.0,
+        },
+    }
+    assert train_torch_module._resume_contract_comparison_payload(
+        first
+    ) != train_torch_module._resume_contract_comparison_payload(
+        distillation_drift
+    )
+    checkpoint_teacher_drift = {
+        **extended,
+        "policy_distill_teacher": {
+            "mode": "checkpoint",
+            "checkpoint_state_sha256": "d" * 64,
+        },
+    }
+    assert train_torch_module._resume_contract_comparison_payload(
+        first
+    ) != train_torch_module._resume_contract_comparison_payload(
+        checkpoint_teacher_drift
     )

@@ -694,7 +694,10 @@ def torch_hero_checkpoint_descriptor(
         model_leaf_count_key = "leaf_count"
         checkpoint_storage_kind = "model_only"
         run_root = require_within_workspace(checkpoint_dir.parent)
-    elif checkpoint_format == "chess-dfm-torch-training-v1":
+    elif checkpoint_format in {
+        "chess-dfm-torch-training-v1",
+        "chess-dfm-torch-training-v2",
+    }:
         if (
             manifest.get("model_only") is not False
             or manifest.get("optimizer_resume_supported") is not True
