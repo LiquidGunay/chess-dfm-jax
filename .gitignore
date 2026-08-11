@@ -13,11 +13,13 @@ runs/
 sweep_runs/
 wandb/
 docs/*.local.json
-research/notebooks/__marimo__/
+__marimo__/
 
 # Artifacts
 models/
 artifacts/
+!curriculum/interpretability/artifacts/
+!curriculum/interpretability/artifacts/raw_hero_snapshot_v1.json
 checkpoints/
 data/
 !chess_dfm_jax/data/

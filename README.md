@@ -121,6 +121,36 @@ uvx --from marimo==0.23.16 marimo run \
 The notebook reads compact repository artifacts, opens no model checkpoint,
 and performs no network requests after the isolated marimo runner is available.
 
+## Interpretability course
+
+The executable course
+[Mechanistic Interpretability Through Chess Transformers](curriculum/interpretability/README.md)
+teaches experimental design, model anatomy, paired model diffing, probes,
+attribution, interventions, lookahead, sparse methods, LoRSA, and causal
+abstraction from first principles. Its eleven marimo notebooks use Raw BT4 and
+Hero as recurring specimens while keeping constructed demonstrations visibly
+separate from empirical evidence.
+
+Start the first module in edit mode so derivations and minimal implementations
+stay visible:
+
+```bash
+.venv/bin/marimo edit \
+  curriculum/interpretability/notebooks/00_evidence_and_experiments.py
+```
+
+Use `marimo run` for a presentation-only view, or browse the committed
+[static course editions](curriculum/interpretability/site/README.md).
+
+Notebook and snapshot execution is offline-first: the course ships a small
+content-bound snapshot, exposes source verification only behind an explicit
+button, and neither downloads weights nor loads a model on import. The static
+HTML editions use marimo's CDN frontend, as documented in the publishing
+contract. See the
+[curriculum map](curriculum/interpretability/CURRICULUM.md) and
+[creator–critic record](curriculum/interpretability/REVIEW_LOG.md) for its
+learning objectives, evidence rules, and release gates.
+
 Optional Railway control-plane dependencies are deliberately separate from
 the Torch core:
 
