@@ -6,6 +6,7 @@ import dataclasses
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -2345,10 +2346,16 @@ def _modal_launch_spend() -> Decimal:
     from research.interpretability.remote_cost import budget_usage_from_summary
 
     summary = modal.Workspace.from_context().billing.summary()
+    # The SDK uses display labels ("Free Storage", "Volumes"); its CLI
+    # normalizes those labels to snake_case before emitting JSON.
+    def normalized(values: dict[str, Decimal]) -> dict[str, Decimal]:
+        return {re.sub(r"[^a-zA-Z0-9]+", "_", key).lower().strip("_"): value
+                for key, value in values.items()}
+
     return budget_usage_from_summary({
         "metered_cost": summary.metered_cost,
-        "adjustments": summary.adjustments,
-        "metered_cost_breakdown": summary.metered_cost_breakdown,
+        "adjustments": normalized(summary.adjustments),
+        "metered_cost_breakdown": normalized(summary.metered_cost_breakdown),
     })
 
 

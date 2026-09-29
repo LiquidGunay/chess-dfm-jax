@@ -151,8 +151,8 @@ def test_launch_queries_live_sdk_summary_without_nested_cli(monkeypatch: pytest.
 
     summary = types.SimpleNamespace(
         metered_cost=Decimal("22.71684919"),
-        adjustments={"free_storage": Decimal("-19.61684919"), "credits": Decimal("-3.1")},
-        metered_cost_breakdown={"volumes": Decimal("19.61684919")},
+        adjustments={"Free Storage": Decimal("-19.61684919"), "Credits": Decimal("-3.1")},
+        metered_cost_breakdown={"Volumes": Decimal("19.61684919")},
     )
     workspace = types.SimpleNamespace(billing=types.SimpleNamespace(summary=lambda: summary))
     monkeypatch.setattr(runner.modal, "Workspace", types.SimpleNamespace(
