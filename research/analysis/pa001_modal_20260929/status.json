@@ -1,0 +1,40 @@
+{
+  "schema_version": "chess-dfm-experiment-execution-v1",
+  "experiment_id": "PA-001",
+  "date_utc": "2026-09-29",
+  "branch": "research/modal-experiments",
+  "status": "staging_remote",
+  "training_submitted": false,
+  "staging": {
+    "app_id": "ap-CaxFqAy0q382NUVZAWwAKJ",
+    "function_call_id": "fc-01M3Q7Z03X6GAY692VC8MM2Y81",
+    "url": "https://modal.com/apps/liquidgunay/chess-dfm-research/ap-CaxFqAy0q382NUVZAWwAKJ",
+    "source_commit": "1363a58",
+    "mode": "stage-proposal-epoch",
+    "gpu": null,
+    "declared_attempt_maximum_dollars": "0.21048000",
+    "per_job_cap_dollars": "0.25",
+    "source_bundle_sha256": "cf83360c179fa939176bda91f9e8ffa7cb0e115e463dbdb5c06cf1a3b502d3aa"
+  },
+  "local_input_verification": {
+    "files": 11431,
+    "bytes": 8635794032,
+    "inventory_sha256": "864afad45689a19a55962bef3cc39a59cbf7450614c19d415bf2aecdd2a573cb"
+  },
+  "local_upload_attempts": [
+    {"concurrency": 128, "outcome": "failed_connection_lost_no_dataset_commit"},
+    {"concurrency": 4, "outcome": "interrupted_after_slow_transfer_and_repeated_connection_failures"}
+  ],
+  "storage_inventory_before_run": {
+    "training_results_bytes": 236375763671,
+    "training_inputs_bytes": 11789868116,
+    "compile_cache_bytes": 1242051649,
+    "interpretability_inputs_bytes": 1268454501,
+    "interpretability_results_bytes": 76232108,
+    "recovery_checkpoints_gib": 211.426,
+    "archived_attempts_gib_within_training_results": 35.73,
+    "included_storage_gib": 1024,
+    "artifacts_deleted": false
+  },
+  "next": "Verify remote staging result and full inventory, refresh live budget, then launch proposal_epoch/proposal_a_epoch/L40S. Searchless evaluation follows the terminal checkpoint."
+}
