@@ -1277,11 +1277,15 @@ def _run_training(
 
         dataset_root = _training_dataset_root(arm.dataset_label)
         marker = json.loads((dataset_root / ".stage.json").read_text(encoding="utf-8"))
-        stage = epoch_data.verify_dataset(dataset_root / "lc0_sequential")
+        local_data = Path(WORKSPACE_MOUNT) / "epoch-data" / "lc0_sequential"
+        print(json.dumps({"data_preflight": "copying_full_corpus", "gpu": device_name}), flush=True)
+        stage = epoch_data.copy_verified_dataset(
+            dataset_root / "lc0_sequential", local_data,
+        )
         if marker != stage:
             raise RuntimeError("Full-epoch dataset stage marker drift")
         _verify_scheduler_contract(
-            dataset_root / "lc0_sequential", epoch_data.load_preregister(),
+            local_data, epoch_data.load_preregister(),
         )
     else:
         raise RuntimeError("Training arm has an unsupported dataset contract")
@@ -1393,15 +1397,7 @@ def _run_training(
         "trajectory_v3" if arm.data_format == "trajectory_v3" else "lc0_sequential"
     )
     if profile_name == "proposal_epoch":
-        from research.infra.runpod_proposal_a_worker import _copy_dataset_to_container
-
-        # Keep the hot corpus off the network filesystem during the long run.
-        local_data = Path(WORKSPACE_MOUNT) / "epoch-data" / "lc0_sequential"
-        local_data.parent.mkdir(parents=True, exist_ok=True)
-        _copy_dataset_to_container(
-            source=data_root, destination=local_data,
-            expected_bytes=epoch_data.INVENTORY_BYTES,
-        )
+        # The local corpus has already passed its complete content/scheduler checks.
         data_root = local_data
     eval_manifest = (
         _training_dataset_root(TRAINING_DATASET_LABEL)

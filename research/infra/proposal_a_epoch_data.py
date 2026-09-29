@@ -7,9 +7,12 @@ to the existing Modal training Volume; neither mode starts a GPU.
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import json
+import os
 from pathlib import Path
+import shutil
 import subprocess
 import tempfile
 from typing import Any
@@ -41,16 +44,22 @@ def load_preregister(repo_root: Path = REPO_ROOT) -> dict[str, Any]:
 
 def verify_dataset(root: Path) -> dict[str, Any]:
     root = root.resolve(strict=True)
-    rows = []
-    for path in sorted(root.rglob("*")):
+
+    def row(path: Path) -> dict[str, Any] | None:
         if path.is_symlink():
             raise RuntimeError(f"Dataset may not contain symlinks: {path}")
         if path.is_file():
-            rows.append({
+            return {
                 "path": path.relative_to(root).as_posix(),
                 "size_bytes": path.stat().st_size,
                 "sha256": sha256_file(path),
-            })
+            }
+        return None
+
+    # Preserve the frozen lexicographic inventory order while overlapping
+    # independent reads. Serial per-file Volume I/O is costly for 11k files.
+    with ThreadPoolExecutor(max_workers=16) as pool:
+        rows = [item for item in pool.map(row, sorted(root.rglob("*"))) if item is not None]
     digest = hashlib.sha256(json.dumps(
         rows, sort_keys=True, separators=(",", ":"), ensure_ascii=False,
     ).encode("utf-8")).hexdigest()
@@ -65,6 +74,40 @@ def verify_dataset(root: Path) -> dict[str, Any]:
         "inventory_size_bytes": size,
         "preregister_sha256": PREREGISTER_SHA256,
     }
+
+
+def copy_verified_dataset(source: Path, destination: Path) -> dict[str, Any]:
+    """Copy once in parallel, hash local bytes, and publish only exact inputs."""
+    source = source.resolve(strict=True)
+    if destination.exists():
+        raise FileExistsError(f"Refusing to replace local dataset: {destination}")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    required_free = INVENTORY_BYTES + 12 * 1024**3
+    if shutil.disk_usage(destination.parent).free < required_free:
+        raise RuntimeError("Container disk reserve too small for full corpus")
+    with tempfile.TemporaryDirectory(prefix=".epoch-copy-", dir=destination.parent) as temporary:
+        staged = Path(temporary)
+
+        def copy(path: Path) -> bool:
+            if path.is_symlink():
+                raise RuntimeError(f"Dataset may not contain symlinks: {path}")
+            if not path.is_file():
+                return False
+            target = staged / path.relative_to(source)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(path, target)
+            return True
+
+        copied = 0
+        with ThreadPoolExecutor(max_workers=16) as pool:
+            for is_file in pool.map(copy, sorted(source.rglob("*"))):
+                copied += int(is_file)
+                if is_file and copied % 1000 == 0:
+                    print(json.dumps({"data_preflight": "copying", "copied_files": copied}), flush=True)
+        marker = verify_dataset(staged)
+        os.replace(staged, destination)
+    print(json.dumps({"data_preflight": "verified_local_copy", **marker}), flush=True)
+    return marker
 
 
 def main() -> None:

@@ -186,6 +186,60 @@ def test_full_epoch_dataset_verification_rejects_same_size_corruption(
         data.verify_dataset(tmp_path)
 
 
+def test_parallel_epoch_copy_verifies_before_publish(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import hashlib
+    from research.infra import proposal_a_epoch_data as data
+
+    source = tmp_path / "source"
+    source.mkdir()
+    rows = []
+    for name in ("z.bin", "nested/b.bin", "nested/a.bin", "a.bin"):
+        path = source / name
+        path.parent.mkdir(exist_ok=True)
+        path.write_bytes(name.encode())
+        rows.append({"path": name, "size_bytes": len(name),
+                     "sha256": hashlib.sha256(name.encode()).hexdigest()})
+    rows.sort(key=lambda item: item["path"])
+    digest = hashlib.sha256(json.dumps(
+        rows, sort_keys=True, separators=(",", ":"), ensure_ascii=False,
+    ).encode()).hexdigest()
+    monkeypatch.setattr(data, "INVENTORY_SHA256", digest)
+    monkeypatch.setattr(data, "INVENTORY_FILES", len(rows))
+    monkeypatch.setattr(data, "INVENTORY_BYTES", sum(item["size_bytes"] for item in rows))
+    monkeypatch.setattr(data.shutil, "disk_usage", lambda path: types.SimpleNamespace(free=100 * 1024**3))
+    destination = tmp_path / "copied"
+    assert data.copy_verified_dataset(source, destination) == data.verify_dataset(source)
+    assert (destination / "nested/a.bin").read_bytes() == b"nested/a.bin"
+    with pytest.raises(FileExistsError, match="Refusing to replace"):
+        data.copy_verified_dataset(source, destination)
+    (source / "a.bin").write_bytes(b"wrong")
+    with pytest.raises(RuntimeError, match="inventory drift"):
+        data.copy_verified_dataset(source, tmp_path / "corrupt")
+    assert not (tmp_path / "corrupt").exists()
+    assert not list(tmp_path.glob(".epoch-copy-*"))
+
+
+def test_epoch_copy_rejects_symlinks_and_low_disk(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from research.infra import proposal_a_epoch_data as data
+
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "escape").symlink_to(tmp_path)
+    with pytest.raises(RuntimeError, match="symlinks"):
+        data.verify_dataset(source)
+    monkeypatch.setattr(data.shutil, "disk_usage", lambda path: types.SimpleNamespace(free=100 * 1024**3))
+    with pytest.raises(RuntimeError, match="symlinks"):
+        data.copy_verified_dataset(source, tmp_path / "copied")
+    assert not (tmp_path / "copied").exists()
+    monkeypatch.setattr(data.shutil, "disk_usage", lambda path: types.SimpleNamespace(free=0))
+    with pytest.raises(RuntimeError, match="disk reserve"):
+        data.copy_verified_dataset(source, tmp_path / "copied")
+
+
 def test_epoch_recovery_falls_back_from_same_size_corruption(tmp_path: Path) -> None:
     import hashlib
 
