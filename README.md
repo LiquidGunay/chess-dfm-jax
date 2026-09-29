@@ -18,6 +18,11 @@ point for:
 
 ## Local GPU autoresearch status
 
+Current experiment entrypoint: [DFM experiment registry](research/experiments/README.md).
+The active branch is `research/modal-experiments`; its PyTorch/Modal epoch,
+searchless-first evaluation gates, and architecture backlog are organized in
+the [research program](docs/dfm_research_program.md).
+
 The active model program is the preregistered
 [Proposal A training and LC0-search plan](docs/proposal_a_training_and_search_plan.md).
 It first tunes the open-loop state-action-state Torch model on value-rich LC0

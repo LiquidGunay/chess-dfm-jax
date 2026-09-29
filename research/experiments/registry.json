@@ -1,0 +1,57 @@
+{
+  "schema_version": "chess-dfm-experiment-registry-v1",
+  "updated_utc": "2026-09-29",
+  "active_branch": "research/modal-experiments",
+  "runtime": "pytorch",
+  "representation_strength_threshold": {
+    "status": "deferred_until_first_searchless_evaluation",
+    "user_decision_date": "2026-09-29",
+    "freeze_before": "architecture_comparisons"
+  },
+  "experiments": [
+    {
+      "id": "PA-001",
+      "name": "Promoted Proposal A full epoch",
+      "status": "staging",
+      "depends_on": [],
+      "specification": "research/analysis/proposal_a_one_epoch_preregister_20260810.json",
+      "runbook": "docs/modal_proposal_a_continuation.md",
+      "provider": "Modal",
+      "gpu": "L40S",
+      "updates": 7774,
+      "examples": 7960576,
+      "declared_attempt_cap_dollars": 22.20,
+      "result_label": null
+    },
+    {
+      "id": "EV-001",
+      "name": "Searchless evaluation of Proposal A p1 and p8",
+      "status": "waiting_for_checkpoint",
+      "depends_on": ["PA-001"],
+      "baselines": ["frozen Hero 1", "raw BT4"],
+      "gate": "Validated held-out paired strength improvement; inconclusive evidence does not promote to search"
+    },
+    {
+      "id": "EV-002",
+      "name": "Matched LC0 MCTS evaluation",
+      "status": "gated_on_searchless_strength",
+      "depends_on": ["EV-001"],
+      "baseline": "raw BT4 in the same LC0 search build",
+      "adapters": ["DFM root prior plus current-state WDL", "updated BT4 native heads"]
+    },
+    {
+      "id": "AR-001",
+      "name": "Controlled architecture and representation comparisons",
+      "status": "backlog",
+      "depends_on": ["EV-001", "EV-002"],
+      "gate": "Freeze a minimum-strength threshold after EV-001, before architecture selection"
+    },
+    {
+      "id": "AR-002",
+      "name": "Continuous diffusion or flow matching in action-embedding space",
+      "status": "hypothesis_backlog",
+      "depends_on": ["AR-001"],
+      "question": "Does a continuous action-embedding trajectory improve the strength/compute tradeoff or learned representations relative to categorical DFM?"
+    }
+  ]
+}
