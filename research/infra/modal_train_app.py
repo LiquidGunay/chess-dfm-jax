@@ -10,6 +10,7 @@ import shutil
 import subprocess
 import sys
 import tarfile
+import tempfile
 import time
 import urllib.request
 from decimal import Decimal
@@ -146,6 +147,26 @@ gpu_image = (
         "chess_dfm_jax/policy_attn_map.txt",
         "/root/chess_dfm_jax/policy_attn_map.txt",
         copy=True,
+    )
+)
+
+epoch_stage_image = (
+    control_image.uv_pip_install(
+        "boto3==1.40.0", "botocore==1.40.76", "numpy==2.2.6",
+        "python-chess==1.999", "zstandard==0.23.0",
+    )
+    .add_local_python_source("chess_dfm_jax", "research", copy=True)
+    .add_local_file(
+        "scripts/convert_lc0_tar_to_sequential.py",
+        "/root/scripts/convert_lc0_tar_to_sequential.py", copy=True,
+    )
+    .add_local_file(
+        epoch_data.PREREGISTER_RELATIVE,
+        f"/root/{epoch_data.PREREGISTER_RELATIVE}", copy=True,
+    )
+    .add_local_file("chess_dfm_jax/policy_moves.txt", "/root/chess_dfm_jax/policy_moves.txt", copy=True)
+    .add_local_file(
+        "chess_dfm_jax/policy_attn_map.txt", "/root/chess_dfm_jax/policy_attn_map.txt", copy=True,
     )
 )
 
@@ -2163,8 +2184,93 @@ def proposal_epoch_l40s(**kwargs: str) -> dict[str, Any]:
     return _run_training(gpu="L40S", **kwargs)
 
 
+@app.function(
+    image=epoch_stage_image,
+    volumes={TRAINING_INPUT_MOUNT: training_input_volume},
+    secrets=[modal.Secret.from_name("chess-dfm-railway-s3")],
+    cpu=4.0,
+    memory=8192,
+    timeout=2700,
+    startup_timeout=300,
+    retries=0,
+    max_containers=1,
+    single_use_containers=True,
+)
+def stage_proposal_epoch(source_metadata: dict[str, str]) -> dict[str, Any]:
+    """Reconstruct the byte-identical corpus from its existing Railway archive."""
+    from research.infra.runpod_proposal_a_worker import _verify_scheduler_contract
+    from research.interpretability.artifact_store import (
+        create_s3_client, create_transfer_config, load_credentials, pull_bundle,
+    )
+
+    preregister = epoch_data.load_preregister()
+    destination = _training_dataset_root(epoch_data.DATASET_LABEL)
+    if destination.exists():
+        marker = epoch_data.verify_dataset(destination / "lc0_sequential")
+        if json.loads((destination / ".stage.json").read_text()) != marker:
+            raise RuntimeError("Existing full-epoch stage marker drift")
+        return {"cache_hit": True, "gpu_active": False, "stage": marker}
+    if set(source_metadata) != {"dataset_manifest.json", "progress.json"}:
+        raise ValueError("Only the two frozen source bookkeeping files may be restored")
+    credentials = load_credentials()
+    source_record = preregister["data_contract"]["source_tar"]
+    with tempfile.TemporaryDirectory(prefix="proposal-a-convert-") as temporary:
+        temporary_root = Path(temporary)
+        source_root = temporary_root / "source-bundle"
+        pull_bundle(
+            source_record["railway_bundle_sha256"], source_root,
+            client=create_s3_client(credentials), bucket=credentials.bucket_name,
+            transfer_config=create_transfer_config(),
+        )
+        source_tar = source_root / source_record["logical_name"]
+        if (source_tar.stat().st_size != source_record["size_bytes"]
+                or _sha256_file(source_tar) != source_record["sha256"]):
+            raise RuntimeError("Railway source archive drift")
+        converted = temporary_root / "lc0_sequential"
+        command = [
+            sys.executable, "-u", "/root/scripts/convert_lc0_tar_to_sequential.py",
+            "--input-tar", str(source_tar), "--output-dir", str(converted),
+            "--positions-per-chunk", "32768", "--validation-fraction", "0.01",
+            "--test-fraction", "0.01", "--split-seed", "20260810",
+        ]
+        started = time.time()
+        subprocess.run(command, check=True)
+        # Preserve the immutable original dataset metadata, including its old
+        # source path/timestamps. Record this reconstruction separately below.
+        for name, content in source_metadata.items():
+            (converted / name).write_text(content, encoding="utf-8")
+        marker = epoch_data.verify_dataset(converted)
+        scheduler = _verify_scheduler_contract(converted, preregister)
+        with tempfile.TemporaryDirectory(
+            prefix=".proposal-a-stage-", dir=TRAINING_INPUT_MOUNT,
+        ) as staged:
+            staged_root = Path(staged)
+            shutil.copytree(converted, staged_root / "lc0_sequential")
+            if epoch_data.verify_dataset(staged_root / "lc0_sequential") != marker:
+                raise RuntimeError("Copied full-epoch corpus drift")
+            (staged_root / ".stage.json").write_text(json.dumps(marker, indent=2) + "\n")
+            (staged_root / "conversion_provenance.json").write_text(json.dumps({
+                "source_archive_sha256": source_record["sha256"],
+                "source": "Railway", "gpu_active": False,
+                "conversion_started_unix": started, "completed_unix": time.time(),
+                "restored_original_bookkeeping": sorted(source_metadata),
+                "converter_sha256": _sha256_file(Path(command[2])),
+                "scheduler": scheduler,
+            }, indent=2) + "\n")
+            os.replace(staged_root, destination)
+        training_input_volume.commit()
+    return {"cache_hit": False, "gpu_active": False, "stage": marker}
+
+
 def _spec(stage: str) -> tuple[Any, Decimal]:
     from research.interpretability.remote_cost import ModalJobSpec
+
+    if stage == "stage-proposal-epoch":
+        return (ModalJobSpec(
+            name="cpu-reconstruct-proposal-a-full-corpus", timeout_seconds=2700,
+            startup_timeout_seconds=300, retries=0,
+            cpu_cores=Decimal("4"), memory_gib=Decimal("8"),
+        ), Decimal("0.25"))
 
     if stage == "stage-data":
         return (
@@ -2234,6 +2340,18 @@ def _local_git_commit(repo_root: Path) -> str:
     return _require_git_commit(completed.stdout.strip())
 
 
+def _modal_launch_spend() -> Decimal:
+    """Reuse the launch client's connection instead of nesting another CLI."""
+    from research.interpretability.remote_cost import budget_usage_from_summary
+
+    summary = modal.Workspace.from_context().billing.summary()
+    return budget_usage_from_summary({
+        "metered_cost": summary.metered_cost,
+        "adjustments": summary.adjustments,
+        "metered_cost_breakdown": summary.metered_cost_breakdown,
+    })
+
+
 @app.local_entrypoint()
 def main(
     mode: str = "stage-data",
@@ -2242,19 +2360,35 @@ def main(
     result_label: str = "",
     recorded_spend: str = "",
     per_job_cap: str = "",
+    data_root: str = "",
 ) -> None:
     from research.interpretability.remote_cost import (
         enforce_modal_budget,
         estimate_modal_job,
-        modal_month_spend,
     )
+
+    if mode == "stage-proposal-epoch":
+        root = Path(data_root).resolve(strict=True)
+        source_metadata = {
+            name: (root / name).read_text(encoding="utf-8")
+            for name in ("dataset_manifest.json", "progress.json")
+        }
+        spec, default_cap = _spec(mode)
+        decision = enforce_modal_budget(
+            estimate_modal_job(spec), recorded_month_spend=_modal_launch_spend(),
+            per_job_cap=default_cap,
+        )
+        print(json.dumps({"launch_stage": mode, "cost_guard": decision}, sort_keys=True))
+        call = stage_proposal_epoch.spawn(source_metadata=source_metadata)
+        print(json.dumps({"stage_submission": {"function_call_id": call.object_id}}))
+        return
 
     if mode == "stage-data":
         stage = "stage-data"
         spec, default_cap = _spec(stage)
         estimate = estimate_modal_job(spec)
         spend = max(
-            modal_month_spend(),
+            _modal_launch_spend(),
             Decimal(recorded_spend) if recorded_spend else Decimal("0"),
         )
         decision = enforce_modal_budget(
@@ -2282,7 +2416,7 @@ def main(
         spec, default_cap = _spec("movement")
         estimate = estimate_modal_job(spec)
         spend = max(
-            modal_month_spend(),
+            _modal_launch_spend(),
             Decimal(recorded_spend) if recorded_spend else Decimal("0"),
         )
         decision = enforce_modal_budget(
@@ -2335,7 +2469,7 @@ def main(
     spec, default_cap = _spec(stage)
     estimate = estimate_modal_job(spec)
     spend = max(
-        modal_month_spend(),
+        _modal_launch_spend(),
         Decimal(recorded_spend) if recorded_spend else Decimal("0"),
     )
     decision = enforce_modal_budget(

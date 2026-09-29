@@ -14,7 +14,25 @@ provider execution changes. This retains the six recovery checkpoints,
 update-6219 pre-decay state, terminal model, and 8,192-position validations at
 updates 6,219 and 7,774. The full corpus is distinct from the tuning pilot.
 
-Verify the full local corpus, then upload it to the existing training Volume:
+The preferred staging path is a CPU-only reconstruction from the already
+verified Railway source archive. It costs at most $0.21048 per declared
+attempt (under a $0.25 cap), has a 45-minute execution timeout and no retries,
+and commits only after the entire output matches the frozen full-corpus
+inventory and scheduler identities:
+
+```bash
+modal run --detach --env chess-dfm-research research/infra/modal_train_app.py \
+  --mode stage-proposal-epoch \
+  --data-root /home/ubuntu/chess-dfm-jax/data/lc0_sequential/test80_20240401_0117
+```
+
+The two original bookkeeping JSON files preserve the immutable source paths
+and timestamps. A separate conversion receipt records the actual remote
+reconstruction time and converter hash. The 1.77 GB source archive and
+conversion scratch remain ephemeral; credentials are confined to this CPU
+stage. Wait for its successful completion before launching training.
+
+Alternatively, verify and upload the existing local corpus directly:
 
 ```bash
 /home/ubuntu/chess-dfm-jax/.venv/bin/python -m research.infra.proposal_a_epoch_data \
@@ -28,7 +46,10 @@ inventory hash. It uploads without overwrite and publishes a completion
 marker only after a successful directory upload. The GPU worker verifies
 the full inventory and train/validation scheduler identities, then copies
 the hot corpus to container-local storage. No additional dataset conversion
-or raw-model download is necessary.
+or raw-model download is necessary for this direct-upload alternative. Two
+local uploads (default and four-transfer concurrency) encountered repeated
+TLS/API connection failures on September 29; use remote reconstruction on
+this connection.
 
 When the live budget check permits:
 

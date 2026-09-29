@@ -134,6 +134,36 @@ def test_promoted_epoch_budget_refuses_current_gross_meter() -> None:
     )["allowed"]
 
 
+def test_full_corpus_remote_staging_is_cpu_only_and_bounded() -> None:
+    from decimal import Decimal
+
+    spec, cap = _spec("stage-proposal-epoch")
+    assert spec.gpu is None
+    assert spec.retries == 0
+    assert spec.timeout_seconds == 2700
+    assert Decimal(estimate_modal_job(spec)["declared_attempt_upper_bound_dollars"]) < cap
+    assert cap == Decimal("0.25")
+
+
+def test_launch_queries_live_sdk_summary_without_nested_cli(monkeypatch: pytest.MonkeyPatch) -> None:
+    from decimal import Decimal
+    from research.infra import modal_train_app as runner
+
+    summary = types.SimpleNamespace(
+        metered_cost=Decimal("22.71684919"),
+        adjustments={"free_storage": Decimal("-19.61684919"), "credits": Decimal("-3.1")},
+        metered_cost_breakdown={"volumes": Decimal("19.61684919")},
+    )
+    workspace = types.SimpleNamespace(billing=types.SimpleNamespace(summary=lambda: summary))
+    monkeypatch.setattr(runner.modal, "Workspace", types.SimpleNamespace(
+        from_context=lambda: workspace,
+    ), raising=False)
+    def refuse_subprocess(*args: object, **kwargs: object) -> None:
+        raise AssertionError("Launch billing must reuse the SDK client")
+    monkeypatch.setattr(runner.subprocess, "run", refuse_subprocess)
+    assert runner._modal_launch_spend() == Decimal("3.10000000")
+
+
 def test_full_epoch_dataset_verification_rejects_same_size_corruption(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
