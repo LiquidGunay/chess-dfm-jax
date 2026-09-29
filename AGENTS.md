@@ -9,9 +9,9 @@ Start with `research/experiments/registry.json` and
 searchless strength evaluation, conditional matched-search evaluation against
 LC0, then strength-qualified architecture/representation comparisons.
 Continuous diffusion in embedding space is a recorded hypothesis, not a
-scheduled run. The user will choose the architecture strength threshold after
-the first searchless evaluation; freeze it before inspecting architecture
-comparisons.
+scheduled run. Propose the architecture strength threshold after the first
+searchless evaluation, as the user requested; freeze it before inspecting
+architecture comparisons.
 
 Keep one stable experiment ID and immutable specification per scientific
 question. Bind remote runs to the source commit/content hashes, data identity,

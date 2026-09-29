@@ -12,7 +12,7 @@
     {
       "id": "PA-001",
       "name": "Promoted Proposal A full epoch",
-      "status": "staging",
+      "status": "training",
       "depends_on": [],
       "specification": "research/analysis/proposal_a_one_epoch_preregister_20260810.json",
       "runbook": "docs/modal_proposal_a_continuation.md",
@@ -22,7 +22,7 @@
       "examples": 7960576,
       "declared_attempt_cap_dollars": 22.20,
       "execution_record": "research/analysis/pa001_modal_20260929/status.json",
-      "result_label": null
+      "result_label": "hero-training-proposal_epoch-proposal_a_epoch-l40s-d46e7b4f1a0afd449d36"
     },
     {
       "id": "EV-001",

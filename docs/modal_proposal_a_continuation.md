@@ -5,6 +5,38 @@ The active model is PyTorch in `research/train_torch.py`. The experiment
 worktree is `.local/worktrees/modal-experiments` in the original checkout;
 uncommitted course work remains on `research/interpretability-blog-lenses`.
 
+Live execution status is recorded in
+[`pa001_modal_20260929/status.json`](../research/analysis/pa001_modal_20260929/status.json).
+The full remote corpus passed verification. The first GPU attempt was stopped
+during slow serial remote verification without observed optimizer updates.
+The replacement uses concurrent input copies with full local verification and
+was submitted September 29 at 19:15 UTC. Do not submit a duplicate while that
+call is active; both attempts are recorded in the execution receipt.
+Local verification completed at 19:17:38 UTC. The first update completed at
+19:19:53 UTC; updates 10 and 20 were finite, without reported nonfinite skips,
+at about 2.55 seconds per step. This confirms startup, not epoch completion
+or chess strength.
+
+Inspect the detached job with:
+
+```bash
+modal app logs ap-rRxarV72MK00sIREH1Q6Cv --env chess-dfm-research --timestamps
+```
+
+Once its function call has completed successfully, collect only compact
+terminal evidence (the collector refuses incomplete runs and never downloads
+model/optimizer states):
+
+```bash
+/home/ubuntu/chess-dfm-jax/.venv/bin/python -m research.infra.pull_modal_training_compact \
+  hero-training-proposal_epoch-proposal_a_epoch-l40s-d46e7b4f1a0afd449d36 \
+  research/analysis/pa001_modal_20260929/terminal
+```
+
+Validate terminal update 7,774 and both validation points before registering
+the checkpoint for EV-001. Freeze opening allocation and the evaluation
+protocol before games; training loss is not the searchless strength gate.
+
 The completed LR/decay screens selected Proposal A with equal encoder/main
 LR `5e-5`, FP32 optimizer masters, BF16 compute, and decoupled decay. The
 pending experiment is the frozen 7,774-update epoch over 7,960,576 examples.
@@ -43,10 +75,11 @@ Alternatively, verify and upload the existing local corpus directly:
 
 Staging checks all 11,431 files (8,635,794,032 bytes) against the frozen
 inventory hash. It uploads without overwrite and publishes a completion
-marker only after a successful directory upload. The GPU worker verifies
-the full inventory and train/validation scheduler identities, then copies
-the hot corpus to container-local storage. No additional dataset conversion
-or raw-model download is necessary for this direct-upload alternative. Two
+marker only after a successful directory upload. The GPU worker copies files
+concurrently to container-local storage, verifies the full local inventory and
+train/validation scheduler identities, and only then starts training. No
+additional dataset conversion or raw-model download is necessary for this
+direct-upload alternative. Two
 local uploads (default and four-transfer concurrency) encountered repeated
 TLS/API connection failures on September 29; use remote reconstruction on
 this connection.
