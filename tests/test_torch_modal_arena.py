@@ -7,6 +7,8 @@ import types
 from decimal import Decimal
 from pathlib import Path
 
+import pytest
+
 if "modal" not in sys.modules and importlib.util.find_spec("modal") is None:
     fake_modal = types.ModuleType("modal")
 
@@ -175,7 +177,10 @@ def test_arena_image_supports_inductor_and_failures_surface_bounded_tail() -> No
     assert '"function_call_id": call.object_id' in source
 
 
-def test_completed_arena_summary_verifies_checkpoint_binding(tmp_path: Path) -> None:
+@pytest.mark.parametrize("raw_opponent", [False, True])
+def test_completed_arena_summary_verifies_checkpoint_binding(
+    tmp_path: Path, raw_opponent: bool,
+) -> None:
     output_dir = tmp_path / "arena"
     output_dir.mkdir()
     state = {
@@ -206,6 +211,12 @@ def test_completed_arena_summary_verifies_checkpoint_binding(tmp_path: Path) -> 
             "fault_counts": {},
         },
     }
+    if raw_opponent:
+        state["contract"]["models"]["opponent"] = {
+            "kind": "raw_bt4", "arena_policy_mode": "default",
+            "bt4_checkpoint": {"sha256": "2" * 64},
+        }
+    opponent_mode = "policy_only" if raw_opponent else "dfm"
     (output_dir / "state.json").write_text(
         json.dumps(state),
         encoding="utf-8",
@@ -217,7 +228,7 @@ def test_completed_arena_summary_verifies_checkpoint_binding(tmp_path: Path) -> 
         candidate_state_sha256="1" * 64,
         opponent_state_sha256="2" * 64,
         candidate_policy_mode="policy_only",
-        opponent_policy_mode="dfm",
+        opponent_policy_mode=opponent_mode,
         pair_count=128,
         candidate_refinement_passes=8,
         opponent_refinement_passes=1,
@@ -231,4 +242,38 @@ def test_completed_arena_summary_verifies_checkpoint_binding(tmp_path: Path) -> 
     assert summary["opponent_refinement_passes"] == 1
     assert summary["fault_counts"] == {}
     assert summary["candidate_policy_mode"] == "policy_only"
-    assert summary["opponent_policy_mode"] == "dfm"
+    assert summary["opponent_policy_mode"] == opponent_mode
+
+
+def test_raw_bt4_arena_command_has_no_hero_opponent_flags(tmp_path: Path) -> None:
+    kwargs = dict(
+        candidate_root=tmp_path / "candidate", opponent_root=None,
+        models_dir=tmp_path / "models", output_dir=tmp_path / "arena",
+        candidate_policy_mode="dfm", opponent_policy_mode="policy_only",
+        pair_count=16, candidate_refinement_passes=8,
+        opponent_refinement_passes=1, opening_start_index=384, resume=False,
+    )
+    command = _arena_command(**kwargs)
+    assert "--opponent-raw-bt4" in command
+    assert "--opponent-torch-hero" not in command
+    assert "--opponent-torch-hero-policy-mode" not in command
+    with pytest.raises(ValueError, match="Raw BT4 requires"):
+        _arena_command(**{**kwargs, "opponent_refinement_passes": 8})
+    with pytest.raises(ValueError, match="Raw BT4 requires"):
+        _arena_command(**{**kwargs, "opponent_policy_mode": "dfm"})
+
+
+def test_raw_bt4_arena_identity_is_content_bound() -> None:
+    from research.infra.modal_arena_app import RAW_BT4_SHA256
+
+    kwargs = dict(
+        candidate_label=_label("a" * 20), candidate_state_sha256="1" * 64,
+        opponent_label="raw-bt4", opponent_state_sha256=RAW_BT4_SHA256,
+        candidate_policy_mode="dfm", opponent_policy_mode="policy_only",
+        pair_count=128, candidate_refinement_passes=1,
+        opponent_refinement_passes=1, opening_start_index=384,
+        arena_source_tree_sha256="3" * 64,
+    )
+    original = _arena_identity(**kwargs)
+    assert original != _arena_identity(**{**kwargs, "opponent_state_sha256": "4" * 64})
+    assert original != _arena_identity(**{**kwargs, "opening_start_index": 512})

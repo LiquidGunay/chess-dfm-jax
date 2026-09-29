@@ -19,6 +19,13 @@ the Modal App/function IDs and result label here. Keep compact evidence in
 `research/analysis/<experiment-id>/`; model and optimizer states stay remote.
 An idea in the backlog is not a scheduled GPU run.
 
+After a completed checkpoint and a frozen opening allocation, the Modal arena
+accepts either a completed Hero result label or `--opponent-label raw-bt4`.
+The latter selects the immutable native raw policy in the same Torch runtime.
+Use candidate pass counts 1 and 8 as distinct evaluations; raw BT4 always uses
+its single policy evaluation. Neither development mode by itself constitutes
+a confirmation or promotion claim.
+
 Use separate commits for launcher/accounting changes, experimental plans,
 and compact run receipts. Keep model/objective changes in separate experiment
 branches once the parent checkpoint and evaluation protocol are frozen.

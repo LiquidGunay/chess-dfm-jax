@@ -51,6 +51,7 @@ ARENA_ASSET_NAMES = (
 ALLOWED_PAIR_COUNTS = (16, 128, 1_024)
 ALLOWED_REFINEMENT_PASSES = (1, 8)
 ALLOWED_POLICY_MODES = ("dfm", "policy_only")
+RAW_BT4_OPPONENT_LABEL = "raw-bt4"
 
 app = modal.App(APP_NAME)
 base_input_volume = modal.Volume.from_name(
@@ -147,6 +148,10 @@ def _require_policy_mode(value: str, *, label: str) -> str:
     if value not in ALLOWED_POLICY_MODES:
         raise ValueError(f"{label} must be one of {ALLOWED_POLICY_MODES}")
     return value
+
+
+def _require_opponent_label(value: str) -> str:
+    return value if value == RAW_BT4_OPPONENT_LABEL else _require_result_label(value)
 
 
 def _arena_source_tree_sha256(repo_root: Path) -> str:
@@ -255,7 +260,7 @@ def _arena_identity(
                     candidate_state_sha256,
                     label="candidate_state_sha256",
                 ),
-                "opponent_label": _require_result_label(opponent_label),
+                "opponent_label": _require_opponent_label(opponent_label),
                 "opponent_state_sha256": _require_sha256(
                     opponent_state_sha256,
                     label="opponent_state_sha256",
@@ -293,7 +298,7 @@ def _arena_identity(
 def _arena_command(
     *,
     candidate_root: Path,
-    opponent_root: Path,
+    opponent_root: Path | None,
     models_dir: Path,
     output_dir: Path,
     candidate_policy_mode: str,
@@ -310,17 +315,10 @@ def _arena_command(
         "research.evaluate_arena",
         "--candidate-torch-hero",
         str(candidate_root),
-        "--opponent-torch-hero",
-        str(opponent_root),
         "--candidate-torch-hero-policy-mode",
         _require_policy_mode(
             candidate_policy_mode,
             label="candidate_policy_mode",
-        ),
-        "--opponent-torch-hero-policy-mode",
-        _require_policy_mode(
-            opponent_policy_mode,
-            label="opponent_policy_mode",
         ),
         "--tier",
         "hero_development",
@@ -347,6 +345,16 @@ def _arena_command(
         "--output-dir",
         str(output_dir),
     ]
+    if opponent_root is None:
+        if opponent_policy_mode != "policy_only" or opponent_refinement_passes != 1:
+            raise ValueError("Raw BT4 requires policy_only and one opponent pass")
+        command.append("--opponent-raw-bt4")
+    else:
+        command.extend((
+            "--opponent-torch-hero", str(opponent_root),
+            "--opponent-torch-hero-policy-mode",
+            _require_policy_mode(opponent_policy_mode, label="opponent_policy_mode"),
+        ))
     if resume:
         command.append("--resume")
     return command
@@ -411,13 +419,17 @@ def _completed_arena_summary(
     candidate_model = models.get("candidate", {})
     opponent_model = models.get("opponent", {})
     candidate = candidate_model.get("state", {})
-    opponent = opponent_model.get("state", {})
+    raw_opponent = opponent_model.get("kind") == "raw_bt4"
+    opponent = opponent_model.get("bt4_checkpoint" if raw_opponent else "state", {})
     aggregate = state.get("aggregate", {})
     if (
         candidate.get("sha256") != candidate_state_sha256
         or opponent.get("sha256") != opponent_state_sha256
         or candidate_model.get("arena_policy_mode") != candidate_policy_mode
-        or opponent_model.get("arena_policy_mode") != opponent_policy_mode
+        or opponent_model.get("arena_policy_mode")
+        != ("default" if raw_opponent else opponent_policy_mode)
+        or (raw_opponent and (opponent_policy_mode != "policy_only"
+                              or opponent_refinement_passes != 1))
         or int(aggregate.get("pair_count", -1)) != pair_count
         or int(run.get("candidate_refinement_passes", -1))
         != candidate_refinement_passes
@@ -494,7 +506,13 @@ def _run_arena(
     git_commit = _require_git_commit(git_commit)
     raw_bt4_path = _verify_raw_bt4_volume()
     candidate = _validated_training_result(candidate_label)
-    opponent = _validated_training_result(opponent_label)
+    opponent = (
+        {"label": RAW_BT4_OPPONENT_LABEL, "root": None,
+         "state_sha256": RAW_BT4_SHA256, "optimizer_update": 0,
+         "arm": "raw_bt4", "profile": "raw"}
+        if opponent_label == RAW_BT4_OPPONENT_LABEL
+        else _validated_training_result(opponent_label)
+    )
     candidate_policy_mode = _require_policy_mode(
         candidate_policy_mode,
         label="candidate_policy_mode",
@@ -647,7 +665,7 @@ def _run_arena(
         "remote_function_seconds": time.perf_counter() - started,
     }
     for record in (wrapper_record["candidate"], wrapper_record["opponent"]):
-        record["root"] = str(record["root"])
+        record["root"] = None if record["root"] is None else str(record["root"])
     (output_dir / "modal_arena.json").write_text(
         json.dumps(wrapper_record, allow_nan=False, indent=2, sort_keys=True)
         + "\n",
@@ -773,7 +791,12 @@ def main(
     if opening_start_index < 0:
         raise ValueError("opening_start_index must be non-negative")
     candidate_label = _require_result_label(candidate_label)
-    opponent_label = _require_result_label(opponent_label)
+    opponent_label = _require_opponent_label(opponent_label)
+    if opponent_label == RAW_BT4_OPPONENT_LABEL:
+        # Raw BT4 is the frozen native policy head, with no DFM refinement.
+        opponent_policy_mode = "policy_only"
+        if opponent_refinement_passes != 1:
+            raise ValueError("Raw BT4 requires one opponent pass")
     candidate_policy_mode = _require_policy_mode(
         candidate_policy_mode,
         label="candidate_policy_mode",
