@@ -18,6 +18,8 @@ from typing import Any, BinaryIO
 
 import modal
 
+from research.infra import proposal_a_epoch_data as epoch_data
+
 
 APP_NAME = "chess-dfm-training"
 RUNNER_REVISION = "hero-v2-modal-training-v7"
@@ -69,6 +71,9 @@ SOURCE_TREE_PATHS = (
     "research/infra/modal_train_app.py",
     "research/stitch_training_segments.py",
     "research/interpretability/remote_cost.py",
+    "research/infra/proposal_a_epoch_data.py",
+    "research/infra/runpod_proposal_a_worker.py",
+    epoch_data.PREREGISTER_RELATIVE,
 )
 COMPILE_SOURCE_TREE_PATHS = (
     "research/train_torch.py",
@@ -127,6 +132,11 @@ gpu_image = (
         "zstandard==0.23.0",
     )
     .add_local_python_source("chess_dfm_jax", "research", copy=True)
+    .add_local_file(
+        epoch_data.PREREGISTER_RELATIVE,
+        f"/root/{epoch_data.PREREGISTER_RELATIVE}",
+        copy=True,
+    )
     .add_local_file(
         "chess_dfm_jax/policy_moves.txt",
         "/root/chess_dfm_jax/policy_moves.txt",
@@ -334,7 +344,21 @@ for _lr_label, _lr_multiplier in (
         weight_decay_multiplier=1.0,
         weight_decay_mode="cautious",
     )
+TRAINING_ARMS["proposal_a_epoch"] = dataclasses.replace(
+    TRAINING_ARMS["proposal_a_equal_lr_5em5_wd1"],
+    dataset_label=epoch_data.DATASET_LABEL,
+    policy_distill_coeff=0.0,
+    dfm_closed_loop_mode="none",
+)
 TRAINING_PROFILES = {
+    "proposal_epoch": TrainingProfile(
+        steps=7_774,
+        validation_updates=(6_219, 7_774),
+        save_recovery=True,
+        save_model=True,
+        log_every=10,
+        recovery_updates=(1_000, 2_500, 4_000, 5_500, 6_219, 7_000),
+    ),
     "smoke": TrainingProfile(
         steps=1,
         validation_updates=(),
@@ -805,6 +829,8 @@ def _run_identity(
     dataset_identity_sha256 = (
         TRAJECTORY_TAR_SHA256
         if arm.data_format == "trajectory_v3"
+        else epoch_data.INVENTORY_SHA256
+        if arm.dataset_label == epoch_data.DATASET_LABEL
         else LC0_PROPOSAL_A_INVENTORY_SHA256
     )
     identity = hashlib.sha256(
@@ -846,6 +872,20 @@ def _training_command(
     arm = TRAINING_ARMS[arm_name]
     if not 0 <= resume_update < profile.steps:
         raise ValueError("Resume update must be in [0, profile.steps)")
+    if profile_name == "proposal_epoch":
+        if arm_name != "proposal_a_epoch":
+            raise ValueError("The promoted epoch must use its frozen full-corpus arm")
+        from research.infra.runpod_proposal_a_worker import build_training_command
+
+        return build_training_command(
+            {"preregister": epoch_data.load_preregister()},
+            dataset_root=data_root,
+            raw_bt4_path=raw_bt4_path,
+            attempt_output=output_dir,
+            recovery=(None if resume_checkpoint is None else {
+                "update": resume_update, "checkpoint_dir": str(resume_checkpoint),
+            }),
+        )
     if profile.save_recovery and (
         not profile.recovery_updates
         or profile.recovery_updates[-1] != profile.steps
@@ -1092,6 +1132,7 @@ def _recovery_checkpoint_candidate(
 def _latest_recovery_checkpoint(
     roots: tuple[Path, ...],
     before_update: int | None = None,
+    verify_hashes: bool = False,
 ) -> tuple[int, Path] | None:
     candidates: list[tuple[int, Path]] = []
     for root in roots:
@@ -1105,9 +1146,13 @@ def _latest_recovery_checkpoint(
                 or candidate[0] < before_update
             ):
                 candidates.append(candidate)
-    if not candidates:
-        return None
-    return max(candidates, key=lambda candidate: candidate[0])
+    for candidate in sorted(candidates, key=lambda item: item[0], reverse=True):
+        if verify_hashes:
+            manifest = json.loads((candidate[1] / "manifest.json").read_text(encoding="utf-8"))
+            if _sha256_file(candidate[1] / manifest["state"]["path"]) != manifest["state"]["sha256"]:
+                continue
+        return candidate
+    return None
 
 
 def _archive_partial_result(output_dir: Path) -> tuple[Path, Path]:
@@ -1205,6 +1250,17 @@ def _run_training(
         and arm.dataset_label == LC0_PROPOSAL_A_DATASET_LABEL
     ):
         stage = _validate_lc0_proposal_a_stage()
+    elif arm.dataset_label == epoch_data.DATASET_LABEL:
+        from research.infra.runpod_proposal_a_worker import _verify_scheduler_contract
+
+        dataset_root = _training_dataset_root(arm.dataset_label)
+        marker = json.loads((dataset_root / ".stage.json").read_text(encoding="utf-8"))
+        stage = epoch_data.verify_dataset(dataset_root / "lc0_sequential")
+        if marker != stage:
+            raise RuntimeError("Full-epoch dataset stage marker drift")
+        _verify_scheduler_contract(
+            dataset_root / "lc0_sequential", epoch_data.load_preregister(),
+        )
     else:
         raise RuntimeError("Training arm has an unsupported dataset contract")
     raw_bt4_path = _verify_raw_bt4_volume()
@@ -1304,6 +1360,7 @@ def _run_training(
     attempt_checkpoint = _latest_recovery_checkpoint(
         attempt_roots,
         before_update=profile.steps,
+        verify_hashes=profile_name == "proposal_epoch",
     )
     if attempt_checkpoint is not None and attempt_checkpoint[0] > resume_update:
         resume_update, resume_checkpoint = attempt_checkpoint
@@ -1313,6 +1370,17 @@ def _run_training(
     data_root = dataset_root / (
         "trajectory_v3" if arm.data_format == "trajectory_v3" else "lc0_sequential"
     )
+    if profile_name == "proposal_epoch":
+        from research.infra.runpod_proposal_a_worker import _copy_dataset_to_container
+
+        # Keep the hot corpus off the network filesystem during the long run.
+        local_data = Path(WORKSPACE_MOUNT) / "epoch-data" / "lc0_sequential"
+        local_data.parent.mkdir(parents=True, exist_ok=True)
+        _copy_dataset_to_container(
+            source=data_root, destination=local_data,
+            expected_bytes=epoch_data.INVENTORY_BYTES,
+        )
+        data_root = local_data
     eval_manifest = (
         _training_dataset_root(TRAINING_DATASET_LABEL)
         / "contracts"
@@ -2079,6 +2147,22 @@ def phase2_a100(**kwargs: str) -> dict[str, Any]:
     return _run_training(gpu="A100", **kwargs)
 
 
+@app.function(
+    image=gpu_image,
+    volumes=_TRAINING_VOLUMES,
+    gpu="L40S",
+    cpu=4.0,
+    memory=32768,
+    timeout=32400,
+    startup_timeout=900,
+    retries=0,
+    max_containers=1,
+    single_use_containers=True,
+)
+def proposal_epoch_l40s(**kwargs: str) -> dict[str, Any]:
+    return _run_training(gpu="L40S", **kwargs)
+
+
 def _spec(stage: str) -> tuple[Any, Decimal]:
     from research.interpretability.remote_cost import ModalJobSpec
 
@@ -2107,6 +2191,7 @@ def _spec(stage: str) -> tuple[Any, Decimal]:
             Decimal("0.30"),
         )
     resources = {
+        "proposal_epoch-l40s": (32400, 900, "L40S", Decimal("22.20")),
         "smoke-l40s": (1200, 900, "L40S", Decimal("1.40")),
         "smoke-a100": (1200, 900, "A100-40GB", Decimal("1.50")),
         "proposal_screen-l40s": (1500, 600, "L40S", Decimal("1.40")),
@@ -2241,6 +2326,9 @@ def main(
         raise ValueError(f"Unknown arm {arm!r}; choose from {sorted(TRAINING_ARMS)}")
     if gpu not in {"L40S", "A100"}:
         raise ValueError("GPU must be L40S or A100")
+    if mode == "proposal_epoch" or arm == "proposal_a_epoch":
+        if (mode, arm, gpu) != ("proposal_epoch", "proposal_a_epoch", "L40S"):
+            raise ValueError("Promoted epoch requires proposal_epoch/proposal_a_epoch/L40S")
 
     stage_profile = "smoke" if mode in {"smoke", "benchmark", "diagnostic"} else mode
     stage = f"{stage_profile}-{gpu.lower()}"
@@ -2261,6 +2349,7 @@ def main(
     git_commit = _local_git_commit(repo_root)
     print(json.dumps({"launch_stage": stage, "cost_guard": decision}, sort_keys=True))
     functions = {
+        ("proposal_epoch", "L40S"): proposal_epoch_l40s,
         ("smoke", "L40S"): smoke_l40s,
         ("smoke", "A100"): smoke_a100,
         ("proposal_screen", "L40S"): proposal_screen_l40s,

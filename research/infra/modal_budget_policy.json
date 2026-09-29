@@ -5,6 +5,7 @@
   "provider_workspace_budget_semantics": "hard outer cap",
   "stop_launch_fraction": 0.8,
   "stop_launch_dollars": 34.0,
+  "usage_basis": "metered_cost plus the nonpositive provider-reported free_storage adjustment; compute is counted before plan/promotional credits",
   "allocation": {
     "planned_gpu_work_dollars": 25.5,
     "provider_reschedules_billing_lag_storage_and_failed_starts_dollars": 8.5,
@@ -12,6 +13,7 @@
   },
   "rules": [
     "Read current metered spend from `modal billing summary` immediately before launch.",
+    "Exclude only explicitly waived free_storage, bounded by metered Volume charges. Missing allowance data falls back to gross usage; inconsistent or nonfinite accounting refuses launch.",
     "Refuse when the conservative per-job maximum exceeds its declared cap.",
     "Refuse when current plus the declared-attempt estimate exceeds $34.00.",
     "Timeouts and retries are part of the estimate; no unbounded retries.",
@@ -20,7 +22,7 @@
     "Start with control-plane smoke, then minimal T4 smoke, before model workloads."
   ],
   "pricing_snapshot": {
-    "date": "2026-08-09",
+    "date": "2026-09-29",
     "source": "https://modal.com/pricing",
     "t4_dollars_per_second": 0.000164,
     "l4_dollars_per_second": 0.000222,

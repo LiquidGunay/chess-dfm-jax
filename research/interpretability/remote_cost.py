@@ -6,11 +6,11 @@ import argparse
 import json
 import subprocess
 from dataclasses import asdict, dataclass
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from typing import Any
 
 
-PRICE_SNAPSHOT_DATE = "2026-08-09"
+PRICE_SNAPSHOT_DATE = "2026-09-29"
 PRICE_SOURCE = "https://modal.com/pricing"
 GPU_DOLLARS_PER_SECOND = {
     "T4": Decimal("0.000164"),
@@ -138,8 +138,31 @@ def enforce_modal_budget(
     return decision
 
 
+def budget_usage_from_summary(payload: dict[str, Any]) -> Decimal:
+    """Exclude provider-waived storage, but count compute before plan credits.
+
+    Modal's gross meter includes Volume bytes covered by its free allowance.
+    Only the explicit free_storage adjustment is excluded. General credits,
+    reservations, and other adjustments do not increase the research budget.
+    Missing adjustment data conservatively falls back to the gross meter.
+    """
+    try:
+        metered = Decimal(str(payload["metered_cost"]))
+        free_storage = Decimal(str(payload.get("adjustments", {}).get("free_storage", 0)))
+        volumes = Decimal(str(payload.get("metered_cost_breakdown", {}).get("volumes", 0)))
+    except (InvalidOperation, KeyError, TypeError, AttributeError) as exc:
+        raise RuntimeError("Modal billing summary had an unexpected schema") from exc
+    if (
+        not all(value.is_finite() for value in (metered, free_storage, volumes))
+        or metered < 0 or volumes < 0 or free_storage > 0
+        or -free_storage > min(metered, volumes)
+    ):
+        raise RuntimeError("Modal billing summary has inconsistent storage adjustments")
+    return metered + free_storage
+
+
 def modal_month_spend() -> Decimal:
-    """Read this month's metered cost from the authenticated Modal CLI."""
+    """Read budget usage, excluding only explicitly waived Volume storage."""
 
     result = subprocess.run(
         ["modal", "billing", "summary", "--for", "this month", "--json"],
@@ -155,7 +178,7 @@ def modal_month_spend() -> Decimal:
         )
     try:
         payload = json.loads(result.stdout)
-        return Decimal(str(payload["metered_cost"]))
+        return budget_usage_from_summary(payload)
     except (json.JSONDecodeError, KeyError, ValueError) as exc:
         raise RuntimeError("Modal billing summary had an unexpected schema") from exc
 

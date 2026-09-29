@@ -83,6 +83,99 @@ from research.infra.modal_train_app import (
 from research.interpretability.remote_cost import estimate_modal_job
 
 
+def test_promoted_epoch_command_matches_frozen_contract_and_resumes(tmp_path: Path) -> None:
+    from research.infra.proposal_a_epoch_data import load_preregister
+    from research.infra.runpod_proposal_a_worker import build_training_command
+
+    common = {
+        "profile_name": "proposal_epoch",
+        "arm_name": "proposal_a_epoch",
+        "output_dir": tmp_path / "output",
+        "raw_bt4_path": tmp_path / "raw.pb.gz",
+        "data_root": tmp_path / "lc0_sequential",
+        "eval_manifest": tmp_path / "unused.json",
+    }
+    expected = build_training_command(
+        {"preregister": load_preregister()},
+        dataset_root=common["data_root"],
+        raw_bt4_path=common["raw_bt4_path"],
+        attempt_output=common["output_dir"],
+        recovery=None,
+    )
+    assert _training_command(**common) == expected
+    resumed = _training_command(
+        **common, resume_checkpoint=tmp_path / "update00006219", resume_update=6219,
+    )
+    index = resumed.index("--save-updates")
+    assert resumed[index + 1:index + 3] == ["7000", "--save-final"]
+    assert resumed[resumed.index("--steps") + 1] == "7774"
+    assert resumed[resumed.index("--lr-total-examples") + 1] == "7960576"
+    assert resumed[resumed.index("--validation-example-count") + 1] == "8192"
+    common["arm_name"] = "proposal_a_equal_lr_5em5_wd1"
+    with pytest.raises(ValueError, match="frozen full-corpus arm"):
+        _training_command(**common)
+
+
+def test_promoted_epoch_budget_refuses_current_gross_meter() -> None:
+    from decimal import Decimal
+    from research.interpretability.remote_cost import enforce_modal_budget
+
+    spec, cap = _spec("proposal_epoch-l40s")
+    estimate = estimate_modal_job(spec)
+    assert spec.retries == 0
+    assert spec.timeout_seconds == 9 * 3600
+    assert Decimal(estimate["declared_attempt_upper_bound_dollars"]) <= cap
+    with pytest.raises(RuntimeError, match="projected spend"):
+        enforce_modal_budget(
+            estimate, recorded_month_spend=Decimal("22.71684919"), per_job_cap=cap,
+        )
+    assert enforce_modal_budget(
+        estimate, recorded_month_spend=Decimal("0"), per_job_cap=cap,
+    )["allowed"]
+
+
+def test_full_epoch_dataset_verification_rejects_same_size_corruption(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import hashlib
+    from research.infra import proposal_a_epoch_data as data
+
+    shard = tmp_path / "shard.bin"
+    shard.write_bytes(b"good")
+    rows = [{"path": "shard.bin", "size_bytes": 4,
+             "sha256": hashlib.sha256(b"good").hexdigest()}]
+    digest = hashlib.sha256(json.dumps(
+        rows, sort_keys=True, separators=(",", ":"), ensure_ascii=False,
+    ).encode()).hexdigest()
+    monkeypatch.setattr(data, "INVENTORY_SHA256", digest)
+    monkeypatch.setattr(data, "INVENTORY_FILES", 1)
+    monkeypatch.setattr(data, "INVENTORY_BYTES", 4)
+    assert data.verify_dataset(tmp_path)["inventory_sha256"] == digest
+    shard.write_bytes(b"evil")
+    with pytest.raises(RuntimeError, match="inventory drift"):
+        data.verify_dataset(tmp_path)
+
+
+def test_epoch_recovery_falls_back_from_same_size_corruption(tmp_path: Path) -> None:
+    import hashlib
+
+    for update, data in [(1000, b"good"), (2500, b"evil")]:
+        directory = tmp_path / "checkpoints" / f"update{update:08d}"
+        directory.mkdir(parents=True)
+        (directory / "state.safetensors").write_bytes(data)
+        (directory / "manifest.json").write_text(json.dumps({
+            "format": "chess-dfm-torch-training-v2",
+            "optimizer_update": update,
+            "model_only": False,
+            "optimizer_resume_supported": True,
+            "state": {"path": "state.safetensors", "size_bytes": 4,
+                      "sha256": hashlib.sha256(b"good").hexdigest()},
+        }))
+    selected = _latest_recovery_checkpoint((tmp_path,), verify_hashes=True)
+    assert selected is not None
+    assert selected[0] == 1000
+
+
 def test_phase1_matrix_contains_exact_hero1_and_separated_v2_controls() -> None:
     assert {
         "hero1_exact",

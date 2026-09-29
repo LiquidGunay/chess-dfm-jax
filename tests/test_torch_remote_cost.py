@@ -6,9 +6,37 @@ import pytest
 
 from research.interpretability.remote_cost import (
     ModalJobSpec,
+    budget_usage_from_summary,
     enforce_modal_budget,
     estimate_modal_job,
 )
+
+
+def test_budget_excludes_free_storage_but_not_compute_credits() -> None:
+    assert budget_usage_from_summary({
+        "metered_cost": "22.71684919", "billed_cost": "0",
+        "adjustments": {"free_storage": "-19.61684919", "credits": "-3.1"},
+        "metered_cost_breakdown": {"volumes": "19.61684919"},
+    }) == Decimal("3.10000000")
+    assert budget_usage_from_summary({
+        "metered_cost": "120", "billed_cost": "0",
+        "adjustments": {"free_storage": "-90", "credits": "-30"},
+        "metered_cost_breakdown": {"volumes": "100"},
+    }) == Decimal("30")  # Includes $10 of non-waived storage.
+    assert budget_usage_from_summary({"metered_cost": "22.7"}) == Decimal("22.7")
+
+
+@pytest.mark.parametrize("metered,free,volumes", [
+    ("NaN", "0", "0"), ("1", "-2", "2"), ("10", "-5", "4"),
+    ("10", "1", "1"), ("Infinity", "0", "0"), ("-1", "0", "0"),
+])
+def test_inconsistent_billing_refuses_launch(metered: str, free: str, volumes: str) -> None:
+    with pytest.raises(RuntimeError, match="inconsistent"):
+        budget_usage_from_summary({
+            "metered_cost": metered,
+            "adjustments": {"free_storage": free},
+            "metered_cost_breakdown": {"volumes": volumes},
+        })
 
 
 def test_cost_estimate_includes_startup_timeout_and_every_retry() -> None:
