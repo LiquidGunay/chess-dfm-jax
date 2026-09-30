@@ -1,6 +1,6 @@
 {
   "schema_version": "chess-dfm-experiment-registry-v1",
-  "updated_utc": "2026-09-29",
+  "updated_utc": "2026-09-30",
   "active_branch": "research/modal-experiments",
   "runtime": "pytorch",
   "representation_strength_threshold": {
@@ -12,7 +12,7 @@
     {
       "id": "PA-001",
       "name": "Promoted Proposal A full epoch",
-      "status": "training",
+      "status": "completed",
       "depends_on": [],
       "specification": "research/analysis/proposal_a_one_epoch_preregister_20260810.json",
       "runbook": "docs/modal_proposal_a_continuation.md",
@@ -27,7 +27,9 @@
     {
       "id": "EV-001",
       "name": "Searchless evaluation of Proposal A p1 and p8",
-      "status": "waiting_for_checkpoint",
+      "status": "smoke_evaluations_running",
+      "specification": "research/analysis/ev001_modal_20260930/preregister.json",
+      "execution_record": "research/analysis/ev001_modal_20260930/runs.json",
       "depends_on": ["PA-001"],
       "baselines": ["frozen Hero 1", "raw BT4"],
       "gate": "Validated held-out paired strength improvement; inconclusive evidence does not promote to search"

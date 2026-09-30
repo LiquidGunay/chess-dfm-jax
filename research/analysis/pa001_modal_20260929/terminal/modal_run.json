@@ -1,0 +1,78 @@
+{
+  "archived_attempts": [],
+  "arm": "proposal_a_epoch",
+  "arm_config": {
+    "data_format": "lc0_sequential",
+    "dataset_label": "lc0-sequential-test80-20240401-0117-full-v1",
+    "dfm_closed_loop_mode": "none",
+    "encoder_lr_ratio": 1.0,
+    "legality_coeff": 0.0,
+    "lr_total_examples": 7960576,
+    "main_lr_multiplier": 0.1,
+    "optimizer_precision": "fp32_master",
+    "policy_distill_coeff": 0.0,
+    "policy_distill_teacher_result_label": null,
+    "policy_distill_teacher_state_sha256": null,
+    "recipe": "hero_v2",
+    "wdl_include_current_state": true,
+    "weight_decay_mode": "decoupled",
+    "weight_decay_multiplier": 1.0
+  },
+  "compile_source_tree_sha256": "7871ad9244c1acd27abb3cdca7068c3555fc3f5e64817ad0569b20f8507e2fda",
+  "compute_capability": [
+    8,
+    9
+  ],
+  "continuation_predecessor_result_label": null,
+  "dataset": {
+    "data_root": "/workspace/epoch-data/lc0_sequential",
+    "format": "lc0_sequential",
+    "label": "lc0-sequential-test80-20240401-0117-full-v1"
+  },
+  "dataset_stage": {
+    "dataset_label": "lc0-sequential-test80-20240401-0117-full-v1",
+    "inventory_file_count": 11431,
+    "inventory_sha256": "864afad45689a19a55962bef3cc39a59cbf7450614c19d415bf2aecdd2a573cb",
+    "inventory_size_bytes": 8635794032,
+    "preregister_sha256": "ed9d5c0d05e995085686442f1530d18b67d59599a7b1ce870d9782c52ead2cf2",
+    "schema_version": "chess-dfm-modal-lc0-sequential-full-v1"
+  },
+  "declared_attempt_upper_bound_dollars": "22.15915200",
+  "device_name": "NVIDIA L40S",
+  "device_total_memory_bytes": 47665709056,
+  "git_commit": "c66bbee44b965839e6bc655522162eb0c9dc7dcf",
+  "gpu": "L40S",
+  "metric_segments": [
+    "/workspace/training-results/runs/hero-training-proposal_epoch-proposal_a_epoch-l40s-d46e7b4f1a0afd449d36"
+  ],
+  "policy_distill_teacher_checkpoint": null,
+  "profile": "proposal_epoch",
+  "profile_config": {
+    "log_every": 10,
+    "recovery_updates": [
+      1000,
+      2500,
+      4000,
+      5500,
+      6219,
+      7000
+    ],
+    "resume_from_profile": null,
+    "save_model": true,
+    "save_recovery": true,
+    "steps": 7774,
+    "validation_updates": [
+      6219,
+      7774
+    ]
+  },
+  "raw_bt4_sha256": "61e43e98d2c4cb747498c6bc13a5bbb3b07e985d3f5d87f0351a4db855fa0651",
+  "remote_function_seconds": 20325.550476557,
+  "result_label": "hero-training-proposal_epoch-proposal_a_epoch-l40s-d46e7b4f1a0afd449d36",
+  "resume_checkpoint": null,
+  "resume_update": 0,
+  "resumed_from_result_label": null,
+  "runner_revision": "hero-v2-modal-training-v7",
+  "schema_version": "chess-dfm-modal-training-run-v1",
+  "source_tree_sha256": "1336e831d97dbc07fbe89a65eab50c11341c7f14013199d80ea8df3f4d3d5b2f"
+}

@@ -3,7 +3,7 @@
   "experiment_id": "PA-001",
   "date_utc": "2026-09-29",
   "branch": "research/modal-experiments",
-  "status": "training",
+  "status": "completed",
   "training_submitted": true,
   "training": {
     "app_id": "ap-rRxarV72MK00sIREH1Q6Cv",
@@ -32,7 +32,14 @@
     "last_observed_step_seconds": 2.550649960000044,
     "last_observed_optimizer_skipped_nonfinite": false,
     "observed_peak_gpu_allocated_bytes": 22052413440,
-    "terminal_checkpoint_observed": false
+    "terminal_checkpoint_observed": true,
+    "completed_utc": "2026-09-30T00:56:20.908010+00:00",
+    "terminal_state_sha256": "ffe6c4d4287810e96bba4ea222961416b23f259ceec449cba19eca6660bfbb5d",
+    "verified_completed_updates": 7774,
+    "verified_nonfinite_losses": 0,
+    "verified_skipped_nonfinite_updates": 0,
+    "train_wall_seconds": 20303.010761536003,
+    "compact_evidence": "terminal/"
   },
   "attempts": [{
     "status": "stopped_during_input_preflight",
@@ -95,5 +102,5 @@
     "artifacts_deleted": false
   },
   "validation": {"focused_torch_modal_tests_passed": 70},
-  "next": "The detached epoch is training. Collect and validate compact evidence after update 7774. Freeze EV-001 opening allocation and evaluation protocol before searchless games. Propose the architecture strength threshold after EV-001."
+  "next": "EV-001 is preregistered at research/analysis/ev001_modal_20260930/preregister.json and smoke evaluations are running. Propose the architecture strength threshold after the first searchless evaluation."
 }

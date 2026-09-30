@@ -1,0 +1,2 @@
+# Full per-update evidence stays local and on Modal; its digest is in the pull manifest.
+metrics.jsonl
