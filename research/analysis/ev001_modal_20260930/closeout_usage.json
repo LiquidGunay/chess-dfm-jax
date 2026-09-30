@@ -1,0 +1,31 @@
+{
+  "schema_version": "chess-dfm-eval-closeout-usage-v1",
+  "checked_utc": "2026-09-30T04:05:54.456776+00:00",
+  "budget_usage_dollars": "18.67000000",
+  "usage_before_evaluations_dollars": "17.72",
+  "observed_usage_increase_dollars": "0.95000000",
+  "stop_threshold_dollars": "34.00",
+  "outer_budget_dollars": "42.50",
+  "meter_may_lag": true,
+  "usage_basis": "Compute before promotional credits; only validated provider-waived storage excluded.",
+  "app_list_scope": "chess-dfm-research environment, live Modal app list",
+  "all_evaluation_apps_stopped": true,
+  "active_evaluation_tasks": 0,
+  "stopped_app_ids": [
+    "ap-pIJiAGHi7nUXURyUr2qg68",
+    "ap-yTnq33Gh4HIJDXu0lG8npb",
+    "ap-30aUi4kpQiEYkXJKPYd08i",
+    "ap-6NmA4KQDEMpk1Jl6oYugWg",
+    "ap-hwt1UKdePq5kn08GfqG65e",
+    "ap-zuBmamQ6gpRi1n5Ld2MaBv",
+    "ap-kVXDT7RZ6LF4QYw2hZLgDW",
+    "ap-crDG3e6bCxO5M74eA9w6kH",
+    "ap-GTPYPhFMAlsjju2SGGZMOu",
+    "ap-GBGGTWqjDQu0DjpaFHqNrx"
+  ],
+  "validation": {
+    "focused_regression_tests_passed": 158,
+    "state_checksums_verified": 10,
+    "preregistration_unchanged": true
+  }
+}

@@ -102,5 +102,5 @@
     "artifacts_deleted": false
   },
   "validation": {"focused_torch_modal_tests_passed": 70},
-  "next": "EV-001 is preregistered at research/analysis/ev001_modal_20260930/preregister.json and smoke evaluations are running. Propose the architecture strength threshold after the first searchless evaluation."
+  "next": "EV-001 smoke and all eight development comparisons completed; the terminal checkpoint failed the Hero 1 strength gate. No confirmation or matched-search run. See research/analysis/ev001_modal_20260930/decision.json for evidence and the proposed, not yet frozen, representation-strength threshold."
 }

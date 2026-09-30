@@ -1,0 +1,42 @@
+{
+  "schema_version": "chess-dfm-evaluation-decision-v1",
+  "experiment_id": "EV-001",
+  "date_utc": "2026-09-30",
+  "evidence": "development_summary.json",
+  "opening_quality_evidence": "opening_overlap.json",
+  "status": "all_preregistered_smoke_and_development_edges_completed",
+  "decision": "do_not_promote_proposal_a_terminal_checkpoint",
+  "confirmation": {
+    "status": "not_run_failed_preregistered_entry_gate",
+    "reason": "The primary one-pass candidate scored 0.064453125 against Hero 1, below the required score greater than 0.5."
+  },
+  "matched_lc0_search": {
+    "status": "not_run_failed_searchless_strength_gate",
+    "adapter_status": "implementation_and_parity_validation_still_required_for_any_future_qualifying_candidate"
+  },
+  "findings": [
+    "Hero 1 remains the strongest tested checkpoint: 90.8203125 percent against raw BT4 on this development allocation.",
+    "The epoch candidate scored 60.3515625 percent against raw BT4 but only 6.4453125 percent against Hero 1. Its raw-BT4 interval includes 50 percent; do not claim confirmed improvement over raw BT4.",
+    "Eight-pass refinement scored 33.984375 percent head-to-head against one-pass, with a marginal pair-aware 95 percent interval of 21.9803401085 to 45.9884098915 percent. This is a descriptive development comparison, not a simultaneous matrix-wide confirmation claim.",
+    "The native policy-only ablation scored 59.5703125 percent against raw BT4 and 5.6640625 percent against Hero 1. Similar point estimates to one-pass DFM do not establish equivalence or isolate a causal training effect.",
+    "All 2112 smoke and development games completed without policy faults, incomplete legal coverage, or ply-cap draws.",
+    "The full-epoch training recipe and Hero 1 differ in more than training duration; these matches alone do not identify the cause of the regression."
+  ],
+  "opening_quality": {
+    "finding": "Exact initial 12-ply action histories overlap with training for 2 of 128 development openings and 33 of 1024 reserved confirmation openings.",
+    "severity_for_development_interpretation": "medium",
+    "confidence_in_exact_prefix_counts": "high",
+    "impact": "Familiar starting histories are possible. This does not establish full-game leakage or contamination of newly played continuations; nonmatches do not prove source-game disjointness.",
+    "remediation": "Keep these results descriptive. Establish full source-game provenance or use a new source-game-disjoint opening pool before any future held-out confirmation claim. Preserve this frozen allocation and all negative results."
+  },
+  "representation_strength_threshold_proposal": {
+    "status": "proposal_not_frozen",
+    "baseline": "frozen Hero 1, DFM one-pass",
+    "relative_elo_noninferiority_margin": 50,
+    "criterion": "A paired 95 percent lower confidence bound above -50 relative logistic Elo versus Hero 1, at a matched one-pass inference budget, with zero faults, complete legal coverage, and at most 5 percent cap draws.",
+    "rationale": "Hero 1 substantially outperformed raw BT4, so merely beating raw BT4 would admit much weaker representations. A 50-Elo tolerance permits modest strength differences without admitting the observed large regression.",
+    "required_before_use": "Agree and freeze this proposed gate, a source-game-disjoint opening pool, fixed sample sizes, and multiplicity handling before inspecting architecture candidates. Report measured latency as well as network evaluations."
+  },
+  "recommended_next_step": "Design a bounded diagnostic of checkpoint trajectories and training-recipe differences before more training or architecture sweeps. No additional GPU runs are launched by this recommendation.",
+  "artifacts_deleted": false
+}

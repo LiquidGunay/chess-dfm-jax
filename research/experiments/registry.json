@@ -4,8 +4,11 @@
   "active_branch": "research/modal-experiments",
   "runtime": "pytorch",
   "representation_strength_threshold": {
-    "status": "deferred_until_first_searchless_evaluation",
+    "status": "proposed_not_frozen",
     "user_decision_date": "2026-09-29",
+    "proposal_date": "2026-09-30",
+    "proposal": "Paired 95% lower bound above -50 relative Elo versus frozen Hero 1 at matched one-pass inference; freeze protocol before architecture selection.",
+    "proposal_record": "research/analysis/ev001_modal_20260930/decision.json",
     "freeze_before": "architecture_comparisons"
   },
   "experiments": [
@@ -27,9 +30,11 @@
     {
       "id": "EV-001",
       "name": "Searchless evaluation of Proposal A p1 and p8",
-      "status": "smoke_evaluations_running",
+      "status": "development_complete_failed_confirmation_entry",
       "specification": "research/analysis/ev001_modal_20260930/preregister.json",
       "execution_record": "research/analysis/ev001_modal_20260930/runs.json",
+      "results": "research/analysis/ev001_modal_20260930/development_summary.json",
+      "decision": "research/analysis/ev001_modal_20260930/decision.json",
       "depends_on": ["PA-001"],
       "baselines": ["frozen Hero 1", "raw BT4"],
       "gate": "Validated held-out paired strength improvement; inconclusive evidence does not promote to search"
@@ -37,7 +42,7 @@
     {
       "id": "EV-002",
       "name": "Matched LC0 MCTS evaluation",
-      "status": "gated_on_searchless_strength",
+      "status": "not_run_candidate_failed_searchless_gate",
       "depends_on": ["EV-001"],
       "baseline": "raw BT4 in the same LC0 search build",
       "adapters": ["DFM root prior plus current-state WDL", "updated BT4 native heads"]
