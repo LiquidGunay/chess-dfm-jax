@@ -1,0 +1,24 @@
+{
+  "schema_version": "chess-dfm-arena-input-preflight-v1",
+  "passed": true,
+  "app_id": "ap-KlspsrEX18ilgKdU2fF94W",
+  "arena_source_tree_sha256": "16b3e0b788f452c5158351f6c8754374e33d445883d15caaa243ddb3f260d458",
+  "raw_bt4_sha256": "61e43e98d2c4cb747498c6bc13a5bbb3b07e985d3f5d87f0351a4db855fa0651",
+  "assets": {
+    "promotion-ply12-n2048-histories-v3.json": "bac58cc7380d9a4173e7618a765917aa0990355e1f8e460196affbe28580ed37",
+    "promotion-ply12-n2048-v3-contract.json": "39a0fb54695ce8846b6d474a1d2514fb2d28082323e23f6a63281d8f5bf915cd",
+    "promotion-ply12-n2048-v3.json": "5632cc726112c2ab700e0f4d935fa83d58418b406fc100262f3aa19ce3befe2e"
+  },
+  "models": {
+    "hero-training-phase1-hero1_exact-l40s-fae7b0ccef5ca3668ed5": {
+      "plane_history_mode": "current_only_as_preprocessed",
+      "run_config_sha256": "1f417904b8160517787f45d686cef7567e8affce143d41310a17d5eacc00c33c",
+      "state_sha256": "e518083ee5476e7ff15e7c34caf9c0505f8fb7d330ea5a6882e4e9e5c1ef1912"
+    },
+    "hero-training-proposal_epoch-proposal_a_epoch-l40s-d46e7b4f1a0afd449d36": {
+      "plane_history_mode": "lc0_full_history_as_preprocessed",
+      "run_config_sha256": "e9dea8007fcd643ff9085fe2f056266d71d08586d46c78e6782d9ebc9d892f34",
+      "state_sha256": "ffe6c4d4287810e96bba4ea222961416b23f259ceec449cba19eca6660bfbb5d"
+    }
+  }
+}

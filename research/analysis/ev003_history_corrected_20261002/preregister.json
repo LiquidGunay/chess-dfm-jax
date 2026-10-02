@@ -1,0 +1,243 @@
+{
+  "schema_version": "chess-dfm-searchless-evaluation-v1",
+  "experiment_id": "EV-003",
+  "created_utc": "2026-10-02",
+  "status": "sealed_before_games",
+  "candidate": {
+    "label": "hero-training-proposal_epoch-proposal_a_epoch-l40s-d46e7b4f1a0afd449d36",
+    "update": 7774,
+    "state_sha256": "ffe6c4d4287810e96bba4ea222961416b23f259ceec449cba19eca6660bfbb5d",
+    "manifest_sha256": "4f656120d73262a6339ab9d600f07c6a8c6c790734b38bd319a3c7616b5e5de1",
+    "plane_history_mode": "lc0_full_history_as_preprocessed"
+  },
+  "hero1": {
+    "label": "hero-training-phase1-hero1_exact-l40s-fae7b0ccef5ca3668ed5",
+    "update": 554,
+    "state_sha256": "e518083ee5476e7ff15e7c34caf9c0505f8fb7d330ea5a6882e4e9e5c1ef1912",
+    "manifest_sha256": "61276cee7db1871b3071fa39b31356b42744df213d00113bd62b372984b9a6fa",
+    "policy_mode": "dfm",
+    "refinement_passes": 1,
+    "plane_history_mode": "current_only_as_preprocessed"
+  },
+  "raw_bt4": {
+    "label": "raw-bt4",
+    "state_sha256": "61e43e98d2c4cb747498c6bc13a5bbb3b07e985d3f5d87f0351a4db855fa0651",
+    "policy_mode": "policy_only",
+    "refinement_passes": 1,
+    "plane_history_mode": "current_only_as_preprocessed",
+    "scope": "Frozen current-only raw-policy anchor, not a claim about LC0's full-history/search strength."
+  },
+  "openings": {
+    "asset": "promotion-ply12-n2048-v3",
+    "pool_sha256": "e750e87643c482d28b4201668bd355234fe1fb27f2a690bf784706b1ddd37459",
+    "pool_file_sha256": "5632cc726112c2ab700e0f4d935fa83d58418b406fc100262f3aa19ce3befe2e",
+    "history_manifest_sha256": "d8781efb5d76066bcf2ce2e9ab2897f3261b20f7c4488c90992a8eadcc918a4b",
+    "history_file_sha256": "bac58cc7380d9a4173e7618a765917aa0990355e1f8e460196affbe28580ed37",
+    "smoke": {
+      "start": 0,
+      "pairs": 16,
+      "purpose": "plumbing_only_previously_exposed"
+    },
+    "development": {
+      "start": 384,
+      "pairs": 128,
+      "games_per_edge": 256,
+      "purpose": "Exact EV-001 development opening reuse for paired input-contract correction; exposed and descriptive, not held-out."
+    },
+    "confirmation_reserve": {
+      "start": 1024,
+      "maximum_pairs": 1024,
+      "games_not_yet_authorized_by_gate": true
+    },
+    "historical_usage_audit": {
+      "local_json_ranges_stop_exclusive": [
+        [
+          0,
+          16
+        ],
+        [
+          0,
+          128
+        ],
+        [
+          0,
+          256
+        ],
+        [
+          256,
+          384
+        ]
+      ],
+      "remote_arena_directories_checked": 21,
+      "largest_recorded_used_index": 511,
+      "scope": "Tracked analysis contracts and the current Modal training-results arena inventory; this is not proof that no other archive ever used these positions.",
+      "training_overlap": "Source-game disjointness from the newly split Proposal A training corpus must be audited before a held-out confirmation claim. Development results remain descriptive."
+    }
+  },
+  "game_contract": {
+    "runtime": "native_pytorch",
+    "device": "L4",
+    "tier": "hero_development",
+    "color_reversed_pairs": true,
+    "deterministic_greedy_legal_argmax": true,
+    "complete_board_history_for_adjudication": true,
+    "additional_ply_cap": 256,
+    "draw_rules": "python-chess normal outcomes with draw claims, or symmetric additional-ply-cap draw",
+    "fault_handling": "illegal actions, exceptions, nonfinite outputs, timeouts, or no representable legal move lose the affected game",
+    "block_pairs": 16,
+    "policy_batch_size_cap": 16,
+    "policy_timeout_seconds": 30,
+    "model_specific_input_history": true
+  },
+  "smoke_edges": [
+    {
+      "id": "smoke_p8_hero1",
+      "candidate": "candidate",
+      "candidate_mode": "dfm",
+      "candidate_passes": 8,
+      "opponent": "hero1",
+      "opponent_mode": "dfm",
+      "opponent_passes": 1
+    },
+    {
+      "id": "smoke_p1_raw",
+      "candidate": "candidate",
+      "candidate_mode": "dfm",
+      "candidate_passes": 1,
+      "opponent": "raw_bt4",
+      "opponent_mode": "policy_only",
+      "opponent_passes": 1
+    }
+  ],
+  "development_edges": [
+    {
+      "id": "p1_hero1",
+      "role": "primary",
+      "candidate": "candidate",
+      "candidate_mode": "dfm",
+      "candidate_passes": 1,
+      "opponent": "hero1",
+      "opponent_mode": "dfm",
+      "opponent_passes": 1
+    },
+    {
+      "id": "p1_raw",
+      "role": "primary",
+      "candidate": "candidate",
+      "candidate_mode": "dfm",
+      "candidate_passes": 1,
+      "opponent": "raw_bt4",
+      "opponent_mode": "policy_only",
+      "opponent_passes": 1
+    },
+    {
+      "id": "p8_hero1",
+      "role": "secondary_refinement",
+      "candidate": "candidate",
+      "candidate_mode": "dfm",
+      "candidate_passes": 8,
+      "opponent": "hero1",
+      "opponent_mode": "dfm",
+      "opponent_passes": 1
+    },
+    {
+      "id": "p8_raw",
+      "role": "secondary_refinement",
+      "candidate": "candidate",
+      "candidate_mode": "dfm",
+      "candidate_passes": 8,
+      "opponent": "raw_bt4",
+      "opponent_mode": "policy_only",
+      "opponent_passes": 1
+    },
+    {
+      "id": "policy_hero1",
+      "role": "native_head_attribution",
+      "candidate": "candidate",
+      "candidate_mode": "policy_only",
+      "candidate_passes": 1,
+      "opponent": "hero1",
+      "opponent_mode": "dfm",
+      "opponent_passes": 1
+    },
+    {
+      "id": "policy_raw",
+      "role": "native_head_attribution",
+      "candidate": "candidate",
+      "candidate_mode": "policy_only",
+      "candidate_passes": 1,
+      "opponent": "raw_bt4",
+      "opponent_mode": "policy_only",
+      "opponent_passes": 1
+    },
+    {
+      "id": "p8_p1",
+      "role": "refinement_attribution",
+      "candidate": "candidate",
+      "candidate_mode": "dfm",
+      "candidate_passes": 8,
+      "opponent": "candidate",
+      "opponent_mode": "dfm",
+      "opponent_passes": 1
+    },
+    {
+      "id": "hero1_raw",
+      "role": "incumbent_anchor",
+      "candidate": "hero1",
+      "candidate_mode": "dfm",
+      "candidate_passes": 1,
+      "opponent": "raw_bt4",
+      "opponent_mode": "policy_only",
+      "opponent_passes": 1
+    }
+  ],
+  "analysis": {
+    "unit": "one complete color-reversed opening pair",
+    "primary_endpoint": "candidate one-pass mean pair score against each frozen incumbent",
+    "descriptive_reports": [
+      "wins_draws_losses",
+      "pentanomial",
+      "pair_score",
+      "pair_aware_score_interval",
+      "relative_logistic_elo_interval",
+      "faults",
+      "cap_draws",
+      "legal_coverage",
+      "latency",
+      "positions_per_second"
+    ],
+    "strength_claim": "No strength promotion from smoke or development scores. Freeze confirmation sample size and multiplicity handling before viewing confirmation results.",
+    "confirmation_entry": "Both primary one-pass development scores must exceed 0.5, faults must be zero, coverage complete, and cap draws no more than 5 percent. Otherwise the current candidate does not qualify for search promotion; all planned development ablations still run unless a systems fault invalidates them.",
+    "confirmation_design": "Use a practically useful target of +20 relative Elo and pair variance from development to choose a fixed sample size, capped by the disjoint reserve and budget. Use familywise one-sided alpha 0.05 across the two primary comparisons. Inconclusive evidence does not promote; do not repeatedly peek and stop on a fixed-sample interval.",
+    "search_gate": "Only validated one-pass improvement over both incumbents permits matched LC0 search. The LC0 adapter still requires implementation and parity checks.",
+    "architecture_threshold": "Reassess the previous proposal after corrected results; no architecture selection or training authorized."
+  },
+  "budget": {
+    "launch_month_usage_dollars": "0.02",
+    "workspace_stop_dollars": "34.00",
+    "per_attempt_cap_dollars": "1.00",
+    "declared_attempt_maximum_dollars": "0.92976000",
+    "smoke_plus_development_attempts": 10,
+    "smoke_plus_development_declared_maximum_dollars": "9.29760000",
+    "maximum_simultaneous_attempts": 4,
+    "rule": "Refresh live usage before each launch and add outstanding declared attempt reservations. No automatic retries or search launch.",
+    "cpu_preflight_declared_maximum_dollars": "0.01473360",
+    "total_declared_maximum_including_preflight_dollars": "9.31233360"
+  },
+  "question": "Does restoring the terminal checkpoint's training-matched board history resolve its apparent strength regression?",
+  "corrects": {
+    "experiment": "EV-001",
+    "record": "research/analysis/ev001_modal_20260930/preregister.json",
+    "issue": "The sequential-trained candidate was evaluated with current-only inputs. Preserve prior evidence; do not interpret those results as training-matched candidate strength.",
+    "only_behavior_change": "Candidate checkpoint input history; baseline inputs, weights, openings, passes, and gameplay unchanged."
+  },
+  "tooling": {
+    "source_commit": "ebb5335c1a6436c0db5e2a31b821951f933348b9",
+    "arena_source_tree_sha256": "16b3e0b788f452c5158351f6c8754374e33d445883d15caaa243ddb3f260d458",
+    "input_preflight_file": "input_preflight.json",
+    "input_preflight_sha256": "c71cbb13b308883fbc370e54d52d2f3ec27faceafd67427c26aa546f08207f64",
+    "input_parity_file": "input_parity.json",
+    "input_parity_sha256": "94f5665cbeec57d2ed0e4e5853b54a59c3b935704b50bf1622e4ff6de9ef57ae",
+    "tests": "108 targeted Torch/arena tests passed"
+  }
+}

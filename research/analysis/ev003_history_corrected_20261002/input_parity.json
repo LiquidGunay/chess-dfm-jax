@@ -1,0 +1,192 @@
+{
+  "dataset_root": "/home/ubuntu/chess-dfm-jax/data/lc0_sequential/test80_20240401_0117",
+  "game_count": 30,
+  "games": [
+    {
+      "game_index": 0,
+      "positions": 50,
+      "shard": "chunks/chunk-00000/train",
+      "stored_planes_sha256": "6952abfc025c8ee05aeb655f37c40358608510d521b0430469072b27c0d22ade"
+    },
+    {
+      "game_index": 1,
+      "positions": 97,
+      "shard": "chunks/chunk-00000/train",
+      "stored_planes_sha256": "7d150768140e29eed4c07d771dd696c406039c95cba962565cd208ea7205033a"
+    },
+    {
+      "game_index": 2,
+      "positions": 124,
+      "shard": "chunks/chunk-00000/train",
+      "stored_planes_sha256": "bc054329d70c4e86735aec8239d6fd8b26af421d47e6ca6b4c44702b2c4e65c5"
+    },
+    {
+      "game_index": 3,
+      "positions": 264,
+      "shard": "chunks/chunk-00000/train",
+      "stored_planes_sha256": "c1b5c4442355d2b1414329466b0647598fdec2a30640a5cb897f862da90130bd"
+    },
+    {
+      "game_index": 4,
+      "positions": 135,
+      "shard": "chunks/chunk-00000/train",
+      "stored_planes_sha256": "ce10422db5f27479d502309a0750b5e1cfe011d03b85e58337d980b414c36836"
+    },
+    {
+      "game_index": 5,
+      "positions": 102,
+      "shard": "chunks/chunk-00000/train",
+      "stored_planes_sha256": "f6393e4f2597afbe80bf64a7440aa916469b07eae0d594eecd33b5cf4581f129"
+    },
+    {
+      "game_index": 6,
+      "positions": 88,
+      "shard": "chunks/chunk-00000/train",
+      "stored_planes_sha256": "73997452ce15a1163d1c432eac355a1cb906c067f20fd9d8e71ea38ab8322fe1"
+    },
+    {
+      "game_index": 7,
+      "positions": 27,
+      "shard": "chunks/chunk-00000/train",
+      "stored_planes_sha256": "189a0f0c292c73af5177848a5cc2858430ee5d1f66fe3d3310b23e27d9bf3067"
+    },
+    {
+      "game_index": 8,
+      "positions": 94,
+      "shard": "chunks/chunk-00000/train",
+      "stored_planes_sha256": "a73dc29aaf770227a8ccd9fad7525ac4e14ec878be80799415c7e619e91221e8"
+    },
+    {
+      "game_index": 9,
+      "positions": 120,
+      "shard": "chunks/chunk-00000/train",
+      "stored_planes_sha256": "8d04c8c6b97c52ca15f5837ef1c19131f7691fd7c9fc9dab13c6561c28ae0867"
+    },
+    {
+      "game_index": 0,
+      "positions": 173,
+      "shard": "chunks/chunk-00127/train",
+      "stored_planes_sha256": "ae5af0d87477895d2793b264e3463896f688bc75f55c4770b61a407b96478cdd"
+    },
+    {
+      "game_index": 1,
+      "positions": 148,
+      "shard": "chunks/chunk-00127/train",
+      "stored_planes_sha256": "45dcc980e375b20c2dc94fe6d9f1c282b2085ba7d47b71ada26744100b9ddf2a"
+    },
+    {
+      "game_index": 2,
+      "positions": 220,
+      "shard": "chunks/chunk-00127/train",
+      "stored_planes_sha256": "b8b23180eacac792544ebedb06e6e73870cec0b5241f49f4deba07331e161f90"
+    },
+    {
+      "game_index": 3,
+      "positions": 125,
+      "shard": "chunks/chunk-00127/train",
+      "stored_planes_sha256": "520c5528e74106e1d0467741da90ec25bc61cd6ca873e2172e84ae16bd89da9f"
+    },
+    {
+      "game_index": 4,
+      "positions": 69,
+      "shard": "chunks/chunk-00127/train",
+      "stored_planes_sha256": "081e506eef66c5ffb4403b9b433b16cd6eb4f0156231d527c5891544b8a9225a"
+    },
+    {
+      "game_index": 5,
+      "positions": 22,
+      "shard": "chunks/chunk-00127/train",
+      "stored_planes_sha256": "cb7326f887b503a22f607555a1babe0bd45f8b77ce513e5aa87f4d34559d537a"
+    },
+    {
+      "game_index": 6,
+      "positions": 102,
+      "shard": "chunks/chunk-00127/train",
+      "stored_planes_sha256": "96bcf0b6b35b864804d50558a3ad9aa4c9b737984b6ea1587d10fd06173875a7"
+    },
+    {
+      "game_index": 7,
+      "positions": 119,
+      "shard": "chunks/chunk-00127/train",
+      "stored_planes_sha256": "20a6414132d5989a09e828bb920a804205dfa9ffd7a8f4f66fd7d545316e227f"
+    },
+    {
+      "game_index": 8,
+      "positions": 98,
+      "shard": "chunks/chunk-00127/train",
+      "stored_planes_sha256": "e84f5c7b9e8b920499bc8ab0e7c171cd462ff9dc7606ed4d2102a335b7607049"
+    },
+    {
+      "game_index": 9,
+      "positions": 117,
+      "shard": "chunks/chunk-00127/train",
+      "stored_planes_sha256": "14c07dd032332e2d4a43f8ab4fa9473dfa6a6de5c9768f3407d1c8a1183ac4f6"
+    },
+    {
+      "game_index": 0,
+      "positions": 43,
+      "shard": "chunks/chunk-00253/train",
+      "stored_planes_sha256": "940e7905647bdbab6277b947284cf22e62236a5620706fa2921eae18c085c874"
+    },
+    {
+      "game_index": 1,
+      "positions": 94,
+      "shard": "chunks/chunk-00253/train",
+      "stored_planes_sha256": "6db3d892ffdc6398bbaaee82ff7c7f36453a3e24483a746fb08e6b1cff119614"
+    },
+    {
+      "game_index": 2,
+      "positions": 27,
+      "shard": "chunks/chunk-00253/train",
+      "stored_planes_sha256": "cae42524f85fc9f59bfe025baf6994618a3c7796cf349a789fd0c16437701b54"
+    },
+    {
+      "game_index": 3,
+      "positions": 98,
+      "shard": "chunks/chunk-00253/train",
+      "stored_planes_sha256": "878bd30ad57bca2e2f6c905939c84bef3d1a48dd1683ff57bf79641a147a633c"
+    },
+    {
+      "game_index": 4,
+      "positions": 74,
+      "shard": "chunks/chunk-00253/train",
+      "stored_planes_sha256": "4263ff718884ca198ee76b7b61d5851e48b0c81ef567f52a93a9f9fe5a34b694"
+    },
+    {
+      "game_index": 5,
+      "positions": 74,
+      "shard": "chunks/chunk-00253/train",
+      "stored_planes_sha256": "419c7babdf35c0dc4cc29894c6fc2993d351db0280bbc4fa21fd5d8819bc0050"
+    },
+    {
+      "game_index": 6,
+      "positions": 183,
+      "shard": "chunks/chunk-00253/train",
+      "stored_planes_sha256": "6c727d14bb4115195f81861810e58c4bfdfc2ab74d4a71cfa94a7e84041aa2a2"
+    },
+    {
+      "game_index": 7,
+      "positions": 85,
+      "shard": "chunks/chunk-00253/train",
+      "stored_planes_sha256": "7443000ff16b42f79cb810d66507311280db7dce1e138d428e26174bcf06ed50"
+    },
+    {
+      "game_index": 8,
+      "positions": 60,
+      "shard": "chunks/chunk-00253/train",
+      "stored_planes_sha256": "82792503db9b1df97f0499b344144115f564a7edfc8676cad5424b07fe15ba1b"
+    },
+    {
+      "game_index": 9,
+      "positions": 193,
+      "shard": "chunks/chunk-00253/train",
+      "stored_planes_sha256": "4c347ed5c8b48be0ed4be4dce698137e3d5ac42314b4af3c104b5ddb1a08ab74"
+    }
+  ],
+  "mismatched_positions_current_only": 3195,
+  "mismatched_positions_full_history": 0,
+  "passed": true,
+  "positions": 3225,
+  "positions_with_repetition_planes": 146,
+  "schema_version": "chess-dfm-arena-input-history-audit-v1"
+}
