@@ -1,0 +1,207 @@
+{
+  "analysis": {
+    "descriptive_reports": [
+      "wins_draws_losses",
+      "pentanomial",
+      "pair_score",
+      "pair_aware_score_interval",
+      "relative_logistic_elo_interval",
+      "faults",
+      "cap_draws",
+      "legal_coverage",
+      "latency"
+    ],
+    "interpretation": "A matched-recipe short-run replicate versus an older terminal run, not two saved checkpoints from one execution; GPU/software execution differed. No search, architecture training, or promotion claim. Report every frozen edge irrespective of performance.",
+    "primary_endpoint": "terminal versus Hero1 at one-pass DFM; matched native-policy versus native-policy is an explicit second comparison",
+    "raw_anchor_limit": "Current-only raw policy reference retained for EV-003 comparability; does not establish strength against full-history LC0.",
+    "training_duration_control": "Normalized model config, raw initializer, data file manifest, seed, batch and LR schedule match. Historical halfway-to-terminal evidence is the stronger within-run control.",
+    "unit": "complete color-reversed opening pair"
+  },
+  "budget": {
+    "companion_validation_reserved_dollars": "0.92976000",
+    "cpu_preflight_attempts": 2,
+    "cpu_preflight_declared_maximum_dollars": "0.01473360",
+    "declared_attempt_maximum_dollars": "0.92976000",
+    "launch_month_usage_dollars": "1.08",
+    "maximum_simultaneous_attempts": 4,
+    "per_attempt_cap_dollars": "1.00",
+    "rule": "Refresh live usage before each launch and add outstanding declared attempt reservations. No automatic retries or search launch.",
+    "smoke_plus_development_attempts": 10,
+    "smoke_plus_development_declared_maximum_dollars": "9.29760000",
+    "total_declared_maximum_including_preflight_and_validation_dollars": "10.25682720",
+    "workspace_stop_dollars": "34.00"
+  },
+  "candidate": {
+    "examples": 28343296,
+    "label": "hero-training-archive-terminal-hero-u27679",
+    "manifest_sha256": "ac4c00ed6dcee8130655dff665549e1834959cd902522be593e3e3e611062735",
+    "origin": "Original July PyTorch one-epoch run, retained on read-only input Volume; not a new Modal training run.",
+    "plane_history_mode": "current_only_as_preprocessed",
+    "state_sha256": "665ac91ad37e14a6c8810068700dba021e39e9c0fe145c8bf620882bb5a71692",
+    "update": 27679
+  },
+  "created_utc": "2026-10-02",
+  "development_edges": [
+    {
+      "candidate": "candidate",
+      "candidate_mode": "dfm",
+      "candidate_passes": 1,
+      "id": "p1_hero1",
+      "opponent": "hero1",
+      "opponent_mode": "dfm",
+      "opponent_passes": 1,
+      "role": "primary"
+    },
+    {
+      "candidate": "candidate",
+      "candidate_mode": "dfm",
+      "candidate_passes": 1,
+      "id": "p1_raw",
+      "opponent": "raw_bt4",
+      "opponent_mode": "policy_only",
+      "opponent_passes": 1,
+      "role": "primary"
+    },
+    {
+      "candidate": "candidate",
+      "candidate_mode": "dfm",
+      "candidate_passes": 8,
+      "id": "p8_hero1",
+      "opponent": "hero1",
+      "opponent_mode": "dfm",
+      "opponent_passes": 1,
+      "role": "secondary_refinement"
+    },
+    {
+      "candidate": "candidate",
+      "candidate_mode": "dfm",
+      "candidate_passes": 8,
+      "id": "p8_raw",
+      "opponent": "raw_bt4",
+      "opponent_mode": "policy_only",
+      "opponent_passes": 1,
+      "role": "secondary_refinement"
+    },
+    {
+      "candidate": "candidate",
+      "candidate_mode": "policy_only",
+      "candidate_passes": 1,
+      "id": "policy_hero1",
+      "opponent": "hero1",
+      "opponent_mode": "dfm",
+      "opponent_passes": 1,
+      "role": "native_head_attribution"
+    },
+    {
+      "candidate": "candidate",
+      "candidate_mode": "policy_only",
+      "candidate_passes": 1,
+      "id": "policy_raw",
+      "opponent": "raw_bt4",
+      "opponent_mode": "policy_only",
+      "opponent_passes": 1,
+      "role": "native_head_attribution"
+    },
+    {
+      "candidate": "candidate",
+      "candidate_mode": "dfm",
+      "candidate_passes": 8,
+      "id": "p8_p1",
+      "opponent": "candidate",
+      "opponent_mode": "dfm",
+      "opponent_passes": 1,
+      "role": "refinement_attribution"
+    },
+    {
+      "candidate": "candidate",
+      "candidate_mode": "policy_only",
+      "candidate_passes": 1,
+      "id": "policy_policy",
+      "opponent": "hero1",
+      "opponent_mode": "policy_only",
+      "opponent_passes": 1,
+      "role": "matched_native_policy_training_duration"
+    }
+  ],
+  "experiment_id": "EV-004",
+  "game_contract": {
+    "additional_ply_cap": 256,
+    "block_pairs": 16,
+    "color_reversed_pairs": true,
+    "complete_board_history_for_adjudication": true,
+    "deterministic_greedy_legal_argmax": true,
+    "device": "L4",
+    "draw_rules": "python-chess normal outcomes with draw claims, or symmetric additional-ply-cap draw",
+    "fault_handling": "illegal actions, exceptions, nonfinite outputs, timeouts, or no representable legal move lose the affected game",
+    "model_specific_input_history": true,
+    "policy_batch_size_cap": 16,
+    "policy_timeout_seconds": 30,
+    "runtime": "native_pytorch",
+    "tier": "hero_development"
+  },
+  "hero1": {
+    "label": "hero-training-phase1-hero1_exact-l40s-fae7b0ccef5ca3668ed5",
+    "manifest_sha256": "61276cee7db1871b3071fa39b31356b42744df213d00113bd62b372984b9a6fa",
+    "plane_history_mode": "current_only_as_preprocessed",
+    "policy_mode": "dfm",
+    "refinement_passes": 1,
+    "state_sha256": "e518083ee5476e7ff15e7c34caf9c0505f8fb7d330ea5a6882e4e9e5c1ef1912",
+    "update": 554
+  },
+  "openings": {
+    "asset": "promotion-ply12-n2048-v3",
+    "development": {
+      "games_per_edge": 256,
+      "pairs": 128,
+      "purpose": "Same indices 384..511 as EV-003; historically exposed development comparison, not held-out confirmation.",
+      "start": 384
+    },
+    "history_file_sha256": "bac58cc7380d9a4173e7618a765917aa0990355e1f8e460196affbe28580ed37",
+    "history_manifest_sha256": "d8781efb5d76066bcf2ce2e9ab2897f3261b20f7c4488c90992a8eadcc918a4b",
+    "pool_file_sha256": "5632cc726112c2ab700e0f4d935fa83d58418b406fc100262f3aa19ce3befe2e",
+    "pool_sha256": "e750e87643c482d28b4201668bd355234fe1fb27f2a690bf784706b1ddd37459",
+    "smoke": {
+      "pairs": 16,
+      "purpose": "plumbing_only_previously_exposed",
+      "start": 0
+    }
+  },
+  "question": "Compare the retained original terminal Hero against its matched-recipe 554-update reference using the EV-003 metrics.",
+  "raw_bt4": {
+    "label": "raw-bt4",
+    "plane_history_mode": "current_only_as_preprocessed",
+    "policy_mode": "policy_only",
+    "refinement_passes": 1,
+    "scope": "Frozen current-only raw-policy anchor, not a claim about LC0's full-history/search strength.",
+    "state_sha256": "61e43e98d2c4cb747498c6bc13a5bbb3b07e985d3f5d87f0351a4db855fa0651"
+  },
+  "schema_version": "chess-dfm-searchless-evaluation-v1",
+  "smoke_edges": [
+    {
+      "candidate": "candidate",
+      "candidate_mode": "dfm",
+      "candidate_passes": 8,
+      "id": "smoke_p8_hero1",
+      "opponent": "hero1",
+      "opponent_mode": "dfm",
+      "opponent_passes": 1
+    },
+    {
+      "candidate": "candidate",
+      "candidate_mode": "dfm",
+      "candidate_passes": 1,
+      "id": "smoke_p1_raw",
+      "opponent": "raw_bt4",
+      "opponent_mode": "policy_only",
+      "opponent_passes": 1
+    }
+  ],
+  "status": "sealed_before_games",
+  "tooling": {
+    "arena_source_tree_sha256": "66f47dcb694c50de1879a33e87d7b7b078ff5bd62283e9eddd8c094e7f153760",
+    "input_preflight_file": "input_preflight.json",
+    "input_preflight_sha256": "357de8c8ac0ce7abc2739a1161856b8f43cc061651ea27729da6f20df4e807d2",
+    "source_commit": "4049c1fb6e49efbdac25b2ab25d9d546b06b4115",
+    "tests": "44 targeted tests passed; legacy JAX CLI tests unavailable in Torch-only environment."
+  }
+}

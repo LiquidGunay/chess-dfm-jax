@@ -1,0 +1,17 @@
+{
+  "schema_version": "chess-dfm-cpu-preflight-attempts-v1",
+  "attempts": [
+    {
+      "app_id": "ap-S2WNgh3lFUXXtrF9FbqYil",
+      "status": "failed_before_gpu",
+      "cause": "CLI-mounted __file__ lacked repository parents; fixed to bundled /root source root.",
+      "declared_maximum_dollars": "0.01473360"
+    },
+    {
+      "app_id": "ap-IN3ILCceE4EyMHHbmVfOeH",
+      "status": "complete",
+      "declared_maximum_dollars": "0.01473360"
+    }
+  ],
+  "gpu_jobs_started_before_pass": false
+}
