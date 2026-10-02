@@ -1,0 +1,53 @@
+{
+  "schema_version": "chess-dfm-common-policy-validation-protocol-v1",
+  "experiment_id": "EV-003",
+  "created_utc": "2026-10-02",
+  "status": "sealed_before_gpu_evaluation",
+  "source_commit": "6485e232ebb3751900921c776d1a0761144d4c90",
+  "evaluation_source_sha256": "f8d6c9d660d6bccbb36c01b596d19e38cda8affd9718ca719aba6114c0f346de",
+  "arena_source_tree_sha256": "16b3e0b788f452c5158351f6c8754374e33d445883d15caaa243ddb3f260d458",
+  "inputs_sha256": "9eeccee3d26f5032d0ed820df5a8aa5fd4e4b3f4ba917e8d8d0310fc0dc457f8",
+  "positions": 8192,
+  "selected_slots_sha256": "629bb68af7d0ec4bb4546320083664547bc023ebe5917ee4c1263e9bd8558333",
+  "raw_bt4_sha256": "61e43e98d2c4cb747498c6bc13a5bbb3b07e985d3f5d87f0351a4db855fa0651",
+  "models": {
+    "hero1": {
+      "label": "hero-training-phase1-hero1_exact-l40s-fae7b0ccef5ca3668ed5",
+      "update": 554,
+      "state_sha256": "e518083ee5476e7ff15e7c34caf9c0505f8fb7d330ea5a6882e4e9e5c1ef1912",
+      "manifest_sha256": "61276cee7db1871b3071fa39b31356b42744df213d00113bd62b372984b9a6fa",
+      "policy_mode": "dfm",
+      "refinement_passes": 1,
+      "plane_history_mode": "current_only_as_preprocessed"
+    },
+    "one_epoch": {
+      "label": "hero-training-proposal_epoch-proposal_a_epoch-l40s-d46e7b4f1a0afd449d36",
+      "update": 7774,
+      "state_sha256": "ffe6c4d4287810e96bba4ea222961416b23f259ceec449cba19eca6660bfbb5d",
+      "manifest_sha256": "4f656120d73262a6339ab9d600f07c6a8c6c790734b38bd319a3c7616b5e5de1",
+      "plane_history_mode": "lc0_full_history_as_preprocessed"
+    }
+  },
+  "evaluation": "Evaluate both immutable checkpoints on precisely the same positions, legal sets, and played-move targets. Score native policy and fully masked t=0 one-pass DFM root logits under each input mode.",
+  "input_modes": [
+    "current_only_as_preprocessed",
+    "lc0_full_history_as_preprocessed"
+  ],
+  "primary_comparison": "Hero1 current-only versus one-epoch full-history (training-matched inputs). Crossed conditions diagnose sensitivity, not alternative model selection.",
+  "metrics": [
+    "legal_conditional_cross_entropy",
+    "legal_top1_accuracy"
+  ],
+  "limitations": [
+    "Not the saved composite objective or randomly masked DFM validation metric.",
+    "The same sequential validation pool used for one-epoch monitoring; not a new held-out strength confirmation.",
+    "These are imitation metrics, not Elo. Eager BF16 computation with physical batch 16 for every model/condition."
+  ],
+  "budget": {
+    "per_job_cap_dollars": "1.00",
+    "declared_maximum_dollars": "0.92976000",
+    "arena_matrix_and_cpu_preflight_reserved_dollars": "9.32",
+    "stop_dollars": "34.00",
+    "retries": 0
+  }
+}

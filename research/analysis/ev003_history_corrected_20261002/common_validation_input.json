@@ -1,0 +1,26 @@
+{
+  "current_only_transform": "Zero planes 12:104, including the current repetition plane; all other current and auxiliary planes retained.",
+  "data": {
+    "batch_size": 64,
+    "dataset_root": "/home/ubuntu/chess-dfm-jax/data/lc0_sequential/test80_20240401_0117",
+    "file_manifest_sha256": "9240e014a2d9126e9a937cb2c908af68bf1aab28f51e692bc2a645111d859629",
+    "horizon": 8,
+    "schema_version": "lc0-sequential-v1",
+    "seed": 20000,
+    "shard_count": 243,
+    "shuffle_batches": true,
+    "split": "validation",
+    "steps_per_epoch": 1147
+  },
+  "endpoint": "Played-move root legal-conditional cross-entropy and top-1, at t=0/all action slots masked; native-policy and one-pass DFM logits.",
+  "file_sha256": "9eeccee3d26f5032d0ed820df5a8aa5fd4e4b3f4ba917e8d8d0310fc0dc457f8",
+  "input_modes": [
+    "current_only_as_preprocessed",
+    "lc0_full_history_as_preprocessed"
+  ],
+  "not_comparable_to": "Saved composite training validation losses or randomly masked root metrics.",
+  "positions": 8192,
+  "schema_version": "chess-dfm-common-policy-validation-input-v1",
+  "selected_slots_sha256": "629bb68af7d0ec4bb4546320083664547bc023ebe5917ee4c1263e9bd8558333",
+  "size_bytes": 1179613
+}
