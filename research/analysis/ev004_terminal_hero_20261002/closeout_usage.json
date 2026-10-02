@@ -1,0 +1,89 @@
+{
+  "collected_utc": "2026-10-02T17:12:42.759450+00:00",
+  "start": "2026-10-01T00:00:00+00:00",
+  "end": "2026-11-01T00:00:00+00:00",
+  "metered_cost": "4.17149446",
+  "metered_cost_breakdown": {
+    "Volumes": "1.51149446",
+    "LLM Tokens": "0E-8",
+    "Ephemeral Apps": "2.66285855"
+  },
+  "adjustments": {
+    "Plan Cost": "0E-8",
+    "Free Storage": "-1.51149446",
+    "Reservation Adjustment": "-0E-8",
+    "Network Egress Allowance": "0E-8",
+    "Credits": "-2.66000000"
+  },
+  "billed_cost": "0E-8",
+  "budget_usage_before_credits_excluding_waived_storage": "2.66000000",
+  "note": "Live provider meter can lag completed jobs; all declared attempt reservations remain in the run receipts.",
+  "apps": [
+    {
+      "app_id": "ap-8YHchdmSuEWXDo3jk4PK5h",
+      "state": "stopped",
+      "tasks": "0"
+    },
+    {
+      "app_id": "ap-p4LyjayU8ZVGaFv3e8uUVI",
+      "state": "stopped",
+      "tasks": "0"
+    },
+    {
+      "app_id": "ap-kh9JioPXix8JEZzlg7CTXH",
+      "state": "stopped",
+      "tasks": "0"
+    },
+    {
+      "app_id": "ap-JT0P7ndmXs2wHqqhq0QyAO",
+      "state": "stopped",
+      "tasks": "0"
+    },
+    {
+      "app_id": "ap-3d1XINuzdB3LQlqd34Hcx8",
+      "state": "stopped",
+      "tasks": "0"
+    },
+    {
+      "app_id": "ap-4ZxVjcbGimQBCyQdbS7qM2",
+      "state": "stopped",
+      "tasks": "0"
+    },
+    {
+      "app_id": "ap-foxe2x3LVwC0JyaAWyPiVW",
+      "state": "stopped",
+      "tasks": "0"
+    },
+    {
+      "app_id": "ap-1D9gNNugbgTmth1MGUaKbu",
+      "state": "stopped",
+      "tasks": "0"
+    },
+    {
+      "app_id": "ap-0E0YCzPrzz4NKpnuYQIeNS",
+      "state": "stopped",
+      "tasks": "0"
+    },
+    {
+      "app_id": "ap-hlsrc7U61qTvqPTkNQuoDN",
+      "state": "stopped",
+      "tasks": "0"
+    },
+    {
+      "app_id": "ap-vfN8fCn722fqBwUktMjKMy",
+      "state": "stopped",
+      "tasks": "0"
+    },
+    {
+      "app_id": "ap-IN3ILCceE4EyMHHbmVfOeH",
+      "state": "stopped",
+      "tasks": "0"
+    },
+    {
+      "app_id": "ap-S2WNgh3lFUXXtrF9FbqYil",
+      "state": "stopped",
+      "tasks": "0"
+    }
+  ],
+  "active_apps_at_closeout": 0
+}

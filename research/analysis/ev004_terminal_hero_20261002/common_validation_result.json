@@ -1,0 +1,128 @@
+{
+  "schema_version": "chess-dfm-common-policy-validation-v1",
+  "positions": 8192,
+  "inputs_sha256": "9eeccee3d26f5032d0ed820df5a8aa5fd4e4b3f4ba917e8d8d0310fc0dc457f8",
+  "rows": [
+    {
+      "model": "hero1",
+      "state_sha256": "e518083ee5476e7ff15e7c34caf9c0505f8fb7d330ea5a6882e4e9e5c1ef1912",
+      "plane_history_mode": "current_only_as_preprocessed",
+      "metrics": {
+        "native_policy": {
+          "legal_conditional_ce": 1.4239523385185748,
+          "legal_top1_accuracy": 0.5345458984375
+        },
+        "dfm_one_pass": {
+          "legal_conditional_ce": 1.9902675182092935,
+          "legal_top1_accuracy": 0.4722900390625
+        }
+      }
+    },
+    {
+      "model": "hero1",
+      "state_sha256": "e518083ee5476e7ff15e7c34caf9c0505f8fb7d330ea5a6882e4e9e5c1ef1912",
+      "plane_history_mode": "lc0_full_history_as_preprocessed",
+      "metrics": {
+        "native_policy": {
+          "legal_conditional_ce": 1.364991007343633,
+          "legal_top1_accuracy": 0.5599365234375
+        },
+        "dfm_one_pass": {
+          "legal_conditional_ce": 1.9227481586276554,
+          "legal_top1_accuracy": 0.4849853515625
+        }
+      }
+    },
+    {
+      "model": "terminal_hero",
+      "state_sha256": "665ac91ad37e14a6c8810068700dba021e39e9c0fe145c8bf620882bb5a71692",
+      "plane_history_mode": "current_only_as_preprocessed",
+      "metrics": {
+        "native_policy": {
+          "legal_conditional_ce": 1.402777514187619,
+          "legal_top1_accuracy": 0.54248046875
+        },
+        "dfm_one_pass": {
+          "legal_conditional_ce": 1.7348612598725595,
+          "legal_top1_accuracy": 0.5025634765625
+        }
+      }
+    },
+    {
+      "model": "terminal_hero",
+      "state_sha256": "665ac91ad37e14a6c8810068700dba021e39e9c0fe145c8bf620882bb5a71692",
+      "plane_history_mode": "lc0_full_history_as_preprocessed",
+      "metrics": {
+        "native_policy": {
+          "legal_conditional_ce": 1.357870596810244,
+          "legal_top1_accuracy": 0.560302734375
+        },
+        "dfm_one_pass": {
+          "legal_conditional_ce": 1.6966048821341246,
+          "legal_top1_accuracy": 0.5115966796875
+        }
+      }
+    }
+  ],
+  "compute_dtype": "bfloat16",
+  "batch_size": 16,
+  "target": "actual played next move",
+  "dfm_time": 0.0,
+  "dfm_input": "all eight action tokens masked",
+  "protocol": {
+    "arena_source_tree_sha256": "66f47dcb694c50de1879a33e87d7b7b078ff5bd62283e9eddd8c094e7f153760",
+    "budget": {
+      "arena_matrix_and_cpu_preflight_reserved_dollars": "9.34",
+      "declared_maximum_dollars": "0.92976000",
+      "per_job_cap_dollars": "1.00",
+      "retries": 0,
+      "stop_dollars": "34.00"
+    },
+    "cpu_preflight_sha256": "357de8c8ac0ce7abc2739a1161856b8f43cc061651ea27729da6f20df4e807d2",
+    "created_utc": "2026-10-02",
+    "evaluation": "Evaluate both immutable checkpoints on precisely the same positions, legal sets, and played-move targets. Score native policy and fully masked t=0 one-pass DFM root logits under each input mode.",
+    "evaluation_source_sha256": "f8d6c9d660d6bccbb36c01b596d19e38cda8affd9718ca719aba6114c0f346de",
+    "experiment_id": "EV-004",
+    "input_modes": [
+      "current_only_as_preprocessed",
+      "lc0_full_history_as_preprocessed"
+    ],
+    "inputs_sha256": "9eeccee3d26f5032d0ed820df5a8aa5fd4e4b3f4ba917e8d8d0310fc0dc457f8",
+    "limitations": [
+      "Not total training objective or randomly masked validation.",
+      "Same sequential played-move pool used in EV-003; not a held-out strength confirmation.",
+      "Terminal and Hero1 are matched-recipe different executions, not a literal saved prefix."
+    ],
+    "metrics": [
+      "legal_conditional_cross_entropy",
+      "legal_top1_accuracy"
+    ],
+    "models": {
+      "hero1": {
+        "label": "hero-training-phase1-hero1_exact-l40s-fae7b0ccef5ca3668ed5",
+        "manifest_sha256": "61276cee7db1871b3071fa39b31356b42744df213d00113bd62b372984b9a6fa",
+        "plane_history_mode": "current_only_as_preprocessed",
+        "policy_mode": "dfm",
+        "refinement_passes": 1,
+        "state_sha256": "e518083ee5476e7ff15e7c34caf9c0505f8fb7d330ea5a6882e4e9e5c1ef1912",
+        "update": 554
+      },
+      "terminal_hero": {
+        "examples": 28343296,
+        "label": "hero-training-archive-terminal-hero-u27679",
+        "manifest_sha256": "ac4c00ed6dcee8130655dff665549e1834959cd902522be593e3e3e611062735",
+        "origin": "Original July PyTorch one-epoch run, retained on read-only input Volume; not a new Modal training run.",
+        "plane_history_mode": "current_only_as_preprocessed",
+        "state_sha256": "665ac91ad37e14a6c8810068700dba021e39e9c0fe145c8bf620882bb5a71692",
+        "update": 27679
+      }
+    },
+    "positions": 8192,
+    "primary_comparison": "Both legacy checkpoints with training-matched current-only inputs; full-history rows are diagnostics. Same 8192 positions as EV-003; verify repeated Hero1 matches previous results.",
+    "raw_bt4_sha256": "61e43e98d2c4cb747498c6bc13a5bbb3b07e985d3f5d87f0351a4db855fa0651",
+    "schema_version": "chess-dfm-common-policy-validation-protocol-v1",
+    "selected_slots_sha256": "629bb68af7d0ec4bb4546320083664547bc023ebe5917ee4c1263e9bd8558333",
+    "source_commit": "4049c1fb6e49efbdac25b2ab25d9d546b06b4115",
+    "status": "sealed_before_gpu_evaluation"
+  }
+}

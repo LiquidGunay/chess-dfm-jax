@@ -1,0 +1,42 @@
+{
+  "schema_version": "chess-dfm-terminal-hero-decision-v1",
+  "experiment_id": "EV-004",
+  "status": "completed_descriptive_comparison",
+  "training_duration": {
+    "short_reference_updates": 554,
+    "short_reference_examples": 567296,
+    "original_terminal_updates": 27679,
+    "original_terminal_examples": 28343296,
+    "normalized_model_config_equal": true,
+    "data_manifest_seed_batch_schedule_equal": true,
+    "limitation": "The short reference is a later matched-recipe replicate, not a retained intermediate checkpoint from the original terminal execution."
+  },
+  "conclusions": {
+    "matched_validation": "Terminal improves native policy CE/top1 and one-pass DFM CE/top1 on identical 8192 played-move targets with training-matched current-only inputs. Hero1 repeated control exactly reproduces EV-003.",
+    "dfm_one_pass_head_to_head": "50.78125 percent; no resolved terminal strength advantage.",
+    "native_policy_head_to_head": "56.8359375 percent, 96W99D61L; frozen paired Hoeffding 95 percent interval 44.8319..68.8400 percent includes equality.",
+    "terminal_native_vs_hero1_dfm": "75.390625 percent; clear descriptive advantage, but bypassing DFM is not a pure training-duration intervention.",
+    "refinement": "Terminal p8 versus its p1 scores 48.046875 percent. Improved scores versus the raw anchor do not establish a direct refinement benefit.",
+    "search": "No search or ONNX export executed. ONNX inference export is a plausible route; legacy current-position value still needs validation or an explicitly frozen raw value branch.",
+    "raw_reference": "All raw arena scores are against the current-only anchor, not full-history/native-search LC0.",
+    "promotion": "No held-out confirmation, architecture threshold freeze, or automatic search promotion."
+  },
+  "verification": {
+    "targeted_tests_passed": 44,
+    "legacy_jax_cli_tests": "Unavailable: no JAX in Torch-only environment.",
+    "smoke_games": 64,
+    "development_games": 2048,
+    "policy_faults": 0,
+    "cap_draws": 0,
+    "incomplete_coverage_positions": 0,
+    "checkpoint_weights_modified": false,
+    "checkpoint_copies_created": false
+  },
+  "evidence": {
+    "summary": "development_summary.json",
+    "validation": "common_validation_result.json",
+    "runs": "runs.json",
+    "preflight": "input_preflight.json",
+    "builder": "research/analysis/build_terminal_hero_comparison.py"
+  }
+}

@@ -1,0 +1,51 @@
+{
+  "arena_label": "hero-arena-128p-o384-cpass8-opass1-de969a5a5f3c7629c614",
+  "candidate_policy_mode": "dfm",
+  "candidate_refinement_passes": 8,
+  "candidate_state_sha256": "665ac91ad37e14a6c8810068700dba021e39e9c0fe145c8bf620882bb5a71692",
+  "cap_draw_rate": 0.0,
+  "fault_counts": {},
+  "opening_start_index": 384,
+  "opponent_policy_mode": "dfm",
+  "opponent_refinement_passes": 1,
+  "opponent_state_sha256": "e518083ee5476e7ff15e7c34caf9c0505f8fb7d330ea5a6882e4e9e5c1ef1912",
+  "pair_aware_logistic_interval": {
+    "confidence": 0.95,
+    "elo": 28.564762717084918,
+    "elo_lower": -55.37620709426534,
+    "elo_model": "logistic",
+    "elo_upper": 116.04410017298186,
+    "method": "hoeffding_bounded_complete_pairs",
+    "pair_count": 128,
+    "promotion_eligible": false,
+    "score": 0.541015625,
+    "score_lower": 0.42097527608500995,
+    "score_upper": 0.66105597391499
+  },
+  "pair_count": 128,
+  "pair_score": 0.541015625,
+  "pentanomial": {
+    "counts": [
+      1,
+      31,
+      47,
+      44,
+      5
+    ],
+    "game_count": 256,
+    "labels": [
+      "LL",
+      "LD",
+      "DD_or_WL_or_LW",
+      "WD",
+      "WW"
+    ],
+    "pair_count": 128,
+    "points": 138.5,
+    "score": 0.541015625
+  },
+  "reused_immutable_result": false,
+  "schema_version": "chess-dfm-modal-torch-arena-result-v2",
+  "state_sha256": "a2cab6a4efb0f580054fca8eb0637f01d32c4801b694af7406e161eba0ab8aa7",
+  "state_size_bytes": 22404
+}

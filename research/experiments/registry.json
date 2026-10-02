@@ -15,11 +15,13 @@
     {
       "id": "EV-004",
       "name": "Retained terminal Hero versus matched-recipe Hero1 reference",
-      "status": "preregistered_inputs_verified",
+      "status": "completed_descriptive_native_gain_inconclusive",
       "depends_on": ["EV-003"],
       "specification": "research/analysis/ev004_terminal_hero_20261002/preregister.json",
       "execution_record": "research/analysis/ev004_terminal_hero_20261002/runs.json",
       "validation_specification": "research/analysis/ev004_terminal_hero_20261002/common_validation_preregister.json",
+      "results": "research/analysis/ev004_terminal_hero_20261002/development_summary.json",
+      "decision": "research/analysis/ev004_terminal_hero_20261002/decision.json",
       "scope": "Original 27679-update Hero versus 554-update replicate: matched policy validation, p1/p8/native arena, no training or search."
     },
     {

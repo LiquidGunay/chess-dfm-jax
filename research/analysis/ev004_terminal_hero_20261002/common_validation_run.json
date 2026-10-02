@@ -1,0 +1,9 @@
+{
+  "schema_version": "chess-dfm-common-policy-run-v1",
+  "experiment_id": "EV-004",
+  "status": "complete",
+  "function_call_id": "fc-01M3YRBF94XQFDMG5K20TZJEQZ",
+  "app_id": "ap-vfN8fCn722fqBwUktMjKMy",
+  "declared_maximum_dollars": "0.92976000",
+  "recorded_spend_including_matrix_reservation_dollars": "10.42"
+}
