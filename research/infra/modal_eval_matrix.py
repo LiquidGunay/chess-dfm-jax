@@ -44,7 +44,7 @@ def atomic_json(path: Path, payload: dict) -> None:
 
 def main() -> None:
     import modal
-    from research.infra.modal_arena_app import _arena_job_spec
+    from research.infra.modal_arena_app import _arena_job_spec, _arena_source_tree_sha256
     from research.infra.modal_train_app import _modal_launch_spend
     from research.interpretability.remote_cost import enforce_modal_budget, estimate_modal_job
 
@@ -57,6 +57,22 @@ def main() -> None:
     root = args.protocol.resolve().parent
     protocol_raw = args.protocol.read_bytes()
     protocol = json.loads(protocol_raw)
+    if args.action == 'launch' and 'tooling' in protocol:
+        actual_source = _arena_source_tree_sha256(Path(__file__).resolve().parents[2])
+        if actual_source != protocol['tooling']['arena_source_tree_sha256']:
+            raise RuntimeError('Arena source changed after protocol freeze')
+        preflight_path = root / protocol['tooling']['input_preflight_file']
+        preflight_raw = preflight_path.read_bytes()
+        if hashlib.sha256(preflight_raw).hexdigest() != protocol['tooling']['input_preflight_sha256']:
+            raise RuntimeError('Input preflight evidence changed')
+        verified = json.loads(preflight_raw)
+        if verified.get('passed') is not True or verified['arena_source_tree_sha256'] != actual_source:
+            raise RuntimeError('Missing valid CPU input preflight')
+        for name in ('candidate', 'hero1'):
+            identity = protocol[name]
+            observed = verified['models'][identity['label']]
+            if any(observed[key] != identity[key] for key in ('state_sha256', 'plane_history_mode')):
+                raise RuntimeError('CPU preflight checkpoint/input contract drift')
     protocol_sha = hashlib.sha256(protocol_raw).hexdigest()
     receipt_path = root / 'runs.json'
     receipt = json.loads(receipt_path.read_text()) if receipt_path.exists() else {

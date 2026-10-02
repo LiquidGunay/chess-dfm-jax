@@ -62,6 +62,9 @@ from research.arena_history_trust import (  # noqa: E402
     TrustedArenaHistoryEndpoint,
     verify_trusted_arena_history_endpoint,
 )
+from research.input_contract import (  # noqa: E402
+    CURRENT_ONLY, LC0_FULL_HISTORY, PLANE_HISTORY_MODES,
+)
 
 _LEGACY_WORKSPACE_ROOT = Path("/mountpoint/.exp")
 _workspace_root_override = os.environ.get("CHESS_DFM_WORKSPACE_ROOT")
@@ -2139,6 +2142,7 @@ class TorchHeroArenaPolicy:
     policy_mode: str
     inference_batch_size: int = _HERO_ARENA_INFERENCE_BATCH_SIZE
     refinement_passes: int = 8
+    plane_history_mode: str = CURRENT_ONLY
     action_codec_id: str = dataclasses.field(
         default=ACTION_CODEC_LC0_CANONICAL_1858,
         init=False,
@@ -2165,6 +2169,8 @@ class TorchHeroArenaPolicy:
             raise ValueError("model_id must be non-empty")
         if self.policy_mode not in {"dfm", "policy_only", "raw_bt4"}:
             raise ValueError("policy_mode must be 'dfm', 'policy_only', or 'raw_bt4'")
+        if self.plane_history_mode not in PLANE_HISTORY_MODES:
+            raise ValueError("Unsupported Torch arena plane-history mode")
         if isinstance(self.inference_batch_size, bool) or self.inference_batch_size < 1:
             raise ValueError("inference_batch_size must be positive")
         if self.model.config.action_codec != ACTION_CODEC_LC0_CANONICAL_1858:
@@ -2208,6 +2214,8 @@ class TorchHeroArenaPolicy:
             raise TypeError("boards must be a non-empty sequence")
         board_items = tuple(boards)
         history_items = tuple(histories)
+        if mode == HISTORY_VALIDATION_FULL_REPLAY:
+            history_items = tuple(tuple(history) for history in history_items)
         if not board_items:
             raise ValueError("boards must not be empty")
         if len(history_items) != len(board_items):
@@ -2234,10 +2242,19 @@ class TorchHeroArenaPolicy:
         plane_rows: list[np.ndarray] = []
         mask_rows: list[np.ndarray] = []
         for row, board in enumerate(checked_boards):
+            plane_history: Sequence[chess.Board] = []
+            if self.plane_history_mode == LC0_FULL_HISTORY:
+                if mode == HISTORY_VALIDATION_TRUSTED_ARENA_ENDPOINT:
+                    fens = history_items[row].plane_history_fens
+                    if fens is None:
+                        raise ValueError("Full-history model requires attested plane history")
+                    plane_history = tuple(chess.Board(fen) for fen in fens)
+                else:
+                    plane_history = history_items[row]
             planes = np.asarray(
                 encode_board(
                     board,
-                    [],
+                    plane_history,
                     planes_layout="nchw",
                     input_format=LC0_CANONICAL_1858_INPUT_FORMAT,
                 )

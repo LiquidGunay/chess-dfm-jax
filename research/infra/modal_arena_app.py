@@ -35,6 +35,7 @@ ARENA_SOURCE_TREE_PATHS = (
     "research/evaluate_arena.py",
     "research/evaluate_torch_migration_parity.py",
     "research/inference.py",
+    "research/input_contract.py",
     "research/local_policy.py",
     "research/play_arena.py",
     "research/prepare.py",
@@ -696,6 +697,43 @@ _ARENA_VOLUMES = {
 
 @app.function(
     image=arena_image,
+    volumes={
+        BASE_INPUT_MOUNT: base_input_volume.with_mount_options(read_only=True),
+        TRAINING_RESULT_MOUNT: training_result_volume.with_mount_options(read_only=True),
+    },
+    cpu=2.0, memory=4096, timeout=300, startup_timeout=120,
+    retries=0, max_containers=1, single_use_containers=True,
+)
+def verify_arena_inputs_cpu(candidate_label: str, opponent_label: str) -> dict[str, Any]:
+    """Hash complete immutable inputs on CPU before authorizing GPU games."""
+    from research.input_contract import torch_hero_plane_history_mode
+
+    raw = _verify_raw_bt4_volume()
+    if _sha256_file(raw) != RAW_BT4_SHA256:
+        raise RuntimeError("Raw BT4 bytes failed preflight")
+    checked = {}
+    for label in sorted({candidate_label, opponent_label} - {RAW_BT4_OPPONENT_LABEL}):
+        record = _validated_training_result(label)
+        state_path = record["root"] / "checkpoint" / "model.safetensors"
+        if _sha256_file(state_path) != record["state_sha256"]:
+            raise RuntimeError(f"Checkpoint bytes failed preflight: {label}")
+        config_path = record["root"] / "run_config.json"
+        config = json.loads(config_path.read_text())
+        checked[label] = {
+            "state_sha256": record["state_sha256"],
+            "run_config_sha256": _sha256_file(config_path),
+            "plane_history_mode": torch_hero_plane_history_mode(config),
+        }
+    return {
+        "schema_version": "chess-dfm-arena-input-preflight-v1",
+        "passed": True, "models": checked, "raw_bt4_sha256": RAW_BT4_SHA256,
+        "arena_source_tree_sha256": _arena_source_tree_sha256(Path("/root")),
+        "assets": {name: _sha256_file(Path("/opt/chess-assets") / name) for name in ARENA_ASSET_NAMES},
+    }
+
+
+@app.function(
+    image=arena_image,
     volumes=_ARENA_VOLUMES,
     gpu="L4",
     cpu=4.0,
@@ -771,8 +809,10 @@ def main(
     opening_start_index: int = 0,
     recorded_spend: str = "",
     per_job_cap: str = "",
+    preflight_only: bool = False,
 ) -> None:
     from research.interpretability.remote_cost import (
+        ModalJobSpec,
         enforce_modal_budget,
         estimate_modal_job,
         modal_month_spend,
@@ -819,6 +859,13 @@ def main(
         candidate_refinement_passes,
         opponent_refinement_passes,
     )
+    if preflight_only:
+        spec = ModalJobSpec(
+            name="arena-input-preflight", timeout_seconds=300,
+            startup_timeout_seconds=120, retries=0, cpu_cores=Decimal("2"),
+            memory_gib=Decimal("4"), gpu=None,
+        )
+        default_cap = Decimal("0.02")
     estimate = estimate_modal_job(spec)
     # Invoking a second Modal CLI from inside `modal run` can deadlock on the
     # local profile lock. A supplied value is therefore authoritative and must
@@ -837,10 +884,16 @@ def main(
     git_commit = _local_git_commit(repo_root)
     print(
         json.dumps(
-            {"launch_stage": "arena-l4", "cost_guard": decision},
+            {"launch_stage": "arena-input-preflight" if preflight_only else "arena-l4", "cost_guard": decision},
             sort_keys=True,
         )
     )
+    if preflight_only:
+        verified = verify_arena_inputs_cpu.remote(candidate_label, opponent_label)
+        if verified["arena_source_tree_sha256"] != arena_source_tree_sha256:
+            raise RuntimeError("CPU preflight bundled source drift")
+        print(json.dumps({"input_preflight": verified}, sort_keys=True))
+        return
     call = arena_l4.spawn(
         candidate_label=candidate_label,
         opponent_label=opponent_label,

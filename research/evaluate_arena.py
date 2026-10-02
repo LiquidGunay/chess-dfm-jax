@@ -53,6 +53,7 @@ from research.arena_history_trust import (
     HISTORY_VALIDATION_SCHEMA,
     HISTORY_VALIDATION_TRUSTED_ARENA_ENDPOINT,
 )
+from research.input_contract import torch_hero_plane_history_mode
 from research.play_arena import (
     ArenaGameplayResult,
     BatchedArenaPolicy,
@@ -810,7 +811,7 @@ def torch_hero_checkpoint_descriptor(
     descriptor = {
         "kind": "torch_hero",
         "action_codec_id": ACTION_CODEC_LC0_CANONICAL_1858,
-        "plane_history_mode": PLANE_HISTORY_MODE_CURRENT_ONLY_AS_PREPROCESSED,
+        "plane_history_mode": torch_hero_plane_history_mode(run_config),
         "checkpoint_dir": str(checkpoint_dir),
         "manifest_path": str(manifest_path),
         "manifest_sha256": sha256_file(manifest_path),
@@ -1227,6 +1228,7 @@ def load_torch_hero_policy(
             policy_mode=policy_mode,
             inference_batch_size=inference_batch_size,
             refinement_passes=refinement_passes,
+            plane_history_mode=checkpoint.descriptor["plane_history_mode"],
         ),
         {
             "load_seconds": elapsed,
@@ -1435,6 +1437,10 @@ class TrackingPolicy:
     @property
     def action_codec_id(self) -> str:
         return str(self.delegate.action_codec_id)
+
+    @property
+    def plane_history_mode(self) -> str:
+        return str(getattr(self.delegate, "plane_history_mode", PLANE_HISTORY_MODE_CURRENT_ONLY_AS_PREPROCESSED))
 
     @property
     def history_validation_mode(self) -> str:

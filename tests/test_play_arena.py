@@ -317,6 +317,27 @@ def test_trusted_endpoint_runner_exactly_matches_full_replay_gameplay():
     ) == list(range(6))
 
 
+def test_trusted_runner_supplies_complete_history_only_when_requested():
+    from research.input_contract import LC0_FULL_HISTORY
+
+    class HistoryPolicy(_TrustedEndpointPolicy):
+        plane_history_mode = LC0_FULL_HISTORY
+
+        def select_actions_from_trusted_arena(self, boards, endpoints):
+            for board, endpoint in zip(boards, endpoints):
+                assert len(endpoint.plane_history_fens) == board.ply() + 1
+                assert endpoint.plane_history_fens[-1] == board.fen(en_passant="legal")
+            return super().select_actions_from_trusted_arena(boards, endpoints)
+
+    pairs, histories = _pairs_and_histories(("e2e4", "e7e5"), count=2)
+    result = play_arena_pairs(
+        pairs, opening_histories=histories,
+        policies={"candidate": HistoryPolicy("candidate"), "reference": _TrustedEndpointPolicy("reference")},
+        additional_ply_cap=4,
+    )
+    assert not any(result.as_dict()["stats"]["fault_counts"].values())
+
+
 def test_policy_batches_are_stably_bounded_and_chunk_faults_are_isolated():
     pairs, histories = _pairs_and_histories(("e2e4", "e7e5"), count=3)
     candidate = _FailOnCallPolicy("candidate", fail_call=2)

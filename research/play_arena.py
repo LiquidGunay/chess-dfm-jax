@@ -50,6 +50,7 @@ from research.arena_history_trust import (
     SUPPORTED_HISTORY_VALIDATION_MODES,
     _mint_trusted_arena_history_endpoint,
 )
+from research.input_contract import LC0_FULL_HISTORY
 from research.arena import (
     ArenaGameSpec,
     GameOutcome,
@@ -764,6 +765,7 @@ def _policy_inputs(
     *,
     history_validation_mode: str,
     ply_cap: int,
+    include_plane_history: bool = False,
 ) -> tuple[list[chess.Board], list[Any]]:
     for state in states:
         _assert_game_state_history_invariant(state)
@@ -783,6 +785,10 @@ def _policy_inputs(
                 additional_plies=state.additional_plies,
                 played_suffix_count=len(state.moves_uci),
                 ply_cap=ply_cap,
+                plane_history_fens=(
+                    tuple(_canonical_position_fen(position) for position in state.history)
+                    if include_plane_history else None
+                ),
             )
             for state in states
         ]
@@ -1112,6 +1118,7 @@ def _play_policy_batch(
         batch_states,
         history_validation_mode=history_validation_mode,
         ply_cap=ply_cap,
+        include_plane_history=(getattr(policy, "plane_history_mode", None) == LC0_FULL_HISTORY),
     )
 
     started = clock()

@@ -105,6 +105,12 @@ def test_torch_hero_v2_descriptor_binds_run_and_recovery_recipe(
 
     assert descriptor.descriptor["lineage"]["recipe"] == "hero_v2"
     assert descriptor.descriptor["torch_run_config"]["recipe"] == "hero_v2"
+    assert descriptor.descriptor["plane_history_mode"] == "current_only_as_preprocessed"
+    run_config["args"] = {"data_format": "lc0_sequential"}
+    run_config["data"] = {"schema_version": "lc0-sequential-v1"}
+    run_config_path.write_text(json.dumps(run_config), encoding="utf-8")
+    sequential = torch_hero_checkpoint_descriptor(checkpoint_dir, models_dir=models_dir)
+    assert sequential.descriptor["plane_history_mode"] == "lc0_full_history_as_preprocessed"
 
     resume_contract["recipe"] = "hero"
     manifest["resume_contract"] = resume_contract

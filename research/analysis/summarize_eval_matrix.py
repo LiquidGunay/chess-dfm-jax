@@ -54,6 +54,9 @@ def summarize(protocol_path: Path) -> dict:
             for side in ('candidate', 'opponent'):
                 identity = protocol[edge[side]]
                 descriptor = contract['models'][side]
+                if 'plane_history_mode' in identity:
+                    require(descriptor['plane_history_mode'] == identity['plane_history_mode'],
+                            f'{edge_id}: {side} input-history contract')
                 source = descriptor.get('state', descriptor.get('bt4_checkpoint'))
                 require(source['sha256'] == identity['state_sha256'],
                         f'{edge_id}: {side} model identity')
@@ -73,6 +76,7 @@ def summarize(protocol_path: Path) -> dict:
                 sides[side] = {
                     'model': edge[side], 'mode': edge[f'{side}_mode'],
                     'passes': edge[f'{side}_passes'],
+                    'plane_history_mode': descriptor.get('plane_history_mode'),
                     'wins': stats['wins'], 'draws': stats['draws'], 'losses': stats['losses'],
                     'positions': coverage['positions'], 'policy_calls': coverage['calls'],
                     'mean_policy_call_seconds': coverage['mean_call_seconds'],

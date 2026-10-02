@@ -43,6 +43,7 @@ class TrustedArenaHistoryEndpoint:
         "ply_cap",
         "claim_draw_checked_nonterminal",
         "below_ply_cap",
+        "plane_history_fens",
         "_seal",
         "_frozen",
     )
@@ -63,6 +64,7 @@ class TrustedArenaHistoryEndpoint:
         claim_draw_checked_nonterminal: bool,
         below_ply_cap: bool,
         _seal: object,
+        plane_history_fens: tuple[str, ...] | None = None,
     ) -> None:
         if _seal is not _MINT_SEAL:
             raise TypeError("TrustedArenaHistoryEndpoint can only be minted by play_arena.")
@@ -81,6 +83,7 @@ class TrustedArenaHistoryEndpoint:
             "ply_cap": ply_cap,
             "claim_draw_checked_nonterminal": claim_draw_checked_nonterminal,
             "below_ply_cap": below_ply_cap,
+            "plane_history_fens": plane_history_fens,
             "_seal": _seal,
             "_frozen": False,
         }
@@ -170,6 +173,16 @@ def verify_trusted_arena_history_endpoint(
         raise ValueError("Trusted arena endpoint lacks ply-cap attestation.")
     if additional_plies >= ply_cap:
         raise ValueError("Trusted arena endpoint is not below its ply cap.")
+    if value.plane_history_fens is not None:
+        history = value.plane_history_fens
+        if (
+            not isinstance(history, tuple)
+            or len(history) != position_count
+            or any(not isinstance(fen, str) for fen in history)
+            or history[0] != STANDARD_INITIAL_FEN
+            or history[-1] != value.current_fen
+        ):
+            raise ValueError("Trusted arena plane history is incomplete or mismatched.")
     return value
 
 
@@ -185,6 +198,7 @@ def _mint_trusted_arena_history_endpoint(
     additional_plies: int,
     played_suffix_count: int,
     ply_cap: int,
+    plane_history_fens: tuple[str, ...] | None = None,
 ) -> TrustedArenaHistoryEndpoint:
     """Mint one packet; callers must have just checked terminal/cap boundaries."""
 
@@ -202,6 +216,7 @@ def _mint_trusted_arena_history_endpoint(
         claim_draw_checked_nonterminal=True,
         below_ply_cap=True,
         _seal=_MINT_SEAL,
+        plane_history_fens=plane_history_fens,
     )
 
 
