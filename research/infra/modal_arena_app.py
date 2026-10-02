@@ -15,6 +15,10 @@ from typing import Any
 
 import modal
 
+from research.infra.retained_terminal_hero import (
+    TERMINAL_CONFIG_RELATIVE, TERMINAL_LABEL, retained_terminal_view,
+)
+
 
 APP_NAME = "chess-dfm-torch-arena"
 BASE_INPUT_VOLUME_NAME = "chess-dfm-interpretability-inputs"
@@ -43,6 +47,8 @@ ARENA_SOURCE_TREE_PATHS = (
     "research/train.py",
     "research/train_torch.py",
     "research/infra/modal_arena_app.py",
+    "research/infra/retained_terminal_hero.py",
+    TERMINAL_CONFIG_RELATIVE,
 )
 ARENA_ASSET_NAMES = (
     "promotion-ply12-n2048-v3.json",
@@ -75,6 +81,11 @@ arena_image = (
         "safetensors==0.5.3",
     )
     .add_local_python_source("chess_dfm_jax", "research", copy=True)
+    .add_local_file(
+        TERMINAL_CONFIG_RELATIVE,
+        "/root/" + TERMINAL_CONFIG_RELATIVE,
+        copy=True,
+    )
     .add_local_file(
         "chess_dfm_jax/policy_moves.txt",
         "/root/chess_dfm_jax/policy_moves.txt",
@@ -181,6 +192,11 @@ def _arena_source_tree_sha256(repo_root: Path) -> str:
 
 def _validated_training_result(result_label: str) -> dict[str, Any]:
     label = _require_result_label(result_label)
+    if label == TERMINAL_LABEL:
+        return retained_terminal_view(
+            Path(BASE_INPUT_MOUNT) / "bundles" / BASE_INPUT_BUNDLE_SHA256,
+            Path("/root"), view_parent=Path("/root"),
+        )
     root = Path(TRAINING_RESULT_MOUNT) / "runs" / label
     paths = {
         "modal_run": root / "modal_run.json",
