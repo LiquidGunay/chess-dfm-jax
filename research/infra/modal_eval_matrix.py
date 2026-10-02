@@ -53,7 +53,11 @@ def main() -> None:
     parser.add_argument('--protocol', type=Path, required=True)
     parser.add_argument('--phase', choices=['smoke', 'development'], default='development')
     parser.add_argument('--limit', type=int, default=4)
+    parser.add_argument('--external-reserved-spend', type=Decimal, default=Decimal('0'),
+                        help='Additional full attempt reservation for companion jobs, including meter lag.')
     args = parser.parse_args()
+    if not args.external_reserved_spend.is_finite() or args.external_reserved_spend < 0:
+        raise ValueError('External budget reservation must be finite and nonnegative')
     root = args.protocol.resolve().parent
     protocol_raw = args.protocol.read_bytes()
     protocol = json.loads(protocol_raw)
@@ -142,7 +146,7 @@ def main() -> None:
         active = sum(r['status'] == 'submitted' for r in runs.values())
         if active >= args.limit:
             break
-        spend = reserved_spend(_modal_launch_spend(), baseline, runs, cap)
+        spend = reserved_spend(_modal_launch_spend(), baseline, runs, cap) + args.external_reserved_spend
         spec, job_cap = _arena_job_spec(protocol['openings'][args.phase]['pairs'], edge['candidate_passes'], edge['opponent_passes'])
         estimate = estimate_modal_job(spec)
         if Decimal(estimate['declared_attempt_upper_bound_dollars']) != cap:
