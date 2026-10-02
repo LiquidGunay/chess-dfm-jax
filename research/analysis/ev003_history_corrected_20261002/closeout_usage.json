@@ -1,0 +1,117 @@
+{
+  "checked_utc": "2026-10-02T14:35:43.353750+00:00",
+  "billing": {
+    "metered_cost": "2.62149446",
+    "billed_cost": "0E-8",
+    "adjustments": {
+      "free_storage": "-1.51149446",
+      "reservation_adjustment": "-0E-8",
+      "network_egress_allowance": "0E-8",
+      "plan_cost": "0E-8",
+      "credits": "-1.11000000"
+    },
+    "metered_cost_breakdown": {
+      "volumes": "1.51149446",
+      "llm_tokens": "0E-8",
+      "ephemeral_apps": "1.10631600"
+    }
+  },
+  "apps": [
+    {
+      "app_id": "ap-tRY9vpYd6oPe4gMb3W26DE",
+      "description": "chess-dfm-torch-arena",
+      "state": "stopped",
+      "tasks": "0",
+      "created_at": "2026-10-02 14:25:12+00:00",
+      "stopped_at": "2026-10-02 14:33:02+00:00"
+    },
+    {
+      "app_id": "ap-BjVSacHZGIupDF87XYVkKZ",
+      "description": "chess-dfm-torch-arena",
+      "state": "stopped",
+      "tasks": "0",
+      "created_at": "2026-10-02 14:24:06+00:00",
+      "stopped_at": "2026-10-02 14:31:51+00:00"
+    },
+    {
+      "app_id": "ap-LHd6dzb7Oubk2pQsrGJxUT",
+      "description": "chess-dfm-torch-arena",
+      "state": "stopped",
+      "tasks": "0",
+      "created_at": "2026-10-02 14:26:36+00:00",
+      "stopped_at": "2026-10-02 14:30:55+00:00"
+    },
+    {
+      "app_id": "ap-ZEo1A1LOOqUvXvgVqiX986",
+      "description": "chess-dfm-torch-arena",
+      "state": "stopped",
+      "tasks": "0",
+      "created_at": "2026-10-02 14:24:52+00:00",
+      "stopped_at": "2026-10-02 14:29:55+00:00"
+    },
+    {
+      "app_id": "ap-FBtyMSvWNWDOsVcLaFfWmj",
+      "description": "chess-dfm-common-policy-evaluation",
+      "state": "stopped",
+      "tasks": "0",
+      "created_at": "2026-10-02 14:20:36+00:00",
+      "stopped_at": "2026-10-02 14:23:35+00:00"
+    },
+    {
+      "app_id": "ap-LfPTEeR7HeE2c3wP3OjKP2",
+      "description": "chess-dfm-torch-arena",
+      "state": "stopped",
+      "tasks": "0",
+      "created_at": "2026-10-02 14:16:33+00:00",
+      "stopped_at": "2026-10-02 14:23:26+00:00"
+    },
+    {
+      "app_id": "ap-4fz02Rd9i3FqsU9mAeo2lE",
+      "description": "chess-dfm-torch-arena",
+      "state": "stopped",
+      "tasks": "0",
+      "created_at": "2026-10-02 14:15:38+00:00",
+      "stopped_at": "2026-10-02 14:22:35+00:00"
+    },
+    {
+      "app_id": "ap-Jjjd2kU3HmIDoE7s3epNFm",
+      "description": "chess-dfm-torch-arena",
+      "state": "stopped",
+      "tasks": "0",
+      "created_at": "2026-10-02 14:14:31+00:00",
+      "stopped_at": "2026-10-02 14:22:18+00:00"
+    },
+    {
+      "app_id": "ap-nmgj5HVs8bSaVnXNaM5DQf",
+      "description": "chess-dfm-torch-arena",
+      "state": "stopped",
+      "tasks": "0",
+      "created_at": "2026-10-02 14:15:17+00:00",
+      "stopped_at": "2026-10-02 14:19:12+00:00"
+    },
+    {
+      "app_id": "ap-ZOgz8DAyf16KZarnaLSs34",
+      "description": "chess-dfm-torch-arena",
+      "state": "stopped",
+      "tasks": "0",
+      "created_at": "2026-10-02 14:09:35+00:00",
+      "stopped_at": "2026-10-02 14:12:55+00:00"
+    },
+    {
+      "app_id": "ap-j7lzQUvCDKLvmeUyRqqli1",
+      "description": "chess-dfm-torch-arena",
+      "state": "stopped",
+      "tasks": "0",
+      "created_at": "2026-10-02 14:09:14+00:00",
+      "stopped_at": "2026-10-02 14:12:37+00:00"
+    },
+    {
+      "app_id": "ap-KlspsrEX18ilgKdU2fF94W",
+      "description": "chess-dfm-torch-arena",
+      "state": "stopped",
+      "tasks": "0",
+      "created_at": "2026-10-02 14:06:26+00:00",
+      "stopped_at": "2026-10-02 14:07:17+00:00"
+    }
+  ]
+}

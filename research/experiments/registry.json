@@ -1,14 +1,14 @@
 {
   "schema_version": "chess-dfm-experiment-registry-v1",
-  "updated_utc": "2026-09-30",
+  "updated_utc": "2026-10-02",
   "active_branch": "research/modal-experiments",
   "runtime": "pytorch",
   "representation_strength_threshold": {
     "status": "proposed_not_frozen",
     "user_decision_date": "2026-09-29",
-    "proposal_date": "2026-09-30",
-    "proposal": "Paired 95% lower bound above -50 relative Elo versus frozen Hero 1 at matched one-pass inference; freeze protocol before architecture selection.",
-    "proposal_record": "research/analysis/ev001_modal_20260930/decision.json",
+    "proposal_date": "2026-10-02",
+    "proposal": "Paired 95% lower bound above -50 relative Elo versus frozen Hero1 at one-pass inference with each checkpoint's training-matched input contract; freeze opening/compute protocol before architecture selection.",
+    "proposal_record": "research/analysis/ev003_history_corrected_20261002/decision.json",
     "freeze_before": "architecture_comparisons"
   },
   "experiments": [
@@ -23,43 +23,85 @@
       "gpu": "L40S",
       "updates": 7774,
       "examples": 7960576,
-      "declared_attempt_cap_dollars": 22.20,
+      "declared_attempt_cap_dollars": 22.2,
       "execution_record": "research/analysis/pa001_modal_20260929/status.json",
       "result_label": "hero-training-proposal_epoch-proposal_a_epoch-l40s-d46e7b4f1a0afd449d36"
     },
     {
       "id": "EV-001",
       "name": "Searchless evaluation of Proposal A p1 and p8",
-      "status": "development_complete_failed_confirmation_entry",
+      "status": "completed_input_mismatch_superseded_by_EV003",
       "specification": "research/analysis/ev001_modal_20260930/preregister.json",
       "execution_record": "research/analysis/ev001_modal_20260930/runs.json",
       "results": "research/analysis/ev001_modal_20260930/development_summary.json",
       "decision": "research/analysis/ev001_modal_20260930/decision.json",
-      "depends_on": ["PA-001"],
-      "baselines": ["frozen Hero 1", "raw BT4"],
-      "gate": "Validated held-out paired strength improvement; inconclusive evidence does not promote to search"
+      "depends_on": [
+        "PA-001"
+      ],
+      "baselines": [
+        "frozen Hero 1",
+        "raw BT4"
+      ],
+      "gate": "Validated held-out paired strength improvement; inconclusive evidence does not promote to search",
+      "interpretation_correction": "The sequential-trained candidate received current-only inputs. Evidence is preserved, but use EV-003 for training-matched candidate strength."
+    },
+    {
+      "id": "EV-003",
+      "name": "History-corrected searchless evaluation and matched validation",
+      "status": "completed_corrected_candidate_failed_confirmation_entry",
+      "depends_on": [
+        "PA-001",
+        "EV-001"
+      ],
+      "specification": "research/analysis/ev003_history_corrected_20261002/preregister.json",
+      "execution_record": "research/analysis/ev003_history_corrected_20261002/runs.json",
+      "validation_specification": "research/analysis/ev003_history_corrected_20261002/common_validation_preregister.json",
+      "scope": "Same weights and development openings; candidate full-history inputs, unchanged current-only incumbents. Common 8192-position root-policy validation across both input modes.",
+      "results": "research/analysis/ev003_history_corrected_20261002/development_summary.json",
+      "decision": "research/analysis/ev003_history_corrected_20261002/decision.json"
     },
     {
       "id": "EV-002",
       "name": "Matched LC0 MCTS evaluation",
-      "status": "not_run_candidate_failed_searchless_gate",
-      "depends_on": ["EV-001"],
+      "status": "not_run_corrected_candidate_failed_primary_development_gate",
+      "depends_on": [
+        "EV-003"
+      ],
       "baseline": "raw BT4 in the same LC0 search build",
-      "adapters": ["DFM root prior plus current-state WDL", "updated BT4 native heads"]
+      "adapters": [
+        "DFM root prior plus current-state WDL",
+        "updated BT4 native heads"
+      ]
     },
     {
       "id": "AR-001",
       "name": "Controlled architecture and representation comparisons",
       "status": "backlog",
-      "depends_on": ["EV-001", "EV-002"],
+      "depends_on": [
+        "EV-001",
+        "EV-002"
+      ],
       "gate": "Freeze a minimum-strength threshold after EV-001, before architecture selection"
     },
     {
       "id": "AR-002",
       "name": "Continuous diffusion or flow matching in action-embedding space",
       "status": "hypothesis_backlog",
-      "depends_on": ["AR-001"],
+      "depends_on": [
+        "AR-001"
+      ],
       "question": "Does a continuous action-embedding trajectory improve the strength/compute tradeoff or learned representations relative to categorical DFM?"
+    },
+    {
+      "id": "AR-003",
+      "name": "Continuous flow matching over JEPA state embeddings",
+      "status": "hypothesis_backlog_not_scheduled",
+      "depends_on": [
+        "EV-003",
+        "AR-001"
+      ],
+      "question": "Does generating future JEPA state embeddings and decoding legal moves from them provide a more useful prediction-to-policy coupling than categorical DFM?",
+      "first_control": "Frozen JEPA encoder, matched data and inference compute, compared with a categorical policy using the same embedding; no new architecture training authorized."
     }
   ]
 }

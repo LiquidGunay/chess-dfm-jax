@@ -1,0 +1,11 @@
+{
+  "schema_version": "chess-dfm-common-validation-run-v1",
+  "status": "complete",
+  "result": "common_validation_result.json",
+  "app_id": "ap-FBtyMSvWNWDOsVcLaFfWmj",
+  "function_call_id": "fc-01M3YFTJDS2AR58RHGQVZP066P",
+  "protocol": "common_validation_preregister.json",
+  "declared_attempt_maximum_dollars": "0.92976000",
+  "reserved_other_work_dollars": "9.32",
+  "launch_log_note": "Detached submission succeeded; CLI timed out waiting for final app logs. Collect the existing call, do not resubmit."
+}
