@@ -15,11 +15,15 @@
     {
       "id": "VP-001",
       "name": "Fresh joint Hero: native value versus JEPA value residual",
-      "status": "cpu_preflight_running",
+      "status": "training_submitted_automatic_evaluation_armed",
       "depends_on": ["GPU-003", "EV-007"],
       "specification": "research/analysis/vp001_joint_value_20261003/preregister.json",
       "execution_specification": "research/analysis/vp001_joint_value_20261003/attempt02/preregister.json",
       "preflight_app_id": "ap-l9Jusm9YsfaXCeyIfWZpqs",
+      "app_id": "ap-RbGODXvfeEHwzbvA22EisD",
+      "call_id": "fc-01M41JHA8N51RM5QTAFP94Y1C1",
+      "remote_output": "experiments/vp001-4ca97bb481a4213732c0",
+      "execution_record": "research/analysis/vp001_joint_value_20261003/attempt02/train-result.json",
       "scope": "Two matched fresh BT4-initialized, end-to-end Hero pilots: 1000 updates each, batch 1024, full sequential history, FP32 storage/BF16 compiled compute, original Hero peak rates and warmup with WSD. Actual current/future root Q/D supervision. Native current value plus auxiliary future WDL versus native-current-logit residual at current/future JEPA states. Follow with six searchless 128-pair matchups against original Hero1 and full-history raw BT4, and common 8192-position inference-policy losses. Single-seed development screening, not a search or confirmation claim.",
       "historical_correction": "PA-001 retained full history but current root Q/D targets were dropped by batch filters, causing successor-target fallback. VP-001 preserves actual current targets and rejects missing targets; historical records are not rewritten."
     },
