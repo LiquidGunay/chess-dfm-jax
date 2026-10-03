@@ -11,7 +11,7 @@ PLANE_HISTORY_MODES = frozenset({CURRENT_ONLY, LC0_FULL_HISTORY})
 
 def require_training_history(data_format: str, *, allow_legacy_current_only: bool = False) -> str:
     """New training must preserve history; legacy reproduction is explicit."""
-    if data_format == "lc0_sequential":
+    if data_format in {"lc0_sequential", "trajectory_v3_history"}:
         return LC0_FULL_HISTORY
     if data_format == "trajectory_v3" and allow_legacy_current_only:
         return CURRENT_ONLY
@@ -24,7 +24,7 @@ def require_training_history(data_format: str, *, allow_legacy_current_only: boo
     raise ValueError(f"Unsupported training data format: {data_format!r}")
 
 
-def audit_full_history_batch(batch: Mapping[str, Any]) -> dict[str, int]:
+def audit_full_history_batch(batch: Mapping[str, Any], *, allow_chess960_initial: bool = False) -> dict[str, int]:
     """Check actual input bytes, not just the dataset's name.
 
     Every valid future target is after at least one move, including targets
@@ -52,6 +52,15 @@ def audit_full_history_batch(batch: Mapping[str, Any]) -> dict[str, int]:
     # boundary for a broken dataset; any other zero-history current row fails.
     initial = encode_board(chess.Board(), [])
     initial_rows = np.all(current == initial, axis=(1, 2, 3))
+    if allow_chess960_initial:
+        # Only genuine initial arrangements qualify; never accept an arbitrary
+        # FEN as a history-free root. This opt-in is for the retained mixed Hero
+        # corpus, whose complete prefixes were separately replayed on CPU.
+        for row in np.flatnonzero(~current_present & ~initial_rows):
+            for index in range(960):
+                if np.array_equal(current[row], encode_board(chess.Board.from_chess960_pos(index), [])):
+                    initial_rows[row] = True
+                    break
     if np.any(~current_present & ~initial_rows):
         raise ValueError("Full-history training data contains a zero-history noninitial current position")
     return {
@@ -73,6 +82,11 @@ def torch_hero_plane_history_mode(run_config: Mapping[str, Any]) -> str:
     data_format = args.get("data_format")
     schema = data.get("schema_version")
     explicit = run_config.get("input_contract", {}).get("plane_history_mode")
+    if data_format == "trajectory_v3_history" or schema == "hero-trajectory-full-history-v1":
+        if (data_format != "trajectory_v3_history" or schema != "hero-trajectory-full-history-v1"
+                or explicit != LC0_FULL_HISTORY or not data.get("manifest_sha256")):
+            raise ValueError("Incomplete or conflicting reconstructed-history provenance")
+        return LC0_FULL_HISTORY
     if data_format == "lc0_sequential" or schema == "lc0-sequential-v1":
         if data_format not in {None, "lc0_sequential"} or schema not in {
             None, "lc0-sequential-v1"

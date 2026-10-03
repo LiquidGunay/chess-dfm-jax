@@ -6967,6 +6967,15 @@ def train(args: argparse.Namespace) -> int:
     )
     if training_history_mode == LC0_FULL_HISTORY and getattr(args, "hero_milestones", False):
         raise ValueError("Legacy Hero milestones use current-only pools; use full-history validation-updates and the history-aware arena")
+    if getattr(args, "data_format", None) == "trajectory_v3_history":
+        from research.hero_history_data import verify_dataset, sha256
+        expected = getattr(args, "history_manifest_sha256", "")
+        if len(expected) != 64 or any(c not in "0123456789abcdef" for c in expected):
+            raise ValueError("Reconstructed history requires an immutable manifest SHA-256")
+        root = _require_workspace(args.data_root, exists=True)
+        if sha256(root/"manifest.json") != expected:
+            raise ValueError("History manifest checksum mismatch")
+        verify_dataset(root)  # CPU verification before constructing model/CUDA state.
     config, optimizer_policy = _resolve_training_recipe(args)
     config = _apply_sigreg_sample_override(
         config,
@@ -7298,6 +7307,17 @@ def train(args: argparse.Namespace) -> int:
             seed=args.seed,
             shuffle_batches=True,
         )
+    elif data_format == "trajectory_v3_history":
+        from research.hero_history_batches import HistoryTrajectoryBatches
+        if config.action_codec != "lc0_canonical_1858" or args.seed != 0:
+            raise ValueError("Reconstructed Hero data requires original canonical codec and seed zero")
+        batches = HistoryTrajectoryBatches(
+            _require_workspace(args.data_root), split="train", batch_size=args.batch_size,
+            horizon=config.horizon, manifest_sha256=args.history_manifest_sha256,
+            canonicalize=canonicalize_trajectory_batch,
+        )
+        if args.data_start + args.steps > batches.available_steps:
+            raise ValueError("Requested training exceeds the frozen reconstructed selection")
     elif data_format == "trajectory_v3":
         batches_class = (
             CanonicalTrajectoryBatches
@@ -7317,7 +7337,8 @@ def train(args: argparse.Namespace) -> int:
     git_commit = _git_commit()
     data_provenance = batches.provenance()
     history_audit = (
-        audit_full_history_batch(batches.batch_at(args.data_start))
+        audit_full_history_batch(batches.batch_at(args.data_start),
+                                 allow_chess960_initial=data_format == "trajectory_v3_history")
         if training_history_mode == LC0_FULL_HISTORY else None
     )
     hero_milestone_contract = _hero_milestone_contract(
@@ -7344,6 +7365,8 @@ def train(args: argparse.Namespace) -> int:
                 example_count=args.validation_example_count,
             )
             if data_format == "lc0_sequential"
+            else _load_history_validation_resources(args)
+            if data_format == "trajectory_v3_history"
             else _load_hero_validation_resources(
                 manifest_path=args.hero_eval_manifest,
             )
@@ -9856,8 +9879,10 @@ def _live_validation_contract(
     total_examples = int(
         getattr(args, "lr_total_examples", None) or _HERO_TRAIN_EXAMPLES
     )
-    if data_format == "lc0_sequential":
+    if data_format in {"lc0_sequential", "trajectory_v3_history"}:
         pool = "lc0_sequential_validation"
+        if data_format == "trajectory_v3_history":
+            pool = "original_hero_fast_pool_full_history"
         source_key = "data_root"
         source_path = str(_require_workspace(args.data_root, exists=True))
     else:
@@ -9975,6 +10000,22 @@ def _load_lc0_validation_resources(
             "data": batches.provenance(),
         },
     )
+
+
+def _load_history_validation_resources(args):
+    from research.hero_history_batches import HistoryTrajectoryBatches
+    batches = HistoryTrajectoryBatches(
+        _require_workspace(args.data_root), split="validation", batch_size=64, horizon=8,
+        manifest_sha256=args.history_manifest_sha256, canonicalize=canonicalize_trajectory_batch,
+    )
+    if batches.available_steps != 128:
+        raise ValueError("Reconstructed validation must contain the original 8192 positions")
+    return _HeroValidationResources(fast_batches=batches, fast_pool={
+        "schema_version": "hero-history-validation-pool-v1",
+        "pool_definition": {"split": "val", "seed": 2026072501, "count": 8192,
+                            "selection": "original_fast_val_global_index_ascending"},
+        "schedule_total_examples": _HERO_TRAIN_EXAMPLES, "data": batches.provenance(),
+    })
 
 
 def _load_hero_milestone_resources(
@@ -11154,7 +11195,7 @@ def build_parser() -> argparse.ArgumentParser:
     train_parser.add_argument("--data-root", type=Path, default=_DATA_ROOT)
     train_parser.add_argument(
         "--data-format",
-        choices=("trajectory_v3", "lc0_sequential"),
+        choices=("trajectory_v3", "lc0_sequential", "trajectory_v3_history"),
         default="lc0_sequential",
         help=(
             "Read legacy duplicated trajectory-v3 shards or value-rich "
@@ -11165,6 +11206,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--allow-legacy-current-only", action="store_true",
         help="Explicit historical reproduction only: permit zero-history trajectory_v3 training.",
     )
+    train_parser.add_argument("--history-manifest-sha256", default="",
+                              help="Required immutable manifest hash for reconstructed original Hero history.")
     train_parser.add_argument("--resume-checkpoint", type=Path)
     train_parser.add_argument("--output-dir", type=Path, required=True)
     train_parser.add_argument("--batch-size", type=int, default=64)
