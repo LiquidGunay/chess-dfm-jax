@@ -15,9 +15,10 @@
     {
       "id": "HH-002",
       "name": "Hero recipe with full history on verified reduced original data",
-      "status": "preparing_cpu_verified_inputs",
+      "status": "gpu_submitted",
       "depends_on": ["HH-001"],
       "plan": "research/analysis/hh002_history_subset_20261003/plan.json",
+      "execution_record": "research/analysis/hh002_history_subset_20261003/status.json",
       "scope": "553 updates, original recipe, contracted original examples; W&B and common-pool historical loss comparison. No searched or searchless arena launch."
     },
     {
