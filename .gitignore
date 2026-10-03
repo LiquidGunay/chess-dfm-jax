@@ -31,3 +31,5 @@ research/runs/
 *.csv
 # Raw profiler traces stay on the results Volume; commit their hashes and summaries.
 research/analysis/**/profile_trace.json.gz
+# GPU-002 tensor slices remain hash-bound on Modal; retain compact JSON in Git.
+research/analysis/gpu002_precision_compile_20261003/*/diagnostic_tensors.safetensors

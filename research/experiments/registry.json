@@ -15,9 +15,10 @@
     {
       "id": "GPU-002",
       "name": "Matched precision and BT4 compilation diagnostic",
-      "status": "preregistered_cpu_verification_pending",
+      "status": "running_cpu_verification_passed",
       "depends_on": ["GPU-001", "HH-002"],
       "specification": "research/analysis/gpu002_precision_compile_20261003/preregister.json",
+      "execution_record": "research/analysis/gpu002_precision_compile_20261003/sweep_run.json",
       "scope": "One L40S, FP32/BF16/FP16 compute with FP32 parameter storage, eager/compiled matrix and separate original-storage control. Fixed HH-002 checkpoint and 192 full-history rows. Forward/backward timing and numerics only; no optimizer steps or strength claims. CPU plus GPU declared-attempt ceiling $3.30."
     },
     {
