@@ -1,0 +1,750 @@
+{
+  "declared_cost": "0.10550400",
+  "full_dataset_hashes_verified": true,
+  "git_commit": "2d8f1fca2dcda242f63d70fa6d4dc8d95ec577f2",
+  "gpu_active": false,
+  "history_audits": [
+    {
+      "current_with_history": 1014,
+      "cursor": 500,
+      "examples": 1024,
+      "future_targets_with_history": 8192,
+      "valid_future_targets": 8192
+    },
+    {
+      "current_with_history": 1013,
+      "cursor": 501,
+      "examples": 1024,
+      "future_targets_with_history": 8192,
+      "valid_future_targets": 8192
+    },
+    {
+      "current_with_history": 1014,
+      "cursor": 502,
+      "examples": 1024,
+      "future_targets_with_history": 8192,
+      "valid_future_targets": 8192
+    },
+    {
+      "current_with_history": 1014,
+      "cursor": 503,
+      "examples": 1024,
+      "future_targets_with_history": 8192,
+      "valid_future_targets": 8192
+    },
+    {
+      "current_with_history": 1013,
+      "cursor": 504,
+      "examples": 1024,
+      "future_targets_with_history": 8192,
+      "valid_future_targets": 8192
+    },
+    {
+      "current_with_history": 1014,
+      "cursor": 505,
+      "examples": 1024,
+      "future_targets_with_history": 8192,
+      "valid_future_targets": 8192
+    },
+    {
+      "current_with_history": 1012,
+      "cursor": 506,
+      "examples": 1024,
+      "future_targets_with_history": 8192,
+      "valid_future_targets": 8192
+    },
+    {
+      "current_with_history": 1009,
+      "cursor": 507,
+      "examples": 1024,
+      "future_targets_with_history": 8192,
+      "valid_future_targets": 8192
+    },
+    {
+      "current_with_history": 1013,
+      "cursor": 508,
+      "examples": 1024,
+      "future_targets_with_history": 8192,
+      "valid_future_targets": 8192
+    },
+    {
+      "current_with_history": 1013,
+      "cursor": 509,
+      "examples": 1024,
+      "future_targets_with_history": 8192,
+      "valid_future_targets": 8192
+    },
+    {
+      "current_with_history": 1017,
+      "cursor": 510,
+      "examples": 1024,
+      "future_targets_with_history": 8192,
+      "valid_future_targets": 8192
+    },
+    {
+      "current_with_history": 1017,
+      "cursor": 511,
+      "examples": 1024,
+      "future_targets_with_history": 8192,
+      "valid_future_targets": 8192
+    },
+    {
+      "current_with_history": 1015,
+      "cursor": 512,
+      "examples": 1024,
+      "future_targets_with_history": 8192,
+      "valid_future_targets": 8192
+    },
+    {
+      "current_with_history": 1013,
+      "cursor": 513,
+      "examples": 1024,
+      "future_targets_with_history": 8192,
+      "valid_future_targets": 8192
+    },
+    {
+      "current_with_history": 1016,
+      "cursor": 514,
+      "examples": 1024,
+      "future_targets_with_history": 8192,
+      "valid_future_targets": 8192
+    },
+    {
+      "current_with_history": 1014,
+      "cursor": 515,
+      "examples": 1024,
+      "future_targets_with_history": 8192,
+      "valid_future_targets": 8192
+    },
+    {
+      "current_with_history": 1012,
+      "cursor": 516,
+      "examples": 1024,
+      "future_targets_with_history": 8192,
+      "valid_future_targets": 8192
+    },
+    {
+      "current_with_history": 1013,
+      "cursor": 517,
+      "examples": 1024,
+      "future_targets_with_history": 8192,
+      "valid_future_targets": 8192
+    },
+    {
+      "current_with_history": 1014,
+      "cursor": 518,
+      "examples": 1024,
+      "future_targets_with_history": 8192,
+      "valid_future_targets": 8192
+    },
+    {
+      "current_with_history": 1011,
+      "cursor": 519,
+      "examples": 1024,
+      "future_targets_with_history": 8192,
+      "valid_future_targets": 8192
+    },
+    {
+      "current_with_history": 1011,
+      "cursor": 520,
+      "examples": 1024,
+      "future_targets_with_history": 8192,
+      "valid_future_targets": 8192
+    },
+    {
+      "current_with_history": 1012,
+      "cursor": 521,
+      "examples": 1024,
+      "future_targets_with_history": 8192,
+      "valid_future_targets": 8192
+    },
+    {
+      "current_with_history": 1011,
+      "cursor": 522,
+      "examples": 1024,
+      "future_targets_with_history": 8192,
+      "valid_future_targets": 8192
+    },
+    {
+      "current_with_history": 1013,
+      "cursor": 523,
+      "examples": 1024,
+      "future_targets_with_history": 8192,
+      "valid_future_targets": 8192
+    },
+    {
+      "current_with_history": 1013,
+      "cursor": 524,
+      "examples": 1024,
+      "future_targets_with_history": 8192,
+      "valid_future_targets": 8192
+    },
+    {
+      "current_with_history": 1015,
+      "cursor": 525,
+      "examples": 1024,
+      "future_targets_with_history": 8192,
+      "valid_future_targets": 8192
+    },
+    {
+      "current_with_history": 1014,
+      "cursor": 526,
+      "examples": 1024,
+      "future_targets_with_history": 8192,
+      "valid_future_targets": 8192
+    },
+    {
+      "current_with_history": 1014,
+      "cursor": 527,
+      "examples": 1024,
+      "future_targets_with_history": 8192,
+      "valid_future_targets": 8192
+    },
+    {
+      "current_with_history": 1015,
+      "cursor": 528,
+      "examples": 1024,
+      "future_targets_with_history": 8192,
+      "valid_future_targets": 8192
+    },
+    {
+      "current_with_history": 1012,
+      "cursor": 529,
+      "examples": 1024,
+      "future_targets_with_history": 8192,
+      "valid_future_targets": 8192
+    },
+    {
+      "current_with_history": 1019,
+      "cursor": 530,
+      "examples": 1024,
+      "future_targets_with_history": 8192,
+      "valid_future_targets": 8192
+    },
+    {
+      "current_with_history": 1014,
+      "cursor": 531,
+      "examples": 1024,
+      "future_targets_with_history": 8192,
+      "valid_future_targets": 8192
+    },
+    {
+      "current_with_history": 1010,
+      "cursor": 532,
+      "examples": 1024,
+      "future_targets_with_history": 8192,
+      "valid_future_targets": 8192
+    },
+    {
+      "current_with_history": 1016,
+      "cursor": 533,
+      "examples": 1024,
+      "future_targets_with_history": 8192,
+      "valid_future_targets": 8192
+    },
+    {
+      "current_with_history": 1014,
+      "cursor": 534,
+      "examples": 1024,
+      "future_targets_with_history": 8192,
+      "valid_future_targets": 8192
+    },
+    {
+      "current_with_history": 1016,
+      "cursor": 535,
+      "examples": 1024,
+      "future_targets_with_history": 8192,
+      "valid_future_targets": 8192
+    },
+    {
+      "current_with_history": 1013,
+      "cursor": 536,
+      "examples": 1024,
+      "future_targets_with_history": 8192,
+      "valid_future_targets": 8192
+    },
+    {
+      "current_with_history": 1012,
+      "cursor": 537,
+      "examples": 1024,
+      "future_targets_with_history": 8192,
+      "valid_future_targets": 8192
+    },
+    {
+      "current_with_history": 1014,
+      "cursor": 538,
+      "examples": 1024,
+      "future_targets_with_history": 8192,
+      "valid_future_targets": 8192
+    },
+    {
+      "current_with_history": 1013,
+      "cursor": 539,
+      "examples": 1024,
+      "future_targets_with_history": 8192,
+      "valid_future_targets": 8192
+    },
+    {
+      "current_with_history": 1013,
+      "cursor": 540,
+      "examples": 1024,
+      "future_targets_with_history": 8192,
+      "valid_future_targets": 8192
+    },
+    {
+      "current_with_history": 1013,
+      "cursor": 541,
+      "examples": 1024,
+      "future_targets_with_history": 8192,
+      "valid_future_targets": 8192
+    },
+    {
+      "current_with_history": 1016,
+      "cursor": 542,
+      "examples": 1024,
+      "future_targets_with_history": 8192,
+      "valid_future_targets": 8192
+    },
+    {
+      "current_with_history": 1013,
+      "cursor": 543,
+      "examples": 1024,
+      "future_targets_with_history": 8192,
+      "valid_future_targets": 8192
+    },
+    {
+      "current_with_history": 1016,
+      "cursor": 544,
+      "examples": 1024,
+      "future_targets_with_history": 8192,
+      "valid_future_targets": 8192
+    },
+    {
+      "current_with_history": 1016,
+      "cursor": 545,
+      "examples": 1024,
+      "future_targets_with_history": 8192,
+      "valid_future_targets": 8192
+    },
+    {
+      "current_with_history": 1015,
+      "cursor": 546,
+      "examples": 1024,
+      "future_targets_with_history": 8192,
+      "valid_future_targets": 8192
+    },
+    {
+      "current_with_history": 1016,
+      "cursor": 547,
+      "examples": 1024,
+      "future_targets_with_history": 8192,
+      "valid_future_targets": 8192
+    },
+    {
+      "current_with_history": 1010,
+      "cursor": 548,
+      "examples": 1024,
+      "future_targets_with_history": 8192,
+      "valid_future_targets": 8192
+    },
+    {
+      "current_with_history": 1013,
+      "cursor": 549,
+      "examples": 1024,
+      "future_targets_with_history": 8192,
+      "valid_future_targets": 8192
+    }
+  ],
+  "output_relative": "benchmarks/gpu003-3341603e891e1dbac9d7",
+  "passed": true,
+  "protocol": {
+    "amendment": {
+      "all_attempts_declared_round_bound_dollars": "4.40328000",
+      "change": "Canonicalize the mounted data path before exact parent provenance comparison. No scientific, input-content, checkpoint or selection changes.",
+      "failure_receipt": "../attempt01_failure.json",
+      "prior_specification": "../preregister.json"
+    },
+    "arms": [
+      {
+        "compile": "fresh",
+        "dtype": "bfloat16",
+        "id": "production_control",
+        "norm": "eager",
+        "prefetch": "step-start",
+        "remat_bt4": true,
+        "storage": "checkpoint",
+        "timeout": 480
+      },
+      {
+        "compile": "fresh",
+        "dtype": "bfloat16",
+        "id": "fp32_storage_control",
+        "norm": "eager",
+        "prefetch": "step-start",
+        "remat_bt4": true,
+        "storage": "float32",
+        "timeout": 480
+      },
+      {
+        "compile": "fresh-bt4",
+        "dtype": "bfloat16",
+        "id": "bf16_compiled",
+        "norm": "eager",
+        "prefetch": "step-start",
+        "remat_bt4": true,
+        "storage": "float32",
+        "timeout": 800
+      },
+      {
+        "compile": "fresh-bt4",
+        "dtype": "float16",
+        "id": "fp16_compiled",
+        "norm": "eager",
+        "prefetch": "step-start",
+        "remat_bt4": true,
+        "storage": "float32",
+        "timeout": 800
+      },
+      {
+        "compile": "fresh",
+        "dtype": "bfloat16",
+        "id": "fused_norm",
+        "norm": "eager-fused-backward",
+        "prefetch": "step-start",
+        "remat_bt4": true,
+        "storage": "checkpoint",
+        "timeout": 480
+      },
+      {
+        "compile": "fresh",
+        "dtype": "bfloat16",
+        "id": "delayed_prefetch",
+        "norm": "eager",
+        "prefetch": "after-forward",
+        "remat_bt4": true,
+        "storage": "checkpoint",
+        "timeout": 480
+      },
+      {
+        "compile": "fresh",
+        "dtype": "bfloat16",
+        "id": "fused_delayed",
+        "norm": "eager-fused-backward",
+        "prefetch": "after-forward",
+        "remat_bt4": true,
+        "storage": "checkpoint",
+        "timeout": 480
+      },
+      {
+        "compile": "fresh-bt4",
+        "dtype": "float16",
+        "id": "fp16_less_remat",
+        "norm": "eager",
+        "prefetch": "step-start",
+        "remat_bt4": false,
+        "storage": "float32",
+        "timeout": 800
+      }
+    ],
+    "attempt": 2,
+    "batch_size": 1024,
+    "budget": {
+      "max_concurrent_gpus": 1,
+      "outer_dollars": "42.50",
+      "retries": 0,
+      "round_cap_dollars": "4.50",
+      "stop_dollars": "34.00"
+    },
+    "checkpoint_manifest_sha256": "695cc76658fddcfaf4a6ec7fe574cd98575d664c573b2997003d22c74dcea6dc",
+    "checkpoint_relative": "runs/hh002-hero-history-0fe540075e5361da6c25/checkpoints/update00000500",
+    "checkpoint_state_sha256": "fd6b25fe0ab8281208dd1be6819290193b963e5d13f2326d3fb5a57079b5e384",
+    "created_utc": "2026-10-03",
+    "dataset_manifest_sha256": "d9003b1d3a5bcebfc5ece8f4f5340d25369bab53fcda68c4bf9965c45019278e",
+    "dataset_relative": "datasets/hh002-history-368190a511fd6d5dd51c",
+    "declared_bounds": {
+      "preflight": "0.10550400",
+      "sweep": "4.19227200"
+    },
+    "design": {
+      "controls": "All arms retain the existing Hero cosine schedule and identical stochastic training choices for updates 501-550. The selected production WSD continuation is separate. This window is still within warmup and cannot validate long stable-phase behavior.",
+      "measured": "Thirty warm full optimizer steps 511-540. Include prefetch wait, transfers, full forward/backward, unscale, optimizer, CPU scalar copies and logging. Exclude restore/first10, checkpoint545, validation and hash audit. No batch reduction on OOM. Record failures, cold timing, memory, full train traces.",
+      "parent": "Strictly restore the immutable HH-002 update-500 model plus all optimizer moments/counters before any explicit fork; source training files stay unchanged.",
+      "recovery": "Every successful main arm writes container-ephemeral full recovery545. Selected candidate (or baseline if none qualifies) reruns545->550 in a fresh process, reusing only its compiler cache and checkpoint. Require identical model+moment/counter hashes at550; report common validation equality separately. No unguarded production resume.",
+      "retention": "Compact JSON, metrics, logs, input hashes and checkpoint manifests only on results Volume (<50MiB). Full disposable checkpoints and compiler caches remain container-ephemeral (<40GiB anticipated) and are not selected production assets. Preserve all existing Volume assets.",
+      "rounding": "At update501 report per-backbone-group fraction of nonzero-gradient coordinates whose stored weights remain unchanged. This is only a proxy: nonzero gradients do not prove a nonzero intended update was rounded away. Excluded from measured timing.",
+      "runtime": "Production TF32/high and reduced-precision GEMM reductions enabled for all arms. Each arm fresh process and cold compiler cache, same single L40S, fixed order. No-CUDA-Graphs initial round.",
+      "scope": "No full epoch, search games, runtime adoption, new GPU provider, budget increase or automatic retry.",
+      "selection": "Fastest mean end-to-end candidate with >=1.10x baseline speed and neither DFM root nor native legal validation CE >1.02x baseline. All losses must be finite and all50 optimizer updates succeed. Speed and CE gates are screening heuristics, not significance or promotion claims.",
+      "storage": "The FP32-storage control changes parameter, gradient and optimizer-moment storage together. Its BF16 compute/fresh compile/reduction settings match production. BF16 compiled versus FP32-storage control isolates BT4 compilation. FP16 versus BF16 compiled isolates compute dtype plus fixed FP16 scale128; do not call FP32 storage an optimizer-neutral optimization.",
+      "validation": "All successful arms receive the same fixed 1024-position eager BF16 full-horizon validation at550; parent500 validation once on production control. Diagnostic and already-exposed validation only, no strength claim."
+    },
+    "experiment_id": "GPU-003",
+    "frozen_training_sources": {
+      "chess_dfm_jax/__init__.py": "704df17a42a3fe66f331b6d09e0c2eda5900468e976201ff174409741cb163be",
+      "chess_dfm_jax/analysis/__init__.py": "8cb4ebde6d8df81778acc4e2bd2990e3524d4073a66e14046a56273a12d960e1",
+      "chess_dfm_jax/analysis/bt4_theory.py": "2abcb476c0b8c65f83adee4f661f80491bee55fc53a816e68be9dba715e51db7",
+      "chess_dfm_jax/analysis/jepa_theory.py": "30f00f7191cf27f48f6f222d4f8bc1811f4e37ee9d465475827e6d7e01dd0d45",
+      "chess_dfm_jax/analysis/profile_targets.py": "aaef6528d9e926c574082204667ecd26fdf9d957b9a3e561421da6efe198291d",
+      "chess_dfm_jax/analysis/roofline.py": "57be21590288fc36458360a3ebebbc50eee4d1f331ec58a67ce96094a51f8735",
+      "chess_dfm_jax/data/__init__.py": "7397b6d9eb107d512e215f11f81f7234fc375967a0d9735aa808f3bb856c47f8",
+      "chess_dfm_jax/data/gcs_cache.py": "d8d0d133b3891f73f8f8b757397a152df825c1c80ed8af9aa0588d6ef232e958",
+      "chess_dfm_jax/data/grain_loader.py": "322a2ba71ae2a8c0263248439fddc52c6381a6fcae322f4e63cfbac70b33a8b3",
+      "chess_dfm_jax/data/lc0_sequential.py": "edb92aa09d21fc144257fce2da37f733c240cdfca030ebb53f9b1d5952820531",
+      "chess_dfm_jax/data/leela.py": "5c4befddab7424419302b01a8be6adc6a1809aba8831de2bdc34986a6269c1bb",
+      "chess_dfm_jax/data/pgn.py": "fd012046857514473007a08bfa6c06376c98254b8f87a18a47bb53c779c685d4",
+      "chess_dfm_jax/data/trajectory.py": "f1b3b9cc33abb62b0bc149a7892178d83ce2f7a093f7008f87a3ba6b340e2c12",
+      "chess_dfm_jax/data/trajectory_v3.py": "4a6b0df1671759346c5380b14dfabcff0af6fce43560c46e036ab2a3ec1a0ea1",
+      "chess_dfm_jax/encoding.py": "34620f4064526fb577d8e2fcaa3deecfe18d5907deeee8924902f5dca87d20bd",
+      "chess_dfm_jax/nnx_bt4.py": "b316f214fab577fb7fe5d174f6df2fd30e0d867f595735dc0cc1d71bb1b376fc",
+      "chess_dfm_jax/paths.py": "63b7f0da08b9c646b1911e44adbe96858b98091bd2bc244a80611d8274f177c0",
+      "chess_dfm_jax/policy.py": "700cb8310442564418cd7a431682f7f06e609309a3f585c968ecbc2fa1656bc2",
+      "chess_dfm_jax/policy_attn_map.txt": "788c74f0f006ccefb7924ed808503175252b8fdb7f0efeb858285d907be4961c",
+      "chess_dfm_jax/policy_moves.txt": "eb2483cf8f53bb000dd6ca437c4ecd383b391bb5fee468b6c30f7f167fb591c5",
+      "chess_dfm_jax/proto/__init__.py": "e0313d7ac20b859ae0a365759a54b1729001a37d8783bcc17eef76462c06ab4b",
+      "chess_dfm_jax/proto/net_pb2.py": "548ba30fc623ce6f36bc22b7225040ff2fddc936b96a51cb368ef2552c7f1353",
+      "chess_dfm_jax/reference_bt4.py": "6c55a0d7b50fe59863e21dc4ebe04c4ffaf159b4afa3d621e00101ca206fcacd",
+      "chess_dfm_jax/tracking/__init__.py": "3b609c34b9456f23e8e0578a25843b8cc2ea9ff6b83f0891cb3cba60b1fff66a",
+      "chess_dfm_jax/tracking/wandb.py": "4d08f26cbf41616afbda25e1e7d11c975effe39c060fa9d257669ff890d8c872",
+      "chess_dfm_jax/training/__init__.py": "816916e38ef463d0fac5d7270636a82b2e9d4fc0dc2bbd35d62916427517af79",
+      "chess_dfm_jax/training/checkpoints.py": "a0b482bff22a17d9846a7c9db5a473e96935f1ae021add4c3f64f1b295a40571",
+      "chess_dfm_jax/training/dfm.py": "49d95936e54f2f6f07555529650d3753755d0c41bb089cb4ea3c4ffdfa50fb6a",
+      "chess_dfm_jax/training/jepa.py": "7d1bf784759e759da00476c16dc1a010529f2ab8277abedeb7bca016b988e140",
+      "chess_dfm_jax/training/joint_latent_sasa.py": "2b7f627ba77c8c09cf3a81fa07636545f74de6766c36f97cb2a2a75fce4e276c",
+      "chess_dfm_jax/training/tpu_jobs.py": "87548963df47de5c997d16edf1693236744cf795d86be4a123e9812f311d5c94",
+      "chess_dfm_jax/weights.py": "5089cf10ef8979b981d7b7ba4fb2c7fddd92d49c500bf95d220091a025f231dd",
+      "research/arena_history_trust.py": "646c0e0381a391ddb529b03a0886f67addab0b1546870966dfba38c0acbe7a9d",
+      "research/hero_history_batches.py": "785a9e9d0b29e2850fcbc6d8e042df417d8b6869f48100b155c02f1d17600849",
+      "research/hero_history_data.py": "b3c2daeb9406f024667da690c40ed88d545441e1630dc7aba7d9bc39d5c1fa53",
+      "research/hero_history_subset_data.py": "71a298dbae7df9fd10b5191ae9ef41746614a2a818ee840bf06005697f8606c6",
+      "research/input_contract.py": "260f3166e8ebe61ad27e78080874d899dfe1f40bc500274fd2f7fd8e0d124ff7",
+      "research/prepare.py": "5118ef8e4690fa33d6da296b036c91a42ae5d83a7a50598024801df3710c45f9",
+      "research/train_torch.py": "71f3e2e43180196fef5c5a1abb0d950fa5be3b2fc1473c4f0231ad4771f52794"
+    },
+    "parent_update": 500,
+    "prior_conservative_floor_dollars": "26.47215455",
+    "question": "Which production-batch runtime optimizations are faster, finite and recoverable before Runpod?",
+    "recovery_update": 545,
+    "seed": 0,
+    "source_sha256": "15882528f9e48e8789ce5948392b15b1c7534394f87a9d4646a0a3bcd4256f33",
+    "terminal_update": 550,
+    "timing_updates": [
+      511,
+      540
+    ],
+    "tooling_commit": "4c69d2ea7572eb9aad4c951258a1a0f6b2eafa2c",
+    "training_cursors": [
+      500,
+      501,
+      502,
+      503,
+      504,
+      505,
+      506,
+      507,
+      508,
+      509,
+      510,
+      511,
+      512,
+      513,
+      514,
+      515,
+      516,
+      517,
+      518,
+      519,
+      520,
+      521,
+      522,
+      523,
+      524,
+      525,
+      526,
+      527,
+      528,
+      529,
+      530,
+      531,
+      532,
+      533,
+      534,
+      535,
+      536,
+      537,
+      538,
+      539,
+      540,
+      541,
+      542,
+      543,
+      544,
+      545,
+      546,
+      547,
+      548,
+      549
+    ],
+    "validation": {
+      "batch_size": 64,
+      "batches": 16,
+      "compute": "common eager BF16, same root/native legal CE and full-horizon auxiliary metrics",
+      "seed": 2026072501,
+      "selection": "first 1024 of the HH-002 common 8128-position pool",
+      "split": "validation"
+    },
+    "warmup_updates": [
+      501,
+      510
+    ]
+  },
+  "training_hashes": {
+    "500": "ab213c27df45a77aec80273e80a724eca225ea7fcdeaa8c9a8d86c38587940eb",
+    "501": "c1f1fa3a49febfe4492287aa51ffe4106a93963320119bdaf682a546a99c1503",
+    "502": "f6ed114e88c316d4ba5162618657aa69ed01aaf3a45cca1c09aa6fe5835c8f37",
+    "503": "e01d8621e9936ed6e373f430f804b739149f263180a20407934d5f1eae6366c2",
+    "504": "2c412947d941ba5a7a8c4d6cf442cb1530ef6285b6028af9c1475e9c8c37a6fa",
+    "505": "c8299aa30a3436644a0bc8efec2338d77600a621966847d6adf3009100ff2e8b",
+    "506": "c405d91e848724d77c21e9433426f01f74a2a8f352a2882c1f5107eecc813faf",
+    "507": "0838ce2679eafdc4423b0ace955e0982d84cff1d32c499b171206ba6d868c009",
+    "508": "4491e1ad01e97aa0439f4258f53cddf03920701e6de8c7347967daf330b7b757",
+    "509": "d9b740fac53d7e5dabd3b4ff4fd4812a5e79b92905baa271180b5d9aa4cf2f97",
+    "510": "07bf79f7a15a300919eecb013c80f9e4e8609034c940949fd107ad7bb45a5927",
+    "511": "a9764e2db6566761e7871968f7085af011f188449ae2e5cd563ff766fdf60859",
+    "512": "51709c0b00db40140e8f392764ea55b45a83a8be234b302616179c7ebbf67773",
+    "513": "a8329d0d0197b4bc81e70474713f798fe1a5c37c635436c562414831bcea9a49",
+    "514": "83e51c0d6aa47bde2cebabf5156f67c362639508a2f094dabea31dc7f9e261a3",
+    "515": "81d4cb8af8bd62e5e14729fa9de1e36d3382f0713a4ba8df006b5e84c304ac0c",
+    "516": "831e7dd0d9ed546f91298368f81fd896e615c04d56266283b1e7775d8def5d22",
+    "517": "bf5625f1da5d33df8f7c3a76bcebba244e77fc9af6abb3fcb00ba1a114169c61",
+    "518": "e4859c4bcb67ceb96edf4023a3507e4a98605f562865f0930049618f232c0e90",
+    "519": "1d0eeaad7e24d6aae96356bf35e05f2d750e502da0bfe264b5207cab6630f018",
+    "520": "00f5d89d17063f9213fc5b6232800ab19f83a1693ec79c69fdb4782be1c63629",
+    "521": "fd587aaab5ae8429928c6ce7040e2de9f5fba749bce412571191c042d0f717a5",
+    "522": "33aa5d312ddfa5ec1cf5d6c9f1323b80f860f19594b695716174a04b0033862b",
+    "523": "0967c67061a17fb61447ce3a6d0ffd568cdbf965257b56c0c54276053be7307a",
+    "524": "04ecd9de022b91c5606c0577cf8054f498aa252bad527830364f81b6b1539fa3",
+    "525": "963715fe8f95e9ea59d416a1aa2d9c5e6c32466bc8294bbb53c7ff66314aacf0",
+    "526": "debdb394826c0418105d1888abe9138c2f2f1da05ca7822209362afe43ec05c8",
+    "527": "65a176aa74cd2862b8c0645c6ace3d526b9d68e70d6ae1f32b15fcf7cb0fb957",
+    "528": "65b31b0f2a24fbbb56f5fca4e9d59dd942216afb4ee96e208779835a14f032a7",
+    "529": "ea83d1eccb0446806350945b9bb842184955ccb8b842587fdd253739984bec3a",
+    "530": "c60d7de87375c425738173560f28903ab375e0c1a2f4e0b171b67c732db3840d",
+    "531": "786ae15f824b1f533a6745bd63d7c57f0c8951f706b35392777354928ae958c6",
+    "532": "10066fec2eacdf6d9872b74c2501a25cf67b4e7abc3ec3085c70725127382e45",
+    "533": "340bca4e2095b9bbcb62e0d8280f486c88c536b5f6c7e362657aa21e56839bd6",
+    "534": "4a3906e697e7e5510ced5ef72a60a87dbbf3732c18b13f41f17fb510bd8c7707",
+    "535": "9bc2760939e8d4e4b104bca9039a91edae43c087daf7d4f20881b1a82ca91056",
+    "536": "02d7f36c873ee67b044fdbf3f5ded05f420b470eeca53c2937c25c4d03871cdc",
+    "537": "5fb676dee1f8166840485d5738aad753dba35efbf292e04b36aa706dd5a18544",
+    "538": "87de4079a3923064fd67796bbf756bd212b10dd6aa3c585436f4266bd3e02284",
+    "539": "3592f9240c68812fb85740fa3e582af4762f821729354a6447dbe5615a0428f3",
+    "540": "6c474d17866a569ed00dd12134935b913814d9302c86637831a9ca0d1c3f5c7b",
+    "541": "61867c19cf25b8a2c6e5d1c905a4eecf6a9ba1688ea945654bb5d1e391f745fb",
+    "542": "2896691d02cbcce6b2fed5b4156d09749dd709f3368ef71caf6ead193cf393de",
+    "543": "79cfb00f2b8e9e499846345f6b5157038e5c5eb5994e607f008a7071b04a4585",
+    "544": "8d622f08d76f6ed012a0944784c22199f05c20ccb8b65bf58a035e25846b5606",
+    "545": "ef262e6a824e8e495a0645f6825b2745cc84863ec6a3895d4efea0befec01ec2",
+    "546": "36c0e3ada009748a6f41343932dfcd9405dc8742ef75226be4df87eab9ecfad7",
+    "547": "ae905b6b17dbb5890b121fa365b7c19ac850194cd113162da6cbe72c2d9231e2",
+    "548": "7535f2b2b8ecb48340ee1c54c8876ddf1d88627dd74470bafc849868229cd2a8",
+    "549": "c566dcad42abfcfbf3f0d731b8edc26f08a9706231842f4c4744ee403ee7e528"
+  },
+  "validation_audits": [
+    {
+      "current_with_history": 63,
+      "examples": 64,
+      "future_targets_with_history": 512,
+      "valid_future_targets": 512
+    },
+    {
+      "current_with_history": 62,
+      "examples": 64,
+      "future_targets_with_history": 512,
+      "valid_future_targets": 512
+    },
+    {
+      "current_with_history": 64,
+      "examples": 64,
+      "future_targets_with_history": 512,
+      "valid_future_targets": 512
+    },
+    {
+      "current_with_history": 64,
+      "examples": 64,
+      "future_targets_with_history": 512,
+      "valid_future_targets": 512
+    },
+    {
+      "current_with_history": 63,
+      "examples": 64,
+      "future_targets_with_history": 512,
+      "valid_future_targets": 512
+    },
+    {
+      "current_with_history": 64,
+      "examples": 64,
+      "future_targets_with_history": 512,
+      "valid_future_targets": 512
+    },
+    {
+      "current_with_history": 64,
+      "examples": 64,
+      "future_targets_with_history": 512,
+      "valid_future_targets": 512
+    },
+    {
+      "current_with_history": 64,
+      "examples": 64,
+      "future_targets_with_history": 512,
+      "valid_future_targets": 512
+    },
+    {
+      "current_with_history": 64,
+      "examples": 64,
+      "future_targets_with_history": 512,
+      "valid_future_targets": 512
+    },
+    {
+      "current_with_history": 64,
+      "examples": 64,
+      "future_targets_with_history": 512,
+      "valid_future_targets": 512
+    },
+    {
+      "current_with_history": 63,
+      "examples": 64,
+      "future_targets_with_history": 512,
+      "valid_future_targets": 512
+    },
+    {
+      "current_with_history": 63,
+      "examples": 64,
+      "future_targets_with_history": 512,
+      "valid_future_targets": 512
+    },
+    {
+      "current_with_history": 64,
+      "examples": 64,
+      "future_targets_with_history": 512,
+      "valid_future_targets": 512
+    },
+    {
+      "current_with_history": 64,
+      "examples": 64,
+      "future_targets_with_history": 512,
+      "valid_future_targets": 512
+    },
+    {
+      "current_with_history": 63,
+      "examples": 64,
+      "future_targets_with_history": 512,
+      "valid_future_targets": 512
+    },
+    {
+      "current_with_history": 63,
+      "examples": 64,
+      "future_targets_with_history": 512,
+      "valid_future_targets": 512
+    }
+  ]
+}

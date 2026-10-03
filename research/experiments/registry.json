@@ -15,10 +15,12 @@
     {
       "id": "GPU-003",
       "name": "Pre-Runpod full-batch runtime and checkpoint recovery tests",
-      "status": "preregistered_cpu_verification_pending",
+      "status": "cpu_verified_gpu_sweep_ready",
       "depends_on": ["GPU-001", "GPU-002", "HH-002"],
       "specification": "research/analysis/gpu003_pre_runpod_20261003/preregister.json",
-      "scope": "Eight disposable L40S batch-1024 arms, matched 50-update training and 1024-position common validation; selected candidate fresh-process recovery check. CPU plus GPU declared bound $4.297776 within $4.50 round cap. No production runtime or WSD continuation launched."
+      "execution_specification": "research/analysis/gpu003_pre_runpod_20261003/attempt02/preregister.json",
+      "preflight": "research/analysis/gpu003_pre_runpod_20261003/attempt02/preflight.json",
+      "scope": "Eight disposable L40S batch-1024 arms, matched 50-update training and 1024-position common validation; selected candidate fresh-process recovery check. All declared attempts including corrected CPU preflight total $4.403280 within $4.50 round cap. No production runtime or WSD continuation launched."
     },
     {
       "id": "HH-003",
