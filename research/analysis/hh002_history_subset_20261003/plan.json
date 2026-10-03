@@ -1,0 +1,60 @@
+{
+  "experiment_id": "HH-002",
+  "name": "Hero recipe with full history, verified reduced original data",
+  "parent": "HH-001",
+  "authorization": "User requested launch of the contracted selection and W&B train/validation loss comparisons.",
+  "initialization": "Fresh raw BT4 plus original seed-0 auxiliary modules; no continuation from Hero1",
+  "reference_label": "hero-training-phase1-hero1_exact-l40s-fae7b0ccef5ca3668ed5",
+  "reference_checkpoint_sha256": "e518083ee5476e7ff15e7c34caf9c0505f8fb7d330ea5a6882e4e9e5c1ef1912",
+  "recipe": "hero",
+  "train_steps": 553,
+  "batch_size": 1024,
+  "train_examples": 566272,
+  "seed": 0,
+  "history": "Full current and future LC0 history; retain standard and Chess960 roots",
+  "data": {
+    "selection_audit": "research/analysis/hh001_history_20261003/contracted_selection_audit.json",
+    "selection": "Original seed-0 first-554-shard order, remove only frozen unresolved-history rows, then take first 566272 surviving rows; no repeats or substitutes",
+    "history_exclusions_train": 342,
+    "batching_tail_exclusions_train": 682,
+    "validation_selection": "Original ascending fast pool, remove frozen 8 unresolved rows, take first 8128 surviving positions",
+    "history_exclusions_validation": 8,
+    "batching_tail_exclusions_validation": 56,
+    "validation_examples": 8128,
+    "targets_actions_masks_unchanged": true
+  },
+  "optimizer": {
+    "precision": "parameter BF16, same as Hero1",
+    "main_lr": 0.0005,
+    "encoder_lr": 0.000016666666666666667,
+    "schedule": "Original example-count cosine; not rescaled to the short run",
+    "schedule_total_examples": 28343296,
+    "warmup_examples": 566866,
+    "weight_decay": 0.01,
+    "weight_decay_mode": "Original selective policy",
+    "legality_coeff": 2.0,
+    "future_wdl_coeff": 0.25,
+    "policy_distillation": 0.0
+  },
+  "logging": {
+    "train": "Every update: raw metrics JSONL and W&B; graph by examples and updates",
+    "validation_updates": [100,200,300,400,500,553],
+    "components": "Full recorded DFM, JEPA, SIGReg, legality and WDL metrics; do not compare train and validation totals as identical estimators",
+    "wandb": "Online only with a supplied Modal secret; otherwise offline files persisted for later sync",
+    "historical_train_curve": "Import original Hero1 curve, explicitly labelled non-matched training batches",
+    "historical_validation_curve": "Reevaluate available original Hero1 checkpoints 100,200,300,400,500,554 on identical retained validation rows and RNG seed, with history zeroed to match their training",
+    "comparison_limit": "Different training subset, batching and terminal step; descriptive comparison, not causal history-only ablation. JEPA targets themselves change with history; compare policy CE/accuracy separately."
+  },
+  "retention": "Final model-only checkpoint and update-500/final recovery states; compact evidence and W&B files. No deletions.",
+  "budget": {
+    "cpu_attempt_cap_dollars": "1.10",
+    "gpu_attempt_cap_dollars": "4.20",
+    "gpu": "L40S",
+    "timeout_seconds": 5400,
+    "startup_timeout_seconds": 900,
+    "retries": 0,
+    "new_launch_stop_dollars": "34.00",
+    "outer_budget_dollars": "42.50",
+    "rule": "Fresh live usage plus conservative previous-attempt floor; complete CPU verification before GPU allocation. No search or arenas in this attempt."
+  }
+}
