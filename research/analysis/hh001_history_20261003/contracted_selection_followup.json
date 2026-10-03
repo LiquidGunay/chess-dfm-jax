@@ -1,0 +1,47 @@
+{
+  "date_utc": "2026-10-03",
+  "parent_experiment": "HH-001",
+  "status": "contracted_selection_verified_training_not_launched",
+  "user_direction": "Check the original LC0 source; a contracted dataset is acceptable if only a few examples are missing.",
+  "audit_source_commit": "d60fa11",
+  "audit": "contracted_selection_audit.json",
+  "source_checks": [
+    {
+      "url": "https://storage.lczero.org/files/",
+      "result": "Public directory listing reachable; links training_pgns/."
+    },
+    {
+      "url": "https://storage.lczero.org/files/training_pgns/",
+      "result": "GET returns an empty public index (parent-directory link only)."
+    },
+    {
+      "url": "https://storage.lczero.org/files/training_pgns/test80/",
+      "result": "GET and HEAD return 404; no alternate source-game archive recovered."
+    }
+  ],
+  "verified_selection": {
+    "original_training_examples": 567296,
+    "training_examples_excluded": 342,
+    "training_examples_retained": 566954,
+    "original_validation_examples": 8192,
+    "validation_examples_excluded": 8,
+    "validation_examples_retained": 8184,
+    "excluded_training_ply_range": [102, 268],
+    "excluded_validation_ply_range": [90, 293]
+  },
+  "interpretation": "Small loss of coverage, but exclusions are not random: omitted promotion spans affect late-game histories. Retained examples keep original labels and fully verified current/future encodes. This does not constitute an exact data-matched history-only ablation.",
+  "checks": {
+    "tests_passed": 87,
+    "gpu_launched": false,
+    "original_assets_modified": false,
+    "hh001_exact_plan_modified": false,
+    "training_manifest_emitted": false
+  },
+  "next_implementation": [
+    "Create a separate reduced-data experiment specification; preserve HH-001's exact-matching requirements.",
+    "Freeze the excluded row identities and explicit minibatch/remainder handling before training; do not silently pad, repeat, replace, or drop more rows.",
+    "Stage and checksum the contracted dataset with full CPU verification before any GPU allocation.",
+    "Compare validation metrics on an identical retained pool; historical full-pool losses are not directly paired results.",
+    "Use a fresh budget-gated Modal launch, retaining the approved per-attempt and workspace caps."
+  ]
+}
