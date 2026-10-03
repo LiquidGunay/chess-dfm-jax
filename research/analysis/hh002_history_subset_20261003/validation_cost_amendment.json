@@ -1,0 +1,12 @@
+{
+  "experiment_id": "HH-002",
+  "timing": "Before any HH-002 GPU launch or training result; original plan retained unchanged",
+  "reason": "Historical full-8192-position validation took 728.54 seconds. Six full pools for each model would exceed the 5400-second GPU cap when added to training.",
+  "fixed_intermediate_pool": "First 1024 of the frozen 8128 validation positions, in the same order and with the same RNG seed for both models",
+  "intermediate_updates": [100,200,300,400,500],
+  "terminal_pool_examples": 8128,
+  "terminal_updates": {"full_history":553,"historical_no_history":554},
+  "tracking": "val/* contains the shared 1024-position learning curve; val_full/* contains the separate full-pool terminal comparison. Never connect these as a single fixed-pool curve.",
+  "unchanged": "Training selection, initialization, optimizer, loss, checkpoint policy and $4.20 GPU cap",
+  "estimate": "Approximately 30 minutes training plus 20 minutes validation per model, with remaining time reserved for compilation/loading. Hard timeout still bounds the attempt."
+}
