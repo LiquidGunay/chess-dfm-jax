@@ -1,10 +1,11 @@
 """Summarize GPU-002 without equating numerical agreement with chess strength."""
 import argparse
+import hashlib
 import json
 from pathlib import Path
 import statistics
 
-from research.precision_compile_benchmark import finalize_stats, merge_stats, tensor_stats, write_json
+from research.precision_compile_benchmark import finalize_stats, tensor_stats, write_json
 
 
 def summarize_arm(result, batch_size):
@@ -31,6 +32,8 @@ def summarize_arm(result, batch_size):
         "native_policy_legal_top1_agreement_to_fp32_eager_first_batch": result["native_policy_legal_top1_agreement"],
         "first_batch_gradient_cosine_to_fp32_eager": batches[0]["gradients_vs_fp32_eager"]["groups"]["all"]["cosine"],
         "first_batch_gradient_relative_l2_to_fp32_eager": batches[0]["gradients_vs_fp32_eager"]["groups"]["all"]["relative_l2"],
+        "first_batch_gradient_groups_to_fp32_eager": {k:{"cosine":v["cosine"], "relative_l2":v["relative_l2"]}
+            for k,v in batches[0]["gradients_vs_fp32_eager"]["groups"].items()},
         "layer_trace_vs_fp32_eager": {k:{"relative_l2":v["relative_l2"], "cosine":v["cosine"]}
                                       for k,v in result["layer_trace_vs_fp32_eager"].items()}}
     same_dtype = batches[0].get("gradients_vs_same_dtype_eager")
@@ -41,6 +44,11 @@ def summarize_arm(result, batch_size):
 
 def build_summary(root):
     from safetensors.torch import load_file
+    collected = json.loads((root/"completion.json").read_text())
+    for name, identity in collected["artifacts"].items():
+        path = root/name
+        if path.stat().st_size != identity["size_bytes"] or hashlib.sha256(path.read_bytes()).hexdigest() != identity["sha256"]:
+            raise ValueError("Collected artifact changed: "+name)
     protocol = json.loads((root/"preregister.json").read_text())
     completed = json.loads((root/"sweep.json").read_text())
     rows, documents = {}, {}
