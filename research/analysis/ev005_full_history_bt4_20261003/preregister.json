@@ -1,0 +1,157 @@
+{
+  "analysis": {
+    "attribution": "Change in Hero1 p1 pair score when only raw opponent history is restored, on the same openings",
+    "parity_limit": "Uses previously audited Torch weight conversion and LC0-record plane parity, not a new native-LC0 forward-parity comparison.",
+    "primary": "Hero1 p1 versus raw full-history BT4",
+    "rule": "Report all three fixed-size comparisons and paired 95% intervals; no promotion, absolute Elo, or SOTA claim. No optional stopping.",
+    "scope": "Hero1 retains training-matched current-only inputs. Raw BT4 differs only in input history across controls. No search or new training.",
+    "secondary": "Hero1 native policy versus raw full-history BT4",
+    "unit": "complete color-reversed opening pair"
+  },
+  "budget": {
+    "declared_attempt_maximum_dollars": "0.92976000",
+    "launch_month_usage_dollars": "2.68285855",
+    "maximum_simultaneous_attempts": 3,
+    "per_attempt_cap_dollars": "1.00",
+    "rule": "Live usage plus full reservations; zero retries. CPU preflight before GPU.",
+    "smoke_plus_development_attempts": 5,
+    "total_declared_maximum_dollars": "4.6688",
+    "workspace_stop_dollars": "34.00"
+  },
+  "created_utc": "2026-10-03T05:45:00.389835+00:00",
+  "development_edges": [
+    {
+      "candidate": "hero1",
+      "candidate_mode": "dfm",
+      "candidate_passes": 1,
+      "id": "p1_full",
+      "opponent": "raw_full",
+      "opponent_mode": "policy_only",
+      "opponent_passes": 1,
+      "role": "primary"
+    },
+    {
+      "candidate": "hero1",
+      "candidate_mode": "policy_only",
+      "candidate_passes": 1,
+      "id": "policy_full",
+      "opponent": "raw_full",
+      "opponent_mode": "policy_only",
+      "opponent_passes": 1,
+      "role": "secondary_native_policy"
+    },
+    {
+      "candidate": "hero1",
+      "candidate_mode": "dfm",
+      "candidate_passes": 1,
+      "id": "p1_current",
+      "opponent": "raw_current",
+      "opponent_mode": "policy_only",
+      "opponent_passes": 1,
+      "role": "history_attribution_control"
+    }
+  ],
+  "experiment_id": "EV-005",
+  "game_contract": {
+    "additional_ply_cap": 256,
+    "block_pairs": 16,
+    "color_reversed_pairs": true,
+    "complete_board_history_for_adjudication": true,
+    "deterministic_greedy_legal_argmax": true,
+    "device": "L4",
+    "draw_rules": "python-chess normal outcomes with draw claims, or symmetric additional-ply-cap draw",
+    "fault_handling": "illegal actions, exceptions, nonfinite outputs, timeouts, or no representable legal move lose the affected game",
+    "model_specific_input_history": true,
+    "policy_batch_size_cap": 16,
+    "policy_timeout_seconds": 30,
+    "runtime": "native_pytorch",
+    "tier": "hero_development"
+  },
+  "hero1": {
+    "label": "hero-training-phase1-hero1_exact-l40s-fae7b0ccef5ca3668ed5",
+    "plane_history_mode": "current_only_as_preprocessed",
+    "state_sha256": "e518083ee5476e7ff15e7c34caf9c0505f8fb7d330ea5a6882e4e9e5c1ef1912"
+  },
+  "openings": {
+    "asset": "promotion-ply12-n2048-v3",
+    "confirmation_reserve": {
+      "games_not_yet_authorized_by_gate": true,
+      "maximum_pairs": 1024,
+      "start": 1024
+    },
+    "development": {
+      "pairs": 128,
+      "start": 1920
+    },
+    "historical_usage_audit": {
+      "largest_recorded_used_index": 511,
+      "local_json_ranges_stop_exclusive": [
+        [
+          0,
+          16
+        ],
+        [
+          0,
+          128
+        ],
+        [
+          0,
+          256
+        ],
+        [
+          256,
+          384
+        ]
+      ],
+      "remote_arena_directories_checked": 21,
+      "scope": "Tracked analysis contracts and the current Modal training-results arena inventory; this is not proof that no other archive ever used these positions.",
+      "training_overlap": "Source-game disjointness from the newly split Proposal A training corpus must be audited before a held-out confirmation claim. Development results remain descriptive."
+    },
+    "history_file_sha256": "bac58cc7380d9a4173e7618a765917aa0990355e1f8e460196affbe28580ed37",
+    "history_manifest_sha256": "d8781efb5d76066bcf2ce2e9ab2897f3261b20f7c4488c90992a8eadcc918a4b",
+    "pool_file_sha256": "5632cc726112c2ab700e0f4d935fa83d58418b406fc100262f3aa19ce3befe2e",
+    "pool_sha256": "e750e87643c482d28b4201668bd355234fe1fb27f2a690bf784706b1ddd37459",
+    "smoke": {
+      "pairs": 16,
+      "start": 1904
+    }
+  },
+  "question": "Does Hero1 beat raw BT4 with its full historical inputs, and how much did missing history affect the anchor?",
+  "raw_current": {
+    "label": "raw-bt4",
+    "plane_history_mode": "current_only_as_preprocessed",
+    "state_sha256": "61e43e98d2c4cb747498c6bc13a5bbb3b07e985d3f5d87f0351a4db855fa0651"
+  },
+  "raw_full": {
+    "label": "raw-bt4",
+    "plane_history_mode": "lc0_full_history_as_preprocessed",
+    "state_sha256": "61e43e98d2c4cb747498c6bc13a5bbb3b07e985d3f5d87f0351a4db855fa0651"
+  },
+  "smoke_edges": [
+    {
+      "candidate": "hero1",
+      "candidate_mode": "dfm",
+      "candidate_passes": 1,
+      "id": "smoke_p1_full",
+      "opponent": "raw_full",
+      "opponent_mode": "policy_only",
+      "opponent_passes": 1,
+      "role": "plumbing"
+    },
+    {
+      "candidate": "hero1",
+      "candidate_mode": "policy_only",
+      "candidate_passes": 1,
+      "id": "smoke_policy_full",
+      "opponent": "raw_full",
+      "opponent_mode": "policy_only",
+      "opponent_passes": 1,
+      "role": "plumbing"
+    }
+  ],
+  "tooling": {
+    "arena_source_tree_sha256": "87fb926d5d450ee82fbee80621afda17e472bc05478f46a0683c668a9320ffa4",
+    "input_preflight_file": "input_preflight.json",
+    "input_preflight_sha256": "1b75756215eac0806b9448e1db8b56f84e37515d109cd485ef70f2aa78626b0c"
+  }
+}

@@ -1,6 +1,6 @@
 {
   "schema_version": "chess-dfm-experiment-registry-v1",
-  "updated_utc": "2026-10-02",
+  "updated_utc": "2026-10-03",
   "active_branch": "research/modal-experiments",
   "runtime": "pytorch",
   "representation_strength_threshold": {
@@ -12,6 +12,15 @@
     "freeze_before": "architecture_comparisons"
   },
   "experiments": [
+    {
+      "id": "EV-005",
+      "name": "Hero1 versus full-history raw BT4 with matched current-only control",
+      "status": "cpu_preflight_passed_frozen_ready_for_smoke",
+      "depends_on": ["EV-003"],
+      "specification": "research/analysis/ev005_full_history_bt4_20261003/preregister.json",
+      "execution_record": "research/analysis/ev005_full_history_bt4_20261003/runs.json",
+      "scope": "Hero1 p1 and native policy versus raw BT4 with full history; matched p1/current-only control. No training, no search, no SOTA claim."
+    },
     {
       "id": "EV-004",
       "name": "Retained terminal Hero versus matched-recipe Hero1 reference",

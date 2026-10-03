@@ -1,0 +1,283 @@
+{
+  "development": [
+    1920,
+    2048
+  ],
+  "limitation": "No overlap in retained state contracts; historical unretained exposure cannot be excluded. Development-only, not confirmation.",
+  "retained_contracts": [
+    {
+      "pairs": 128,
+      "path": "research/analysis/ev001_modal_20260930/results/hero1_raw/state.json",
+      "sha256": "0565f0c72823b802f6480b8d8f517f85f24ad1430cc348f0eb7b226f688d48ee",
+      "start": 384
+    },
+    {
+      "pairs": 128,
+      "path": "research/analysis/ev001_modal_20260930/results/p1_hero1/state.json",
+      "sha256": "8adaabeb69722d324732e7f68edec65fb32c17c4c6b0581e756d9cd83f8e40c1",
+      "start": 384
+    },
+    {
+      "pairs": 128,
+      "path": "research/analysis/ev001_modal_20260930/results/p1_raw/state.json",
+      "sha256": "d8a0e7ad791883840936910598db0838ba211a0263c3dd86845998780e1fb13a",
+      "start": 384
+    },
+    {
+      "pairs": 128,
+      "path": "research/analysis/ev001_modal_20260930/results/p8_hero1/state.json",
+      "sha256": "66e82afebce5c5283afe9478e9644c7538e7d129fc0c16d4dd2dbc8bc9eebf80",
+      "start": 384
+    },
+    {
+      "pairs": 128,
+      "path": "research/analysis/ev001_modal_20260930/results/p8_p1/state.json",
+      "sha256": "81ffe1ca372a7dd777efe716eb1bc84a315d108e4b205e101e4dc1d5c276e028",
+      "start": 384
+    },
+    {
+      "pairs": 128,
+      "path": "research/analysis/ev001_modal_20260930/results/p8_raw/state.json",
+      "sha256": "4fb1f339df3e8ce617b1729f9dcf4c966e311e344fd37f53a84264be7198c261",
+      "start": 384
+    },
+    {
+      "pairs": 128,
+      "path": "research/analysis/ev001_modal_20260930/results/policy_hero1/state.json",
+      "sha256": "339dec0b2b0ec7839049b519919865a0775b76d07d8dc742210f282fb9930caa",
+      "start": 384
+    },
+    {
+      "pairs": 128,
+      "path": "research/analysis/ev001_modal_20260930/results/policy_raw/state.json",
+      "sha256": "52494a3e22d6c38bc337594626a6040d4d57ab39cefca8da4cd5c2b370d18b84",
+      "start": 384
+    },
+    {
+      "pairs": 16,
+      "path": "research/analysis/ev001_modal_20260930/results/smoke_p1_raw/state.json",
+      "sha256": "4a6f09e1dc09921d0df6e5dd5e9bfea81c3bb2d174d907feead9f69c64dccbca",
+      "start": 0
+    },
+    {
+      "pairs": 16,
+      "path": "research/analysis/ev001_modal_20260930/results/smoke_p8_hero1/state.json",
+      "sha256": "3f51e148a68a31fd9ffb554389fa15aa327bfcf2a5285ac4243e94687d0defd2",
+      "start": 0
+    },
+    {
+      "pairs": 128,
+      "path": "research/analysis/ev003_history_corrected_20261002/results/hero1_raw/state.json",
+      "sha256": "c2fec59e7e66be0d33bb0bf50be2cd7ecb43be11fe3ac35a90e8a2b1664e7fd6",
+      "start": 384
+    },
+    {
+      "pairs": 128,
+      "path": "research/analysis/ev003_history_corrected_20261002/results/p1_hero1/state.json",
+      "sha256": "29eaf7f1ac41ca1ce25f676667f3b012ac251e3c11245e6d388d58c95ad31539",
+      "start": 384
+    },
+    {
+      "pairs": 128,
+      "path": "research/analysis/ev003_history_corrected_20261002/results/p1_raw/state.json",
+      "sha256": "eb9816b5ffbba3598504440f95e5c0191476af745f95d1cdfd7a27d4d0550bf6",
+      "start": 384
+    },
+    {
+      "pairs": 128,
+      "path": "research/analysis/ev003_history_corrected_20261002/results/p8_hero1/state.json",
+      "sha256": "d914099e29afea5d62bd7db5fc28f8d599296bee0bba411483d87147bc44b095",
+      "start": 384
+    },
+    {
+      "pairs": 128,
+      "path": "research/analysis/ev003_history_corrected_20261002/results/p8_p1/state.json",
+      "sha256": "e8fdb7d4fe25e528f5a26315fed1bb2ecca342e232f33f4f88c86a2c7d3b3799",
+      "start": 384
+    },
+    {
+      "pairs": 128,
+      "path": "research/analysis/ev003_history_corrected_20261002/results/p8_raw/state.json",
+      "sha256": "fc552c80bdf69f605d34f6877f9ee6f22677df72801897d4817453101b5d36d5",
+      "start": 384
+    },
+    {
+      "pairs": 128,
+      "path": "research/analysis/ev003_history_corrected_20261002/results/policy_hero1/state.json",
+      "sha256": "698097a216837b12d4b676863e6a3e6bbc445ffc2a4fcc8d4f0abe6427f1dbd8",
+      "start": 384
+    },
+    {
+      "pairs": 128,
+      "path": "research/analysis/ev003_history_corrected_20261002/results/policy_raw/state.json",
+      "sha256": "7513222773ffc86e966955f12948b09fe77f0949ce5425f1a4f863f9ece781b0",
+      "start": 384
+    },
+    {
+      "pairs": 16,
+      "path": "research/analysis/ev003_history_corrected_20261002/results/smoke_p1_raw/state.json",
+      "sha256": "e1878b268b8e1fea26b93c17edb57fe6a12342e2093489efae19dfd98530534c",
+      "start": 0
+    },
+    {
+      "pairs": 16,
+      "path": "research/analysis/ev003_history_corrected_20261002/results/smoke_p8_hero1/state.json",
+      "sha256": "a5e60f8eafccd6f43586ab56496ef00fff49ed2643d003a3ad1aa291c2451a80",
+      "start": 0
+    },
+    {
+      "pairs": 128,
+      "path": "research/analysis/ev004_terminal_hero_20261002/results/p1_hero1/state.json",
+      "sha256": "6702480e835f804e487697c33106db44faf128d0b57d6ad2c442db485ca07fca",
+      "start": 384
+    },
+    {
+      "pairs": 128,
+      "path": "research/analysis/ev004_terminal_hero_20261002/results/p1_raw/state.json",
+      "sha256": "5440cf23aa98b9d4e293c84362d48d7e4c004b0a0d7e58f386069a4c5ba7557b",
+      "start": 384
+    },
+    {
+      "pairs": 128,
+      "path": "research/analysis/ev004_terminal_hero_20261002/results/p8_hero1/state.json",
+      "sha256": "a2cab6a4efb0f580054fca8eb0637f01d32c4801b694af7406e161eba0ab8aa7",
+      "start": 384
+    },
+    {
+      "pairs": 128,
+      "path": "research/analysis/ev004_terminal_hero_20261002/results/p8_p1/state.json",
+      "sha256": "7866d293fe4648c043e3b0acd8c45b16f91c3e767f10a18bd4ba0139c9fa8299",
+      "start": 384
+    },
+    {
+      "pairs": 128,
+      "path": "research/analysis/ev004_terminal_hero_20261002/results/p8_raw/state.json",
+      "sha256": "ce90f6b8173d478dc430ec38728ded081afa84d24e66a286ccf01d8ab434002c",
+      "start": 384
+    },
+    {
+      "pairs": 128,
+      "path": "research/analysis/ev004_terminal_hero_20261002/results/policy_hero1/state.json",
+      "sha256": "5273547a55b5b1454ba55cc8cba8378a6d33acf1efa7dbd622b5d61ce6529708",
+      "start": 384
+    },
+    {
+      "pairs": 128,
+      "path": "research/analysis/ev004_terminal_hero_20261002/results/policy_policy/state.json",
+      "sha256": "8dd3ae75eecdaf43787eca4627897aeaacf1af4f5bbb032807225c92790b031e",
+      "start": 384
+    },
+    {
+      "pairs": 128,
+      "path": "research/analysis/ev004_terminal_hero_20261002/results/policy_raw/state.json",
+      "sha256": "386ec4ced9ddd6d3ee061437f5e2886927565d632597aefbce7e42b18c1e66fc",
+      "start": 384
+    },
+    {
+      "pairs": 16,
+      "path": "research/analysis/ev004_terminal_hero_20261002/results/smoke_p1_raw/state.json",
+      "sha256": "fa2aa90dbebed72d3c7981632582f32709a3a97300b149d634273d25d23a6319",
+      "start": 0
+    },
+    {
+      "pairs": 16,
+      "path": "research/analysis/ev004_terminal_hero_20261002/results/smoke_p8_hero1/state.json",
+      "sha256": "562cc979e5b7298e4d59d7298969b1c8d3506ee245e56a10b34d93a0b7ec864d",
+      "start": 0
+    },
+    {
+      "pairs": 16,
+      "path": "research/analysis/hero_v2_phase1/arena/v2_fp32_1_10_vs_hero1/state.json",
+      "sha256": "aa7b7f8256cd4e7084000c0abb1e9f4d171a6f9a27a70ff415f1fc5eb3aa0678",
+      "start": 0
+    },
+    {
+      "pairs": 128,
+      "path": "research/analysis/hero_v2_phase1/arena/v2_fp32_1_12_legality0_distill1_policy_only_vs_hero1_policy_only/128p/state.json",
+      "sha256": "acb038612832c46ae747f134b56e281a27f7774b06f43d96995d472c582eaee0",
+      "start": 0
+    },
+    {
+      "pairs": 128,
+      "path": "research/analysis/hero_v2_phase1/arena/v2_fp32_1_12_legality0_distill1_vs_hero1/128p/state.json",
+      "sha256": "b9a143e95bd698c64538731e3655c5faba9bd61060180f37a8835d04f37b2215",
+      "start": 0
+    },
+    {
+      "pairs": 128,
+      "path": "research/analysis/hero_v2_phase1/arena/v2_fp32_1_12_legality0_hero1distill1_policy_only_vs_hero1_policy_only/128p/state.json",
+      "sha256": "f89bbdf88b8a6bae8ad3eeedc862b95bb99a3e5f3a6fd129ffb8cf735009b8ab",
+      "start": 0
+    },
+    {
+      "pairs": 128,
+      "path": "research/analysis/hero_v2_phase1/arena/v2_fp32_1_12_legality0_hero1distill1_vs_hero1/128p/state.json",
+      "sha256": "37dd55a464b5f2ca6599fdfd094f44e5487e6334a4f401ee1d1cee99f28ec36e",
+      "start": 0
+    },
+    {
+      "pairs": 128,
+      "path": "research/analysis/hero_v2_phase1/arena/v2_fp32_1_12_legality0_vs_hero1/128p/state.json",
+      "sha256": "095a54c2c5f95359c6622fdf0c6295cfa896321ed2e1abcdde23212900dc66e3",
+      "start": 0
+    },
+    {
+      "pairs": 128,
+      "path": "research/analysis/hero_v2_phase1/arena/v2_fp32_1_12_vs_hero1/128p/state.json",
+      "sha256": "de47cc0aefa4e5a37a6625f10706d0ca9b1fb0c2e7936c5b49ec6e03a0b15265",
+      "start": 0
+    },
+    {
+      "pairs": 16,
+      "path": "research/analysis/hero_v2_phase1/arena/v2_fp32_1_12_vs_hero1/16p/state.json",
+      "sha256": "ed9e9a478d101a9d3f418b945fdaa67329e84157927152abd4d4baed9e52b429",
+      "start": 0
+    },
+    {
+      "pairs": 16,
+      "path": "research/analysis/hero_v2_phase1/arena/v2_fp32_1_30_vs_hero1/state.json",
+      "sha256": "15a5cf471904065fe19ce5a20f42e0ccafaddcc72642fca978ca0ec269018a4a",
+      "start": 0
+    },
+    {
+      "pairs": 128,
+      "path": "research/analysis/hero_v2_phase1/arena/v2_main_fp32_1_30_vs_hero1/128p/state.json",
+      "sha256": "a1d29523c20e7035cd6e5ec18279ee1f4452f2375b76dccb27f8dc902ad586f4",
+      "start": 0
+    },
+    {
+      "pairs": 128,
+      "path": "research/analysis/hero_v2_phase1/u1024/full_loop_arenas/candidate1_vs_control1/hero-arena-128p-o256-cpass1-opass1-101a7d2daf1b40a98215/state.json",
+      "sha256": "4ec019a4b659e619cbb8596b88b675b821b65f83624ad2a355515de8f9ec1563",
+      "start": 256
+    },
+    {
+      "pairs": 128,
+      "path": "research/analysis/hero_v2_phase1/u1024/full_loop_arenas/candidate8_vs_candidate1/hero-arena-128p-o256-cpass8-opass1-9f92b515ce56c3632002/state.json",
+      "sha256": "66bd8d4bb5495b96439481d2df25650692e92e535b489972e28d09ee3eb51335",
+      "start": 256
+    },
+    {
+      "pairs": 128,
+      "path": "research/analysis/hero_v2_phase1/u1024/full_loop_arenas/candidate8_vs_control1/hero-arena-128p-o256-cpass8-opass1-8b10cdc14c0e3c4aad80/state.json",
+      "sha256": "d481006e7d1711d17c791c11801170384f04ab92e318b230197be0a7aceab1e8",
+      "start": 256
+    },
+    {
+      "pairs": 128,
+      "path": "research/analysis/hero_v2_phase1/u1024/full_loop_arenas/candidate8_vs_control8/hero-arena-128p-o256-cpass8-opass8-365e2b1cfc2b1acccfe7/state.json",
+      "sha256": "5dfccfb1df2c7410623fc0ac5ac122d8c3bb50f391c9e5608e22294ae0368c97",
+      "start": 256
+    },
+    {
+      "pairs": 128,
+      "path": "research/analysis/hero_v2_phase1/u1024/full_loop_arenas/control1_vs_control8_exploratory/hero-arena-128p-o256-cpass1-opass8-d405f464c054e0769ea4/state.json",
+      "sha256": "52827e9992f9a921a99c83cc1c5232dd3cea98a111a9f78c078f658f5d210e33",
+      "start": 256
+    }
+  ],
+  "smoke": [
+    1904,
+    1920
+  ]
+}

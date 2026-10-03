@@ -1,0 +1,9 @@
+{
+  "experiment_id": "EV-005",
+  "kind": "nonbehavioral_metadata_clarification",
+  "reason": "The frozen protocol copied EV-003 opening metadata, including its historical confirmation-reserve description. EV-005's explicitly frozen smoke/development allocations are operative; no launch or outcome rule changes.",
+  "allocated_to_EV005": {"smoke_start": 1904, "smoke_pairs": 16, "development_start": 1920, "development_pairs": 128},
+  "remaining_unallocated_confirmation_range": {"start_inclusive": 1024, "stop_exclusive": 1904, "pairs": 880},
+  "interpretation": "These 144 opening pairs are now development-exposed and must never be called an untouched confirmation set. EV-003 did not qualify for its planned confirmation. EV-005 makes no confirmation or promotion claim.",
+  "preservation": "The preregistration bytes and submission bindings remain unchanged. The separate opening_exposure_audit.json is the current retained-evidence audit; the inherited historical_usage_audit is historical context only."
+}
