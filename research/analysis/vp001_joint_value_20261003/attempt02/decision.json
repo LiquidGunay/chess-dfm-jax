@@ -1,0 +1,42 @@
+{
+  "experiment_id": "VP-001",
+  "status": "complete_no_strength_promotion",
+  "readiness": "Share with the stated single-seed development and historical-baseline caveats.",
+  "training": "Two fresh jointly trainable BT4-initialized models, seed 0, 1000 matched batch-1024 updates each, full current/future history, actual search root Q/D targets, WSD stable phase, FP32 storage and BF16 compute. Not frozen-backbone arm training and not a full epoch.",
+  "formulations": {
+    "native": "Native BT4 current WDL head and auxiliary JEPA future WDL predictions.",
+    "jepa_residual": "Current native BT4 WDL logits, W/L perspective-swapped at odd horizons, plus zero-output-initialized JEPA WDL residual at H0 through H8. Gradients also enter the native baseline."
+  },
+  "play": {
+    "games": 1536,
+    "pairs_per_match": 128,
+    "mode": "Searchless one-pass DFM for trained models, native policy for raw BT4",
+    "native_vs_residual_score": 0.501953125,
+    "native_vs_hero1_score": 0.337890625,
+    "residual_vs_hero1_score": 0.326171875,
+    "native_vs_bt4_score": 0.103515625,
+    "residual_vs_bt4_score": 0.083984375,
+    "hero1_vs_bt4_score": 0.18359375,
+    "finding": "BT4 is clearly strongest in this pool. Both pilots are weaker than Hero1. No resolved strength difference between the value formulations."
+  },
+  "loss_findings": [
+    "All four models were measured on identical 8192 boards and played-move targets, preserving each checkpoint's history contract. Historical Hero1/raw BT4 metrics exactly reproduce EV-007.",
+    "Both pilots have lower one-pass DFM CE than Hero1, but lower top-1 accuracy and weaker play. Played-move CE is not a monotonic strength metric here.",
+    "The pilots' native-policy CE is worse than raw BT4 and original Hero1. Lower composite training/validation objectives did not preserve the pretrained policy.",
+    "Residual final value CE, expected-Q MSE and Brier score are slightly better than direct-value results, but no playing-strength improvement was demonstrated.",
+    "Eight-pass CE and top-1 are worse than one-pass for both pilots. Eight-pass play was not tested in this tournament."
+  ],
+  "limitations": [
+    "Single seed and development openings, no held-out or absolute Elo claim.",
+    "New-versus-new is matched. Original Hero1 is at 554 updates / 567296 examples and differs in corpus, history, precision and schedule; this is not a clean value-versus-no-value ablation.",
+    "Intermediate composite validation uses 2048 positions; terminal validation uses 8192. Do not present initialization-to-terminal composite means as exactly the same pool.",
+    "Value targets are soft search root Q/D, not observed game outcomes. No common raw-BT4/Hero1 value-loss comparison was run.",
+    "Marginal 95% bounded-opening-pair intervals, not simultaneous inference across all matchups."
+  ],
+  "followup_not_launched": "Do not promote these checkpoints on strength. A matched 1000-update no-value control and policy-preservation diagnosis would be needed before blaming value supervision or extending either pilot.",
+  "retention": "Final model and exact recovery states at updates 554 and 1000 retained for both pilots; no assets deleted.",
+  "verification": "All 1536 games legally replayed with original opening/repetition histories; WDL, color pairs, intervals, legal coverage and all 10 per-position policy aggregations independently reconciled. 149 targeted tests passed.",
+  "results": "summary_verified.json",
+  "billing": "closeout_billing.json",
+  "wandb": "wandb_sync_receipt.json"
+}

@@ -1,0 +1,23 @@
+{
+  "observed_utc": "2026-10-03 20:57:34 UTC",
+  "source": "Authenticated Modal CLI billing summary and app listings",
+  "billing_summary": {
+    "metered_cost": "13.30729302",
+    "billed_cost": "0E-8",
+    "adjustments": {"credits": "-11.04000000", "reservation_adjustment": "-0E-8", "plan_cost": "0E-8", "free_storage": "-2.26728095", "network_egress_allowance": "-0.00001207"},
+    "metered_cost_breakdown": {"llm_tokens": "0E-8", "ephemeral_apps": "11.03676426", "volumes": "2.26728095"}
+  },
+  "budget_usage_excluding_explicitly_waived_storage": "11.04001207",
+  "before_workflow_budget_usage": "7.81000000",
+  "observed_usage_increase": "3.23001207",
+  "remaining_to_34_stop_line": "22.95998793",
+  "remaining_to_42_50_outer_budget": "31.45998793",
+  "declared_all_attempt_bounds": "7.602216",
+  "declared_bounds_note": "Includes failed CPU preflight, corrected CPU preflight, training, evaluation preflight and evaluation. These maxima are not actual spend or continuing reservations. Image-builder/platform reschedule charges are not assigned to those function bounds.",
+  "active_tasks": 0,
+  "training_app_id": "ap-RbGODXvfeEHwzbvA22EisD",
+  "training_stopped_utc": "2026-10-03 20:03:45+00:00",
+  "evaluation_app_id": "ap-uD83B1UqBjJZcemGzZjtXo",
+  "evaluation_stopped_utc": "2026-10-03 20:56:11+00:00",
+  "note": "Metered usage before credits, excluding only explicitly waived storage. Readouts can lag; observed change is not a finalized per-experiment invoice. Cash billed currently zero."
+}

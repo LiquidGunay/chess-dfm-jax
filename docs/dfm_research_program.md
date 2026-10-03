@@ -68,6 +68,22 @@ updates with full history, WSD and FP32 storage/BF16 compiled compute. This
 is not a frozen-backbone or existing-Hero continuation experiment. A fixed
 four-model searchless tournament and common policy-loss pool follow.
 
+VP-001 closeout: both 1,000-update pilots and the fixed 1,536-game tournament
+completed. Native versus residual scored 50.20% (inconclusive); against
+Hero1 they scored 33.79% / 32.62%, and against raw full-history BT4 10.35% /
+8.40%. All games were independently replayed with complete legal coverage
+and no faults or cap draws. On the identical 8,192-position policy pool,
+their DFM1 CE is lower than Hero1 (1.756 / 1.765 versus 1.990), but top-1
+accuracy and play are worse. Their native-policy CE also worsened versus
+raw BT4 (1.744 / 1.732 versus 1.341). Residual value fit is slightly better
+than direct value fit; this did not yield stronger play. No strength
+promotion or searched evaluation follows. A matched no-value control is
+needed before attributing the regression to value supervision: historical
+Hero1 differs in data, history, precision and training length. These are
+stable-phase WSD pilot checkpoints, not completed full-epoch runs. Detailed
+loss components, curves, confidence intervals and draw reasons are in
+`research/analysis/vp001_joint_value_20261003/attempt02/summary_verified.json`.
+
 Value-target correction: the sequential loader supplied actual current
 root Q/D, but the older training batch filter dropped these fields. PA-001
 therefore used the flipped successor fallback for its current WDL target.

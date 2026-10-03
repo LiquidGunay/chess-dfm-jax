@@ -1,0 +1,137 @@
+{
+  "arena_action_parity": [
+    {
+      "checked_eight_pass_actions": 8192,
+      "checked_one_pass_actions": 16,
+      "model": "hero1",
+      "pool": "sequential"
+    },
+    {
+      "checked_eight_pass_actions": 8192,
+      "checked_one_pass_actions": 16,
+      "model": "jepa_residual",
+      "pool": "sequential"
+    },
+    {
+      "checked_eight_pass_actions": 8192,
+      "checked_one_pass_actions": 16,
+      "model": "native",
+      "pool": "sequential"
+    },
+    {
+      "checked_eight_pass_actions": 0,
+      "checked_one_pass_actions": 0,
+      "model": "raw_bt4",
+      "pool": "sequential"
+    }
+  ],
+  "compute_dtype": "bfloat16",
+  "experiment_id": "VP-001",
+  "inference": "Native logits; DFM first and eighth root logits captured from the unchanged arena refinement helper, without teacher forcing.",
+  "metric": "Mean negative log probability of the played next move, normalized over its complete legal set, in nats.",
+  "physical_batch_size": 16,
+  "position_metrics_sha256": "ed9d4a3e928bc786c5af1e8be068b38094bd7c5abf6da50ca855cb7dff143e83",
+  "rows": [
+    {
+      "legal_conditional_ce": 1.4239523306060846,
+      "legal_top1_accuracy": 0.5345458984375,
+      "mode": "native_policy",
+      "model": "hero1",
+      "plane_history_mode": "current_only_as_preprocessed",
+      "pool": "sequential",
+      "positions": 8192,
+      "state_sha256": "e518083ee5476e7ff15e7c34caf9c0505f8fb7d330ea5a6882e4e9e5c1ef1912"
+    },
+    {
+      "legal_conditional_ce": 1.9902675154077851,
+      "legal_top1_accuracy": 0.4722900390625,
+      "mode": "dfm_one_pass",
+      "model": "hero1",
+      "plane_history_mode": "current_only_as_preprocessed",
+      "pool": "sequential",
+      "positions": 8192,
+      "state_sha256": "e518083ee5476e7ff15e7c34caf9c0505f8fb7d330ea5a6882e4e9e5c1ef1912"
+    },
+    {
+      "legal_conditional_ce": 2.0119830623894117,
+      "legal_top1_accuracy": 0.4581298828125,
+      "mode": "dfm_eight_pass",
+      "model": "hero1",
+      "plane_history_mode": "current_only_as_preprocessed",
+      "pool": "sequential",
+      "positions": 8192,
+      "state_sha256": "e518083ee5476e7ff15e7c34caf9c0505f8fb7d330ea5a6882e4e9e5c1ef1912"
+    },
+    {
+      "legal_conditional_ce": 1.732288592508139,
+      "legal_top1_accuracy": 0.4388427734375,
+      "mode": "native_policy",
+      "model": "jepa_residual",
+      "plane_history_mode": "lc0_full_history_as_preprocessed",
+      "pool": "sequential",
+      "positions": 8192,
+      "state_sha256": "ffbe05590352b35d71ef763daeadba9bac0458a3a56ad846894054d3fb15044d"
+    },
+    {
+      "legal_conditional_ce": 1.7653104065420897,
+      "legal_top1_accuracy": 0.430908203125,
+      "mode": "dfm_one_pass",
+      "model": "jepa_residual",
+      "plane_history_mode": "lc0_full_history_as_preprocessed",
+      "pool": "sequential",
+      "positions": 8192,
+      "state_sha256": "ffbe05590352b35d71ef763daeadba9bac0458a3a56ad846894054d3fb15044d"
+    },
+    {
+      "legal_conditional_ce": 2.109376341121096,
+      "legal_top1_accuracy": 0.372314453125,
+      "mode": "dfm_eight_pass",
+      "model": "jepa_residual",
+      "plane_history_mode": "lc0_full_history_as_preprocessed",
+      "pool": "sequential",
+      "positions": 8192,
+      "state_sha256": "ffbe05590352b35d71ef763daeadba9bac0458a3a56ad846894054d3fb15044d"
+    },
+    {
+      "legal_conditional_ce": 1.7444274733853078,
+      "legal_top1_accuracy": 0.43896484375,
+      "mode": "native_policy",
+      "model": "native",
+      "plane_history_mode": "lc0_full_history_as_preprocessed",
+      "pool": "sequential",
+      "positions": 8192,
+      "state_sha256": "9e633e155dcaef26f298f5ecab7d49045ee14bd3ffca56ee0db03b2ca1afa40b"
+    },
+    {
+      "legal_conditional_ce": 1.7560727888155747,
+      "legal_top1_accuracy": 0.43603515625,
+      "mode": "dfm_one_pass",
+      "model": "native",
+      "plane_history_mode": "lc0_full_history_as_preprocessed",
+      "pool": "sequential",
+      "positions": 8192,
+      "state_sha256": "9e633e155dcaef26f298f5ecab7d49045ee14bd3ffca56ee0db03b2ca1afa40b"
+    },
+    {
+      "legal_conditional_ce": 1.9836072935864277,
+      "legal_top1_accuracy": 0.3887939453125,
+      "mode": "dfm_eight_pass",
+      "model": "native",
+      "plane_history_mode": "lc0_full_history_as_preprocessed",
+      "pool": "sequential",
+      "positions": 8192,
+      "state_sha256": "9e633e155dcaef26f298f5ecab7d49045ee14bd3ffca56ee0db03b2ca1afa40b"
+    },
+    {
+      "legal_conditional_ce": 1.3412584648554002,
+      "legal_top1_accuracy": 0.5660400390625,
+      "mode": "native_policy",
+      "model": "raw_bt4",
+      "plane_history_mode": "lc0_full_history_as_preprocessed",
+      "pool": "sequential",
+      "positions": 8192,
+      "state_sha256": "61e43e98d2c4cb747498c6bc13a5bbb3b07e985d3f5d87f0351a4db855fa0651"
+    }
+  ],
+  "seconds": 196.31973916700008
+}

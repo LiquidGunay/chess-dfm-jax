@@ -1,0 +1,9 @@
+{
+  "status": "exact_reproduction",
+  "reference": "research/analysis/ev007_policy_loss_play_20261003/result.json",
+  "validation_file_sha256": "9eeccee3d26f5032d0ed820df5a8aa5fd4e4b3f4ba917e8d8d0310fc0dc457f8",
+  "positions": 8192,
+  "verified_identical_fields": ["legal_conditional_ce", "legal_top1_accuracy", "positions", "state_sha256", "plane_history_mode"],
+  "rows": [["hero1", "native_policy"], ["hero1", "dfm_one_pass"], ["hero1", "dfm_eight_pass"], ["raw_bt4", "native_policy"]],
+  "note": "Same content-hashed sequential pool. Display pool name is sequential in VP-001 and sequential_validation in EV-007."
+}

@@ -1,0 +1,57 @@
+{
+  "left": "native",
+  "right": "hero1",
+  "summary": {
+    "arena_label": "hero-arena-128p-o1664-cpass1-opass1-0e800ee1c251244d4096",
+    "candidate_plane_history_mode": "lc0_full_history_as_preprocessed",
+    "candidate_policy_mode": "dfm",
+    "candidate_refinement_passes": 1,
+    "candidate_state_sha256": "9e633e155dcaef26f298f5ecab7d49045ee14bd3ffca56ee0db03b2ca1afa40b",
+    "cap_draw_rate": 0.0,
+    "fault_counts": {},
+    "opening_start_index": 1664,
+    "opponent_plane_history_mode": "current_only_as_preprocessed",
+    "opponent_policy_mode": "dfm",
+    "opponent_refinement_passes": 1,
+    "opponent_state_sha256": "e518083ee5476e7ff15e7c34caf9c0505f8fb7d330ea5a6882e4e9e5c1ef1912",
+    "pair_aware_logistic_interval": {
+      "confidence": 0.95,
+      "elo": -116.86143802971469,
+      "elo_lower": -222.05271267239812,
+      "elo_model": "logistic",
+      "elo_upper": -29.301829055417585,
+      "method": "hoeffding_bounded_complete_pairs",
+      "pair_count": 128,
+      "promotion_eligible": false,
+      "score": 0.337890625,
+      "score_lower": 0.21785027608500993,
+      "score_upper": 0.45793097391499005
+    },
+    "pair_count": 128,
+    "pair_score": 0.337890625,
+    "pentanomial": {
+      "counts": [
+        17,
+        56,
+        48,
+        7,
+        0
+      ],
+      "game_count": 256,
+      "labels": [
+        "LL",
+        "LD",
+        "DD_or_WL_or_LW",
+        "WD",
+        "WW"
+      ],
+      "pair_count": 128,
+      "points": 86.5,
+      "score": 0.337890625
+    },
+    "reused_immutable_result": false,
+    "schema_version": "chess-dfm-modal-torch-arena-result-v2",
+    "state_sha256": "61881b936bd8bed45e233840796fe295f0904a9bc065c6d14b67d7e143801e94",
+    "state_size_bytes": 23112
+  }
+}
