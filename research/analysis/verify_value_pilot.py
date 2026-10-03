@@ -258,7 +258,7 @@ def main():
         item["score"] = item["points"] / item["games"]
     summary = {"experiment_id": "VP-001", "status": "complete_independently_reconciled",
         "scope": "Single-seed searchless development screening; no search/absolute Elo/held-out confirmation claim.",
-        "interval_note": "Marginal 95% Hoeffding intervals on complete opening pairs; not multiplicity-adjusted. Elo is match-relative logistic only.",
+        "interval_note": "Marginal 95% Hoeffding intervals on complete opening pairs; not multiplicity-adjusted. Elo is match-relative logistic only. A null Elo endpoint at score 0 or 1 denotes an unbounded endpoint, not an estimated finite rating.",
         "loss_note": "Policy CE in nats over full legal set, same 8192 played-move targets. Native policy/DFM1/DFM8 separated. Composite train and validation objectives are different; intermediate validation uses 2048, final uses 8192.",
         "models": models, "standings": standings, "matches": matches,
         "policy_losses": verify_losses(directory, models), "training": verify_training(directory),
