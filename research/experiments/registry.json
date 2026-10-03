@@ -15,9 +15,12 @@
     {
       "id": "GPU-001",
       "name": "Matched L40S versus H100 history-training throughput and cost",
-      "status": "preregistered",
+      "status": "complete_h100_faster_cost_allocation_sensitive_epoch_over_budget",
       "depends_on": ["HH-002"],
       "specification": "research/analysis/gpu001_history_training_20261003/preregister.json",
+      "results": "research/analysis/gpu001_history_training_20261003/summary.json",
+      "decision": "research/analysis/gpu001_history_training_20261003/decision.json",
+      "result_summary": "H100 1.426s/update versus L40S 2.990s: 2.10x faster and 12.5% cheaper in the matched benchmark. Historical L40S same-window rate was 2.479s, making the cost advantage allocation-sensitive. H100 remaining epoch projects 10.75h/$47.22 train-loop only, over the existing budget. Both disposable attempts complete; no full epoch launched.",
       "scope": "Disposable exact update-500 resumes on identical existing history batches; 40 warm measured updates and one separate profiler update per GPU. No model retention or full-epoch launch."
     },
     {

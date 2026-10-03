@@ -1,0 +1,60 @@
+{
+  "experiment_id": "GPU-001",
+  "status": "complete_h100_faster_cost_advantage_allocation_sensitive_epoch_over_budget",
+  "completed_utc": "2026-10-03",
+  "app_url": "https://modal.com/apps/liquidgunay/chess-dfm-research/ap-IqxpLhyafdxTGQv92VeBOH",
+  "primary_results": "summary.json",
+  "descriptive_diagnostics": "diagnostics.json",
+  "completion_receipt": "completion.json",
+  "method": "Identical update-500 optimizer recovery, full-history batches, frozen recipe and training code. Discard ten warmup updates, measure forty fixed updates, profile one separate final update. Both attempts succeeded without nonfinite updates or checkpoint writes.",
+  "findings": {
+    "l40s_seconds_per_update": 2.990236591525,
+    "h100_seconds_per_update": 1.426239050225,
+    "h100_speedup": 2.096588640630242,
+    "h100_cost_ratio": 0.8747708483035112,
+    "cost_break_even_speedup": 1.834034623707622,
+    "historical_l40s_same_window_seconds_per_update": 2.479208670374999,
+    "h100_cost_ratio_to_historical_l40s": 1.0550833542385396,
+    "interpretation": "H100 clearly improves wall time in this test. Its 12.5% cost reduction versus today's L40S allocation is not a robust fleet-wide cost claim: relative to the earlier L40S same-window rate, H100 is 5.5% more expensive. Historical comparison is sensitivity only, not a new primary endpoint."
+  },
+  "workload_diagnosis": {
+    "observed": [
+      "Backward CUDA interval improves from 1.448s to 0.439s (3.30x), forward from 1.384s to 0.866s (1.60x), optimizer from 0.147s to 0.108s (1.36x). These intervals include launch gaps, not only kernel execution.",
+      "Both warm windows have about 11 microseconds exposed input wait per update; transfers are 6-8 milliseconds. Bulk input waiting is not the observed steady-state limit.",
+      "Separate traces contain about 21600 kernels per update, with median duration about 2.4 microseconds on both GPUs.",
+      "Name-based device-kernel classification assigns about 24-25% of summed kernel duration to matrix multiplies, 48-49% to elementwise work, 7-9% to reductions, and 7-8% to copies. Fused Triton kernels remain unclassified; these are not wall-time fractions.",
+      "Instrumented GPU active-union time falls from 2.427s to 0.758s (3.20x), while end-to-end warm throughput improves 2.10x. Instrumented idle share is 16.5% on L40S and 30.9% on H100, not a steady-state utilization or MFU estimate."
+    ],
+    "source_facts": [
+      "The current and one selected future board each go through the 15-layer BT4 encoder; only the last future layer is trainable. BT4 and state-projector activations are recomputed during backward to save memory.",
+      "The policy-bearing BT4 remains eager for numerical compatibility. Fresh projector/DFM/JEPA regions are compiled. Eager normalizations, casts, adds, multiplies and reductions introduce many distinct kernels.",
+      "JEPA predicts eight states sequentially and the Muon/AdamW optimizer has repeated small operations. Sequential structure and launch costs do not scale with tensor-core peak FLOPS. The profile does not establish JEPA as the dominant cost."
+    ],
+    "inference": "The workload is mixed, not a pure tensor-core GEMM benchmark. Faster device math and memory operations help substantially, while dispatch, smaller operations and dependencies increasingly limit scaling. Memory traffic is a plausible mechanism, but no hardware bandwidth/occupancy counters were collected to prove saturation. Near-zero exposed input wait also does not exclude CPU preprocessing contention with kernel dispatch.",
+    "profiling_limit": "Each trace is a separate final update with instrumentation and no following-batch prefetch; do not substitute its timing for the preregistered warm-window result.",
+    "candidate_next_tests_not_launched": [
+      "Matched prefetch scheduling/CPU-preparation ablation to separate dispatch contention from GPU execution.",
+      "Numerically checked fusion of eager BT4 normalization/casts or launch reduction. Earlier whole-BT4 compilation failed parity, so do not enable it silently.",
+      "Use available memory to evaluate reduced rematerialization only under an explicit matched numerical/performance protocol."
+    ]
+  },
+  "epoch_decision": {
+    "full_epoch_launched": false,
+    "remaining_updates": 27126,
+    "h100_projected_remaining_train_loop_hours": 10.746711243445374,
+    "h100_projected_remaining_train_loop_dollars": 47.2165785718217,
+    "l40s_projected_remaining_train_loop_hours": 22.531432717140877,
+    "l40s_projected_remaining_train_loop_dollars": 53.975939714259205,
+    "excluded_costs": ["Remaining original-data history reconstruction", "Cold start and compilation", "Validation and checkpoints", "Interruptions"],
+    "existing_stop_dollars": "34.00",
+    "existing_outer_budget_dollars": "42.50",
+    "conservative_cumulative_declared_floor_dollars": "23.09341055",
+    "decision": "Do not launch the epoch or raise budget. Even the H100 train-loop estimate alone exceeds the outer budget. Remaining original history data also needs preparation; replaying the 553-update subset is not an original-data epoch. Recommend a bounded runtime-optimization pass, or obtain a new budget after staging estimates."
+  },
+  "retention": "No models or optimizer states were written by GPU-001. Raw traces and telemetry remain hash-bound on chess-dfm-training-results under benchmarks/gpu001-2ca0e018960c56266a25; compact results and profiles are committed. Existing checkpoints and data were not deleted.",
+  "verification": "All 10 trainer artifacts per GPU downloaded and SHA256/size verified; primary summary recomputed from metrics; seven targeted analysis/benchmark tests passed; Modal container inventory empty after both results returned.",
+  "limits": [
+    "One container per GPU and forty warmed updates; no fleet-level confidence interval.",
+    "Same source, data and optimizer state does not imply bitwise equality across BF16 hardware kernels. First losses are 7.847913 and 7.847539; later numerical trajectories drift. No playing-strength or gradient-direction parity conclusion follows."
+  ]
+}

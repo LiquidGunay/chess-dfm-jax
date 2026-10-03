@@ -1,0 +1,14 @@
+{
+  "H100": {
+    "artifacts_verified": 10,
+    "call_id": "fc-01M4129PEDRSEFNFBESV7GWKTK",
+    "result_relative": "benchmarks/gpu001-2ca0e018960c56266a25/H100/result.json",
+    "result_sha256": "722d729089be9cc04d3ce7ff93079011688216c36c0612fd17250b37cd78e5ff"
+  },
+  "L40S": {
+    "artifacts_verified": 10,
+    "call_id": "fc-01M4129P4VBX07DR6VAB9V4J16",
+    "result_relative": "benchmarks/gpu001-2ca0e018960c56266a25/L40S/result.json",
+    "result_sha256": "0d5b96df6b30da743f41ba75a6615a324f1e36adf5c50638f129947e070fde22"
+  }
+}

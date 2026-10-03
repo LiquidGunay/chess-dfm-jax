@@ -1,0 +1,110 @@
+{
+  "analysis_type": "post_hoc_descriptive_diagnostics",
+  "experiment_id": "GPU-001",
+  "historical_sensitivity": {
+    "caveat": "Historical, not a simultaneous randomized hardware control. Same update window but allocation/startup history differs; this is sensitivity, not a replacement for the frozen primary comparison.",
+    "h100_cost_ratio_to_historical": 1.0550833542385396,
+    "h100_speedup_over_historical": 1.7382841046063666,
+    "historical_metrics_sha256": "99e8426b0aea60ab5552100f0be509f4a5cd23e31215e7117bd5b4966e60f20c",
+    "historical_remote_path": "runs/hh002-hero-history-0fe540075e5361da6c25/metrics.jsonl",
+    "historical_seconds_per_update": 2.479208670374999,
+    "mean_timings": {
+      "backward_cuda_seconds": 1.3066774200439453,
+      "data_prepare_seconds": 0.9413863977249946,
+      "data_wait_seconds": 9.58109998805412e-06,
+      "forward_cuda_seconds": 1.0613319122314453,
+      "host_overhead_in_step_seconds": 8.211829360272663e-05,
+      "optimizer_cuda_seconds": 0.09571714363098145,
+      "step_seconds": 2.4638085941999748,
+      "transfer_seconds": 0.008904071625016741
+    },
+    "updates": [
+      511,
+      550
+    ],
+    "volume": "chess-dfm-training-results"
+  },
+  "kernel_mix": {
+    "H100": {
+      "attention": {
+        "fraction_of_summed_kernel_duration": 0.06993908618326043,
+        "kernels": 103,
+        "seconds": 0.05243098100000003
+      },
+      "copy": {
+        "fraction_of_summed_kernel_duration": 0.08080434212140493,
+        "kernels": 2001,
+        "seconds": 0.06057629800000025
+      },
+      "elementwise": {
+        "fraction_of_summed_kernel_duration": 0.47810137333997593,
+        "kernels": 14076,
+        "seconds": 0.3584165219999963
+      },
+      "matmul": {
+        "fraction_of_summed_kernel_duration": 0.24896613343088833,
+        "kernels": 2715,
+        "seconds": 0.18664153800000147
+      },
+      "other": {
+        "fraction_of_summed_kernel_duration": 0.004252234219197454,
+        "kernels": 45,
+        "seconds": 0.003187757
+      },
+      "reduction": {
+        "fraction_of_summed_kernel_duration": 0.07102918443299214,
+        "kernels": 1575,
+        "seconds": 0.053248190999999945
+      },
+      "triton_unclassified": {
+        "fraction_of_summed_kernel_duration": 0.04690764627228084,
+        "kernels": 1085,
+        "seconds": 0.035165085000000006
+      }
+    },
+    "L40S": {
+      "attention": {
+        "fraction_of_summed_kernel_duration": 0.05840067724779471,
+        "kernels": 103,
+        "seconds": 0.13986509800000002
+      },
+      "copy": {
+        "fraction_of_summed_kernel_duration": 0.06864844085656734,
+        "kernels": 2001,
+        "seconds": 0.16440769800000157
+      },
+      "elementwise": {
+        "fraction_of_summed_kernel_duration": 0.48753596533340454,
+        "kernels": 14076,
+        "seconds": 1.167610869999905
+      },
+      "matmul": {
+        "fraction_of_summed_kernel_duration": 0.2438769410969799,
+        "kernels": 2707,
+        "seconds": 0.5840663820000026
+      },
+      "other": {
+        "fraction_of_summed_kernel_duration": 0.0008668748026958953,
+        "kernels": 45,
+        "seconds": 0.0020760979999999997
+      },
+      "reduction": {
+        "fraction_of_summed_kernel_duration": 0.08549877000510495,
+        "kernels": 1577,
+        "seconds": 0.20476293100000012
+      },
+      "triton_unclassified": {
+        "fraction_of_summed_kernel_duration": 0.05517233065745269,
+        "kernels": 1085,
+        "seconds": 0.1321334579999998
+      }
+    }
+  },
+  "limits": [
+    "Kernel classes are descriptive name matches, not measured roofline/occupancy or a unique causal bottleneck attribution.",
+    "Kernel duration shares exclude inter-kernel idle time and do not equal wall-clock time shares.",
+    "One separate instrumented final update per GPU; unlike the warm training window it has no following-batch prefetch.",
+    "Near-zero exposed data wait does not rule out CPU preprocessing contention with kernel dispatch.",
+    "No additional GPU experiments or model/runtime changes were made for these diagnostics."
+  ]
+}

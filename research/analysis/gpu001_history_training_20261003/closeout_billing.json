@@ -1,0 +1,23 @@
+{
+  "observed_utc": "2026-10-03T14:32:00Z",
+  "timestamp_precision": "Approximate collection minute; provider returned no event timestamp",
+  "source": "modal billing summary --json (current month)",
+  "billing_summary": {
+    "metered_cost": "8.11728095",
+    "billed_cost": "0E-8",
+    "adjustments": {
+      "reservation_adjustment": "-0E-8",
+      "credits": "-5.85000000",
+      "free_storage": "-2.26728095",
+      "plan_cost": "0E-8",
+      "network_egress_allowance": "0E-8"
+    },
+    "metered_cost_breakdown": {
+      "ephemeral_apps": "5.85285364",
+      "llm_tokens": "0E-8",
+      "volumes": "2.26728095"
+    }
+  },
+  "budget_usage_under_existing_meter_minus_waived_storage_rule": "5.85000000",
+  "caveat": "Live billing can lag and totals/breakdown differ slightly in precision. Credits do not increase the research budget. Keep the conservative $23.09341055 cumulative launch floor until separately reconciled; no new launch made."
+}
