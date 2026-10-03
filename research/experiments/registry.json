@@ -15,9 +15,10 @@
     {
       "id": "HH-001",
       "name": "Hero 1 recipe with full history on the original examples",
-      "status": "cpu_reconstruction_preflight",
+      "status": "blocked_original_game_history_required",
       "depends_on": ["EV-005"],
       "plan": "research/analysis/hh001_history_20261003/plan.json",
+      "execution_record": "research/analysis/hh001_history_20261003/status.json",
       "scope": "Matched 554-update fresh run, same original examples/targets/order; restore current and future history, including Chess960. No data substitution."
     },
     {

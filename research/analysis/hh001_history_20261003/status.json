@@ -1,0 +1,63 @@
+{
+  "experiment_id": "HH-001",
+  "status": "blocked_original_game_history_required",
+  "training_started": false,
+  "gpu_launched": false,
+  "selected_route": "Original examples/targets/order, history-only change",
+  "stage_attempt": {
+    "app_id": "ap-qubVTKhxMSzDKUv7my0WIn",
+    "task_id": "ta-01M40E1GDTZ663HNRKVPVT36AR",
+    "app_state": "stopped",
+    "created_utc": "2026-10-03T08:27:45Z",
+    "stopped_utc": "2026-10-03T08:33:14Z",
+    "source_commit": "97c34dd",
+    "source_tree_sha256": "8db9ffbe43cdc9fb371236e11814124659a6067c48d2babc889c06ccfe1c2f2b",
+    "source_volume": "chess-dfm-training-inputs",
+    "output_volume": "chess-dfm-training-results",
+    "partial_output": "datasets/hero1-history-8db9ffbe43cdc9fb3712",
+    "declared_attempt_upper_bound_dollars": "1.05240000",
+    "launch_budget_usage_floor_dollars": "2.66285855",
+    "retries": 0
+  },
+  "coverage": {
+    "training_batches_requested": 554,
+    "training_batches_rebuilt": 543,
+    "training_batches_unresolved": 11,
+    "training_examples_rebuilt": 556032,
+    "training_examples_withheld_with_unresolved_batches": 11264,
+    "validation_source_shards_requested": 1522,
+    "validation_source_shards_rebuilt": 1515,
+    "validation_source_shards_unresolved": 7,
+    "validation_examples_rebuilt": 8140,
+    "validation_examples_withheld_with_unresolved_shards": 52,
+    "complete_manifest_emitted": false
+  },
+  "blocker": {
+    "reason": "Some omitted promotion spans admit different legal move histories that give the same retained FEN and unchanged non-history planes, but different full-history input planes.",
+    "witness": "ambiguity_witness.json",
+    "witness_original_train_shard": "chunk_014927.npz",
+    "witness_original_row": 819,
+    "witness_distinct_history_planes": [19,22,23,32,35,36],
+    "diagnostic": "long_gap_uniqueness.json",
+    "rebuild_failures": "rebuild_v1_failures.json",
+    "diagnostic_limit": "Long-gap search is bounded and stops after two legal paths. Exhausting its bound is not evidence of uniqueness. Two uniquely recoverable long gaps were found, but other ambiguities independently prevent an exact matched run."
+  },
+  "source_recovery_attempts": [
+    {"source": "Original GCS preprocessing manifest", "result": "HTTP 403: owning project's billing account is closed. No billing or access settings changed."},
+    {"source": "Public LC0 training_pgns/test80 index", "result": "Unavailable through web tool; direct HTTPS returned 403. No bypass attempted."},
+    {"source": "Project-local PGN/archive/URL-list files", "result": "No .pgn, .pgn.bz2, .tar.bz2 or *urls.txt copies found in the scoped project file search."}
+  ],
+  "storage": {
+    "before_rebuild_bytes": 279520418932,
+    "new_partial_shards_and_audits_bytes": 642843811,
+    "deleted_bytes": 0,
+    "cleanup_review_threshold_gib": 768,
+    "original_assets_unchanged": true
+  },
+  "billing_after_cpu_attempt": {
+    "provider_reported_budget_usage_before_credits_dollars": "2.33",
+    "provider_reported_billed_dollars": "0",
+    "caveat": "Live provider meter may lag. Last observed increase was $0.04; the declared CPU attempt maximum is retained above for conservative accounting. No active app or GPU reservation remains."
+  },
+  "next_required_input": "An accessible backup of the original LC0 test80 PGNs, or restored read access to the original GCS source/cache. Do not guess histories, drop rows, substitute data, resume an old checkpoint, or launch GPU training under the current exact-matching plan."
+}

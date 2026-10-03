@@ -1,0 +1,658 @@
+{
+  "records": [
+    {
+      "file": ".local/hero-history-fixtures/train/chunk_002882.npz",
+      "gaps": [
+        {
+          "end_fen": "1k6/8/p1q5/P3K3/3p2P1/5P2/7P/3q4 w - - 0 58",
+          "missing_from_ply": 105,
+          "nodes": 109071,
+          "paths": [
+            [
+              "d3d2",
+              "e1f2",
+              "c2c1q",
+              "f2g3",
+              "c1c8",
+              "g3f4",
+              "c8c6",
+              "f4e5",
+              "d2d1q"
+            ],
+            [
+              "d3d2",
+              "e1f2",
+              "c2c1q",
+              "f2g3",
+              "c1c5",
+              "g3f4",
+              "c5c6",
+              "f4e5",
+              "d2d1q"
+            ]
+          ],
+          "plies": 9,
+          "row": 277,
+          "seconds": 1.9129655430006096,
+          "start_fen": "1k6/8/p7/P7/3p2P1/3p1P2/2p4P/4K3 b - - 0 53",
+          "status": "ambiguous"
+        }
+      ],
+      "sha256": "aedbf46413a099fb5e4582f90902067de711b40c2bc19a536037ba6daadf81c7"
+    },
+    {
+      "file": ".local/hero-history-fixtures/train/chunk_008985.npz",
+      "gaps": [
+        {
+          "end_fen": "1b6/kp6/8/Pp6/8/3K4/8/6qr w - - 0 56",
+          "missing_from_ply": 105,
+          "nodes": 94,
+          "paths": [
+            [
+              "g3g2",
+              "d2e3",
+              "h2h1r",
+              "e3d3",
+              "g2g1q"
+            ],
+            [
+              "g3g2",
+              "d2e3",
+              "g2g1q",
+              "e3d3",
+              "h2h1r"
+            ]
+          ],
+          "plies": 5,
+          "row": 669,
+          "seconds": 0.0026334950016462244,
+          "start_fen": "1b6/kp6/8/Pp6/8/6p1/3K3p/8 b - - 1 53",
+          "status": "ambiguous"
+        }
+      ],
+      "sha256": "8f02e3dd281bb760b1b0fb37c24afe6be4e4c987ff992098411a0cf8ac6483ab"
+    },
+    {
+      "file": ".local/hero-history-fixtures/train/chunk_008986.npz",
+      "gaps": [
+        {
+          "end_fen": "8/1p6/p7/4K1k1/1PP5/4P3/3r4/5q2 w - - 0 71",
+          "missing_from_ply": 135,
+          "nodes": 15990,
+          "paths": [
+            [
+              "c2d2",
+              "d1h1",
+              "f2f1q",
+              "h1f1",
+              "g2f1q"
+            ],
+            [
+              "c2d2",
+              "d1h1",
+              "f2f1r",
+              "h1f1",
+              "g2f1q"
+            ]
+          ],
+          "plies": 5,
+          "row": 363,
+          "seconds": 0.5130485940026119,
+          "start_fen": "8/1p6/p7/4K1k1/1PP5/4P3/2r2pp1/3R4 b - - 1 68",
+          "status": "ambiguous"
+        }
+      ],
+      "sha256": "2efe61ec0f7b0e006b431d475d6d5e1b17017e7d1b0605db108d686d62a9b850"
+    },
+    {
+      "file": ".local/hero-history-fixtures/train/chunk_009285.npz",
+      "gaps": [
+        {
+          "end_fen": "8/8/4B3/8/4n2P/4k3/8/1K4q1 w - - 0 74",
+          "missing_from_ply": 141,
+          "nodes": 1377,
+          "paths": [
+            [
+              "g3g2",
+              "a2e6",
+              "b2b1q",
+              "c2b1",
+              "g2g1q"
+            ],
+            [
+              "g3g2",
+              "a2e6",
+              "b2b1r",
+              "c2b1",
+              "g2g1q"
+            ]
+          ],
+          "plies": 5,
+          "row": 819,
+          "seconds": 0.02815224200458033,
+          "start_fen": "8/8/8/8/4n2P/4k1p1/BpK5/8 b - - 1 71",
+          "status": "ambiguous"
+        }
+      ],
+      "sha256": "199d52067b724d07508c12b14cfc98404ed51eb279b690b99020161ade89931e"
+    },
+    {
+      "file": ".local/hero-history-fixtures/train/chunk_010369.npz",
+      "gaps": [
+        {
+          "end_fen": "7N/8/3p1P2/4bK2/3pP3/8/4k2q/8 b - - 0 65",
+          "missing_from_ply": 123,
+          "nodes": 2090,
+          "paths": [
+            [
+              "d2d1q",
+              "f5f6",
+              "d1h1",
+              "g5f5",
+              "h1h2",
+              "h7h8n"
+            ],
+            [
+              "d2d1q",
+              "f5f6",
+              "d1g1",
+              "g5f5",
+              "g1h2",
+              "h7h8n"
+            ]
+          ],
+          "plies": 6,
+          "row": 89,
+          "seconds": 0.038438416995632,
+          "start_fen": "8/7P/3p4/4bPK1/3pP3/8/3pk3/8 b - - 0 62",
+          "status": "ambiguous"
+        }
+      ],
+      "sha256": "9cc6d238bbce2f8e389fa7431e176f5b072715abe3ddf81938c10946f18ba139"
+    },
+    {
+      "file": ".local/hero-history-fixtures/train/chunk_014893.npz",
+      "gaps": [
+        {
+          "end_fen": "8/8/8/6k1/4b3/2K5/3r4/2R2b1q w - - 0 101",
+          "missing_from_ply": 195,
+          "nodes": 318,
+          "paths": [
+            [
+              "e2d2",
+              "c5c4",
+              "h2h1q",
+              "c4c3",
+              "f2f1b"
+            ],
+            [
+              "e2d2",
+              "c5c4",
+              "f2f1b",
+              "c4c3",
+              "h2h1q"
+            ]
+          ],
+          "plies": 5,
+          "row": 68,
+          "seconds": 0.0059042339998995885,
+          "start_fen": "8/8/8/2K3k1/4b3/8/4rp1p/2R5 b - - 1 98",
+          "status": "ambiguous"
+        }
+      ],
+      "sha256": "fa5a3b6fb749cf62e1e31c24a1d418002ab579f14b198e192b068d5d4aa654d1"
+    },
+    {
+      "file": ".local/hero-history-fixtures/train/chunk_014927.npz",
+      "gaps": [
+        {
+          "end_fen": "8/8/8/8/8/3k3K/8/4qr2 w - - 0 103",
+          "missing_from_ply": 201,
+          "nodes": 75,
+          "paths": [
+            [
+              "f2f1r",
+              "g3h3",
+              "e2e1q"
+            ],
+            [
+              "e2e1q",
+              "g3h3",
+              "f2f1r"
+            ]
+          ],
+          "plies": 3,
+          "row": 819,
+          "seconds": 0.0019317149999551475,
+          "start_fen": "8/8/8/8/8/3k2K1/4pp2/8 b - - 1 101",
+          "status": "ambiguous"
+        }
+      ],
+      "sha256": "5fa0f0cd3320d56593fcf60dc0c49e14d332a1ed64331b5206316fdc77b4ea2e"
+    },
+    {
+      "file": ".local/hero-history-fixtures/train/chunk_015026.npz",
+      "gaps": [
+        {
+          "end_fen": "2R5/5P2/8/8/k2K4/8/5P2/qq6 w - - 0 58",
+          "missing_from_ply": 111,
+          "nodes": 94,
+          "paths": [
+            [
+              "b2b1q",
+              "c3c8",
+              "a2a1q"
+            ],
+            [
+              "a2a1q",
+              "c3c8",
+              "b2b1q"
+            ]
+          ],
+          "plies": 3,
+          "row": 411,
+          "seconds": 0.002276653998706024,
+          "start_fen": "2r5/5P2/8/8/k2K4/2R5/pp3P2/8 b - - 5 56",
+          "status": "ambiguous"
+        }
+      ],
+      "sha256": "bb82cea5594329fb39666294014360c994ab099388285694c3290cdcd4d1e80d"
+    },
+    {
+      "file": ".local/hero-history-fixtures/train/chunk_015070.npz",
+      "gaps": [
+        {
+          "end_fen": "4N3/R7/3k4/5K1p/5P1P/8/5r2/q7 b - - 0 63",
+          "missing_from_ply": 123,
+          "nodes": 34,
+          "paths": [
+            [
+              "a2a1q",
+              "e7e8n"
+            ]
+          ],
+          "plies": 2,
+          "row": 847,
+          "seconds": 0.0009088100050576031,
+          "start_fen": "8/R3P3/3k4/5K1p/5P1P/8/p4r2/8 b - - 0 62",
+          "status": "unique"
+        }
+      ],
+      "sha256": "c7b740bdae6e5b1e7090039d6439e457baf640234dfbd9535a7207687979a592"
+    },
+    {
+      "file": ".local/hero-history-fixtures/train/chunk_015469.npz",
+      "gaps": [
+        {
+          "end_fen": "8/2K4p/6qP/1p1b4/8/1k2B3/8/6q1 w - - 0 72",
+          "missing_from_ply": 133,
+          "nodes": 25541,
+          "paths": [
+            [
+              "e8f7",
+              "c8d8",
+              "f7d5",
+              "d8e8",
+              "b2b1q",
+              "e8d8",
+              "b1g6",
+              "d8c7",
+              "g2g1q"
+            ],
+            [
+              "e8f7",
+              "c8d8",
+              "f7d5",
+              "d8e8",
+              "b2b1q",
+              "e8d7",
+              "b1g6",
+              "d7c7",
+              "g2g1q"
+            ]
+          ],
+          "plies": 9,
+          "row": 41,
+          "seconds": 0.5230185289983638,
+          "start_fen": "2K1b3/7p/7P/1p6/8/1k2B3/1p4p1/8 b - - 3 67",
+          "status": "ambiguous"
+        }
+      ],
+      "sha256": "4e6335b023a3825389b54d5c69de52b8c3e01188574f0f573342ff5aa4e76e7c"
+    },
+    {
+      "file": ".local/hero-history-fixtures/train/chunk_019352.npz",
+      "gaps": [
+        {
+          "end_fen": "8/5k2/5p2/p1pPpP2/P1P5/7q/4K3/1q6 w - - 0 52",
+          "missing_from_ply": 97,
+          "nodes": 1572,
+          "paths": [
+            [
+              "h2h1q",
+              "g3f2",
+              "h1h3",
+              "f2e2",
+              "b2b1q"
+            ]
+          ],
+          "plies": 5,
+          "row": 19,
+          "seconds": 0.03648587100178702,
+          "start_fen": "8/5k2/5p2/p1pPpP2/P1P5/6K1/1p5p/8 b - - 3 49",
+          "status": "unique"
+        }
+      ],
+      "sha256": "3f115e659102bef74382c359976cbbe60c5a74e1718b3c466dd4b476b16bd8d5"
+    },
+    {
+      "file": ".local/hero-history-fixtures/train/chunk_025137.npz",
+      "gaps": [
+        {
+          "end_fen": "2K5/6r1/8/5k2/1N6/8/8/5q2 w - - 0 106",
+          "missing_from_ply": 203,
+          "nodes": 5770,
+          "paths": [
+            [
+              "f3f2",
+              "c8d8",
+              "g2g1r",
+              "d8c8",
+              "g1g7",
+              "a6b4",
+              "f2f1q"
+            ],
+            [
+              "f3f2",
+              "c8d8",
+              "g2g1r",
+              "a6b4",
+              "g1g7",
+              "d8c8",
+              "f2f1q"
+            ]
+          ],
+          "plies": 7,
+          "row": 865,
+          "seconds": 0.0762489109984017,
+          "start_fen": "2K5/8/N7/5k2/8/5p2/6p1/8 b - - 3 102",
+          "status": "ambiguous"
+        }
+      ],
+      "sha256": "cc0f53a2e755ab87d5fd1599e56dd62df491bf01c207d56a595acd9bac8e7f62"
+    },
+    {
+      "file": ".local/hero-history-fixtures/val/chunk_000197.npz",
+      "gaps": [
+        {
+          "end_fen": "5B2/2n5/6kp/4Pp2/5P2/6K1/8/2qb4 w - - 0 70",
+          "missing_from_ply": 129,
+          "nodes": 500001,
+          "paths": [],
+          "plies": 9,
+          "row": 748,
+          "seconds": 8.297640968004998,
+          "start_fen": "8/8/3Rn1kp/4Pp2/5PbB/2p3K1/3p4/8 b - - 1 65",
+          "status": "bound_exhausted"
+        }
+      ],
+      "sha256": "5c5007094aa2f30b5a0aa9d7430b5c229571588fdd3a42560699109e933643d4"
+    },
+    {
+      "file": ".local/hero-history-fixtures/val/chunk_000878.npz",
+      "gaps": [
+        {
+          "end_fen": "4n2N/1b3k2/8/5Pp1/1r6/8/4K3/2q5 b - - 0 76",
+          "missing_from_ply": 145,
+          "nodes": 454,
+          "paths": [
+            [
+              "b5b6",
+              "e3e2",
+              "b6b4",
+              "h6h7",
+              "c2c1q",
+              "h7h8n"
+            ],
+            [
+              "b5b6",
+              "e3e2",
+              "c2c1q",
+              "h6h7",
+              "b6b4",
+              "h7h8n"
+            ]
+          ],
+          "plies": 6,
+          "row": 7,
+          "seconds": 0.009043887002917472,
+          "start_fen": "4n3/1b3k2/7P/1r3Pp1/8/4K3/2p5/8 b - - 11 73",
+          "status": "ambiguous"
+        }
+      ],
+      "sha256": "c91ddf47870d856d2e5722a35da378f8b357f27e5c10dd36e3e9904397b52833"
+    },
+    {
+      "file": ".local/hero-history-fixtures/val/chunk_000949.npz",
+      "gaps": [
+        {
+          "end_fen": "4N3/2k5/8/p3PK2/8/P2r4/1b6/2q5 b - - 0 44",
+          "missing_from_ply": 83,
+          "nodes": 108,
+          "paths": [
+            [
+              "d2d3",
+              "f4f5",
+              "c2c1q",
+              "e7e8n"
+            ],
+            [
+              "c2c1q",
+              "f4f5",
+              "d2d3",
+              "e7e8n"
+            ]
+          ],
+          "plies": 4,
+          "row": 870,
+          "seconds": 0.002294921003340278,
+          "start_fen": "8/2k1P3/8/p3P3/5K2/P7/1bpr4/8 b - - 1 42",
+          "status": "ambiguous"
+        }
+      ],
+      "sha256": "663ee03d44debfa5d4888bd6001146d1039d080529bca8476071ff018733d5d3"
+    },
+    {
+      "file": ".local/hero-history-fixtures/val/chunk_001112.npz",
+      "gaps": [
+        {
+          "end_fen": "4K3/1q6/5p2/5P1P/5P2/8/1k6/q7 w - - 0 69",
+          "missing_from_ply": 127,
+          "nodes": 2491,
+          "paths": [
+            [
+              "e7f8",
+              "g8h8",
+              "b2b1q",
+              "h8g8",
+              "b1b7",
+              "g8f8",
+              "a1b2",
+              "f8e8",
+              "a2a1q"
+            ],
+            [
+              "e7f8",
+              "g8f8",
+              "b2b1q",
+              "f8g8",
+              "b1b7",
+              "g8f8",
+              "a1b2",
+              "f8e8",
+              "a2a1q"
+            ]
+          ],
+          "plies": 9,
+          "row": 843,
+          "seconds": 0.046829015998810064,
+          "start_fen": "6K1/4b3/5p2/5P1P/5P2/8/pp6/k7 b - - 5 64",
+          "status": "ambiguous"
+        }
+      ],
+      "sha256": "3b1f8f494ecc0dd76da73984d23b50e7b4df68c332ad16c152f439d28873ead5"
+    },
+    {
+      "file": ".local/hero-history-fixtures/val/chunk_001113.npz",
+      "gaps": [
+        {
+          "end_fen": "8/8/8/3P4/8/8/8/kq2K3 w - - 0 67",
+          "missing_from_ply": 123,
+          "nodes": 205677,
+          "paths": [
+            [
+              "b2c1q",
+              "b1c1",
+              "a3a2",
+              "c1d2",
+              "a2a1",
+              "d2e1",
+              "b3b2",
+              "d4d5",
+              "b2b1q"
+            ],
+            [
+              "b2c1q",
+              "b1c1",
+              "a3a2",
+              "c1d2",
+              "a2a1",
+              "d4d5",
+              "b3b2",
+              "d2e1",
+              "b2b1q"
+            ]
+          ],
+          "plies": 9,
+          "row": 756,
+          "seconds": 2.723207748000277,
+          "start_fen": "8/8/8/8/3P4/kp6/1p6/1KR5 b - - 0 62",
+          "status": "ambiguous"
+        }
+      ],
+      "sha256": "367481405c774ca0fa7774b005fd835e649cf27654c599c45e9e7577b97be31d"
+    },
+    {
+      "file": ".local/hero-history-fixtures/val/chunk_001279.npz",
+      "gaps": [
+        {
+          "end_fen": "3N4/8/8/8/5k2/3K1P2/8/1rq5 b - - 0 77",
+          "missing_from_ply": 145,
+          "nodes": 35581,
+          "paths": [
+            [
+              "b4b8",
+              "c2c3",
+              "a2a1q",
+              "c3d3",
+              "a1c1",
+              "d6d7",
+              "b8b1",
+              "d7d8n"
+            ],
+            [
+              "b4b8",
+              "c2d2",
+              "a2a1q",
+              "d2d3",
+              "a1c1",
+              "d6d7",
+              "b8b1",
+              "d7d8n"
+            ]
+          ],
+          "plies": 8,
+          "row": 558,
+          "seconds": 0.4744988559978083,
+          "start_fen": "8/8/3P4/8/1r3k2/5P2/p1K5/8 b - - 1 73",
+          "status": "ambiguous"
+        }
+      ],
+      "sha256": "3cce9f6d454c2a69baea6be06d556ef57553cebd4be79e4f37c6053be1bc2e81"
+    },
+    {
+      "file": ".local/hero-history-fixtures/val/chunk_001350.npz",
+      "gaps": [
+        {
+          "end_fen": "4K3/7p/1q2p1k1/5R2/3P4/8/8/5qq1 w - - 0 67",
+          "missing_from_ply": 123,
+          "nodes": 3508,
+          "paths": [
+            [
+              "b7b8",
+              "f8f7",
+              "b8b6",
+              "f7e8",
+              "h6g6",
+              "d3f3",
+              "g2g1q",
+              "f3f5",
+              "f2f1q"
+            ],
+            [
+              "b7b8",
+              "f8f7",
+              "b8b6",
+              "f7e8",
+              "h6g6",
+              "d3f3",
+              "f2f1q",
+              "f3f5",
+              "g2g1q"
+            ]
+          ],
+          "plies": 9,
+          "row": 385,
+          "seconds": 0.053023805005068425,
+          "start_fen": "5K2/1q5p/4p2k/8/3P4/3R4/5pp1/8 b - - 3 62",
+          "status": "ambiguous"
+        }
+      ],
+      "sha256": "883a297d6610f31ef494153a585eac8cd83c9847df6b2de269e6990a7aefcd8f"
+    },
+    {
+      "file": ".local/hero-history-fixtures/val/chunk_001412.npz",
+      "gaps": [
+        {
+          "end_fen": "8/8/4q3/3N3K/8/7n/8/3k1r2 w - - 0 83",
+          "missing_from_ply": 159,
+          "nodes": 874,
+          "paths": [
+            [
+              "e2e1q",
+              "e8c7",
+              "e1e6",
+              "c7d5",
+              "f2f1r"
+            ],
+            [
+              "e2e1q",
+              "e8f6",
+              "e1e6",
+              "f6d5",
+              "f2f1r"
+            ]
+          ],
+          "plies": 5,
+          "row": 448,
+          "seconds": 0.017202255003212485,
+          "start_fen": "4N3/8/8/7K/8/7n/4pp2/3k4 b - - 5 80",
+          "status": "ambiguous"
+        }
+      ],
+      "sha256": "9ec45c0d172ede18f2610afac0c0dcd35a129ab319c47e761d195ed059d5c8f2"
+    }
+  ],
+  "schema_version": "hero-missing-move-uniqueness-v1",
+  "scope": "Bounded legal-path diagnostic; no training data generated"
+}

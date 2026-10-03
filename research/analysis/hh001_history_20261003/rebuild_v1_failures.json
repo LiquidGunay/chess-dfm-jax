@@ -1,0 +1,92 @@
+[
+  {
+    "error": "ValueError: More than one missing prefix move at ply 97; need source PGN",
+    "source": "/workspace/training-inputs/trajectory-v3-lc0-test80-h8-sets1-3-20260430/trajectory_v3/train/chunk_019352.npz",
+    "split": "train"
+  },
+  {
+    "error": "ValueError: More than one missing prefix move at ply 141; need source PGN",
+    "source": "/workspace/training-inputs/trajectory-v3-lc0-test80-h8-sets1-3-20260430/trajectory_v3/train/chunk_009285.npz",
+    "split": "train"
+  },
+  {
+    "error": "ValueError: More than one missing prefix move at ply 123; need source PGN",
+    "source": "/workspace/training-inputs/trajectory-v3-lc0-test80-h8-sets1-3-20260430/trajectory_v3/train/chunk_015070.npz",
+    "split": "train"
+  },
+  {
+    "error": "ValueError: More than one missing prefix move at ply 203; need source PGN",
+    "source": "/workspace/training-inputs/trajectory-v3-lc0-test80-h8-sets1-3-20260430/trajectory_v3/train/chunk_025137.npz",
+    "split": "train"
+  },
+  {
+    "error": "ValueError: More than one missing prefix move at ply 195; need source PGN",
+    "source": "/workspace/training-inputs/trajectory-v3-lc0-test80-h8-sets1-3-20260430/trajectory_v3/train/chunk_014893.npz",
+    "split": "train"
+  },
+  {
+    "error": "ValueError: More than one missing prefix move at ply 123; need source PGN",
+    "source": "/workspace/training-inputs/trajectory-v3-lc0-test80-h8-sets1-3-20260430/trajectory_v3/train/chunk_010369.npz",
+    "split": "train"
+  },
+  {
+    "error": "ValueError: More than one missing prefix move at ply 133; need source PGN",
+    "source": "/workspace/training-inputs/trajectory-v3-lc0-test80-h8-sets1-3-20260430/trajectory_v3/train/chunk_015469.npz",
+    "split": "train"
+  },
+  {
+    "error": "ValueError: More than one missing prefix move at ply 135; need source PGN",
+    "source": "/workspace/training-inputs/trajectory-v3-lc0-test80-h8-sets1-3-20260430/trajectory_v3/train/chunk_008986.npz",
+    "split": "train"
+  },
+  {
+    "error": "ValueError: More than one missing prefix move at ply 111; need source PGN",
+    "source": "/workspace/training-inputs/trajectory-v3-lc0-test80-h8-sets1-3-20260430/trajectory_v3/train/chunk_015026.npz",
+    "split": "train"
+  },
+  {
+    "error": "ValueError: More than one missing prefix move at ply 201; need source PGN",
+    "source": "/workspace/training-inputs/trajectory-v3-lc0-test80-h8-sets1-3-20260430/trajectory_v3/train/chunk_014927.npz",
+    "split": "train"
+  },
+  {
+    "error": "ValueError: More than one missing prefix move at ply 105; need source PGN",
+    "source": "/workspace/training-inputs/trajectory-v3-lc0-test80-h8-sets1-3-20260430/trajectory_v3/train/chunk_002882.npz",
+    "split": "train"
+  },
+  {
+    "error": "ValueError: More than one missing prefix move at ply 129; need source PGN",
+    "source": "/workspace/training-inputs/trajectory-v3-lc0-test80-h8-sets1-3-20260430/trajectory_v3/val/chunk_000197.npz",
+    "split": "validation"
+  },
+  {
+    "error": "ValueError: More than one missing prefix move at ply 145; need source PGN",
+    "source": "/workspace/training-inputs/trajectory-v3-lc0-test80-h8-sets1-3-20260430/trajectory_v3/val/chunk_000878.npz",
+    "split": "validation"
+  },
+  {
+    "error": "ValueError: More than one missing prefix move at ply 83; need source PGN",
+    "source": "/workspace/training-inputs/trajectory-v3-lc0-test80-h8-sets1-3-20260430/trajectory_v3/val/chunk_000949.npz",
+    "split": "validation"
+  },
+  {
+    "error": "ValueError: More than one missing prefix move at ply 123; need source PGN",
+    "source": "/workspace/training-inputs/trajectory-v3-lc0-test80-h8-sets1-3-20260430/trajectory_v3/val/chunk_001113.npz",
+    "split": "validation"
+  },
+  {
+    "error": "ValueError: More than one missing prefix move at ply 145; need source PGN",
+    "source": "/workspace/training-inputs/trajectory-v3-lc0-test80-h8-sets1-3-20260430/trajectory_v3/val/chunk_001279.npz",
+    "split": "validation"
+  },
+  {
+    "error": "ValueError: More than one missing prefix move at ply 123; need source PGN",
+    "source": "/workspace/training-inputs/trajectory-v3-lc0-test80-h8-sets1-3-20260430/trajectory_v3/val/chunk_001350.npz",
+    "split": "validation"
+  },
+  {
+    "error": "ValueError: More than one missing prefix move at ply 159; need source PGN",
+    "source": "/workspace/training-inputs/trajectory-v3-lc0-test80-h8-sets1-3-20260430/trajectory_v3/val/chunk_001412.npz",
+    "split": "validation"
+  }
+]

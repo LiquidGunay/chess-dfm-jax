@@ -1,0 +1,39 @@
+{
+  "different_history_plane_indices": [
+    19,
+    22,
+    23,
+    32,
+    35,
+    36
+  ],
+  "end_fen": "8/8/8/8/8/3k3K/8/4qr2 w - - 0 103",
+  "finding": "Retained records do not uniquely determine the full-history model input",
+  "full_history_input_sha256": [
+    "3fcda507bb3ad2beda7b1900b19a36c107a508414ccad692ad9b0ab0e06b14dc",
+    "d5055c042e16e5e0ca48c16e21dcb7ea779cb4cfa5b0e9171b087ee6c5972f6a"
+  ],
+  "nodes": 75,
+  "nonhistory_inputs_identical_to_original": true,
+  "paths": [
+    [
+      "f2f1r",
+      "g3h3",
+      "e2e1q"
+    ],
+    [
+      "e2e1q",
+      "g3h3",
+      "f2f1r"
+    ]
+  ],
+  "plies": 3,
+  "prefix_replayed_from_ply_zero": true,
+  "row": 819,
+  "row_ply": 204,
+  "seconds": 0.0017684569975244813,
+  "source": ".local/hero-history-fixtures/train/chunk_014927.npz",
+  "source_sha256": "5fa0f0cd3320d56593fcf60dc0c49e14d332a1ed64331b5206316fdc77b4ea2e",
+  "start_fen": "8/8/8/8/8/3k2K1/4pp2/8 b - - 1 101",
+  "status": "ambiguous"
+}
