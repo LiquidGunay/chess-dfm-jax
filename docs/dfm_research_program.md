@@ -44,6 +44,20 @@ quality or optimizer-master movement. The slightly contracted data and
 Frozen protocol, results, uncertainty and receipts are under
 `research/analysis/ev006_hh002_play_20261003/`.
 
+EV-007 closeout: inference-aligned legal policy CE was recomputed on the same
+8,128 retained Hero positions and a separate common 8,192-position sequential
+pool for raw BT4, Hero1 and HH-002 (native policy, DFM1, DFM8). Raw BT4 has
+the lowest loss on both pools. HH-002 native policy improves over Hero1 but
+still has worse loss than raw; its playing-strength difference from raw
+remains inconclusive. DFM1 improves over Hero1 on both loss and direct play.
+However, HH-002 DFM8 has worse loss than Hero1 DFM8 on both pools while
+winning their direct match with 65.82% score (paired 95% interval
+53.82%-77.82%). It also has better played-move top-1 accuracy. Thus CE is a
+useful diagnostic, not a monotonic strength proxy or a substitute for paired
+games against full-history BT4. These are deployment-policy losses, not the
+teacher-forced/composite training objective. Data, results and receipts:
+`research/analysis/ev007_policy_loss_play_20261003/`.
+
 ## 1. Complete the selected epoch
 
 Run PA-001 with the already selected Proposal A recipe. Preserve the frozen

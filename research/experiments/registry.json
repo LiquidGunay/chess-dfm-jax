@@ -15,9 +15,12 @@
     {
       "id": "EV-007",
       "name": "Inference-aligned policy validation versus observed play",
-      "status": "preregistered",
+      "status": "complete_ce_broadly_tracks_play_but_not_monotonically",
       "depends_on": ["EV-006", "EV-005", "HH-002"],
       "specification": "research/analysis/ev007_policy_loss_play_20261003/preregister.json",
+      "results": "research/analysis/ev007_policy_loss_play_20261003/summary.json",
+      "decision": "research/analysis/ev007_policy_loss_play_20261003/decision.json",
+      "result_summary": "Raw BT4 has lowest CE on both shared validation pools. HH-002 native/DFM1 improve on Hero1 but remain worse than raw. HH-002 DFM8 has worse CE than old Hero1 DFM8 yet wins their direct match; CE alone is not a monotonic strength measure. All 14 aggregations validated; historical Hero1 metrics reproduce.",
       "scope": "Raw BT4 and old/history-trained Hero native/DFM1/DFM8 on shared 8128-position Hero and 8192-position sequential pools. No training or new games; compare legal CE with existing play results."
     },
     {

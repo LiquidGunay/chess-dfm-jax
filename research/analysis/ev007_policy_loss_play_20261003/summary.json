@@ -1,0 +1,438 @@
+{
+  "descriptive_rankings": {
+    "hero_validation": {
+      "ce_ascending": [
+        [
+          "hh002",
+          "native_policy"
+        ],
+        [
+          "hero1",
+          "native_policy"
+        ],
+        [
+          "hh002",
+          "dfm_one_pass"
+        ],
+        [
+          "hero1",
+          "dfm_one_pass"
+        ],
+        [
+          "hh002",
+          "dfm_eight_pass"
+        ]
+      ],
+      "observed_score_descending": [
+        [
+          "hh002",
+          "native_policy"
+        ],
+        [
+          "hero1",
+          "native_policy"
+        ],
+        [
+          "hh002",
+          "dfm_one_pass"
+        ],
+        [
+          "hh002",
+          "dfm_eight_pass"
+        ],
+        [
+          "hero1",
+          "dfm_one_pass"
+        ]
+      ],
+      "ordering_agrees": false,
+      "scope": "Descriptive only, five learned policies with observed BT4 matches; no significance or causal claim"
+    },
+    "sequential_validation": {
+      "ce_ascending": [
+        [
+          "hh002",
+          "native_policy"
+        ],
+        [
+          "hero1",
+          "native_policy"
+        ],
+        [
+          "hh002",
+          "dfm_one_pass"
+        ],
+        [
+          "hero1",
+          "dfm_one_pass"
+        ],
+        [
+          "hh002",
+          "dfm_eight_pass"
+        ]
+      ],
+      "observed_score_descending": [
+        [
+          "hh002",
+          "native_policy"
+        ],
+        [
+          "hero1",
+          "native_policy"
+        ],
+        [
+          "hh002",
+          "dfm_one_pass"
+        ],
+        [
+          "hh002",
+          "dfm_eight_pass"
+        ],
+        [
+          "hero1",
+          "dfm_one_pass"
+        ]
+      ],
+      "ordering_agrees": false,
+      "scope": "Descriptive only, five learned policies with observed BT4 matches; no significance or causal claim"
+    }
+  },
+  "direct_history_versus_hero1_comparisons": [
+    {
+      "candidate": "hh002",
+      "candidate_score": 0.5859375,
+      "edge": "policy_hero1",
+      "interval": {
+        "confidence": 0.95,
+        "elo": 60.31415751636439,
+        "elo_lower": -23.733935888794957,
+        "elo_model": "logistic",
+        "elo_upper": 152.16440962196845,
+        "method": "hoeffding_bounded_complete_pairs",
+        "pair_count": 128,
+        "promotion_eligible": false,
+        "score": 0.5859375,
+        "score_lower": 0.46589715108500995,
+        "score_upper": 0.70597784891499
+      },
+      "mode": "native_policy",
+      "opponent": "hero1",
+      "validation_differences_candidate_minus_opponent": {
+        "hero_validation": {
+          "legal_conditional_ce": -0.048641266457220445,
+          "legal_top1_accuracy": 0.014025590551181022
+        },
+        "sequential_validation": {
+          "legal_conditional_ce": -0.0523519441804865,
+          "legal_top1_accuracy": 0.0230712890625
+        }
+      }
+    },
+    {
+      "candidate": "hh002",
+      "candidate_score": 0.658203125,
+      "edge": "p1_hero1",
+      "interval": {
+        "confidence": 0.95,
+        "elo": 113.83674087401768,
+        "elo_lower": 26.56988839782081,
+        "elo_model": "logistic",
+        "elo_upper": 218.09563118240237,
+        "method": "hoeffding_bounded_complete_pairs",
+        "pair_count": 128,
+        "promotion_eligible": false,
+        "score": 0.658203125,
+        "score_lower": 0.53816277608501,
+        "score_upper": 0.77824347391499
+      },
+      "mode": "dfm_one_pass",
+      "opponent": "hero1",
+      "validation_differences_candidate_minus_opponent": {
+        "hero_validation": {
+          "legal_conditional_ce": -0.06920196631039888,
+          "legal_top1_accuracy": 0.015255905511811052
+        },
+        "sequential_validation": {
+          "legal_conditional_ce": -0.08219989293346552,
+          "legal_top1_accuracy": 0.0185546875
+        }
+      }
+    },
+    {
+      "candidate": "hh002",
+      "candidate_score": 0.658203125,
+      "edge": "p8_hero1",
+      "interval": {
+        "confidence": 0.95,
+        "elo": 113.83674087401768,
+        "elo_lower": 26.56988839782081,
+        "elo_model": "logistic",
+        "elo_upper": 218.09563118240237,
+        "method": "hoeffding_bounded_complete_pairs",
+        "pair_count": 128,
+        "promotion_eligible": false,
+        "score": 0.658203125,
+        "score_lower": 0.53816277608501,
+        "score_upper": 0.77824347391499
+      },
+      "mode": "dfm_eight_pass",
+      "opponent": "hero1",
+      "validation_differences_candidate_minus_opponent": {
+        "hero_validation": {
+          "legal_conditional_ce": 0.038214840855384846,
+          "legal_top1_accuracy": 0.008858267716535417
+        },
+        "sequential_validation": {
+          "legal_conditional_ce": 0.024585343277266247,
+          "legal_top1_accuracy": 0.0126953125
+        }
+      }
+    }
+  ],
+  "ev003_reproduction": [
+    {
+      "ce_difference_vs_ev003": -7.912490218586754e-09,
+      "mode": "native_policy",
+      "top1_identical": true
+    },
+    {
+      "ce_difference_vs_ev003": -2.8015083586296896e-09,
+      "mode": "dfm_one_pass",
+      "top1_identical": true
+    }
+  ],
+  "experiment_id": "EV-007",
+  "hh002_eight_versus_one_play": {
+    "confidence": 0.95,
+    "elo": -104.85976756261368,
+    "elo_lower": -206.51410790541297,
+    "elo_model": "logistic",
+    "elo_upper": -18.392352882074373,
+    "method": "hoeffding_bounded_complete_pairs",
+    "pair_count": 128,
+    "promotion_eligible": false,
+    "score": 0.353515625,
+    "score_lower": 0.23347527608500993,
+    "score_upper": 0.47355597391499005
+  },
+  "limitations": "Validation pools are reused development data, not newly held-out strength tests. Played moves are not certified optimal. Positions can be correlated; no IID position confidence claims. CE measures probabilities/calibration, while greedy play uses argmax and compounds rare mistakes. Association is not causation or a guarantee of monotonic Elo.",
+  "rows": [
+    {
+      "missing_play_reason": "reference, not a self-play result",
+      "mode": "native_policy",
+      "model": "raw_bt4",
+      "validation": {
+        "hero_validation": {
+          "legal_conditional_ce": 1.4115221708711978,
+          "legal_top1_accuracy": 0.5440452755905512,
+          "positions": 8128
+        },
+        "sequential_validation": {
+          "legal_conditional_ce": 1.3412584648554002,
+          "legal_top1_accuracy": 0.5660400390625,
+          "positions": 8192
+        }
+      },
+      "versus_full_history_bt4": null
+    },
+    {
+      "missing_play_reason": null,
+      "mode": "native_policy",
+      "model": "hero1",
+      "validation": {
+        "hero_validation": {
+          "legal_conditional_ce": 1.4925034850924659,
+          "legal_top1_accuracy": 0.5169783464566929,
+          "positions": 8128
+        },
+        "sequential_validation": {
+          "legal_conditional_ce": 1.4239523306060846,
+          "legal_top1_accuracy": 0.5345458984375,
+          "positions": 8192
+        }
+      },
+      "versus_full_history_bt4": {
+        "edge": "policy_full",
+        "games": 256,
+        "interval": {
+          "confidence": 0.95,
+          "elo": -57.520996290825764,
+          "elo_lower": -148.90779956278115,
+          "elo_model": "logistic",
+          "elo_upper": 26.462479358012825,
+          "method": "hoeffding_bounded_complete_pairs",
+          "pair_count": 128,
+          "promotion_eligible": false,
+          "score": 0.41796875,
+          "score_lower": 0.29792840108500995,
+          "score_upper": 0.53800909891499
+        },
+        "score": 0.41796875,
+        "source_experiment": "EV-005"
+      }
+    },
+    {
+      "missing_play_reason": null,
+      "mode": "dfm_one_pass",
+      "model": "hero1",
+      "validation": {
+        "hero_validation": {
+          "legal_conditional_ce": 2.043090366619018,
+          "legal_top1_accuracy": 0.4565698818897638,
+          "positions": 8128
+        },
+        "sequential_validation": {
+          "legal_conditional_ce": 1.9902675154077851,
+          "legal_top1_accuracy": 0.4722900390625,
+          "positions": 8192
+        }
+      },
+      "versus_full_history_bt4": {
+        "edge": "p1_full",
+        "games": 256,
+        "interval": {
+          "confidence": 0.95,
+          "elo": -254.72883903486974,
+          "elo_lower": -456.2494164915396,
+          "elo_model": "logistic",
+          "elo_upper": -140.9969479312804,
+          "method": "hoeffding_bounded_complete_pairs",
+          "pair_count": 128,
+          "promotion_eligible": false,
+          "score": 0.1875,
+          "score_lower": 0.06745965108500993,
+          "score_upper": 0.30754034891499005
+        },
+        "score": 0.1875,
+        "source_experiment": "EV-005"
+      }
+    },
+    {
+      "missing_play_reason": "no corresponding full-history BT4 match",
+      "mode": "dfm_eight_pass",
+      "model": "hero1",
+      "validation": {
+        "hero_validation": {
+          "legal_conditional_ce": 2.0738940592925164,
+          "legal_top1_accuracy": 0.4375,
+          "positions": 8128
+        },
+        "sequential_validation": {
+          "legal_conditional_ce": 2.0119830623894117,
+          "legal_top1_accuracy": 0.4581298828125,
+          "positions": 8192
+        }
+      },
+      "versus_full_history_bt4": null
+    },
+    {
+      "missing_play_reason": null,
+      "mode": "native_policy",
+      "model": "hh002",
+      "validation": {
+        "hero_validation": {
+          "legal_conditional_ce": 1.4438622186352454,
+          "legal_top1_accuracy": 0.531003937007874,
+          "positions": 8128
+        },
+        "sequential_validation": {
+          "legal_conditional_ce": 1.3716003864255981,
+          "legal_top1_accuracy": 0.5576171875,
+          "positions": 8192
+        }
+      },
+      "versus_full_history_bt4": {
+        "edge": "policy_raw",
+        "games": 256,
+        "interval": {
+          "confidence": 0.95,
+          "elo": -12.219568270856845,
+          "elo_lower": -98.15793677077951,
+          "elo_model": "logistic",
+          "elo_upper": 72.22056670352883,
+          "method": "hoeffding_bounded_complete_pairs",
+          "pair_count": 128,
+          "promotion_eligible": false,
+          "score": 0.482421875,
+          "score_lower": 0.36238152608500995,
+          "score_upper": 0.60246222391499
+        },
+        "score": 0.482421875,
+        "source_experiment": "EV-006"
+      }
+    },
+    {
+      "missing_play_reason": null,
+      "mode": "dfm_one_pass",
+      "model": "hh002",
+      "validation": {
+        "hero_validation": {
+          "legal_conditional_ce": 1.9738884003086192,
+          "legal_top1_accuracy": 0.4718257874015748,
+          "positions": 8128
+        },
+        "sequential_validation": {
+          "legal_conditional_ce": 1.9080676224743196,
+          "legal_top1_accuracy": 0.4908447265625,
+          "positions": 8192
+        }
+      },
+      "versus_full_history_bt4": {
+        "edge": "p1_raw",
+        "games": 256,
+        "interval": {
+          "confidence": 0.95,
+          "elo": -143.33015984736542,
+          "elo_lower": -258.0011926718629,
+          "elo_model": "logistic",
+          "elo_upper": -52.70504489342534,
+          "method": "hoeffding_bounded_complete_pairs",
+          "pair_count": 128,
+          "promotion_eligible": false,
+          "score": 0.3046875,
+          "score_lower": 0.18464715108500993,
+          "score_upper": 0.42472784891499005
+        },
+        "score": 0.3046875,
+        "source_experiment": "EV-006"
+      }
+    },
+    {
+      "missing_play_reason": null,
+      "mode": "dfm_eight_pass",
+      "model": "hh002",
+      "validation": {
+        "hero_validation": {
+          "legal_conditional_ce": 2.112108900147901,
+          "legal_top1_accuracy": 0.4463582677165354,
+          "positions": 8128
+        },
+        "sequential_validation": {
+          "legal_conditional_ce": 2.036568405666678,
+          "legal_top1_accuracy": 0.4708251953125,
+          "positions": 8192
+        }
+      },
+      "versus_full_history_bt4": {
+        "edge": "p8_raw",
+        "games": 256,
+        "interval": {
+          "confidence": 0.95,
+          "elo": -245.95888641325385,
+          "elo_lower": -435.75184388626366,
+          "elo_model": "logistic",
+          "elo_upper": -134.6680186190169,
+          "method": "hoeffding_bounded_complete_pairs",
+          "pair_count": 128,
+          "promotion_eligible": false,
+          "score": 0.1953125,
+          "score_lower": 0.07527215108500993,
+          "score_upper": 0.31535284891499005
+        },
+        "score": 0.1953125,
+        "source_experiment": "EV-006"
+      }
+    }
+  ],
+  "validated_per_position_aggregations": 14
+}

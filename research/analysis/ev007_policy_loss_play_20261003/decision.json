@@ -1,0 +1,36 @@
+{
+  "experiment_id": "EV-007",
+  "status": "complete",
+  "conclusion": "Inference-aligned CE broadly follows playing strength but is not monotonic; none of the learned policies beats raw BT4 on either shared validation pool.",
+  "findings": [
+    "Native BT4 CE is 1.411522 on Hero validation and 1.341258 on sequential validation, the lowest among the seven policies.",
+    "HH-002 native CE is 1.443862/1.371600, better than Hero1 native 1.492503/1.423952 but worse than raw BT4. The existing HH-002 native game score against raw is 48.24%, paired 95% interval 36.24%-60.25%; degradation in playing strength remains unestablished.",
+    "HH-002 one-pass DFM improves CE on both pools versus old Hero1 one-pass, and wins their direct match with 65.82% score. It still has substantially worse CE and observed BT4 score than native policy.",
+    "HH-002 eight-pass DFM worsens both CE and play versus HH-002 one-pass; its direct game score against one-pass is 35.35%, paired 95% interval 23.35%-47.36%.",
+    "A direct counterexample to monotonic CE-to-strength ranking: HH-002 eight-pass has higher CE than Hero1 eight-pass on both pools (2.112109 versus 2.073894; 2.036568 versus 2.011983), but wins their direct match with 65.82% score, paired 95% interval 53.82%-77.82%. Its played-move top-1 accuracy is nevertheless higher on both pools (44.64% versus 43.75%; 47.08% versus 45.81%).",
+    "Probability loss, argmax move agreement and game outcome are distinct measurements. Calibration, non-optimal played-move labels, distribution shift and rare consequential blunders are possible explanations, not causes isolated by this experiment."
+  ],
+  "recommendation": "Retain full-history raw BT4 as the strength anchor. Track shared inference-aligned legal CE and top-1 for inexpensive screening, but require paired games against BT4 to establish a strength improvement; do not select architectures by composite training loss or CE alone.",
+  "verification": {
+    "local_tests_passed": 25,
+    "result_and_per_position_file_hashes_verified": true,
+    "per_position_aggregations_verified": 14,
+    "eight_pass_action_parity_positions": 32640,
+    "one_pass_action_parity_positions": 64,
+    "hero1_sequential_previous_top1_exact_match": true,
+    "hero1_sequential_previous_ce_max_abs_difference": 7.912490218586754e-09
+  },
+  "execution": {
+    "cpu_app_id": "ap-ek0TM3UByKI3K89ZvFhmag",
+    "gpu_app_id": "ap-O9kTU3qRVy7fTJWFad07Ll",
+    "gpu_function_call_id": "fc-01M410PQCJFMPZ3JD2NGSE5SYD",
+    "evaluator_seconds_including_model_loading": 235.323708766,
+    "total_declared_attempt_bound_dollars": "0.99290400",
+    "conservative_month_reservation_floor_dollars": "19.61969855",
+    "live_usage_before_cpu_dollars": "4.79000000",
+    "live_usage_before_gpu_dollars": "4.80000000",
+    "live_usage_at_collection_dollars": "4.99000000",
+    "accounting_caveat": "Workspace meter readings can reconcile with lag and are not isolated experiment invoices; retain full declared reservations for subsequent launch gates."
+  },
+  "limits": "Reused development validation and opening pools, not a fresh held-out strength test. Played-move labels are not certified optimal. Preserve model-specific history contracts. No new training, games, search, absolute Elo or promotion claim."
+}
