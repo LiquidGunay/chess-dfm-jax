@@ -1,0 +1,59 @@
+{
+  "experiment_id": "GPU-002",
+  "status": "complete_fp16_compiled_promising_production_validation_required",
+  "completed_utc": "2026-10-03",
+  "app_url": "https://modal.com/apps/liquidgunay/chess-dfm-research/ap-hFX3JtBGa3f6r4QAggFyeb",
+  "results": "summary.json",
+  "completion_receipt": "completion.json",
+  "all_seven_arms_complete": true,
+  "training_or_optimizer_updates": 0,
+  "gpu_containers_remaining": 0,
+  "findings": [
+    "On the fixed FP32-storage matrix, FP16 and BF16 are effectively tied in warm eager time (~0.18s) and compiled time (~0.096s); strict FP32 is slower (~0.331s eager, ~0.266s compiled).",
+    "Compilation speeds up BF16/FP16 by approximately 1.88/1.89x versus fully eager in this small-batch forward/backward diagnostic. This is not a production end-to-end speedup.",
+    "FP16 compiled gradients are substantially closer to strict FP32 eager than BF16 compiled gradients: first-batch global relative L2 is 0.234% versus 1.732%; raw-BT4 gradient relative L2 is 0.545% versus 3.317%. All three batches are finite.",
+    "FP16 eager and compiled match FP32 eager teacher-forced root choices on all 192 diagnostic positions and native policy choices on the first 64. BF16 compiled disagrees on 2/192 teacher-forced roots and 1/64 native choices. These are small numerical diagnostics, not playing-strength measurements.",
+    "FP32 compiled matches FP32 eager closely, with all-batch global gradient cosine above 0.99999999. The previously reported large BT4 compilation discrepancy is not reproduced under this different checkpoint/input/storage/runtime protocol. Its historical cause remains unisolated.",
+    "Compilation improves the global-gradient error relative to FP32 for both low-precision formats, but not every tensor or discrete move; do not equate eager agreement with accuracy.",
+    "Cold first forward/backward takes 75.95s FP32, 100.41s BF16 and 99.28s FP16; includes compilation, autotuning and first-use overhead. Narrower arithmetic did not shorten cold start here."
+  ],
+  "timing_sensitivity": {
+    "median_forward_backward_seconds": {
+      "bf16_compiled": 0.09575409599997897,
+      "bf16_eager": 0.17296232249999122,
+      "fp16_compiled": 0.09565544299999829,
+      "fp16_eager": 0.1757743309999995,
+      "fp32_compiled": 0.26646222450000323,
+      "fp32_eager": 0.3265100684999993,
+      "production_control": 0.11785442950002789
+    },
+    "fp16_compiled_speedup_vs_same_dtype_eager_mean": 1.8914134192442056,
+    "fp16_compiled_speedup_vs_same_dtype_eager_median": 1.8375779306150164,
+    "fp16_compiled_speedup_vs_production_mean": 1.5323416528546374,
+    "fp16_compiled_speedup_vs_production_median": 1.2320723819138029,
+    "fp16_compiled_time_reduction_vs_production_median": 0.18835937345930942,
+    "interpretation": "Production control has one 0.395s repeat versus ~0.118s median, inflating its 0.147s mean; report both and do not advertise the mean-only ~1.53x ratio as a robust production gain. Median comparison is ~1.23x speed (~19% less time). No repeats discarded; no production batch or optimizer timing yet."
+  },
+  "precision_scope": {
+    "matrix_parameter_and_gradient_storage": "FP32, checkpoint values promoted exactly; existing BF16 weight quantization cannot be undone",
+    "fp16_compute": "FP16 with existing FP32 normalization/statistics/loss islands and fixed loss scaling 128; finite over three batches is not a long-training stability guarantee",
+    "production_control": "Original mixed FP32/BF16 parameter storage, eager BT4, compiled fresh regions, high/TF32 and native reduction settings. Different storage/settings from the controlled matrix.",
+    "main_matrix_parameter_bytes": 1109210392,
+    "production_parameter_bytes": 712293144
+  },
+  "next_step_not_launched": "Test the promising compiled FP16/FP32-storage runtime against the exact production configuration at batch 1024, including data, optimizer and checkpoint-resume behavior; explicitly distinguish FP32 optimizer/master-state changes from a runtime-only optimization. Then bounded multi-update stability and common-pool validation before long training or play claims. No training runtime was switched.",
+  "budget": {
+    "preflight_declared_bound_dollars": "0.07912800",
+    "sweep_declared_bound_dollars": "3.19411200",
+    "total_declared_bound_dollars": "3.27324000",
+    "prior_conservative_floor_dollars": "23.09341055",
+    "new_conservative_floor_dollars": "26.36665055",
+    "observed_compute_before_dollars": "5.72000000",
+    "observed_compute_after_dollars": "6.24000000",
+    "observed_increase_dollars": "0.52000000",
+    "usage_note": "Metered total minus only provider-waived storage, before plan credits. Billing observations lag and can revise; increase is not an exact per-app invoice. Retain conservative declared-attempt floor.",
+    "no_active_gpu_containers_confirmed": true
+  },
+  "retention": "No models or optimizer states written. Full gradient references and compiler caches were container-ephemeral. Seven ~32.9MiB diagnostic tensor slices remain on Modal and ignored locally; 37 terminal artifacts collected with hashes, rechecked before summary. Existing assets preserved.",
+  "verification": "45 targeted tests passed; 1 optional JAX-dependent test module skipped. Full CPU dataset/checkpoint byte verification before GPU; matched CPU/GPU input/RNG hashes for all seven arms; all three batches finite for each arm; zero optimizer steps."
+}

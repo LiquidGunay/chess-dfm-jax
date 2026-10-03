@@ -1,0 +1,7 @@
+{
+  "arm": "fp32_compiled",
+  "elapsed_seconds": 109.28873757599999,
+  "process_status": "complete",
+  "result_status": "complete",
+  "returncode": 0
+}

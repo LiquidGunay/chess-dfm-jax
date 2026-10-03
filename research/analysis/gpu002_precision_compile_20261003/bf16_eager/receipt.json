@@ -1,0 +1,7 @@
+{
+  "arm": "bf16_eager",
+  "elapsed_seconds": 27.021145085,
+  "process_status": "complete",
+  "result_status": "complete",
+  "returncode": 0
+}

@@ -15,10 +15,13 @@
     {
       "id": "GPU-002",
       "name": "Matched precision and BT4 compilation diagnostic",
-      "status": "running_cpu_verification_passed",
+      "status": "complete_fp16_compiled_promising_production_validation_required",
       "depends_on": ["GPU-001", "HH-002"],
       "specification": "research/analysis/gpu002_precision_compile_20261003/preregister.json",
       "execution_record": "research/analysis/gpu002_precision_compile_20261003/sweep_run.json",
+      "results": "research/analysis/gpu002_precision_compile_20261003/summary.json",
+      "decision": "research/analysis/gpu002_precision_compile_20261003/decision.json",
+      "result_summary": "All seven arms finite and complete. At batch 64, compiled FP16/BF16 both ~0.096s forward/backward versus ~0.18s fully eager. FP16 is substantially closer to strict FP32 numerically. Production-control median is 0.118s: ~23% faster (~19% less time), not the matrix's ~1.9x speedup. No optimizer steps, production-batch proof or strength claim; GPU stopped.",
       "scope": "One L40S, FP32/BF16/FP16 compute with FP32 parameter storage, eager/compiled matrix and separate original-storage control. Fixed HH-002 checkpoint and 192 full-history rows. Forward/backward timing and numerics only; no optimizer steps or strength claims. CPU plus GPU declared-attempt ceiling $3.30."
     },
     {

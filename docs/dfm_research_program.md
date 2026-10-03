@@ -60,6 +60,22 @@ teacher-forced/composite training objective. Data, results and receipts:
 
 ## 1. Complete the selected epoch
 
+GPU-002 systems diagnostic (2026-10-03): the full-history, fixed-weight
+FP32/BF16/FP16 eager/compiled matrix and separate production-storage control
+completed on one L40S. Compiled FP16/BF16 both take about 0.096s per
+forward/backward at batch 64, versus about 0.18s fully eager; strict FP32 is
+slower. FP16 remains substantially closer to the FP32 reference numerically.
+The existing runtime already compiles fresh regions: its median is 0.118s,
+so the relevant exploratory median comparison is about 1.23x speed, not
+1.9x. Cold compiled first passes take 76--100 seconds. These measurements
+exclude optimizer/data/checkpoint work and are not production-batch or
+strength results. The main matrix promotes stored checkpoint values to FP32
+parameter/gradient storage, unlike the existing mixed-storage control; no
+training runtime was silently changed. Next require batch-1024 full-step
+and bounded training-stability/common-validation checks under a new explicit
+contract. All GPUs stopped; evidence and limitations are recorded in
+`research/analysis/gpu002_precision_compile_20261003/`.
+
 Run PA-001 with the already selected Proposal A recipe. Preserve the frozen
 data order, optimizer, 7,774-update schedule, validation, and checkpoints.
 The update-6,219 pre-decay state is a continuation asset; the update-7,774

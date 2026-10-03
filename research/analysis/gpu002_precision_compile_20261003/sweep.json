@@ -1,0 +1,57 @@
+{
+  "all_complete": true,
+  "declared_cost": "3.19411200",
+  "git_commit": "40dcd1aed21759c890b9b0514fce93f465125367",
+  "output_relative": "benchmarks/gpu002-2f7289d993368d516fbe",
+  "records": [
+    {
+      "arm": "fp32_eager",
+      "elapsed_seconds": 58.780658091,
+      "process_status": "complete",
+      "result_status": "complete",
+      "returncode": 0
+    },
+    {
+      "arm": "bf16_eager",
+      "elapsed_seconds": 27.021145085,
+      "process_status": "complete",
+      "result_status": "complete",
+      "returncode": 0
+    },
+    {
+      "arm": "fp16_eager",
+      "elapsed_seconds": 26.018521175000018,
+      "process_status": "complete",
+      "result_status": "complete",
+      "returncode": 0
+    },
+    {
+      "arm": "fp32_compiled",
+      "elapsed_seconds": 109.28873757599999,
+      "process_status": "complete",
+      "result_status": "complete",
+      "returncode": 0
+    },
+    {
+      "arm": "bf16_compiled",
+      "elapsed_seconds": 128.08832271199998,
+      "process_status": "complete",
+      "result_status": "complete",
+      "returncode": 0
+    },
+    {
+      "arm": "fp16_compiled",
+      "elapsed_seconds": 126.09089563299995,
+      "process_status": "complete",
+      "result_status": "complete",
+      "returncode": 0
+    },
+    {
+      "arm": "production_control",
+      "elapsed_seconds": 103.07432924699992,
+      "process_status": "complete",
+      "result_status": "complete",
+      "returncode": 0
+    }
+  ]
+}

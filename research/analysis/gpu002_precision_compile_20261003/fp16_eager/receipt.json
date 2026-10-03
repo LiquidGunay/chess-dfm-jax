@@ -1,0 +1,7 @@
+{
+  "arm": "fp16_eager",
+  "elapsed_seconds": 26.018521175000018,
+  "process_status": "complete",
+  "result_status": "complete",
+  "returncode": 0
+}

@@ -1,0 +1,27 @@
+{
+  "arm": {
+    "compile": "none",
+    "dtype": "float32",
+    "id": "fp32_eager",
+    "storage": "float32",
+    "timeout": 240
+  },
+  "cold_cache": true,
+  "command": [
+    "/opt/conda/bin/python",
+    "-m",
+    "research.precision_compile_benchmark",
+    "--protocol",
+    "/tmp/gpu002-sweep-xkjs0g79/protocol.json",
+    "--arm",
+    "fp32_eager",
+    "--data",
+    "/workspace/training-results/datasets/hh002-history-368190a511fd6d5dd51c",
+    "--checkpoint",
+    "/workspace/training-results/runs/hh002-hero-history-0fe540075e5361da6c25/checkpoints/update00000500",
+    "--scratch",
+    "/tmp/gpu002-sweep-xkjs0g79",
+    "--output",
+    "/workspace/training-results/benchmarks/gpu002-2f7289d993368d516fbe/fp32_eager"
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "arm": "fp32_eager",
+  "elapsed_seconds": 58.780658091,
+  "process_status": "complete",
+  "result_status": "complete",
+  "returncode": 0
+}

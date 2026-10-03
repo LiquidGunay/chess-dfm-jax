@@ -1,0 +1,7 @@
+{
+  "arm": "bf16_compiled",
+  "elapsed_seconds": 128.08832271199998,
+  "process_status": "complete",
+  "result_status": "complete",
+  "returncode": 0
+}
