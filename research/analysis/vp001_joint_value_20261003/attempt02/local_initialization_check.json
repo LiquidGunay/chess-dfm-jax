@@ -1,0 +1,14 @@
+{
+  "passed": true,
+  "device": "cpu",
+  "raw_bt4_sha256": "61e43e98d2c4cb747498c6bc13a5bbb3b07e985d3f5d87f0351a4db855fa0651",
+  "both_parameter_count": 278482889,
+  "native_value_head_parameter_count": 1180291,
+  "all_parameters_float32": true,
+  "common_initial_parameters_sha256": "60cd0d44bbfded8356d2ed9f5f8023af7fa042eeead3368489086a0736866073",
+  "common_hash_excludes": ["value_wdl_head.wdl_w", "value_wdl_head.wdl_b"],
+  "native_auxiliary_wdl_output_zero": false,
+  "jepa_residual_auxiliary_wdl_output_zero": true,
+  "targeted_test_count": 144,
+  "targeted_test_failures": 0
+}
