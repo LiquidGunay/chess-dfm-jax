@@ -1,0 +1,200 @@
+{
+  "analysis": {
+    "primary": "New p1 versus Hero1 p1 and new p1 versus full-history raw BT4",
+    "rule": "Report all seven fixed-size descriptive comparisons, marginal paired 95% intervals, faults and cap draws; no optional stopping, absolute Elo or promotion claim.",
+    "scope": "Searchless only. Candidate/raw full history; Hero1 current-only. Different training example counts; no pure causal history attribution.",
+    "unit": "complete color-reversed opening pair"
+  },
+  "budget": {
+    "declared_attempt_maximum_dollars": "0.92976000",
+    "launch_month_usage_dollars": "9.32919455",
+    "maximum_simultaneous_attempts": 3,
+    "per_attempt_cap_dollars": "1.00",
+    "rule": "Live usage plus full attempt reservations, including both CPU attempts; zero automatic retries.",
+    "smoke_plus_development_attempts": 10,
+    "total_declared_maximum_dollars": "9.29760000",
+    "workspace_stop_dollars": "34.00"
+  },
+  "candidate": {
+    "label": "hh002-hero-history-0fe540075e5361da6c25",
+    "plane_history_mode": "lc0_full_history_as_preprocessed",
+    "state_sha256": "ab8fab8dfebfbee862f5004b10251ec3947523ffb2265ab621b7eaa80e3e4948"
+  },
+  "created_utc": "2026-10-03",
+  "development_edges": [
+    {
+      "candidate": "candidate",
+      "candidate_mode": "dfm",
+      "candidate_passes": 1,
+      "id": "p1_hero1",
+      "opponent": "hero1",
+      "opponent_mode": "dfm",
+      "opponent_passes": 1,
+      "role": "primary"
+    },
+    {
+      "candidate": "candidate",
+      "candidate_mode": "dfm",
+      "candidate_passes": 1,
+      "id": "p1_raw",
+      "opponent": "raw_full",
+      "opponent_mode": "policy_only",
+      "opponent_passes": 1,
+      "role": "primary"
+    },
+    {
+      "candidate": "candidate",
+      "candidate_mode": "dfm",
+      "candidate_passes": 8,
+      "id": "p8_hero1",
+      "opponent": "hero1",
+      "opponent_mode": "dfm",
+      "opponent_passes": 8,
+      "role": "secondary"
+    },
+    {
+      "candidate": "candidate",
+      "candidate_mode": "dfm",
+      "candidate_passes": 8,
+      "id": "p8_raw",
+      "opponent": "raw_full",
+      "opponent_mode": "policy_only",
+      "opponent_passes": 1,
+      "role": "secondary"
+    },
+    {
+      "candidate": "candidate",
+      "candidate_mode": "policy_only",
+      "candidate_passes": 1,
+      "id": "policy_hero1",
+      "opponent": "hero1",
+      "opponent_mode": "policy_only",
+      "opponent_passes": 1,
+      "role": "secondary"
+    },
+    {
+      "candidate": "candidate",
+      "candidate_mode": "policy_only",
+      "candidate_passes": 1,
+      "id": "policy_raw",
+      "opponent": "raw_full",
+      "opponent_mode": "policy_only",
+      "opponent_passes": 1,
+      "role": "secondary"
+    },
+    {
+      "candidate": "candidate",
+      "candidate_mode": "dfm",
+      "candidate_passes": 8,
+      "id": "p8_vs_p1",
+      "opponent": "candidate",
+      "opponent_mode": "dfm",
+      "opponent_passes": 1,
+      "role": "refinement_ablation"
+    }
+  ],
+  "experiment_id": "EV-006",
+  "game_contract": {
+    "additional_ply_cap": 256,
+    "block_pairs": 16,
+    "color_reversed_pairs": true,
+    "complete_board_history_for_adjudication": true,
+    "deterministic_greedy_legal_argmax": true,
+    "device": "L4",
+    "draw_rules": "python-chess normal outcomes with draw claims, or symmetric additional-ply-cap draw",
+    "fault_handling": "illegal actions, exceptions, nonfinite outputs, timeouts, or no representable legal move lose the affected game",
+    "model_specific_input_history": true,
+    "policy_batch_size_cap": 16,
+    "policy_timeout_seconds": 30,
+    "runtime": "native_pytorch",
+    "tier": "hero_development"
+  },
+  "hero1": {
+    "label": "hero-training-phase1-hero1_exact-l40s-fae7b0ccef5ca3668ed5",
+    "plane_history_mode": "current_only_as_preprocessed",
+    "state_sha256": "e518083ee5476e7ff15e7c34caf9c0505f8fb7d330ea5a6882e4e9e5c1ef1912"
+  },
+  "openings": {
+    "asset": "promotion-ply12-n2048-v3",
+    "development": {
+      "pairs": 128,
+      "start": 1920
+    },
+    "historical_usage_audit": {
+      "largest_recorded_used_index": 511,
+      "local_json_ranges_stop_exclusive": [
+        [
+          0,
+          16
+        ],
+        [
+          0,
+          128
+        ],
+        [
+          0,
+          256
+        ],
+        [
+          256,
+          384
+        ]
+      ],
+      "remote_arena_directories_checked": 21,
+      "scope": "Tracked analysis contracts and the current Modal training-results arena inventory; this is not proof that no other archive ever used these positions.",
+      "training_overlap": "Source-game disjointness from the newly split Proposal A training corpus must be audited before a held-out confirmation claim. Development results remain descriptive."
+    },
+    "history_file_sha256": "bac58cc7380d9a4173e7618a765917aa0990355e1f8e460196affbe28580ed37",
+    "history_manifest_sha256": "d8781efb5d76066bcf2ce2e9ab2897f3261b20f7c4488c90992a8eadcc918a4b",
+    "pool_file_sha256": "5632cc726112c2ab700e0f4d935fa83d58418b406fc100262f3aa19ce3befe2e",
+    "pool_sha256": "e750e87643c482d28b4201668bd355234fe1fb27f2a690bf784706b1ddd37459",
+    "reuse_note": "Already-exposed EV-005 development allocation; paired benchmark comparison, not unexposed confirmation. Historical source-game disjointness not certified.",
+    "smoke": {
+      "pairs": 16,
+      "start": 1904
+    }
+  },
+  "question": "Did full-history Hero-recipe training improve searchless play, and did it cause greater stored-weight movement than the historical Hero1 run?",
+  "raw_full": {
+    "label": "raw-bt4",
+    "plane_history_mode": "lc0_full_history_as_preprocessed",
+    "state_sha256": "61e43e98d2c4cb747498c6bc13a5bbb3b07e985d3f5d87f0351a4db855fa0651"
+  },
+  "smoke_edges": [
+    {
+      "candidate": "candidate",
+      "candidate_mode": "dfm",
+      "candidate_passes": 1,
+      "id": "smoke_p1_raw",
+      "opponent": "raw_full",
+      "opponent_mode": "policy_only",
+      "opponent_passes": 1,
+      "role": "plumbing"
+    },
+    {
+      "candidate": "candidate",
+      "candidate_mode": "dfm",
+      "candidate_passes": 8,
+      "id": "smoke_p8_hero1",
+      "opponent": "hero1",
+      "opponent_mode": "dfm",
+      "opponent_passes": 8,
+      "role": "plumbing"
+    },
+    {
+      "candidate": "candidate",
+      "candidate_mode": "policy_only",
+      "candidate_passes": 1,
+      "id": "smoke_policy_raw",
+      "opponent": "raw_full",
+      "opponent_mode": "policy_only",
+      "opponent_passes": 1,
+      "role": "plumbing"
+    }
+  ],
+  "tooling": {
+    "arena_source_tree_sha256": "3838c5c696c42269a055687a39ba0db2614f44973545eed6e21c5e333f19e349",
+    "input_preflight_file": "input_preflight.json",
+    "input_preflight_sha256": "4b52d97981b906037a6afe0aab7fd996948da56fa494ec2c24765e2f7a4a131a"
+  }
+}

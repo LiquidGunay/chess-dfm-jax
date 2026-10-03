@@ -1,0 +1,28 @@
+{
+  "arena_source_tree_sha256": "3838c5c696c42269a055687a39ba0db2614f44973545eed6e21c5e333f19e349",
+  "assets": {
+    "promotion-ply12-n2048-histories-v3.json": "bac58cc7380d9a4173e7618a765917aa0990355e1f8e460196affbe28580ed37",
+    "promotion-ply12-n2048-v3-contract.json": "39a0fb54695ce8846b6d474a1d2514fb2d28082323e23f6a63281d8f5bf915cd",
+    "promotion-ply12-n2048-v3.json": "5632cc726112c2ab700e0f4d935fa83d58418b406fc100262f3aa19ce3befe2e"
+  },
+  "effective_model_configs_identical": true,
+  "gpu_active": false,
+  "legacy_config_note": "Missing historical optional fields use explicit current Config defaults; effective recipes are compared exactly.",
+  "models": {
+    "hero-training-phase1-hero1_exact-l40s-fae7b0ccef5ca3668ed5": {
+      "plane_history_mode": "current_only_as_preprocessed",
+      "run_config_sha256": "1f417904b8160517787f45d686cef7567e8affce143d41310a17d5eacc00c33c",
+      "state_sha256": "e518083ee5476e7ff15e7c34caf9c0505f8fb7d330ea5a6882e4e9e5c1ef1912",
+      "updates": 554
+    },
+    "hh002-hero-history-0fe540075e5361da6c25": {
+      "plane_history_mode": "lc0_full_history_as_preprocessed",
+      "run_config_sha256": "eeb3904cd65d5d75eae824c91e82cbe7e84bd5c967a86f17cf6bbd940c5e0586",
+      "state_sha256": "ab8fab8dfebfbee862f5004b10251ec3947523ffb2265ab621b7eaa80e3e4948",
+      "updates": 553
+    }
+  },
+  "passed": true,
+  "raw_bt4_sha256": "61e43e98d2c4cb747498c6bc13a5bbb3b07e985d3f5d87f0351a4db855fa0651",
+  "schema_version": "chess-dfm-arena-input-preflight-v1"
+}
