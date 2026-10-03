@@ -6,6 +6,7 @@ through their existing CPU verification and fresh billing gates. No retries.
 import argparse
 from datetime import datetime, timezone
 import hashlib
+import itertools
 import json
 from pathlib import Path
 import subprocess
@@ -48,9 +49,17 @@ def collect(directory):
                 except FileNotFoundError:
                     continue
                 store(directory / "collected" / run["arm"] / name, data)
-    evaluated = directory / "collected/evaluation_complete.json"
-    if evaluated.exists():
-        for match in json.loads(evaluated.read_text())["matches"]:
+    matches = []
+    for left, right in itertools.combinations(("native", "jepa_residual", "hero1", "raw_bt4"), 2):
+        name = "match-" + left + "-" + right + ".json"
+        try:
+            data = b"".join(volume.read_file(remote + "/" + name))
+        except FileNotFoundError:
+            continue
+        store(directory / "collected" / name, data)
+        matches.append(json.loads(data))
+    if matches:
+        for match in matches:
             result = match["summary"]
             arena_label = result.get("arena_label", result.get("result_label"))
             if arena_label:
@@ -64,6 +73,14 @@ def collect(directory):
                             raise ValueError("Collected arena checksum differs from remote receipt")
                         if json.loads(data)["status"] != "complete":
                             raise ValueError("Collected arena is not terminal")
+                        for reference in json.loads(data)["blocks"]:
+                            block_name = Path(reference["path"]).name
+                            if not block_name.startswith("block-") or not block_name.endswith(".json"):
+                                raise ValueError("Unexpected game-block filename")
+                            block = b"".join(volume.read_file("arenas/" + arena_label + "/blocks/" + block_name))
+                            if hashlib.sha256(block).hexdigest() != reference["sha256"]:
+                                raise ValueError("Collected game block differs from terminal reference")
+                            store(directory / "collected/matches" / (match["left"] + "-" + match["right"]) / "blocks" / block_name, block)
                     store(directory / "collected/matches" / (match["left"] + "-" + match["right"]) / name, data)
 
 

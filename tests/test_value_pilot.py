@@ -142,3 +142,30 @@ def test_value_pilot_log_import_separates_validation_pools(tmp_path):
     assert result["events"][250]["val_2048/loss"] == 3.
     assert result["events"][1000]["val_8192/loss"] == 3.
     assert "val_2048/loss" not in result["events"][1000]
+
+
+def test_value_pilot_independent_interval_is_pair_based():
+    import math
+    from research.analysis.verify_value_pilot import score_interval
+    result = score_interval(128, 128)
+    assert result["score"] == .5
+    assert result["elo"] == 0
+    assert result["score_upper"] - .5 == pytest.approx(math.sqrt(math.log(40) / 256))
+    assert score_interval(0, 128)["elo"] is None
+
+
+def test_value_pilot_independent_opening_replay_retains_stack():
+    import chess
+    from research.analysis.verify_value_pilot import opening_board
+    board = chess.Board()
+    fens = [board.fen(en_passant="legal")]
+    for move in ("e2e4", "e7e5", "g1f3", "b8c6"):
+        board.push_uci(move)
+        fens.append(board.fen(en_passant="legal"))
+    cache = {}
+    restored = opening_board({"fens": fens}, cache)
+    assert restored.move_stack == board.move_stack
+    restored.pop()
+    assert len(opening_board({"fens": fens}, cache).move_stack) == 4
+    with pytest.raises(ValueError, match="not a unique legal sequence"):
+        opening_board({"fens": [fens[0], fens[-1]]}, {})
