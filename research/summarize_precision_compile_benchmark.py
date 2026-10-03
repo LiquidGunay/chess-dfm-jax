@@ -43,7 +43,11 @@ def summarize_arm(result, batch_size):
 
 
 def build_summary(root):
+    import torch
     from safetensors.torch import load_file
+    # Fix CPU reduction ordering to the two-thread collection analysis. This
+    # keeps retained float64 tensor comparisons reproducible across hosts.
+    torch.set_num_threads(2)
     collected = json.loads((root/"completion.json").read_text())
     for name, identity in collected["artifacts"].items():
         path = root/name
