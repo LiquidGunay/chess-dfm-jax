@@ -10017,6 +10017,7 @@ def _load_history_validation_resources(args):
         "pool_definition": {"split": "val", "seed": 2026072501, "count": count,
                             "selection": "hh002_common_retained_pool" if subset else "original_fast_val_global_index_ascending"},
         "schedule_total_examples": _HERO_TRAIN_EXAMPLES, "data": batches.provenance(),
+        **({"intermediate_examples": 1024, "terminal_update": 553} if subset else {}),
     })
 
 
@@ -10177,6 +10178,13 @@ def _run_frozen_validation_milestone(
 ) -> dict[str, Any]:
     """Evaluate a live training prefix without writing a model snapshot."""
 
+    if (resources.fast_pool.get("intermediate_examples") is not None
+            and update != resources.fast_pool["terminal_update"]):
+        pool = resources.fast_pool
+        resources = _HeroValidationResources(fast_batches=resources.fast_batches, fast_pool={
+            **pool, "pool_definition": {**pool["pool_definition"],
+                "count": pool["intermediate_examples"],
+                "selection": "hh002_fixed_common_prefix_1024_for_loss_curves"}})
     was_training = model.training
     try:
         metrics, evaluation_seconds = _evaluate_validation_pool(
