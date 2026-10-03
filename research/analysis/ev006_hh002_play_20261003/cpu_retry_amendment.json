@@ -1,0 +1,22 @@
+{
+  "experiment_id": "EV-006",
+  "type": "CPU audit execution repair; no scientific change",
+  "first_app_id": "ap-QYVFSBByQC4LfbxinqDfkw",
+  "first_task_id": "ta-01M40XG8WEQ8PP7H6PHFN910JR",
+  "first_source_sha256": "31c7d00801d64d676596ae51c971964928d73a79d56a809df681090e9516b2be",
+  "first_status": "Checkpoint hashing and history/config preflight completed; weight loading failed because trusted mount paths were configured after module import.",
+  "preflight_remote_path": "audits/hh002-comparison-cf8aaebbfdc009bf7589/input_preflight.json",
+  "fix": "Configure only the two exact resolved Modal Volume mount roots before importing modules that capture trusted roots.",
+  "additional_cpu_attempt_cap_dollars": "0.18463200",
+  "new_total_declared_maximum_dollars": "9.66686400",
+  "new_projected_conservative_maximum_dollars": "18.62679455",
+  "automatic_retries": 0,
+  "checkpoints_modified": false,
+  "initialization_code_check": {
+    "historical_commit": "86ba0b37e3e188eab115b45a1460d079fac341f8",
+    "initialize_fresh_modules_ast_identical": true,
+    "initialize_fresh_modules_ast_sha256": "8284276e7942657fac1302b5a6659cfe30789e7d5808336f4cf66062010e4be0",
+    "bind_raw_bt4_ast_identical": true,
+    "bind_raw_bt4_ast_sha256": "8a23b768c93feac5fd8b69216b0e74afe0ea02345bf78eb305b87b82817667eb"
+  }
+}
