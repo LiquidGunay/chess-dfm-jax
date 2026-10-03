@@ -386,6 +386,7 @@ def _validated_torch_hero_model_config(
         "policy_passthrough_mode",
         "dfm_state_source",
         "wdl_include_current_state",
+        "value_supervision_mode",
         "dfm_closed_loop_mode",
         "policy_distill_coeff",
         "policy_distill_teacher_mode",
@@ -771,6 +772,10 @@ def torch_hero_checkpoint_descriptor(
         "dfm_blocks",
         "jepa_transition",
     ]
+    if expected_config.get("value_supervision_mode", "legacy") != "legacy":
+        if run_config.get("evaluation_compile_regions") != expected_compile_regions:
+            raise ValueError("Value-pilot inference compilation contract mismatch")
+        expected_compile_regions = ["bt4_encoder_layers"] + expected_compile_regions
     recorded_recipe = run_config.get("recipe")
     if (
         run_config.get("framework") != "torch"
@@ -1219,7 +1224,7 @@ def load_torch_hero_policy(
     ):
         raise ValueError("Torch hero checkpoint raw-BT4 mapping drift.")
     compiled_regions = _apply_compile_regions(model, "fresh")
-    expected_regions = checkpoint.run_config["compile_regions"]
+    expected_regions = checkpoint.run_config.get("evaluation_compile_regions", checkpoint.run_config["compile_regions"])
     if compiled_regions != expected_regions:
         raise ValueError("Torch hero compile-region contract drift.")
     model.eval()

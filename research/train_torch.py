@@ -231,6 +231,7 @@ class Config:
     policy_passthrough_mode: str = "root_only"
     dfm_state_source: str = "trunk"
     wdl_include_current_state: bool = False
+    value_supervision_mode: str = "legacy"
     dfm_closed_loop_mode: str = "none"
 
 
@@ -829,11 +830,43 @@ class BT4PolicyHead(nn.Module):
         return logits
 
 
+class BT4ValueHead(nn.Module):
+    """Native pretrained BT4 winner head; square order matches the export."""
+
+    def __init__(self):
+        super().__init__()
+        self.embed = RawLinear(1024, 128, dtype=torch.float32)
+        self.dense = RawLinear(64 * 128, 128, dtype=torch.float32)
+        self.out = RawLinear(128, 3, dtype=torch.float32)
+
+    def forward(self, tokens: Tensor, compute_dtype: torch.dtype) -> Tensor:
+        hidden = F.mish(self.embed(tokens, compute_dtype))
+        hidden = F.mish(self.dense(hidden.reshape(tokens.shape[0], -1), compute_dtype))
+        return self.out(hidden, compute_dtype)
+
+
+def compose_value_logits(mode: str, native: Tensor, auxiliary: Tensor) -> Tensor:
+    """H0..H8 predictions. Future baselines use only current-board features."""
+    if native.ndim != 2 or native.shape[-1] != 3 or auxiliary.ndim != 3:
+        raise ValueError("Expected native [B,3] and auxiliary [B,H+1,3] logits")
+    if auxiliary.shape[0] != native.shape[0] or auxiliary.shape[-1] != 3:
+        raise ValueError("Value logit shape mismatch")
+    if mode == "native":
+        return torch.cat((native[:, None], auxiliary[:, 1:]), dim=1)
+    if mode != "jepa_residual":
+        raise ValueError("Unknown value supervision mode")
+    # Each legal ply changes the side to move. Preserve D; swap W and L.
+    odd = torch.arange(auxiliary.shape[1], device=native.device) % 2 == 1
+    baseline = torch.where(odd[None, :, None], native.flip(-1)[:, None], native[:, None])
+    return baseline + auxiliary
+
+
 class BT4Encoder(nn.Module):
     def __init__(
         self,
         *,
         include_policy_head: bool = False,
+        include_value_head: bool = False,
         future_policy_head_count: int = 0,
         use_sdpa: bool = False,
         norm_impl: str = "eager",
@@ -848,6 +881,7 @@ class BT4Encoder(nn.Module):
             for _ in range(15)
         )
         self.policy_head = BT4PolicyHead() if include_policy_head else None
+        self.value_head = BT4ValueHead() if include_value_head else None
         if future_policy_head_count < 0:
             raise ValueError("future_policy_head_count must be non-negative")
         if future_policy_head_count and not include_policy_head:
@@ -1313,10 +1347,15 @@ class JointModel(nn.Module):
         super().__init__()
         _validate_hero_architecture_config(config)
         self.config = config
+        if config.value_supervision_mode not in {"legacy", "native", "jepa_residual"}:
+            raise ValueError("Unsupported value supervision mode")
+        if config.value_supervision_mode != "legacy" and not config.wdl_include_current_state:
+            raise ValueError("Native/residual value supervision requires the current state")
         self.bt4_norm_impl = bt4_norm_impl
         dtype = torch.float32
         self.encoder = BT4Encoder(
             include_policy_head=config.use_bt4_policy_residual,
+            include_value_head=config.value_supervision_mode != "legacy",
             future_policy_head_count=(
                 config.horizon - 1 if config.policy_passthrough_mode == "all_horizon_heads" else 0
             ),
@@ -1377,6 +1416,8 @@ class JointModel(nn.Module):
         current: Tensor,
         compute_dtype: torch.dtype,
     ) -> tuple[Tensor | None, Tensor | None]:
+        if getattr(self.encoder, "value_head", None) is not None:
+            self._current_value_logits = self.encoder.value_head(current, compute_dtype)
         policy_head = self.encoder.policy_head
         if policy_head is None:
             if self.encoder.future_policy_heads:
@@ -2973,6 +3014,8 @@ def loss_and_aux(
     if config.wdl_coeff != 0.0:
         if "wdl_targets" not in batch:
             raise ValueError("Nonzero wdl_coeff requires per-horizon wdl_targets")
+        if config.value_supervision_mode != "legacy" and "current_wdl_target" not in batch:
+            raise ValueError("Value pilot requires the actual current root Q/D target")
         raw_wdl_targets = batch["wdl_targets"][:, : config.horizon].float()
         wdl_states, wdl_targets, wdl_weight = _prepare_wdl_supervision(
             pred_z,
@@ -2992,6 +3035,9 @@ def loss_and_aux(
                 wdl_states,
                 compute_dtype,
             )
+            if config.value_supervision_mode != "legacy":
+                wdl_logits = compose_value_logits(config.value_supervision_mode,
+                    model._current_value_logits, wdl_logits)
         if wdl_targets.shape != wdl_logits.shape:
             raise ValueError(
                 "wdl_targets must match predicted WDL logits: "
@@ -3565,6 +3611,8 @@ def full_horizon_evaluation_aux(
     if config.wdl_coeff != 0.0:
         if "wdl_targets" not in batch:
             raise ValueError("Nonzero wdl_coeff requires per-horizon wdl_targets")
+        if config.value_supervision_mode != "legacy" and "current_wdl_target" not in batch:
+            raise ValueError("Value pilot requires the actual current root Q/D target")
         raw_wdl_targets = batch["wdl_targets"][:, : config.horizon].float()
         wdl_states, wdl_targets, wdl_weight = _prepare_wdl_supervision(
             pred_z,
@@ -3583,6 +3631,9 @@ def full_horizon_evaluation_aux(
             wdl_states,
             compute_dtype,
         )
+        if config.value_supervision_mode != "legacy":
+            wdl_logits = compose_value_logits(config.value_supervision_mode,
+                model._current_value_logits, wdl_logits)
         if wdl_targets.shape != wdl_logits.shape:
             raise ValueError(
                 "wdl_targets must match predicted WDL logits: "
@@ -3797,6 +3848,10 @@ def full_horizon_evaluation_aux(
         "wdl_accuracy": wdl_accuracy,
         "wdl_expected_value_mse": wdl_expected_value_mse,
         "wdl_expected_value_bias": wdl_expected_value_bias,
+        "wdl_q_mse_by_horizon": (((expected_value - target_value).square() * wdl_weight).sum(0)
+            / wdl_weight.sum(0).clamp_min(1.0)) if config.wdl_coeff else torch.zeros(config.horizon, device=actions.device),
+        "wdl_ce_by_horizon": ((sample_wdl_ce * wdl_weight).sum(0)
+            / wdl_weight.sum(0).clamp_min(1.0)) if config.wdl_coeff else torch.zeros(config.horizon, device=actions.device),
         "wdl_brier_score": wdl_brier_score,
         "wdl_entropy": wdl_entropy,
         "wdl_ece_15": wdl_ece_15,
@@ -4621,6 +4676,12 @@ def bind_raw_bt4(
             f"encoder.future_policy_heads.{index}",
         )
 
+    if model.encoder.value_head is not None:
+        for layer_name, source_prefix in (("embed", "embed"), ("dense", "dense1"), ("out", "dense2")):
+            layer = getattr(model.encoder.value_head, layer_name)
+            copy(layer.w, mapped["value"][source_prefix + "_w"], f"encoder.value_head.{layer_name}.w")
+            copy(layer.b, mapped["value"][source_prefix + "_b"], f"encoder.value_head.{layer_name}.b")
+
     combined = hashlib.sha256()
     for record in records:
         combined.update(record["path"].encode("utf-8"))
@@ -4767,11 +4828,19 @@ def load_raw_bt4_hero_model(
 
     model = JointModel(config, bt4_norm_impl=bt4_norm_impl)
     fresh_manifest = initialize_fresh_modules(model, seed=config.init_seed)
+    if config.value_supervision_mode == "jepa_residual":
+        with torch.no_grad():
+            model.value_wdl_head.wdl_w.zero_()
+            model.value_wdl_head.wdl_b.zero_()
+        fresh_manifest["zero_initialized_value_residual"] = True
     mapped = map_bt4_weights(
         load_pb_gz(str(source_path)),
         mapping_table=attention_policy_map(),
     )
     raw_mapping = bind_raw_bt4(model, mapped)
+    if config.value_supervision_mode != "legacy":
+        # Explicit VP-001 storage contract; historical models keep their ABI.
+        model.float()
     del mapped
     gc.collect()
     return model.to(device), {
@@ -5308,6 +5377,8 @@ _TRAIN_BATCH_KEYS = frozenset(
         "legal_masks_valid",
         "value_targets",
         "wdl_targets",
+        "current_value_target",
+        "current_wdl_target",
     }
 )
 
