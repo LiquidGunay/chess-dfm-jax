@@ -15,7 +15,7 @@
     {
       "id": "HH-002",
       "name": "Hero recipe with full history on verified reduced original data",
-      "status": "gpu_submitted",
+      "status": "training_running",
       "depends_on": ["HH-001"],
       "plan": "research/analysis/hh002_history_subset_20261003/plan.json",
       "execution_record": "research/analysis/hh002_history_subset_20261003/status.json",

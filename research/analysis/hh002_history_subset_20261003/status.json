@@ -1,6 +1,15 @@
 {
   "experiment_id": "HH-002",
-  "status": "gpu_submitted_waiting_for_first_update",
+  "status": "training_running_first_update_verified",
+  "first_completed_update": {
+    "update": 1,
+    "examples": 1024,
+    "loss": 12.348388671875,
+    "dfm_ce_loss": 7.1321611404418945,
+    "root_legal_conditional_ce": 1.2193899154663086,
+    "optimizer_skipped_nonfinite": false,
+    "note": "Startup sanity check only, not evidence of trained-model improvement."
+  },
   "app_id": "ap-c3UxW374olMEN4q05do8dN",
   "gpu_task_id": "ta-01M40SDQGMVV1GTDKD5QFRE12R",
   "app_url": "https://modal.com/apps/liquidgunay/chess-dfm-research/ap-c3UxW374olMEN4q05do8dN",
