@@ -13,6 +13,14 @@
   },
   "experiments": [
     {
+      "id": "GPU-001",
+      "name": "Matched L40S versus H100 history-training throughput and cost",
+      "status": "preregistered",
+      "depends_on": ["HH-002"],
+      "specification": "research/analysis/gpu001_history_training_20261003/preregister.json",
+      "scope": "Disposable exact update-500 resumes on identical existing history batches; 40 warm measured updates and one separate profiler update per GPU. No model retention or full-epoch launch."
+    },
+    {
       "id": "EV-007",
       "name": "Inference-aligned policy validation versus observed play",
       "status": "complete_ce_broadly_tracks_play_but_not_monotonically",

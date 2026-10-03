@@ -1,0 +1,103 @@
+{
+  "experiment_id": "GPU-001",
+  "created_utc": "2026-10-03",
+  "question": "Does H100 reduce HH-002 epoch training time and cost relative to L40S, and which workload components limit scaling?",
+  "source_sha256": "5fd6206f9f59bb76dd278b1b8f3ecf212975209e2ffc54c3947547043833961a",
+  "frozen_training_sources": {
+    "research/train_torch.py": "71f3e2e43180196fef5c5a1abb0d950fa5be3b2fc1473c4f0231ad4771f52794",
+    "research/prepare.py": "5118ef8e4690fa33d6da296b036c91a42ae5d83a7a50598024801df3710c45f9",
+    "research/input_contract.py": "260f3166e8ebe61ad27e78080874d899dfe1f40bc500274fd2f7fd8e0d124ff7",
+    "research/arena_history_trust.py": "646c0e0381a391ddb529b03a0886f67addab0b1546870966dfba38c0acbe7a9d",
+    "research/hero_history_batches.py": "785a9e9d0b29e2850fcbc6d8e042df417d8b6869f48100b155c02f1d17600849",
+    "research/hero_history_data.py": "b3c2daeb9406f024667da690c40ed88d545441e1630dc7aba7d9bc39d5c1fa53",
+    "research/hero_history_subset_data.py": "71a298dbae7df9fd10b5191ae9ef41746614a2a818ee840bf06005697f8606c6",
+    "chess_dfm_jax/__init__.py": "704df17a42a3fe66f331b6d09e0c2eda5900468e976201ff174409741cb163be",
+    "chess_dfm_jax/analysis/__init__.py": "8cb4ebde6d8df81778acc4e2bd2990e3524d4073a66e14046a56273a12d960e1",
+    "chess_dfm_jax/analysis/bt4_theory.py": "2abcb476c0b8c65f83adee4f661f80491bee55fc53a816e68be9dba715e51db7",
+    "chess_dfm_jax/analysis/jepa_theory.py": "30f00f7191cf27f48f6f222d4f8bc1811f4e37ee9d465475827e6d7e01dd0d45",
+    "chess_dfm_jax/analysis/profile_targets.py": "aaef6528d9e926c574082204667ecd26fdf9d957b9a3e561421da6efe198291d",
+    "chess_dfm_jax/analysis/roofline.py": "57be21590288fc36458360a3ebebbc50eee4d1f331ec58a67ce96094a51f8735",
+    "chess_dfm_jax/data/__init__.py": "7397b6d9eb107d512e215f11f81f7234fc375967a0d9735aa808f3bb856c47f8",
+    "chess_dfm_jax/data/gcs_cache.py": "d8d0d133b3891f73f8f8b757397a152df825c1c80ed8af9aa0588d6ef232e958",
+    "chess_dfm_jax/data/grain_loader.py": "322a2ba71ae2a8c0263248439fddc52c6381a6fcae322f4e63cfbac70b33a8b3",
+    "chess_dfm_jax/data/lc0_sequential.py": "edb92aa09d21fc144257fce2da37f733c240cdfca030ebb53f9b1d5952820531",
+    "chess_dfm_jax/data/leela.py": "5c4befddab7424419302b01a8be6adc6a1809aba8831de2bdc34986a6269c1bb",
+    "chess_dfm_jax/data/pgn.py": "fd012046857514473007a08bfa6c06376c98254b8f87a18a47bb53c779c685d4",
+    "chess_dfm_jax/data/trajectory.py": "f1b3b9cc33abb62b0bc149a7892178d83ce2f7a093f7008f87a3ba6b340e2c12",
+    "chess_dfm_jax/data/trajectory_v3.py": "4a6b0df1671759346c5380b14dfabcff0af6fce43560c46e036ab2a3ec1a0ea1",
+    "chess_dfm_jax/encoding.py": "34620f4064526fb577d8e2fcaa3deecfe18d5907deeee8924902f5dca87d20bd",
+    "chess_dfm_jax/nnx_bt4.py": "b316f214fab577fb7fe5d174f6df2fd30e0d867f595735dc0cc1d71bb1b376fc",
+    "chess_dfm_jax/paths.py": "63b7f0da08b9c646b1911e44adbe96858b98091bd2bc244a80611d8274f177c0",
+    "chess_dfm_jax/policy.py": "700cb8310442564418cd7a431682f7f06e609309a3f585c968ecbc2fa1656bc2",
+    "chess_dfm_jax/proto/__init__.py": "e0313d7ac20b859ae0a365759a54b1729001a37d8783bcc17eef76462c06ab4b",
+    "chess_dfm_jax/proto/net_pb2.py": "548ba30fc623ce6f36bc22b7225040ff2fddc936b96a51cb368ef2552c7f1353",
+    "chess_dfm_jax/reference_bt4.py": "6c55a0d7b50fe59863e21dc4ebe04c4ffaf159b4afa3d621e00101ca206fcacd",
+    "chess_dfm_jax/tracking/__init__.py": "3b609c34b9456f23e8e0578a25843b8cc2ea9ff6b83f0891cb3cba60b1fff66a",
+    "chess_dfm_jax/tracking/wandb.py": "4d08f26cbf41616afbda25e1e7d11c975effe39c060fa9d257669ff890d8c872",
+    "chess_dfm_jax/training/__init__.py": "816916e38ef463d0fac5d7270636a82b2e9d4fc0dc2bbd35d62916427517af79",
+    "chess_dfm_jax/training/checkpoints.py": "a0b482bff22a17d9846a7c9db5a473e96935f1ae021add4c3f64f1b295a40571",
+    "chess_dfm_jax/training/dfm.py": "49d95936e54f2f6f07555529650d3753755d0c41bb089cb4ea3c4ffdfa50fb6a",
+    "chess_dfm_jax/training/jepa.py": "7d1bf784759e759da00476c16dc1a010529f2ab8277abedeb7bca016b988e140",
+    "chess_dfm_jax/training/joint_latent_sasa.py": "2b7f627ba77c8c09cf3a81fa07636545f74de6766c36f97cb2a2a75fce4e276c",
+    "chess_dfm_jax/training/tpu_jobs.py": "87548963df47de5c997d16edf1693236744cf795d86be4a123e9812f311d5c94",
+    "chess_dfm_jax/weights.py": "5089cf10ef8979b981d7b7ba4fb2c7fddd92d49c500bf95d220091a025f231dd",
+    "chess_dfm_jax/policy_moves.txt": "eb2483cf8f53bb000dd6ca437c4ecd383b391bb5fee468b6c30f7f167fb591c5",
+    "chess_dfm_jax/policy_attn_map.txt": "788c74f0f006ccefb7924ed808503175252b8fdb7f0efeb858285d907be4961c"
+  },
+  "tooling_commit": "2f14c9b868e3d208e7164e0b25e4ddc2dc7222e2",
+  "costs": {
+    "None": "0.07912800",
+    "L40S": "1.19779200",
+    "H100": "2.19679200"
+  },
+  "training_source_commit": "1fc185f2fc85ff321b553c8a24c71c2c638026a8",
+  "checkpoint_relative": "runs/hh002-hero-history-0fe540075e5361da6c25/checkpoints/update00000500",
+  "checkpoint_state_sha256": "fd6b25fe0ab8281208dd1be6819290193b963e5d13f2326d3fb5a57079b5e384",
+  "dataset_relative": "datasets/hh002-history-368190a511fd6d5dd51c",
+  "dataset_manifest_sha256": "d9003b1d3a5bcebfc5ece8f4f5340d25369bab53fcda68c4bf9965c45019278e",
+  "raw_bt4_sha256": "61e43e98d2c4cb747498c6bc13a5bbb3b07e985d3f5d87f0351a4db855fa0651",
+  "design": {
+    "gpus": [
+      "L40S",
+      "H100"
+    ],
+    "cpu_cores": 4,
+    "memory_gib": 32,
+    "torch_threads": 2,
+    "torch_version": "2.5.1+cu121",
+    "batch_size": 1024,
+    "seed": 0,
+    "recipe": "Unmodified HH-002 Hero recipe, parameter BF16, eager BT4, compiled fresh regions, original rematerialization and optimizer",
+    "resume_update": 500,
+    "last_update": 553,
+    "warmup_updates": [
+      501,
+      510
+    ],
+    "measured_updates": [
+      511,
+      550
+    ],
+    "profile_update": 553,
+    "primary": "Elapsed wall time difference from end-update 510 to end-update 550 / 40; cost per update at declared GPU+CPU+RAM resource rates",
+    "secondary": "Four fixed ten-update blocks, input wait, transfer, forward/backward/optimizer CUDA event intervals, peak memory, GPU telemetry, one separate instrumented CPU/CUDA trace",
+    "outputs": "Metrics and profiles only; no model/checkpoint writes, no validation/arena or W&B runs",
+    "legacy_commit_handling": "Verify every frozen training dependency byte against the original training commit, preserve that legacy resume-contract commit and record the actual orchestration commit separately; no resume-check bypass",
+    "parity": "Same model/optimizer/data/RNG contract; BF16 kernels can differ by GPU. Report first-step loss/gradient norms and later trajectory drift; no claim of bitwise cross-hardware training equivalence"
+  },
+  "analysis": {
+    "remaining_original_epoch_updates": 27126,
+    "projection": "Steady-state train-loop time/cost only; data reconstruction, future validation/checkpointing, cold-start compilation and interruptions additional",
+    "causality": "Separate measured component changes from hypotheses about bandwidth, compute efficiency and CPU/kernel-launch overhead. CUDA event intervals include device idle time between launches; profiler overhead excluded from primary timing",
+    "decision": "Do not automatically launch the full epoch or increase budget. Report measured speed/cost tradeoff, warm-window stability, remaining input reconstruction and budget needs."
+  },
+  "budget": {
+    "prior_conservative_floor_dollars": "19.61969855",
+    "total_declared_attempt_bound_dollars": "3.47371200",
+    "stop_dollars": "34.00",
+    "outer_dollars": "42.50",
+    "retries": 0,
+    "max_concurrent_gpus": 2,
+    "rule": "Full CPU input verification before either GPU. Refresh live spend before each stage; reserve CPU plus both GPU attempts. No retries or new hardware arms without a new bounded plan."
+  }
+}
