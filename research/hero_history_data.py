@@ -25,6 +25,15 @@ TRAIN_MANIFEST_SHA256 = "9389b98f7597acd9e4498d0fcc35903f0ff9922aa44c5b777c881ce
 META_KEYS = ("ply", "fen_t", "actions_uci", "result", "input_format", "source_uri")
 
 
+class UnresolvedHistory(ValueError):
+    """An omitted move, not a corrupt record; strict rebuilding still fails."""
+
+    def __init__(self, message, affected_rows, missing_ply):
+        super().__init__(message)
+        self.affected_rows = list(affected_rows)
+        self.missing_ply = int(missing_ply)
+
+
 def sha256(path):
     digest = hashlib.sha256()
     with Path(path).open("rb") as stream:
@@ -197,8 +206,11 @@ def reconstruct_shard(path, *, rows=None, max_prefix_shards=16):
             if ply in moves:
                 move = board.parse_uci(moves[ply])
             else:
+                affected = [row for row, start in requested if start+horizon > ply]
                 if ply+1 not in fens:
-                    raise ValueError(f"More than one missing prefix move at ply {ply}; need source PGN")
+                    raise UnresolvedHistory(
+                        f"More than one missing prefix move at ply {ply}; need source PGN",
+                        affected, ply)
                 move = unique_missing_move(board, fens[ply+1])
                 gaps.append({"game_root_fen": fens[0], "ply": ply, "uci": move.uci(),
                              "before_fen": board.fen(), "after_fen": fens[ply+1]})
