@@ -1,0 +1,59 @@
+{
+  "schema_version": "chess-dfm-wandb-import-status-v1",
+  "date_utc": "2026-10-03",
+  "status": "historical_upload_and_partition_complete",
+  "entity": "gunays-independent",
+  "archive_project": "chess-dfm-torch",
+  "project_privacy": "private",
+  "historical_runs_uploaded": 22,
+  "training_records": 17448,
+  "validation_records": 23,
+  "remote_verification": {
+    "all_runs": ["group", "provenance_hash", "record_counts", "terminal_update", "terminal_examples", "finished_state"],
+    "pointwise_dfm_history": {
+      "local-4d8b9c4044394610d869": 554,
+      "local-9d8add17967b53ba9a21": 7774
+    },
+    "workspace_readback_verified": 7,
+    "targeted_tests_passed": 8
+  },
+  "partition": {
+    "existing_jax_projects": "Unchanged; not copied or mixed into new projects.",
+    "chess-dfm-torch": {
+      "role": "Historical archive; fixed-ID filtered saved views",
+      "cohorts": {
+        "hero-554-current-only": 11,
+        "hero-1024-current-only": 2,
+        "proposal-a-lr": 4,
+        "proposal-a-decay": 2,
+        "PA-001-full-epoch": 1,
+        "diagnostics": 2
+      }
+    },
+    "chess-dfm-history": {
+      "role": "Focused HH-002 comparison; only the full-history run and historical comparator",
+      "view_url": "https://wandb.ai/gunays-independent/chess-dfm-history?nw=fdrwguh5q3k",
+      "run_ids": ["hh002-full-edf0a158db54", "hh002-old-edf0a158db54"],
+      "logs_status": "Not yet synced; Modal job is running offline. Empty view is intentional until sync."
+    }
+  },
+  "view_contract": [
+    "No automatically generated metric panels in the saved views.",
+    "Examples processed is the x-axis; no averaging across different architecture variants.",
+    "Different original validation pools have separate metric namespaces.",
+    "HH-002 1024-position validation curves and 8128-position terminal bars are separate.",
+    "Cross-recipe total weighted loss is not used as a fair ranking.",
+    "JEPA targets depend on the model and input history; loss is not playing strength.",
+    "Existing user views were not overwritten; only newly created saved views were added."
+  ],
+  "receipts": {
+    "uploads": "import_receipt.json",
+    "saved_views": "workspaces.json",
+    "approved_inventory": "approved_inventory.json"
+  },
+  "checkpoints_uploaded": false,
+  "datasets_uploaded": false,
+  "credentials_uploaded": false,
+  "new_gpu_jobs": 0,
+  "deletions": 0
+}

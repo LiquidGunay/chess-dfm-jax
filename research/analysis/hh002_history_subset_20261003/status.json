@@ -30,7 +30,9 @@
   "wandb": {
     "requested_mode": "offline",
     "initialized_successfully": true,
-    "reason": "No W&B credential in the local environment, netrc or Modal research environment; requested optional secret from the user.",
+    "reason": "The original checkout's .env contained a valid W&B key, but it was not loaded into the launch environment. The already-running job remains offline; do not restart training just for logging.",
+    "cloud_sync_status": "pending_running_offline_job",
+    "comparison_workspace_url": "https://wandb.ai/gunays-independent/chess-dfm-history?nw=fdrwguh5q3k",
     "full_history_run_id": "hh002-full-edf0a158db54",
     "historical_run_id": "hh002-old-edf0a158db54",
     "project_default": "chess-dfm-history",

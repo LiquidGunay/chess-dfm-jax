@@ -1,0 +1,51 @@
+{
+  "hero-554-current-only": {
+    "url": "https://wandb.ai/gunays-independent/chess-dfm-torch?nw=6gzwzwkxxz5",
+    "name": "Archive - Hero architecture and optimizer - 554 updates",
+    "project": "chess-dfm-torch",
+    "sections": 4,
+    "readback_verified": true
+  },
+  "hero-1024-current-only": {
+    "url": "https://wandb.ai/gunays-independent/chess-dfm-torch?nw=9ex8cfjokkc",
+    "name": "Archive - Hero closed-loop comparison - 1,024 updates",
+    "project": "chess-dfm-torch",
+    "sections": 4,
+    "readback_verified": true
+  },
+  "proposal-a-lr": {
+    "url": "https://wandb.ai/gunays-independent/chess-dfm-torch?nw=jn5djc9spju",
+    "name": "Archive - Proposal A learning-rate sweep",
+    "project": "chess-dfm-torch",
+    "sections": 4,
+    "readback_verified": true
+  },
+  "proposal-a-decay": {
+    "url": "https://wandb.ai/gunays-independent/chess-dfm-torch?nw=a531no8vn5v",
+    "name": "Archive - Proposal A weight-decay controls",
+    "project": "chess-dfm-torch",
+    "sections": 4,
+    "readback_verified": true
+  },
+  "PA-001-full-epoch": {
+    "url": "https://wandb.ai/gunays-independent/chess-dfm-torch?nw=rvv0svpnmm2",
+    "name": "Archive - Proposal A full epoch",
+    "project": "chess-dfm-torch",
+    "sections": 4,
+    "readback_verified": true
+  },
+  "diagnostics": {
+    "url": "https://wandb.ai/gunays-independent/chess-dfm-torch?nw=2bsqmpwy0yn",
+    "name": "Archive - Diagnostics only - not strength evidence",
+    "project": "chess-dfm-torch",
+    "sections": 3,
+    "readback_verified": true
+  },
+  "HH-002": {
+    "url": "https://wandb.ai/gunays-independent/chess-dfm-history?nw=fdrwguh5q3k",
+    "name": "HH-002 - History versus no history - matched validation",
+    "project": "chess-dfm-history",
+    "sections": 4,
+    "readback_verified": true
+  }
+}
