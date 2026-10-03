@@ -101,6 +101,7 @@ def verify_match(directory, left, right, models, cache):
             histories[history["pair_id"]] = history
     require(next_pair == 128 and len(games) == 256 and len(histories) == 128, "Incomplete game evidence")
     pairs = defaultdict(list)
+    replay_coverage = {model_id: Counter() for model_id in ids}
     legal_moves_replayed = 0
     for game in games:
         board = opening_board(histories[game["pair_id"]], cache)
@@ -108,7 +109,10 @@ def verify_match(directory, left, right, models, cache):
         require(len(game["moves_uci"]) == game["ply_count"], "Wrong ply count")
         for uci in game["moves_uci"]:
             move = chess.Move.from_uci(uci)
-            require(move in board.legal_moves, "Illegal move in game record")
+            legal = tuple(board.legal_moves)
+            require(move in legal, "Illegal move in game record")
+            model_id = game["white_model" if board.turn == chess.WHITE else "black_model"]
+            replay_coverage[model_id].update(positions=1, legal_moves=len(legal))
             board.push(move)
             legal_moves_replayed += 1
         require(board.fen(en_passant="legal") == game["final_fen"], "Final board mismatch")
@@ -150,6 +154,12 @@ def verify_match(directory, left, right, models, cache):
     for model_id, name in ids.items():
         for key, value in counts[name].items():
             close(value, aggregate["models"][model_id][key], "WDL/count disagreement")
+        if not faults:
+            recorded = aggregate["models"][model_id]["coverage"]
+            for key, value in replay_coverage[model_id].items():
+                require(value == recorded[key], "Position/legal-move count disagreement")
+            require(recorded["legal_moves"] == recorded["representable_legal_actions"], "Incomplete legal coverage")
+            require(recorded["incomplete_coverage_positions"] == 0, "Coverage failures")
     interval = score_interval(counts[left]["points"], 128)
     for key, value in interval.items():
         if value is not None:
@@ -163,6 +173,7 @@ def verify_match(directory, left, right, models, cache):
         "pentanomial_counts": bins, "normal_termination_counts": dict(normal_terms),
         "termination_counts": dict(terminations), "fault_counts": dict(faults),
         "legal_moves_replayed": legal_moves_replayed,
+        "independently_recomputed_coverage": replay_coverage,
         "ply_count_mean": math.fsum(g["ply_count"] for g in games) / len(games),
         "ply_count_min": min(g["ply_count"] for g in games),
         "ply_count_max": max(g["ply_count"] for g in games),
