@@ -13,13 +13,23 @@
   },
   "experiments": [
     {
+      "id": "EV-006",
+      "name": "History-trained Hero searchless play and matched weight movement",
+      "status": "smokes_passed_development_running_weight_audit_complete",
+      "depends_on": ["HH-002", "EV-005"],
+      "specification": "research/analysis/ev006_hh002_play_20261003/preregister.json",
+      "execution_record": "research/analysis/ev006_hh002_play_20261003/runs.json",
+      "weight_results": "research/analysis/ev006_hh002_play_20261003/weight_comparison.json",
+      "scope": "Seven fixed 128-pair searchless comparisons: p1, p8 and native policy versus Hero1 and full-history raw BT4, plus p8 versus p1. Development only; no search or promotion."
+    },
+    {
       "id": "HH-002",
       "name": "Hero recipe with full history on verified reduced original data",
-      "status": "training_running",
+      "status": "training_and_common_pool_validation_complete_wandb_synced",
       "depends_on": ["HH-001"],
       "plan": "research/analysis/hh002_history_subset_20261003/plan.json",
       "execution_record": "research/analysis/hh002_history_subset_20261003/status.json",
-      "scope": "553 updates, original recipe, contracted original examples; W&B and common-pool historical loss comparison. No searched or searchless arena launch."
+      "scope": "553 updates, original recipe, contracted original examples; W&B and common-pool historical loss comparison. Playing strength is a separate EV-006 evaluation."
     },
     {
       "id": "HH-001",

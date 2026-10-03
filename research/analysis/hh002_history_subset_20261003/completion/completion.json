@@ -1,0 +1,22 @@
+{
+  "baseline_tracking": {
+    "error_type": null,
+    "id": "hh002-old-edf0a158db54",
+    "name": "Hero1 \u2014 no history (historical training)",
+    "requested_mode": "offline",
+    "url": null,
+    "wandb_started": true
+  },
+  "comparison": "complete",
+  "result_label": "hh002-hero-history-0fe540075e5361da6c25",
+  "seconds": 1720.967639671,
+  "tracking": {
+    "error_type": null,
+    "id": "hh002-full-edf0a158db54",
+    "name": "Hero recipe \u2014 full history (reduced data)",
+    "requested_mode": "offline",
+    "url": null,
+    "wandb_started": true
+  },
+  "training": "complete"
+}

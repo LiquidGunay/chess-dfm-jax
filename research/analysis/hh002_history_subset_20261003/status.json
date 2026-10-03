@@ -1,6 +1,11 @@
 {
   "experiment_id": "HH-002",
-  "status": "training_running_first_update_verified",
+  "status": "training_and_common_pool_validation_complete_wandb_synced",
+  "completed_utc": "2026-10-03T12:13:53.590342+00:00",
+  "completion_record": "completion/completion.json",
+  "report": "completion/report.json",
+  "optimizer_skipped_nonfinite_updates": 0,
+  "play_evaluation": "EV-006",
   "first_completed_update": {
     "update": 1,
     "examples": 1024,
@@ -31,14 +36,15 @@
     "requested_mode": "offline",
     "initialized_successfully": true,
     "reason": "The original checkout's .env contained a valid W&B key, but it was not loaded into the launch environment. The already-running job remains offline; do not restart training just for logging.",
-    "cloud_sync_status": "pending_running_offline_job",
+    "cloud_sync_status": "complete_both_runs_all_source_scalars_verified",
+    "cloud_sync_receipt": "research/analysis/wandb_sync_20261003/hh002_sync_receipt.json",
     "comparison_workspace_url": "https://wandb.ai/gunays-independent/chess-dfm-history?nw=fdrwguh5q3k",
     "full_history_run_id": "hh002-full-edf0a158db54",
     "historical_run_id": "hh002-old-edf0a158db54",
     "project_default": "chess-dfm-history",
     "group": "HH-002-history-comparison",
     "remote_tracking_directory": "comparisons/hh002-hero-history-0fe540075e5361da6c25/tracking",
-    "note": "Offline is not a live cloud dashboard. Metrics JSONL remain authoritative if W&B fails. Sync after authentication."
+    "note": "Completed offline bundles were synced on 2026-10-03. Both finished runs are in the focused private project: 553 and 554 training records, five 1024-position validations each, and one 8128-position terminal validation each."
   },
   "budget": {
     "provider_compute_meter_before_launch_dollars": "2.41000000",

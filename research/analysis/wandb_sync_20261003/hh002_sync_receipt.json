@@ -1,0 +1,44 @@
+{
+  "runs": [
+    {
+      "run_id": "hh002-full-edf0a158db54",
+      "url": "https://wandb.ai/gunays-independent/chess-dfm-history/runs/hh002-full-edf0a158db54",
+      "state": "finished",
+      "group": "HH-002-history-comparison",
+      "rows": 559,
+      "counts": {
+        "train": 553,
+        "val": 5,
+        "val_full": 1
+      },
+      "all_source_scalars_pointwise_verified": true,
+      "source_events_sha256": "f24d884312a2f0eb8be94a9efe6dadd82c3217de4b0ee57c5bd64a1674e0630d",
+      "terminal_metrics": {
+        "val_full/loss": 7.8803186792088304,
+        "val_full/dfm_ce_loss": 5.856701133758064,
+        "val_full/root_legal_conditional_ce": 1.973722787353936
+      }
+    },
+    {
+      "run_id": "hh002-old-edf0a158db54",
+      "url": "https://wandb.ai/gunays-independent/chess-dfm-history/runs/hh002-old-edf0a158db54",
+      "state": "finished",
+      "group": "HH-002-history-comparison",
+      "rows": 560,
+      "counts": {
+        "train": 554,
+        "val": 5,
+        "val_full": 1
+      },
+      "all_source_scalars_pointwise_verified": true,
+      "source_events_sha256": "62c461c1866c6e409afc5a60b34f9d99528bae97da964f8738a06034b2ecc02a",
+      "terminal_metrics": {
+        "val_full/loss": 8.05552056830699,
+        "val_full/dfm_ce_loss": 5.892598054540439,
+        "val_full/root_legal_conditional_ce": 2.0434784279094904
+      }
+    }
+  ],
+  "project": "gunays-independent/chess-dfm-history",
+  "date_utc": "2026-10-03"
+}

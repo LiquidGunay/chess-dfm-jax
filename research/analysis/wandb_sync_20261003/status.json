@@ -34,7 +34,7 @@
       "role": "Focused HH-002 comparison; only the full-history run and historical comparator",
       "view_url": "https://wandb.ai/gunays-independent/chess-dfm-history?nw=fdrwguh5q3k",
       "run_ids": ["hh002-full-edf0a158db54", "hh002-old-edf0a158db54"],
-      "logs_status": "Not yet synced; Modal job is running offline. Empty view is intentional until sync."
+      "logs_status": "Both finished HH-002 runs synced; all 1119 source event rows verified pointwise. Receipt: hh002_sync_receipt.json."
     }
   },
   "view_contract": [

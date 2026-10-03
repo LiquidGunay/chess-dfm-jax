@@ -1,0 +1,136 @@
+{
+  "audit_relative": "audits/hh002-comparison-d287fe66a65a9b0ab636",
+  "declared_attempt_upper_bound_dollars": "0.18463200",
+  "git_commit": "b3aec31ab3f80eb9c45f0a9ca5c1d23fc2c4b5fd",
+  "gpu_active": false,
+  "input_preflight": {
+    "arena_source_tree_sha256": "3838c5c696c42269a055687a39ba0db2614f44973545eed6e21c5e333f19e349",
+    "assets": {
+      "promotion-ply12-n2048-histories-v3.json": "bac58cc7380d9a4173e7618a765917aa0990355e1f8e460196affbe28580ed37",
+      "promotion-ply12-n2048-v3-contract.json": "39a0fb54695ce8846b6d474a1d2514fb2d28082323e23f6a63281d8f5bf915cd",
+      "promotion-ply12-n2048-v3.json": "5632cc726112c2ab700e0f4d935fa83d58418b406fc100262f3aa19ce3befe2e"
+    },
+    "effective_model_configs_identical": true,
+    "gpu_active": false,
+    "legacy_config_note": "Missing historical optional fields use explicit current Config defaults; effective recipes are compared exactly.",
+    "models": {
+      "hero-training-phase1-hero1_exact-l40s-fae7b0ccef5ca3668ed5": {
+        "plane_history_mode": "current_only_as_preprocessed",
+        "run_config_sha256": "1f417904b8160517787f45d686cef7567e8affce143d41310a17d5eacc00c33c",
+        "state_sha256": "e518083ee5476e7ff15e7c34caf9c0505f8fb7d330ea5a6882e4e9e5c1ef1912",
+        "updates": 554
+      },
+      "hh002-hero-history-0fe540075e5361da6c25": {
+        "plane_history_mode": "lc0_full_history_as_preprocessed",
+        "run_config_sha256": "eeb3904cd65d5d75eae824c91e82cbe7e84bd5c967a86f17cf6bbd940c5e0586",
+        "state_sha256": "ab8fab8dfebfbee862f5004b10251ec3947523ffb2265ab621b7eaa80e3e4948",
+        "updates": 553
+      }
+    },
+    "passed": true,
+    "raw_bt4_sha256": "61e43e98d2c4cb747498c6bc13a5bbb3b07e985d3f5d87f0351a4db855fa0651",
+    "schema_version": "chess-dfm-arena-input-preflight-v1"
+  },
+  "passed": true,
+  "reports": {
+    "hero-training-phase1-hero1_exact-l40s-fae7b0ccef5ca3668ed5": {
+      "groups": {
+        "all": {
+          "cosine": 0.999999930869436,
+          "delta_absolute_max": 0.0095672607421875,
+          "delta_absolute_mean": 5.877755158787193e-06,
+          "delta_l2": 1.1857585671016628,
+          "delta_mean": 1.1211367878287431e-07,
+          "delta_rms": 8.417076670965968e-05,
+          "hero_l2": 3188.939138420476,
+          "parameter_count": 198458624,
+          "raw_l2": 3188.9389926695408,
+          "relative_delta_l2": 0.00037183482337773874,
+          "unchanged_count": 195002188,
+          "unchanged_fraction": 0.9825835938477534
+        },
+        "policy_head": {
+          "cosine": 0.9999989091727587,
+          "delta_absolute_max": 0.0095672607421875,
+          "delta_absolute_mean": 1.531359538449352e-06,
+          "delta_l2": 0.16930285175177057,
+          "delta_mean": -4.069014646872036e-08,
+          "delta_rms": 9.534753080456243e-05,
+          "hero_l2": 114.62290041462876,
+          "parameter_count": 3152896,
+          "raw_l2": 114.62281701753244,
+          "relative_delta_l2": 0.0014770431939905508,
+          "unchanged_count": 3145621,
+          "unchanged_fraction": 0.9976925975357259
+        },
+        "trunk": {
+          "cosine": 0.9999999321911379,
+          "delta_absolute_max": 0.00823974609375,
+          "delta_absolute_mean": 5.947920706444764e-06,
+          "delta_l2": 1.1736097834645494,
+          "delta_mean": 1.1458045010778113e-07,
+          "delta_rms": 8.397813604079667e-05,
+          "hero_l2": 3186.8784757581307,
+          "parameter_count": 195305728,
+          "raw_l2": 3186.8783329125054,
+          "relative_delta_l2": 0.00036826312800965357,
+          "unchanged_count": 191856567,
+          "unchanged_fraction": 0.9823396833501985
+        }
+      },
+      "path": "hero1_parameter_diff.json",
+      "sha256": "cf7f78d0756dfc7c68842f4c92a7b1022c0c84bd9b155990d5bfadac05f8c063"
+    },
+    "hh002-hero-history-0fe540075e5361da6c25": {
+      "groups": {
+        "all": {
+          "cosine": 0.9999999042699127,
+          "delta_absolute_max": 0.008031845092773438,
+          "delta_absolute_mean": 7.323440884147192e-06,
+          "delta_l2": 1.3953573991036625,
+          "delta_mean": -4.0709659282891487e-07,
+          "delta_rms": 9.904908585533522e-05,
+          "hero_l2": 3188.939230781342,
+          "parameter_count": 198458624,
+          "raw_l2": 3188.9389926695408,
+          "relative_delta_l2": 0.0004375616474041022,
+          "unchanged_count": 194907675,
+          "unchanged_fraction": 0.9821073585595353
+        },
+        "policy_head": {
+          "cosine": 0.9999993262661573,
+          "delta_absolute_max": 0.008031845092773438,
+          "delta_absolute_mean": 1.0966239041101847e-06,
+          "delta_l2": 0.13305474568396677,
+          "delta_mean": -1.8864178058106834e-08,
+          "delta_rms": 7.493341861362102e-05,
+          "hero_l2": 114.62286278376534,
+          "parameter_count": 3152896,
+          "raw_l2": 114.62281701753244,
+          "relative_delta_l2": 0.001160805057370166,
+          "unchanged_count": 3146240,
+          "unchanged_fraction": 0.9978889249756414
+        },
+        "trunk": {
+          "cosine": 0.9999999050176376,
+          "delta_absolute_max": 0.007902145385742188,
+          "delta_absolute_mean": 7.423962802014808e-06,
+          "delta_l2": 1.3889991741841725,
+          "delta_mean": -4.133639790450591e-07,
+          "delta_rms": 9.939041345228879e-05,
+          "hero_l2": 3186.878569532192,
+          "parameter_count": 195305728,
+          "raw_l2": 3186.8783329125054,
+          "relative_delta_l2": 0.00043584945174695726,
+          "unchanged_count": 191761435,
+          "unchanged_fraction": 0.9818525906214077
+        }
+      },
+      "path": "full_history_parameter_diff.json",
+      "sha256": "8520615e46ee72e402f511e49a5bf577e47c2bdaf627717f4ed390c6ab1c8377"
+    }
+  },
+  "schema_version": "hh002-weight-comparison-v1",
+  "seconds": 30.75002329,
+  "source_sha256": "5380b5da9745ec0dc0549332bcb58c5e3431d4b942ab1496705e1daa46fdd317"
+}
