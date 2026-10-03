@@ -1,0 +1,13 @@
+{
+  "training_loss": "Composite Hero objective on randomly masked action sequences and sampled balanced future targets. Do not compare numerically to inference-policy CE.",
+  "composite_validation": "Fully masked action sequence with full-horizon targets and recorded-line contextualization. This is not a searchless deployment rollout.",
+  "intermediate_validation_positions": 2048,
+  "terminal_validation_positions": 8192,
+  "validation_pool_note": "Intermediate validation uses the first 2048 positions of the final 8192-position pool. Initial versus terminal composite means therefore do not use exactly the same pool size.",
+  "matched_inference_policy_loss": "All four models use the same 8192 sequential positions and played-next-move targets. CE is in nats, normalized over legal moves. Historical Hero1 gets its recorded current-only transform; new models and raw BT4 receive full history. Native, DFM1 and DFM8 are distinct inference policies, with raw BT4 native only.",
+  "value_targets": "Soft search WDL from each position's actual root_q/root_d, in that position's side-to-move perspective. These are search targets, not game-result ground truth.",
+  "wdl_horizon_metric_labels": "The generic serialized *_by_horizon_h1 through h9 names index the nine prediction slots. For these current-inclusive pilots, h1 means actual H0/current, h2 means H1, ..., h9 means H8. wdl_current_loss is explicitly H0.",
+  "calibration_note": "Composite-validation ECE is the mean of batch-level ECE values, not one global pooled calibration estimate.",
+  "tournament": "Six 128-color-pair searchless development matchups, 1536 games total. DFM1 for new models/Hero1; native for raw BT4. Primary uncertainty is the existing marginal bounded-pair Hoeffding interval; not simultaneous across comparisons. Relative logistic Elo is matchup-specific, not a calibrated absolute rating.",
+  "causal_limits": "Single seed. New-versus-new is the matched value-formulation comparison. New-versus-historical Hero1 also changes history, data, precision and schedule/training length. No held-out promotion, source-game non-overlap or searched-strength claim."
+}
