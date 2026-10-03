@@ -135,3 +135,13 @@ def test_runtime_norm_dispatch_is_real():
     output = layer(value, torch.float32)
     output.square().sum().backward()
     assert bool(torch.isfinite(value.grad).all())
+
+
+def test_batch_provenance_uses_canonical_volume_path(tmp_path, monkeypatch):
+    import research.hero_history_batches as history
+    real = tmp_path/'volume'; real.mkdir()
+    alias = tmp_path/'mount'; alias.symlink_to(real, target_is_directory=True)
+    seen = []
+    monkeypatch.setattr(history, 'HistoryTrajectoryBatches', lambda path, **kwargs: seen.append(path))
+    bench.batches({'dataset_manifest_sha256':'a'*64}, alias)
+    assert seen == [real.resolve()]

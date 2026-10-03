@@ -42,7 +42,9 @@ ARMS = (
 def batches(protocol, data, split="train"):
     from research.hero_history_batches import HistoryTrajectoryBatches
     from research.train_torch import canonicalize_trajectory_batch
-    return HistoryTrajectoryBatches(data, split=split, batch_size=1024 if split == "train" else 64,
+    # Modal mounts are symlinks. HH-002 recorded the canonical Volume path;
+    # compare that same physical location, never ignore path provenance.
+    return HistoryTrajectoryBatches(Path(data).resolve(strict=True), split=split, batch_size=1024 if split == "train" else 64,
         horizon=8, manifest_sha256=protocol["dataset_manifest_sha256"],
         canonicalize=canonicalize_trajectory_batch)
 

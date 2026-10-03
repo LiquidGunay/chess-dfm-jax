@@ -69,10 +69,12 @@ def preflight(protocol, commit, cost):
     if base._sha256_file(data/"manifest.json") != protocol["dataset_manifest_sha256"]:
         raise ValueError("Dataset manifest mismatch")
     verify_dataset(data)
+    print("CPU full dataset byte verification passed", flush=True)
     checkpoint = Path(base.TRAINING_RESULT_MOUNT)/protocol["checkpoint_relative"]
     if base._sha256_file(checkpoint/"manifest.json") != protocol["checkpoint_manifest_sha256"]:
         raise ValueError("Checkpoint manifest mismatch")
     _, manifest = _verified_training_checkpoint(checkpoint)
+    print("CPU recovery checkpoint byte verification passed", flush=True)
     if (manifest["optimizer_update"] != 500 or manifest["next_data_cursor"] != 500 or
         manifest["state"]["sha256"] != protocol["checkpoint_state_sha256"]):
         raise ValueError("Wrong parent checkpoint")
