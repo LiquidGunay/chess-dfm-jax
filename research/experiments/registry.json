@@ -1,7 +1,7 @@
 {
   "schema_version": "chess-dfm-experiment-registry-v1",
   "updated_utc": "2026-10-03",
-  "active_branch": "research/modal-experiments",
+  "active_branch": "research/hero-value-pilots",
   "runtime": "pytorch",
   "representation_strength_threshold": {
     "status": "proposed_not_frozen",
@@ -12,6 +12,15 @@
     "freeze_before": "architecture_comparisons"
   },
   "experiments": [
+    {
+      "id": "VP-001",
+      "name": "Fresh joint Hero: native value versus JEPA value residual",
+      "status": "authorized_prelaunch_verification",
+      "depends_on": ["GPU-003", "EV-007"],
+      "specification": "research/analysis/vp001_joint_value_20261003/preregister.json",
+      "scope": "Two matched fresh BT4-initialized, end-to-end Hero pilots: 1000 updates each, batch 1024, full sequential history, FP32 storage/BF16 compiled compute, original Hero peak rates and warmup with WSD. Actual current/future root Q/D supervision. Native current value plus auxiliary future WDL versus native-current-logit residual at current/future JEPA states. Follow with six searchless 128-pair matchups against original Hero1 and full-history raw BT4, and common 8192-position inference-policy losses. Single-seed development screening, not a search or confirmation claim.",
+      "historical_correction": "PA-001 retained full history but current root Q/D targets were dropped by batch filters, causing successor-target fallback. VP-001 preserves actual current targets and rejects missing targets; historical records are not rewritten."
+    },
     {
       "id": "GPU-003",
       "name": "Pre-Runpod full-batch runtime and checkpoint recovery tests",

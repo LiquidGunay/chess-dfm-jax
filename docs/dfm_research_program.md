@@ -60,6 +60,22 @@ teacher-forced/composite training objective. Data, results and receipts:
 
 ## 1. Complete the selected epoch
 
+VP-001 (2026-10-03): the user authorized two fresh joint-training pilots
+before the epoch continuation: native BT4 current-value supervision versus
+a JEPA value residual over current native BT4 logits (perspective-corrected
+for future plies). Both retain Hero's other losses and use 1,000 matched
+updates with full history, WSD and FP32 storage/BF16 compiled compute. This
+is not a frozen-backbone or existing-Hero continuation experiment. A fixed
+four-model searchless tournament and common policy-loss pool follow.
+
+Value-target correction: the sequential loader supplied actual current
+root Q/D, but the older training batch filter dropped these fields. PA-001
+therefore used the flipped successor fallback for its current WDL target.
+VP-001 preserves and requires the actual target. Prior full-history and
+play observations remain valid; their current-value training interpretation
+must include this limitation. Frozen protocol and receipts are under
+`research/analysis/vp001_joint_value_20261003/`.
+
 GPU-003 pre-Runpod tests are complete (2026-10-03). At the real batch size
 of 1,024, compiled BF16/FP16 with FP32 parameter and optimizer-moment storage
 take about 1.97s per full update versus 2.85s for production (31% less time).
