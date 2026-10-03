@@ -1,0 +1,45 @@
+{
+  "experiment_id": "EV-006",
+  "question": "Did full-history Hero-recipe training improve searchless play, and did it cause greater stored-weight movement than the historical Hero1 run?",
+  "candidate_label": "hh002-hero-history-0fe540075e5361da6c25",
+  "candidate_state_sha256": "ab8fab8dfebfbee862f5004b10251ec3947523ffb2265ab621b7eaa80e3e4948",
+  "candidate_updates": 553,
+  "baseline_label": "hero-training-phase1-hero1_exact-l40s-fae7b0ccef5ca3668ed5",
+  "baseline_state_sha256": "e518083ee5476e7ff15e7c34caf9c0505f8fb7d330ea5a6882e4e9e5c1ef1912",
+  "baseline_updates": 554,
+  "arena_design": {
+    "primary": ["new p1 versus Hero1 p1", "new p1 versus full-history raw BT4"],
+    "secondary": ["new p8 versus Hero1 p8", "new p8 versus full-history raw BT4", "new native policy versus Hero1 native policy", "new native policy versus full-history raw BT4", "new p8 versus new p1"],
+    "smoke": ["new p1 versus full-history raw BT4", "new p8 versus Hero1 p8", "new native policy versus full-history raw BT4"],
+    "smoke_pairs_per_comparison": 16,
+    "development_pairs_per_comparison": 128,
+    "smoke_opening_start": 1904,
+    "development_opening_start": 1920,
+    "opening_policy": "Same already-exposed development allocation as EV-005; no new held-out or source-game-disjoint claim.",
+    "history_policy": "Candidate and raw BT4 full history; historical Hero1 retains current-only training contract.",
+    "no_optional_stopping": true,
+    "search": false,
+    "confirmation_or_promotion": false
+  },
+  "weight_audit": {
+    "device": "CPU",
+    "baseline": "Same raw BT4 mapping for shared encoder/native policy; recorded deterministic fresh initialization for added modules.",
+    "primary_metric": "L2 norm of stored parameter delta divided by L2 norm of corresponding initial parameters, aggregated by sums of squares.",
+    "groups": ["all BT4 encoder parameters", "trunk", "input embedding", "each transformer layer", "native policy head", "added modules separately"],
+    "secondary_metrics": ["delta RMS", "cosine similarity", "fraction of stored parameters changed", "absolute delta L2"],
+    "caveats": ["Stored BF16 weights, not FP32 optimizer masters.", "Single seed, 553 versus 554 updates and a slightly contracted training set; not a pure causal estimate of history.", "Larger weight movement alone is not better representation learning."]
+  },
+  "budget": {
+    "live_compute_usage_before_plan_dollars": "3.53000000",
+    "conservative_floor_including_prior_attempt_caps_dollars": "8.95993055",
+    "cpu_audit_attempt_maximum_dollars": "0.18463200",
+    "arena_attempts": 10,
+    "arena_attempt_maximum_dollars": "0.92976000",
+    "total_declared_maximum_dollars": "9.48223200",
+    "projected_conservative_maximum_dollars": "18.44216255",
+    "maximum_simultaneous_arena_attempts": 3,
+    "workspace_stop_dollars": "34.00",
+    "retries": 0
+  },
+  "source_and_model_checks": "Full CPU checkpoint hashing and effective-model-config equality precede frozen arena preregistration and GPU allocation."
+}
