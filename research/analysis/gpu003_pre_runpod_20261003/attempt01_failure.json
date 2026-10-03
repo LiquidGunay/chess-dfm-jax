@@ -1,0 +1,14 @@
+{
+  "status": "cpu_preflight_failed_no_gpu_launched",
+  "app_id": "ap-s9Mc80hdYirNDUZNIdkauX",
+  "container_id": "ta-01M41ADBN1HXEGX9X4N3C62P5R",
+  "error": "Parent data provenance mismatch",
+  "cause": "The new harness passed the Modal mount alias to HistoryTrajectoryBatches, whereas HH-002 and GPU-001 bound its resolved physical Volume path. Full dataset and checkpoint byte checks completed before this path guard.",
+  "fix": "Resolve the existing dataset directory strictly before constructing batches, matching GPU-001's original behavior. Keep the exact provenance comparison and immutable checkpoint/manifest hashes intact.",
+  "declared_attempt_bound_dollars": "0.10550400",
+  "next_conservative_floor_dollars": "26.47215455",
+  "replacement_attempt": "attempt02/preregister.json",
+  "round_declared_bound_with_replacement_dollars": "4.40328000",
+  "round_cap_dollars": "4.50",
+  "policy": "One explicit tooling-corrected CPU replacement within the original cap; no automatic function retry or GPU launch after a failed preflight. Original specification and receipt preserved."
+}
