@@ -59,6 +59,11 @@ def collect(directory):
                         data = b"".join(volume.read_file("arenas/" + arena_label + "/" + name))
                     except FileNotFoundError:
                         continue
+                    if name == "state.json":
+                        if hashlib.sha256(data).hexdigest() != result["state_sha256"]:
+                            raise ValueError("Collected arena checksum differs from remote receipt")
+                        if json.loads(data)["status"] != "complete":
+                            raise ValueError("Collected arena is not terminal")
                     store(directory / "collected/matches" / (match["left"] + "-" + match["right"]) / name, data)
 
 
@@ -91,6 +96,18 @@ def main():
     for stage in ("eval-preflight", "evaluate"):
         if (args.directory / (stage + "-reservation.json")).exists():
             raise FileExistsError("Evaluation already attempted; no automatic retry")
+        # Do not assume another user-launched job fits inside our reservation.
+        for check in range(3):
+            apps = json.loads(subprocess.check_output(["/root/.local/bin/modal", "app", "list",
+                "--env", "chess-dfm-research", "--json"], text=True))
+            active = [row for row in apps if int(row.get("tasks", 0)) > 0]
+            if not active:
+                break
+            if any(row["description"] != "chess-dfm-vp001-joint-value" for row in active):
+                raise RuntimeError("Concurrent external work needs a new budget audit")
+            if check == 2:
+                raise RuntimeError("Previous containers have not stopped; refuse overlapping launch")
+            time.sleep(45)
         command = ["/root/.local/bin/modal", "run", "--env", "chess-dfm-research"]
         if stage == "evaluate":
             command.append("--detach")
