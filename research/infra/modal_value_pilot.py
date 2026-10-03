@@ -31,6 +31,10 @@ VOLUMES = {base.BASE_INPUT_MOUNT:base.base_input_volume.with_mount_options(read_
     base.TRAINING_RESULT_MOUNT:base.training_result_volume}
 HERO = base.HERO1_EXACT_PHASE1_RESULT_LABEL
 HERO_SHA = "e518083ee5476e7ff15e7c34caf9c0505f8fb7d330ea5a6882e4e9e5c1ef1912"
+wandb_secret_name = os.environ.get("VP001_WANDB_SECRET", "")
+if wandb_secret_name not in {"", "chess-dfm-wandb"}:
+    raise ValueError("Unexpected W&B secret destination")
+wandb_secrets = [modal.Secret.from_name(wandb_secret_name, required_keys=["WANDB_API_KEY"])] if wandb_secret_name else []
 
 
 def identity(root):
@@ -127,7 +131,7 @@ def preflight(protocol):
 
 @app.function(image=image,gpu="L40S",cpu=4,memory=32768,timeout=5400,startup_timeout=600,
     retries=0,max_containers=1,single_use_containers=True,volumes=VOLUMES,
-    secrets=[modal.Secret.from_name("chess-dfm-wandb",required_keys=["WANDB_API_KEY"])])
+    secrets=wandb_secrets)
 def train(protocol, preflight_sha, cost, commit):
     verify(protocol)
     out = root(protocol)

@@ -106,6 +106,7 @@ def run(arm, data, raw, output, protocol, preflight):
     try:
         import wandb
         tracker = wandb.init(project="chess-dfm-history", group="VP-001-value-head-pilots",
+            mode="online" if os.environ.get("WANDB_API_KEY") else "offline",
             name="Fresh Hero — " + arm, id=output.name[-20:] + "-" + arm,
             dir=str(output), config={"arm":arm,"protocol":protocol,"model":dataclasses.asdict(cfg)},
             settings=wandb.Settings(disable_git=True, init_timeout=30))
