@@ -1,0 +1,21 @@
+{
+  "runs": [
+    {
+      "arm": "native",
+      "url": "https://wandb.ai/gunays-independent/chess-dfm-history/runs/4ca97bb481a4213732c0-native",
+      "id": "4ca97bb481a4213732c0-native",
+      "all_source_scalars_verified": true,
+      "rows": 1001,
+      "source_sha256": "b7f7febb111aa26198411665de97220a0b0af71c1d95a3efa33330428edaadc8"
+    },
+    {
+      "arm": "jepa_residual",
+      "url": "https://wandb.ai/gunays-independent/chess-dfm-history/runs/4ca97bb481a4213732c0-jepa_residual",
+      "id": "4ca97bb481a4213732c0-jepa_residual",
+      "all_source_scalars_verified": true,
+      "rows": 1001,
+      "source_sha256": "05c788a31ccba1955fdd59235bc6fd985971dcb1bee1e454e17511064048f349"
+    }
+  ],
+  "credentials_kept_off_modal": true
+}

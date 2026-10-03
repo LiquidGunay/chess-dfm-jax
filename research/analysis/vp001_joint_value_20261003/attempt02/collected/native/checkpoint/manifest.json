@@ -1,0 +1,15 @@
+{
+  "created_utc": "2026-10-03T19:34:55.536684+00:00",
+  "data_cursor": 1000,
+  "format": "chess-dfm-torch-model-v1",
+  "model_only": true,
+  "optimizer_resume_supported": false,
+  "optimizer_update": 1000,
+  "source_mapping_sha256": "f446d36cfec80e17b3acf3a76671744e3c335306f0898df99fd2858fc7a2524e",
+  "state": {
+    "leaf_count": 468,
+    "path": "model.safetensors",
+    "sha256": "9e633e155dcaef26f298f5ecab7d49045ee14bd3ffca56ee0db03b2ca1afa40b",
+    "size_bytes": 1113978220
+  }
+}
