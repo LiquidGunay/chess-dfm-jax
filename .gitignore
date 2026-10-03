@@ -29,3 +29,5 @@ research/runs/
 *.npz
 !research/eval/interpretability_pilot_v1/positions.npz
 *.csv
+# Raw profiler traces stay on the results Volume; commit their hashes and summaries.
+research/analysis/**/profile_trace.json.gz
