@@ -1,0 +1,16 @@
+{
+  "status": "cpu_preflight_failed_before_gpu",
+  "app_id": "ap-iVDl4KGWueGOUdcCuv6wR8",
+  "cause": "Storage inventory followed a dangling historical W&B debug-core.log symlink into a previous container's temporary directory.",
+  "correction": "Count link metadata with lstat, without following external targets. No scientific settings changed. Preserve attempt01 specification; use a new attempt02 source identity and output directory.",
+  "declared_attempt_bound_dollars": "0.184632",
+  "gpu_started": false,
+  "prior_usage_reconciliation": {
+    "metered_dollars": "10.07728095",
+    "provider_waived_storage_dollars": "2.26728095",
+    "compute_before_credits_dollars": "7.81000000",
+    "billed_dollars": "0",
+    "previous_gpu003_apps_stopped_with_zero_tasks": ["ap-MoN11J6haO0ZrQMNHbU2O1", "ap-Iyltprjt6owFWm2f49oR1R", "ap-s9Mc80hdYirNDUZNIdkauX"],
+    "interpretation": "Historical completed-job maximum bounds are neither metered usage nor provider-held reservations. New workflow bounds remain conservatively reserved until closeout."
+  }
+}
