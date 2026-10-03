@@ -122,3 +122,23 @@ def test_value_pilot_arena_descriptor_accepts_training_and_inference_regions(arm
         (run / "run_config.json").write_text(json.dumps(record))
         with pytest.raises(ValueError, match="execution contract mismatch"):
             torch_hero_checkpoint_descriptor(run, models_dir=models)
+
+
+def test_value_pilot_log_import_separates_validation_pools(tmp_path):
+    import json
+    from research.analysis.sync_value_pilot import prepare
+    root = tmp_path / "collected/native"
+    root.mkdir(parents=True)
+    (root / "report.json").write_text(json.dumps({"status": "complete", "updates": 1000}))
+    (root / "run_config.json").write_text("{}")
+    (root / "wandb.json").write_text(json.dumps({"id": "test-native"}))
+    training = [{"update": i, "examples": i * 1024, "loss": 2.} for i in range(1, 1001)]
+    validation = [{"update": i, "examples": i * 1024, "loss": 3.} for i in (0, 250, 554, 1000)]
+    for name, rows in (("metrics", training), ("validation_metrics", validation)):
+        (root / (name + ".jsonl")).write_text("\n".join(map(json.dumps, rows)) + "\n")
+    result = prepare(tmp_path, "native")
+    assert len(result["events"]) == 1001
+    assert result["events"][0]["val_2048/loss"] == 3.
+    assert result["events"][250]["val_2048/loss"] == 3.
+    assert result["events"][1000]["val_8192/loss"] == 3.
+    assert "val_2048/loss" not in result["events"][1000]
