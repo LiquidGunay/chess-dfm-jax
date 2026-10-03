@@ -9,7 +9,8 @@ from research.collect_gpu_training_benchmark import preserve_bytes
 from research.pre_runpod_benchmark import choose_candidate, summarize
 
 
-def collect(root):
+def collect(root, audit_suffix=""):
+    if audit_suffix not in {"", "_verified"}: raise ValueError("Unknown audit suffix")
     protocol = json.loads((root/"preregister.json").read_text())
     submitted = json.loads((root/"sweep_run.json").read_text())
     try:
@@ -85,14 +86,16 @@ def collect(root):
         "replay_diagnostics": replay_diagnostics,
         "failures": [r for r in complete["records"] if r["process_status"] != "complete"],
         "scope": "Fifty-update warmup-prefix diagnostic; common teacher-forced/full-horizon validation, not playing strength or stable-phase WSD validation. FP32-storage arms also change optimizer moment storage."}
-    preserve_bytes(root/"summary.json", (json.dumps(summary, indent=2, sort_keys=True)+"\n").encode())
+    preserve_bytes(root/("summary"+audit_suffix+".json"), (json.dumps(summary, indent=2, sort_keys=True)+"\n").encode())
     receipt = {"call_id": submitted["call_id"], "output_relative": remote, "artifacts": artifacts,
         "hash_basis": "Terminal bytes from authenticated Modal Volume, preserving existing evidence; timings and selection independently recomputed."}
-    preserve_bytes(root/"completion.json", (json.dumps(receipt, indent=2, sort_keys=True)+"\n").encode())
+    preserve_bytes(root/("completion"+audit_suffix+".json"), (json.dumps(receipt, indent=2, sort_keys=True)+"\n").encode())
     print(json.dumps({"status": "collected", "arms_complete": len(results), "candidate": complete["candidate"], "resume": complete["resume"]}), flush=True)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("root", type=Path)
-    collect(parser.parse_args().root)
+    parser.add_argument("--audit-suffix", choices=["", "_verified"], default="")
+    args = parser.parse_args()
+    collect(args.root, args.audit_suffix)
