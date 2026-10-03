@@ -24,6 +24,26 @@ Both smoke runs and all main matches are complete; evidence is recorded in
 representation-strength proposal remains unfrozen and requires recalibration
 against this full-history anchor before architecture selection.
 
+HH-002 / EV-006 closeout (2026-10-03): the 553-update full-history Hero-recipe
+run and its common-pool historical validation are complete; both loss curves
+are synced to the focused `chess-dfm-history` W&B project. On 128 paired
+development openings per matchup, its one-pass DFM scores 65.82% versus
+historical Hero1 but 30.47% versus full-history raw BT4. Its native policy
+scores 48.24% versus raw BT4 (inconclusive), while eight-pass DFM scores
+19.53% versus raw and 35.35% directly versus one-pass. All 1,792 main games
+and 96 smoke games completed without faults, cap draws, or coverage misses.
+This candidate is not promoted to searched evaluation.
+
+The matched-initialization CPU weight audit finds 18.35% more backbone L2
+movement than Hero1, concentrated in the embedding stack (+36.53%);
+transformer-block movement is 0.85% smaller and native-policy-head movement
+21.41% smaller. The backbone distance remains small: 0.04358% of initial
+norm versus 0.03683%. This measures stored BF16 weights, not representation
+quality or optimizer-master movement. The slightly contracted data and
+553-versus-554 updates prevent a pure causal history-training attribution.
+Frozen protocol, results, uncertainty and receipts are under
+`research/analysis/ev006_hh002_play_20261003/`.
+
 ## 1. Complete the selected epoch
 
 Run PA-001 with the already selected Proposal A recipe. Preserve the frozen

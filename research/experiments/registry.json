@@ -15,11 +15,14 @@
     {
       "id": "EV-006",
       "name": "History-trained Hero searchless play and matched weight movement",
-      "status": "smokes_passed_development_running_weight_audit_complete",
+      "status": "complete_history_dfm_beats_hero1_but_loses_to_raw_bt4",
       "depends_on": ["HH-002", "EV-005"],
       "specification": "research/analysis/ev006_hh002_play_20261003/preregister.json",
       "execution_record": "research/analysis/ev006_hh002_play_20261003/runs.json",
       "weight_results": "research/analysis/ev006_hh002_play_20261003/weight_comparison.json",
+      "results": "research/analysis/ev006_hh002_play_20261003/development_summary.json",
+      "decision": "research/analysis/ev006_hh002_play_20261003/decision.json",
+      "result_summary": "HH-002 p1 scores 65.82% versus Hero1 p1 and 30.47% versus full-history raw BT4. Native policy scores 48.24% versus raw (inconclusive). Eight passes score 35.35% versus one pass. Backbone movement is 18.35% larger, concentrated in embedding movement (+36.53%); transformer blocks move 0.85% less. All 1792 main and 96 smoke games completed without faults/cap draws/coverage misses; no promotion to search.",
       "scope": "Seven fixed 128-pair searchless comparisons: p1, p8 and native policy versus Hero1 and full-history raw BT4, plus p8 versus p1. Development only; no search or promotion."
     },
     {

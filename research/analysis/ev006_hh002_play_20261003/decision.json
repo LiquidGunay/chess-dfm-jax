@@ -1,0 +1,79 @@
+{
+  "experiment_id": "EV-006",
+  "status": "complete",
+  "completed_utc": "2026-10-03T13:34:01.408117+00:00",
+  "protocol_sha256": "6a2e54365c8267d9d32b35a7b9975b14ffd9c75a7d3e2e0ec93fde294855f84a",
+  "development_games": 1792,
+  "smoke_games": 96,
+  "policy_faults": 0,
+  "cap_draws": 0,
+  "incomplete_legal_coverage_positions": 0,
+  "primary": {
+    "p1_versus_hero1": "Improved on this development opening set: 111W/115D/30L, score 0.658203125, marginal paired 95% interval [0.53816277608501, 0.77824347391499].",
+    "p1_versus_raw_full_history_bt4": "Inferior on development: 41W/74D/141L, score 0.3046875, marginal paired 95% interval [0.18464715108500993, 0.42472784891499005].",
+    "confirmation_entry_passed": false,
+    "candidate_promoted": false,
+    "matched_search_launched": false
+  },
+  "secondary": {
+    "p8_versus_hero1_p8": "Score 0.658203125; same point score as p1 against its corresponding Hero1 setting, but not the same matchup.",
+    "p8_versus_raw_full_history_bt4": "Score 0.1953125; inferior to raw BT4.",
+    "native_versus_hero1_native": "Score 0.5859375, interval [0.46589715108500995, 0.70597784891499]; inconclusive.",
+    "native_versus_raw_full_history_bt4": "Score 0.482421875, interval [0.36238152608500995, 0.60246222391499]; no superiority or equivalence established.",
+    "p8_versus_p1_same_checkpoint": "49W/83D/124L, score 0.353515625, interval [0.23347527608500993, 0.47355597391499005]; extra refinement is worse in this development matchup.",
+    "dfm_attribution": "Native policy has a higher observed score against the shared raw opponent than DFM1 or DFM8. A direct native-versus-DFM matchup was not part of this matrix."
+  },
+  "historical_raw_anchor_comparison": {
+    "hero1_p1_score_EV005": 0.1875,
+    "history_p1_score_EV006": 0.3046875,
+    "opening_history_asset_and_game_contract_equality_verified": true,
+    "interpretation": "Observed score improvement on a reused benchmark; no separate causal or held-out significance claim."
+  },
+  "weight_movement": {
+    "normalization": "L2 distance from the verified matching initialization divided by its L2 norm; pretrained and freshly initialized modules are reported separately.",
+    "backbone_relative_delta_percent_hero1": 0.036826312800965356,
+    "backbone_relative_delta_percent_history": 0.04358494517469572,
+    "backbone_movement_change_percent": 18.352726242941152,
+    "embedding_movement_change_percent": 36.53196034662991,
+    "transformer_blocks_movement_change_percent": -0.8469953888313619,
+    "native_policy_head_movement_change_percent": -21.41021588989549,
+    "added_modules_movement_change_percent": 1.80743628892124,
+    "interpretation": "Greater backbone movement is concentrated in the embedding stack, not broad additional transformer adaptation. This is not evidence of better representations by itself."
+  },
+  "limitations": [
+    "Searchless native-PyTorch arena only, with training-matched inputs: full history for HH-002 and raw BT4, current-only for historical Hero1.",
+    "Already-exposed development openings, uncertified training source-game overlap, no held-out promotion or absolute Elo/SOTA claim.",
+    "Confidence intervals are marginal bounded-pair Hoeffding intervals, not simultaneous across the seven comparisons.",
+    "Single seed, 553 versus 554 training updates and a slightly contracted training set; not a pure causal history-training comparison.",
+    "Backbone movement is measured in stored BF16 weights, not optimizer-master weights; zero-initialized added tensors have undefined relative movement."
+  ],
+  "verification": {
+    "all_arena_state_hashes_and_frozen_contracts_verified": true,
+    "complete_color_reversed_opening_pairs_per_main_match": 128,
+    "full_raw_and_model_checkpoint_hashes_cpu_verified": true,
+    "effective_model_recipes_identical": true,
+    "recorded_fresh_initialization_hashes_verified": true,
+    "targeted_final_regression_tests_passed": 24,
+    "all_modal_apps_stopped_zero_active_tasks": true
+  },
+  "cpu_audit_attempts": [
+    {"app_id": "ap-QYVFSBByQC4LfbxinqDfkw", "status": "preflight_passed_weight_load_failed_trusted_mount_order"},
+    {"app_id": "ap-Rq6F91UYQQeiPv8EWL0Grb", "status": "complete_after_recorded_cpu_only_repair"}
+  ],
+  "budget": {
+    "provider_compute_usage_before_dollars": "3.53000000",
+    "provider_compute_usage_at_closeout_dollars": "4.95000000",
+    "meter_checked_utc": "2026-10-03T13:34:09.657166+00:00",
+    "meter_note": "Month-to-date compute before credits, excluding explicitly waived storage. Meter can lag; the difference is not a final per-experiment invoice.",
+    "total_declared_maximum_including_two_cpu_attempts_dollars": "9.66686400",
+    "conservative_month_reservation_dollars": "18.62679455",
+    "workspace_stop_dollars": "34.00"
+  },
+  "evidence": {
+    "games": "development_summary.json",
+    "weights": "weight_comparison.json",
+    "launches": "runs.json",
+    "loss_curves": "https://wandb.ai/gunays-independent/chess-dfm-history?nw=fdrwguh5q3k"
+  },
+  "next_action": "Do not automatically promote this DFM checkpoint to matched search; retain the full-history raw-BT4 anchor and investigate training/refinement under a separately frozen protocol."
+}
