@@ -31,20 +31,32 @@ def audit_full_history_batch(batch: Mapping[str, Any]) -> dict[str, int]:
     of an initial-position example. Classical LC0 must retain its predecessor.
     """
     import numpy as np
+    import chess
+    from chess_dfm_jax.encoding import encode_board
 
     current = np.asarray(batch["current_planes"])
     future = np.asarray(batch["future_planes"])
     valid = np.asarray(batch["future_valid"], dtype=bool)
-    if current.shape[-3:] != (112, 8, 8) or future.shape[-3:] != (112, 8, 8):
+    if (current.ndim != 4 or future.ndim != 5 or current.shape[0] != future.shape[0]
+            or current.shape[-3:] != (112, 8, 8) or future.shape[-3:] != (112, 8, 8)):
         raise ValueError("History audit requires classical 112-plane inputs")
+    if not np.isfinite(current).all() or not np.isfinite(future).all():
+        raise ValueError("History audit rejects nonfinite input planes")
     if future.shape[:2] != valid.shape or not valid.any():
         raise ValueError("History audit requires valid future targets")
     present = np.any(future[..., 13:104, :, :] != 0, axis=(-3, -2, -1))
     if np.any(valid & ~present):
         raise ValueError("Full-history training data contains a zero-history future target")
+    current_present = np.any(current[:, 13:104] != 0, axis=(1, 2, 3))
+    # The real initial position has no predecessor. Do not mistake that valid
+    # boundary for a broken dataset; any other zero-history current row fails.
+    initial = encode_board(chess.Board(), [])
+    initial_rows = np.all(current == initial, axis=(1, 2, 3))
+    if np.any(~current_present & ~initial_rows):
+        raise ValueError("Full-history training data contains a zero-history noninitial current position")
     return {
         "examples": int(current.shape[0]),
-        "current_with_history": int(np.any(current[:, 13:104] != 0, axis=(1, 2, 3)).sum()),
+        "current_with_history": int(current_present.sum()),
         "valid_future_targets": int(valid.sum()),
         "future_targets_with_history": int((present & valid).sum()),
     }

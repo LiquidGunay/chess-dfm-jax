@@ -22,6 +22,16 @@ def test_full_history_audit_rejects_zeroed_targets():
     batch["future_planes"] = encode_board(board, [])[None, None]
     with pytest.raises(ValueError, match="zero-history future"):
         audit_full_history_batch(batch)
+    batch["future_planes"] = full[None, None]
+    batch["current_planes"] = encode_board(board, [])[None]
+    with pytest.raises(ValueError, match="noninitial current"):
+        audit_full_history_batch(batch)
+    batch["current_planes"] = encode_board(chess.Board(), [])[None]
+    assert audit_full_history_batch(batch)["current_with_history"] == 0
+    batch["future_planes"] = batch["future_planes"].copy()
+    batch["future_planes"][0, 0, 20, 0, 0] = np.nan
+    with pytest.raises(ValueError, match="nonfinite"):
+        audit_full_history_batch(batch)
 
 
 def test_new_training_requires_history_and_legacy_is_explicit():
