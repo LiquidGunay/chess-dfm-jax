@@ -58,8 +58,18 @@ def summarize(root):
         rankings[pool] = {'observed_score_descending': observed, 'ce_ascending': loss_order,
                           'ordering_agrees': observed == loss_order,
                           'scope': 'Descriptive only, five learned policies with observed BT4 matches; no significance or causal claim'}
+    direct = []
+    for mode, id_ in [('native_policy','policy_hero1'), ('dfm_one_pass','p1_hero1'), ('dfm_eight_pass','p8_hero1')]:
+        game = next(r for r in new_games['comparisons'] if r['id'] == id_)
+        direct.append({'edge': id_, 'mode': mode, 'candidate': 'hh002', 'opponent': 'hero1',
+                       'candidate_score': game['score'], 'interval': game['pair_aware_interval'],
+                       'validation_differences_candidate_minus_opponent': {
+                           pool: {metric: lookup[pool,'hh002',mode][metric]-lookup[pool,'hero1',mode][metric]
+                                  for metric in ('legal_conditional_ce','legal_top1_accuracy')}
+                           for pool in ('hero_validation','sequential_validation')}})
     return {'experiment_id': 'EV-007', 'rows': rows, 'ev003_reproduction': parity,
             'descriptive_rankings': rankings,
+            'direct_history_versus_hero1_comparisons': direct,
             'hh002_eight_versus_one_play': next(r for r in new_games['comparisons'] if r['id'] == 'p8_vs_p1')['pair_aware_interval'],
             'validated_per_position_aggregations': 14,
             'limitations': result['protocol']['analysis']['limitations']}
