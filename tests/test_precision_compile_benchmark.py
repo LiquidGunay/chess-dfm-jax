@@ -82,3 +82,27 @@ def test_config_preserves_history_recipe_runtime():
     assert not current.remat_dfm_blocks
     assert current.use_bt4_sdpa and current.use_head_sdpa
     assert current.root_legal_ce_coeff == HERO_CONFIG.root_legal_ce_coeff
+
+
+def test_summary_rejects_training_and_inconsistent_timings():
+    import copy
+    from research.summarize_precision_compile_benchmark import summarize_arm
+    grads = {"groups":{"all":{"cosine":1., "relative_l2":0.}}}
+    batch = {"finite":True, "scalars":{"loss":3.}, "legal_top1_agreement":1.,
+             "gradients_vs_fp32_eager":grads, "gradients_vs_same_dtype_eager":grads}
+    result = {"status":"complete", "batches":[batch]*3, "optimizer_steps":0,
+        "warm":{"repeats":[{"wall_seconds":2.}, {"wall_seconds":4.}],
+                "mean_seconds":3., "peak_allocated_bytes":1024**3},
+        "cold_first_forward_backward_seconds":10., "cold_minus_warm_seconds":7.,
+        "parameter_bytes_by_dtype":{"torch.float32":100},
+        "native_policy_legal_top1_agreement":1., "layer_trace_vs_fp32_eager":{}}
+    row = summarize_arm(result, 64)
+    assert row["mean_forward_backward_seconds"] == 3
+    assert row["examples_per_second_forward_backward_only"] == pytest.approx(64/3)
+    bad = copy.deepcopy(result); bad["optimizer_steps"] = 1
+    with pytest.raises(ValueError): summarize_arm(bad, 64)
+    bad = copy.deepcopy(result); bad["warm"]["mean_seconds"] = 2
+    with pytest.raises(ValueError): summarize_arm(bad, 64)
+    bad = copy.deepcopy(result); bad["batches"][0]["finite"] = False
+    with pytest.raises(ValueError): summarize_arm(bad, 64)
+    assert summarize_arm({"status":"nonfinite", "batches":[batch]}, 64)["status"] == "nonfinite"
