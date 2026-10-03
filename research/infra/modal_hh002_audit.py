@@ -38,6 +38,12 @@ def spec():
               volumes={arena.BASE_INPUT_MOUNT: arena.base_input_volume.with_mount_options(read_only=True),
                        arena.TRAINING_RESULT_MOUNT: arena.training_result_volume})
 def run(expected_source, git_commit, declared_cost):
+    # train_torch captures trusted roots at import time. Modal Volume mounts
+    # resolve outside /workspace, so bind the exact resolved mounts first.
+    os.environ.update({"CHESS_DFM_WORKSPACE_ROOT": "/workspace",
+        "CHESS_DFM_TRUSTED_WORKSPACE_ROOTS": os.pathsep.join(
+            str(Path(root).resolve(strict=True))
+            for root in (arena.BASE_INPUT_MOUNT, arena.TRAINING_RESULT_MOUNT))})
     import torch
     from research.input_contract import torch_hero_plane_history_mode
     from research.interpretability.models import BT4ComparisonModels, _encoder_layout
@@ -49,8 +55,6 @@ def run(expected_source, git_commit, declared_cost):
         raise ValueError("CPU audit source drift")
     started = time.monotonic()
     torch.set_num_threads(4)
-    os.environ.update({"CHESS_DFM_WORKSPACE_ROOT": "/workspace",
-        "CHESS_DFM_TRUSTED_WORKSPACE_ROOTS": os.pathsep.join([arena.BASE_INPUT_MOUNT, arena.TRAINING_RESULT_MOUNT])})
     raw = arena._verify_raw_bt4_volume()
     if arena._sha256_file(raw) != arena.RAW_BT4_SHA256:
         raise ValueError("Raw BT4 content drift")
