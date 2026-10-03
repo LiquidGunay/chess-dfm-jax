@@ -1,0 +1,52 @@
+{
+  "baseline_checkpoints": [
+    {
+      "path": "/workspace/training-results/runs/hero-training-phase1-hero1_exact-l40s-fae7b0ccef5ca3668ed5/checkpoints/update00000100",
+      "state_sha256": "9cbb512ae94c4d5c0d312b0f128371c2976bb65b093b1d0b8c2c62c9c7e280b1",
+      "update": 100
+    },
+    {
+      "path": "/workspace/training-results/runs/hero-training-phase1-hero1_exact-l40s-fae7b0ccef5ca3668ed5/checkpoints/update00000200",
+      "state_sha256": "5f25054e070d133fa1434dca1abf6e81fd2b58ec90ccac236d1f9b929880c364",
+      "update": 200
+    },
+    {
+      "path": "/workspace/training-results/runs/hero-training-phase1-hero1_exact-l40s-fae7b0ccef5ca3668ed5/checkpoints/update00000300",
+      "state_sha256": "812ebf62b978b479f0cbd50f4182a163af7e06eb90243155d68f6aff5fe304cb",
+      "update": 300
+    },
+    {
+      "path": "/workspace/training-results/runs/hero-training-phase1-hero1_exact-l40s-fae7b0ccef5ca3668ed5/checkpoints/update00000400",
+      "state_sha256": "e1fa6e53d10d7fac88b18ecb1cc7f37b7029ebc3dfcb80784cd6c7e728596a3d",
+      "update": 400
+    },
+    {
+      "path": "/workspace/training-results/runs/hero-training-phase1-hero1_exact-l40s-fae7b0ccef5ca3668ed5/checkpoints/update00000500",
+      "state_sha256": "4d122279e9835f5fb1551d4d719007a5d9324121c8ec02949b52a8689586dba1",
+      "update": 500
+    },
+    {
+      "path": "/workspace/training-results/runs/hero-training-phase1-hero1_exact-l40s-fae7b0ccef5ca3668ed5/checkpoints/update00000554",
+      "state_sha256": "3ba8f71c190865317f7ddb8a6ab71ac2ad80fafc1b72eb45f438cdf41dfa1c8d",
+      "update": 554
+    }
+  ],
+  "baseline_run_config_sha256": "1f417904b8160517787f45d686cef7567e8affce143d41310a17d5eacc00c33c",
+  "baseline_training_metrics_sha256": "64526c98c54944cbc67da0fbdf5bed665cdee169e165be8c46ccaab18ed2d503",
+  "dataset_root": "/workspace/training-results/datasets/hh002-history-368190a511fd6d5dd51c",
+  "git_commit": "82487b3021e61ea75aeaddaad491cc5523d83613",
+  "gpu_active": false,
+  "inventory_bytes": {
+    "/inventory/compile-cache": 1242051649,
+    "/inventory/interpretability-results": 76232108,
+    "/workspace/base-inputs": 1268454501,
+    "/workspace/training-inputs": 20425663802,
+    "/workspace/training-results": 257150865133
+  },
+  "manifest_sha256": "d9003b1d3a5bcebfc5ece8f4f5340d25369bab53fcda68c4bf9965c45019278e",
+  "passed": true,
+  "raw_bt4_sha256": "61e43e98d2c4cb747498c6bc13a5bbb3b07e985d3f5d87f0351a4db855fa0651",
+  "source_tree_sha256": "368190a511fd6d5dd51ca87fbfb15b22a73c61d7676612490c234ddc8b997781",
+  "train_examples": 566272,
+  "validation_examples": 8128
+}
