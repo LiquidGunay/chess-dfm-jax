@@ -1,0 +1,21 @@
+{
+  "context_count": 0,
+  "distinct_header_game_ids": 1,
+  "future_targets": 8192,
+  "ignored_unrooted_context_rows": 0,
+  "passed": true,
+  "reconstructed_games_touching_targets": 11,
+  "reconstructed_planes_sha256": "8684de6d6aba63458c6365f5f6484b3e1cde9b7466b322784284af63f3887a29",
+  "schema_version": "hero-history-recovery-audit-v1",
+  "scope": "Supplied ordered shards only; not full-corpus certification",
+  "shards": [
+    {
+      "path": "/tmp/hero1-history-feasibility-chunk-000000.npz",
+      "sha256": "6478a7372a18b6cf96687aa085d9be2d96f9226b54462ae1d6c05543bb17505e",
+      "source_uri": "gs://gunay-chess-experiments-us-central1/data/trajectory_v2_lc0_test80_h8_10m_retry_20260429/train/chunk_000000.npz"
+    }
+  ],
+  "target_rows": 1024,
+  "target_rows_with_current_repetition": 8,
+  "training_started": false
+}

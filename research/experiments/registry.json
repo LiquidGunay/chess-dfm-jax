@@ -13,6 +13,14 @@
   },
   "experiments": [
     {
+      "id": "HH-001",
+      "name": "Hero 1 recipe with full history on the original examples",
+      "status": "cpu_reconstruction_preflight",
+      "depends_on": ["EV-005"],
+      "plan": "research/analysis/hh001_history_20261003/plan.json",
+      "scope": "Matched 554-update fresh run, same original examples/targets/order; restore current and future history, including Chess960. No data substitution."
+    },
+    {
       "id": "EV-005",
       "name": "Hero1 versus full-history raw BT4 with matched current-only control",
       "status": "completed_hero1_p1_inferior_to_full_history_bt4_native_inconclusive",

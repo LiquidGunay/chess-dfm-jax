@@ -1,0 +1,19 @@
+{
+  "context_count": 1,
+  "error": "Replayed FEN mismatch (or unsupported setup game)",
+  "passed": false,
+  "schema_version": "hero-history-recovery-audit-v1",
+  "shards": [
+    {
+      "path": "/tmp/hero1-history-feasibility-chunk-017540.npz",
+      "sha256": "a090ac1785aa146d24358ab8a596d402c52a7b05ee5bc74375de60369b5e6c36",
+      "source_uri": "gs://gunay-chess-experiments-us-central1/data/trajectory_v2_lc0_test80_h8_10m_skip704_20260429/train/chunk_050609.npz"
+    },
+    {
+      "path": "/tmp/hero1-history-feasibility-chunk-017541.npz",
+      "sha256": "70b713a1d218824eab79605d43cb26662f4448d759e078363d180dbfd9f2aa5b",
+      "source_uri": "gs://gunay-chess-experiments-us-central1/data/trajectory_v2_lc0_test80_h8_10m_skip704_20260429/train/chunk_050610.npz"
+    }
+  ],
+  "training_started": false
+}

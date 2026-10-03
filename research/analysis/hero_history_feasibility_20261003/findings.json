@@ -1,0 +1,76 @@
+{
+  "schema_version": "hero-history-training-feasibility-v1",
+  "date_utc": "2026-10-03",
+  "status": "data_choice_and_preflight_required_before_training",
+  "training_started": false,
+  "remote_compute_launched": false,
+  "scope": "Seven downloaded legacy shards: four target shards and three predecessor-context shards. This is a targeted feasibility check, not a representative corpus-wide prevalence estimate.",
+  "requested_recipe": {
+    "reference": "research/analysis/hero_v2_phase1/hero1_exact/run_config.json",
+    "initialization": "Fresh raw BT4 plus seed-0 auxiliary modules, not continuation from a current-only Hero checkpoint",
+    "proposed_initial_updates": 554,
+    "batch_size": 1024,
+    "examples": 567296,
+    "optimizer_precision": "Original BF16 direct updates",
+    "main_lr": 0.0005,
+    "encoder_lr": 0.000016666666666666667,
+    "schedule": "Preserve original example-based cosine schedule and warmup, not compress it into 554 updates",
+    "legality_coeff": 2.0,
+    "future_wdl_coeff": 0.25,
+    "wdl_targets": "Hard game outcome, future states only",
+    "history_scope": "Current and all valid future input planes, including repetition indicators"
+  },
+  "successful_reconstruction": {
+    "records": ["first_corpus_shard.json", "first_training_shard.json"],
+    "target_rows": 2048,
+    "future_targets": 16384,
+    "nonhistory_plane_mismatches": 0,
+    "claim": "A clean history-only reconstruction works on these two standard-game target shards; no original records were modified."
+  },
+  "issues": [
+    {
+      "issue": "Stored history is absent",
+      "impact": "Cannot enable history by changing a trainer flag; current and future inputs must be rebuilt or sourced from official sequential records."
+    },
+    {
+      "issue": "Nonunique game_id metadata",
+      "evidence": "Each sampled shard has exactly one header-derived game_id despite multiple ply-zero game boundaries.",
+      "impact": "Never join history by game_id alone. Use source identity, ordered rows, validated boundaries and move replay. This finding does not by itself establish duplicate games or split leakage."
+    },
+    {
+      "issue": "Omitted promotion windows",
+      "evidence": [
+        {"shard": "train/chunk_024435.npz", "row_before": 451, "row_after": 452, "ply_before": 101, "ply_after": 110, "unique_missing_move": "a2a1q"},
+        {"shard": "train/chunk_021647.npz", "row_before": 630, "row_after": 631, "ply_before": 77, "ply_after": 86, "unique_missing_move": "a2a1q"},
+        {"shard": "train/chunk_021647.npz", "row_before": 644, "row_after": 645, "ply_before": 99, "ply_after": 108, "unique_missing_move": "b2b1q"}
+      ],
+      "cause": "All three uniquely connecting legal moves are rejected by the old absolute lc0_1858 codec; the preprocessor skips a window when action conversion raises.",
+      "impact": "Contiguous-row reconstruction is insufficient. Any gap recovery needs a uniquely verified legal transition or original PGN, without silently dropping retained training examples. No gap repair was applied."
+    },
+    {
+      "issue": "Original corpus contains nonstandard starting positions",
+      "evidence": [
+        {"shard": "train/chunk_021646.npz", "row": 1006, "white_back_rank": "RNKBRQBN"},
+        {"shard": "train/chunk_017540.npz", "row": 380, "white_back_rank": "RNQNKRBB"},
+        {"shard": "train/chunk_017541.npz", "row": 840, "white_back_rank": "NRQKBBRN"}
+      ],
+      "records": ["second_training_shard.json", "third_training_shard.json"],
+      "impact": "A standard-start replay rejects these games. Exact matching requires setup/Chess960-aware reconstruction and validation; filtering them changes the training population. Not evidence that the retained positions themselves are corrupt."
+    }
+  ],
+  "available_alternative": {
+    "dataset_root": "/home/ubuntu/chess-dfm-jax/data/lc0_sequential/test80_20240401_0117",
+    "source_sha256": "1c5e5d0d1d335bfeca9693700a1ad1415abfb190772bd051d1f00cb193eb3c2f",
+    "variant_filter": "standard-initial-position-only",
+    "retained_games": 75424,
+    "filtered_nonstandard_games": 3184,
+    "full_history_parity_record": "research/analysis/ev005_full_history_bt4_20261003/input_plane_parity.json",
+    "caveat": "Different examples, population, splits and ordering from original Hero1. Default sequential materialization uses soft search-Q/D WDL and variable terminal horizons; a Hero recipe replica must explicitly use retained result_q/result_d and full eight-ply windows. This must not be labelled a pure history ablation."
+  },
+  "next_gate": "Choose exact original-data reconstruction versus the Hero recipe on existing standard-only sequential data. Then freeze the dataset/targets/order and bounded training specification, perform complete CPU input verification, refresh billing/reservations, and use a budget-gated launcher.",
+  "verification": {
+    "command": "python -m pytest -q tests/test_hero_history_recovery.py tests/test_torch_arena_history_inputs.py",
+    "passed": 29,
+    "training_or_checkpoint_contract_changes": false
+  }
+}

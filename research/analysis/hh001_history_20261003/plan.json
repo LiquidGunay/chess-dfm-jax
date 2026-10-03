@@ -1,0 +1,43 @@
+{
+  "experiment_id": "HH-001",
+  "name": "Hero 1 recipe, original examples, full board history",
+  "user_selected_route": 1,
+  "question": "What changes when the original short Hero recipe is trained with full LC0 current/future history while keeping examples, labels, ordering, initialization and optimization matched?",
+  "training_updates": 554,
+  "batch_size": 1024,
+  "training_examples": 567296,
+  "seed": 0,
+  "initialization": "Fresh raw BT4 and seed-0 auxiliary modules, not continuation from history-free Hero",
+  "reference_run_config": "research/analysis/hero_v2_phase1/hero1_exact/run_config.json",
+  "reference_checkpoint_sha256": "e518083ee5476e7ff15e7c34caf9c0505f8fb7d330ea5a6882e4e9e5c1ef1912",
+  "data": {
+    "original_label": "trajectory-v3-lc0-test80-h8-sets1-3-20260430",
+    "original_archive_sha256": "d8feffa259580563c8097fa4a604ca415469dd80da66dabda170ac9ce929b968",
+    "training_selection": "First 554 slots of random.Random(0).shuffle(range(27679)); original within-shard row order",
+    "validation_selection": "Original fast_val_global_index pool: same 8192 rows in ascending global-index order",
+    "retain_chess960": true,
+    "preserve_existing_targets_and_masks": true,
+    "repair_missing_prefix_moves": "Only a unique legal one-ply transition matching the exact next retained FEN; anything unresolved blocks the GPU launch",
+    "allowed_plane_changes": "Current repetition plane 12 and past-board planes 13:104, for current and all future positions",
+    "original_data_mutation": false
+  },
+  "gates": [
+    "Complete coverage of every selected original training and validation row, without substitutions",
+    "Exact equality of non-history planes, targets, actions, legal masks and metadata",
+    "Legal replay, standard/Chess960 initial-root checks, overlapping-window consistency and reference-encoder parity",
+    "CPU hashes of all rebuilt input files, the frozen validation selection and raw BT4 weights before GPU",
+    "Freeze final data manifest and training source/config hashes before GPU launch"
+  ],
+  "budget": {
+    "pricing_checked_utc_date": "2026-10-03",
+    "pricing_source": "https://modal.com/pricing",
+    "cpu_attempt_cap_dollars": "1.10",
+    "training_attempt_cap_dollars": "4.20",
+    "retries": 0,
+    "workspace_new_launch_stop_dollars": "34.00",
+    "workspace_outer_budget_dollars": "42.50",
+    "rule": "Fresh usage before each launch plus outstanding reservations; count compute before credits, exclude only validated waived storage"
+  },
+  "evaluation_scope": "Matched validation at update 554. Searchless arena requires a subsequent checkpoint-bound protocol; no search or automatic architecture sweep.",
+  "retention": "Preserve original assets; one new full-history input dataset and the final short-run model/recovery state. No storage deletion is authorized by this plan."
+}

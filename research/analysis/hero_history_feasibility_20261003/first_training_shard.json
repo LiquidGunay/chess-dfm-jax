@@ -1,0 +1,26 @@
+{
+  "context_count": 1,
+  "distinct_header_game_ids": 1,
+  "future_targets": 8192,
+  "ignored_unrooted_context_rows": 99,
+  "passed": true,
+  "reconstructed_games_touching_targets": 13,
+  "reconstructed_planes_sha256": "f03439a581a3e7deae9956bba09ecccb92311c999722a7469a9852a7f7e470d3",
+  "schema_version": "hero-history-recovery-audit-v1",
+  "scope": "Supplied ordered shards only; not full-corpus certification",
+  "shards": [
+    {
+      "path": "/tmp/hero1-history-feasibility-chunk-024435.npz",
+      "sha256": "2d86867d71f3767b22765d6ca9ebf33633de5679bfc7034ed7acc56f70120731",
+      "source_uri": "gs://gunay-chess-experiments-us-central1/data/trajectory_v2_lc0_test80_h8_10m_skip1344_20260430/train/chunk_031375.npz"
+    },
+    {
+      "path": "/tmp/hero1-history-feasibility-chunk-024436.npz",
+      "sha256": "6fbcba3e3cd44bbc80217e216add98db5be37e10656d56b54d58d52d14d37ff6",
+      "source_uri": "gs://gunay-chess-experiments-us-central1/data/trajectory_v2_lc0_test80_h8_10m_skip1344_20260430/train/chunk_031376.npz"
+    }
+  ],
+  "target_rows": 1024,
+  "target_rows_with_current_repetition": 5,
+  "training_started": false
+}
