@@ -10008,12 +10008,14 @@ def _load_history_validation_resources(args):
         _require_workspace(args.data_root), split="validation", batch_size=64, horizon=8,
         manifest_sha256=args.history_manifest_sha256, canonicalize=canonicalize_trajectory_batch,
     )
-    if batches.available_steps != 128:
+    subset = batches.manifest.get("selection_contract") == "hh002-contracted-v1"
+    count = 8128 if subset else 8192
+    if batches.available_steps != count // 64:
         raise ValueError("Reconstructed validation must contain the original 8192 positions")
     return _HeroValidationResources(fast_batches=batches, fast_pool={
         "schema_version": "hero-history-validation-pool-v1",
-        "pool_definition": {"split": "val", "seed": 2026072501, "count": 8192,
-                            "selection": "original_fast_val_global_index_ascending"},
+        "pool_definition": {"split": "val", "seed": 2026072501, "count": count,
+                            "selection": "hh002_common_retained_pool" if subset else "original_fast_val_global_index_ascending"},
         "schedule_total_examples": _HERO_TRAIN_EXAMPLES, "data": batches.provenance(),
     })
 

@@ -337,6 +337,9 @@ def verify_dataset(root, manifest=None):
     root = Path(root)
     if manifest is None:
         manifest = json.loads((root/"manifest.json").read_text())
+    if manifest.get("selection_contract") is not None:
+        from research.hero_history_subset_data import verify_subset
+        return verify_subset(root, manifest)
     if manifest.get("schema_version") != SCHEMA or not manifest.get("passed"):
         raise ValueError("Missing successful history rebuild contract")
     if (manifest["original_training_inventory_sha256"] != TRAIN_MANIFEST_SHA256

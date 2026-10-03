@@ -78,5 +78,7 @@ class HistoryTrajectoryBatches:
                 "manifest_sha256": self.manifest_sha256, "batch_size": self.batch_size,
                 "steps_per_epoch": self.steps_per_epoch, "available_steps": self.available_steps,
                 "examples": int(self.offsets[-1]), "seed": 0,
-                "batch_schedule": "original_Hero_seed0_permutation_prefix" if self.split == "train" else "original_fast_pool_ascending_global_indices",
+                "selection_contract": self.manifest.get("selection_contract", "hh001-exact"),
+                "batch_schedule": ("contracted_original_order_fixed_batches" if self.manifest.get("selection_contract") else
+                                   "original_Hero_seed0_permutation_prefix" if self.split == "train" else "original_fast_pool_ascending_global_indices"),
                 "original_training_inventory_sha256": self.manifest["original_training_inventory_sha256"]}
