@@ -1,0 +1,52 @@
+{
+  "arms": [
+    "native",
+    "jepa_residual"
+  ],
+  "attempt": "02-storage-symlink-accounting-fix-no-scientific-change",
+  "batch_size": 1024,
+  "budget": {
+    "evaluation_round_cap": "3.50",
+    "live_compute_floor": "7.81",
+    "old_completed_maxima_released": true,
+    "outer": "42.50",
+    "prior_attempt_bound": ".184632",
+    "stop": "34",
+    "training_round_cap": "4.50"
+  },
+  "data_inventory_sha256": "864afad45689a19a55962bef3cc39a59cbf7450614c19d415bf2aecdd2a573cb",
+  "experiment_id": "VP-001",
+  "full_history": true,
+  "historical_correction": "PA-001 full-history inputs were correct, but current WDL targets were dropped by batch filters. New pipeline preserves real current targets and fails closed if absent; historical evidence is unchanged.",
+  "initialization": "Fresh raw BT4 including native value; seed-0 Hero JEPA/DFM/projector; no Hero checkpoint resume",
+  "optimizer": "Hero peaks 5e-4 and 5e-4/30, selective WD .01; FP32 weights/moments, BF16 compute; WSD original 566866-example warmup, original horizon and 20% cooldown. Stop in stable phase, preserve recovery at 554/1000.",
+  "other_losses": "Original Hero DFM, root legal CE, legality, JEPA and SIGReg; no teacher KL or feedback",
+  "seed": 0,
+  "source_sha256": "d034cf4cfacde6629f33e636505c1c1d7ceb60b951eb7d9fb2cb875b55bdaf52",
+  "steps": 1000,
+  "tournament": {
+    "games": 1536,
+    "input_contract": "Full history for new models/raw, original current-only Hero1",
+    "matches": 6,
+    "opening_start": 1664,
+    "pairs_per_match": 128,
+    "players": [
+      "native",
+      "jepa_residual",
+      "hero1",
+      "raw_bt4"
+    ],
+    "policy": "one-pass DFM; raw native policy",
+    "scope": "Searchless development round robin; no held-out or search-strength claim; fixed terminal update, no selection"
+  },
+  "validation_positions_final": 8192,
+  "validation_positions_intermediate": 2048,
+  "validation_updates": [
+    0,
+    250,
+    554,
+    1000
+  ],
+  "value_objective": "Both: coefficient .25 times uniform mean WDL CE over H0..H8. A: native H0 + original auxiliary futures. B: current-native logits (W/L swapped on odd horizons) plus auxiliary residual at H0..H8; residual output initialized zero.",
+  "value_targets": "Actual root_q/root_d at current and future positions; no successor fallback"
+}
