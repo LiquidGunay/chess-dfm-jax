@@ -1,0 +1,46 @@
+{
+  "cost_guard": {
+    "allowed": true,
+    "declared_attempt_upper_bound": "0.06314400",
+    "estimate": {
+      "assumption": "upper bound for configured attempts charges startup_timeout + execution timeout for every allowed attempt",
+      "attempt_count": 1,
+      "cpu_dollars": "0.0471600",
+      "declared_attempt_billable_seconds": 900,
+      "declared_attempt_upper_bound_dollars": "0.06314400",
+      "excluded_provider_behavior": "Modal may reschedule crashed containers independently of configured function retries; image builds, scheduling, collection lag, and those platform reschedules are covered by the 20% workspace reserve and the provider-native hard budget, not this per-job estimate",
+      "gpu_dollars": "0",
+      "job": {
+        "cpu_cores": "4",
+        "gpu": null,
+        "memory_gib": "8",
+        "name": "EV-007-prepare",
+        "retries": 0,
+        "startup_timeout_seconds": 300,
+        "timeout_seconds": 600
+      },
+      "memory_dollars": "0.01598400",
+      "pricing": {
+        "cpu_dollars_per_core_second": "0.0000131",
+        "gpu_dollars_per_second": "0",
+        "memory_dollars_per_gib_second": "0.00000222",
+        "snapshot_date": "2026-09-29",
+        "source": "https://modal.com/pricing"
+      },
+      "schema_version": "modal-job-cost-estimate-v2"
+    },
+    "per_job_cap": "0.07",
+    "projected_month_spend": "18.68993855",
+    "reasons": [],
+    "recorded_month_spend": "18.62679455",
+    "schema_version": "modal-budget-decision-v2",
+    "stop_fraction": "0.80",
+    "stop_threshold": "34.0000",
+    "workspace_budget": "42.50"
+  },
+  "git_commit": "ee9b1c35fb227462d99242169bf18edd3a045c2d",
+  "output_relative": "validations/ev007-c802c5fde0356d9c7a06",
+  "protocol_sha256": "e5a5f7e3bc0e5f2eb9a80f83ece727518d2271eb88d588b501b4344ce5f0f8d5",
+  "stage": "prepare",
+  "status": "complete"
+}

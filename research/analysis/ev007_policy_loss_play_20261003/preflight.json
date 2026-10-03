@@ -1,0 +1,124 @@
+{
+  "declared_cost": "0.06314400",
+  "gpu_active": false,
+  "models": {
+    "hero1": {
+      "label": "hero-training-phase1-hero1_exact-l40s-fae7b0ccef5ca3668ed5",
+      "plane_history_mode": "current_only_as_preprocessed",
+      "root": "/workspace/training-results/runs/hero-training-phase1-hero1_exact-l40s-fae7b0ccef5ca3668ed5",
+      "run_config_sha256": "1f417904b8160517787f45d686cef7567e8affce143d41310a17d5eacc00c33c",
+      "state_sha256": "e518083ee5476e7ff15e7c34caf9c0505f8fb7d330ea5a6882e4e9e5c1ef1912"
+    },
+    "hh002": {
+      "label": "hh002-hero-history-0fe540075e5361da6c25",
+      "plane_history_mode": "lc0_full_history_as_preprocessed",
+      "root": "/workspace/training-results/runs/hh002-hero-history-0fe540075e5361da6c25",
+      "run_config_sha256": "eeb3904cd65d5d75eae824c91e82cbe7e84bd5c967a86f17cf6bbd940c5e0586",
+      "state_sha256": "ab8fab8dfebfbee862f5004b10251ec3947523ffb2265ab621b7eaa80e3e4948"
+    },
+    "raw_bt4": {
+      "plane_history_mode": "lc0_full_history_as_preprocessed",
+      "root": null,
+      "state_sha256": "61e43e98d2c4cb747498c6bc13a5bbb3b07e985d3f5d87f0351a4db855fa0651"
+    }
+  },
+  "output_relative": "validations/ev007-c802c5fde0356d9c7a06",
+  "passed": true,
+  "pools": {
+    "hero_validation": {
+      "data": {
+        "available_steps": 127,
+        "batch_schedule": "contracted_original_order_fixed_batches",
+        "batch_size": 64,
+        "examples": 8128,
+        "manifest_sha256": "d9003b1d3a5bcebfc5ece8f4f5340d25369bab53fcda68c4bf9965c45019278e",
+        "original_training_inventory_sha256": "9389b98f7597acd9e4498d0fcc35903f0ff9922aa44c5b777c881cecc1f9a293",
+        "schema_version": "hero-trajectory-full-history-v1",
+        "seed": 0,
+        "selection_contract": "hh002-contracted-v1",
+        "split": "validation",
+        "split_dir": "/workspace/training-results/datasets/hh002-history-368190a511fd6d5dd51c/validation",
+        "steps_per_epoch": 127
+      },
+      "file_sha256": "036ae4ce89732d5c90792eb748ba6c42f885757a2c92b68453826306f9591568",
+      "history_nonzero_positions": 8042,
+      "legal_count_max": 62,
+      "legal_count_min": 1,
+      "positions": 8128,
+      "size_bytes": 1304820
+    },
+    "sequential_validation": {
+      "file_sha256": "9eeccee3d26f5032d0ed820df5a8aa5fd4e4b3f4ba917e8d8d0310fc0dc457f8",
+      "history_nonzero_positions": 8112,
+      "legal_count_max": 61,
+      "legal_count_min": 1,
+      "positions": 8192
+    }
+  },
+  "protocol": {
+    "analysis": {
+      "comparison": "Descriptive policy-loss ordering versus already observed BT4 game scores, and matched HH-002 p8 versus p1 contrast; report missing edges explicitly",
+      "limitations": "Validation pools are reused development data, not newly held-out strength tests. Played moves are not certified optimal. Positions can be correlated; no IID position confidence claims. CE measures probabilities/calibration, while greedy play uses argmax and compounds rare mistakes. Association is not causation or a guarantee of monotonic Elo.",
+      "play_sources": [
+        "research/analysis/ev006_hh002_play_20261003/development_summary.json",
+        "research/analysis/ev005_full_history_bt4_20261003/development_summary.json"
+      ],
+      "reproducibility_check": "Compare repeated Hero1 current-only sequential native and one-pass results against EV-003"
+    },
+    "arena_source_sha256": "3838c5c696c42269a055687a39ba0db2614f44973545eed6e21c5e333f19e349",
+    "budget": {
+      "cpu_declared_maximum_dollars": "0.06314400",
+      "gpu_declared_maximum_dollars": "0.92976000",
+      "maximum_simultaneous_attempts": 1,
+      "prior_conservative_reservations_dollars": "18.62679455",
+      "retries": 0,
+      "rule": "Refresh live spend before each launch; use the larger of live spend and conservative reservation floor, adding the full CPU reservation before GPU. Verify all consumed input bytes on CPU before GPU allocation.",
+      "total_declared_maximum_dollars": "0.99290400",
+      "workspace_outer_dollars": "42.50",
+      "workspace_stop_dollars": "34.00"
+    },
+    "created_utc": "2026-10-03",
+    "evaluation": {
+      "cross_check_pool": "8192 previously frozen sequential/test80 validation positions",
+      "excluded": "No training, new games, composite JEPA/value objectives, randomly teacher-forced DFM metrics, or checkpoint selection",
+      "gpu": "L4",
+      "history": "Each checkpoint uses its recorded training contract; common boards/targets/legal masks",
+      "inference": "Capture first/eighth root logits from unchanged arena refinement helper, all tokens initially masked, no teacher forcing; check selected action parity",
+      "metric": "Mean legal-conditional cross-entropy of actual played next move in nats; lower is better",
+      "physical_batch_size": 16,
+      "policies": "Raw native policy; each learned checkpoint native policy, DFM one pass and DFM eight passes",
+      "precision": "bfloat16 with float32 legal normalization",
+      "primary_pool": "8128 retained original Hero validation positions, frozen HH-002 selection",
+      "secondary_metric": "Legal top-1 played-move accuracy"
+    },
+    "experiment_id": "EV-007",
+    "hero_data_manifest_sha256": "d9003b1d3a5bcebfc5ece8f4f5340d25369bab53fcda68c4bf9965c45019278e",
+    "hero_data_relative": "datasets/hh002-history-368190a511fd6d5dd51c",
+    "models": {
+      "hero1": {
+        "label": "hero-training-phase1-hero1_exact-l40s-fae7b0ccef5ca3668ed5",
+        "plane_history_mode": "current_only_as_preprocessed",
+        "run_config_sha256": "1f417904b8160517787f45d686cef7567e8affce143d41310a17d5eacc00c33c",
+        "state_sha256": "e518083ee5476e7ff15e7c34caf9c0505f8fb7d330ea5a6882e4e9e5c1ef1912"
+      },
+      "hh002": {
+        "label": "hh002-hero-history-0fe540075e5361da6c25",
+        "plane_history_mode": "lc0_full_history_as_preprocessed",
+        "run_config_sha256": "eeb3904cd65d5d75eae824c91e82cbe7e84bd5c967a86f17cf6bbd940c5e0586",
+        "state_sha256": "ab8fab8dfebfbee862f5004b10251ec3947523ffb2265ab621b7eaa80e3e4948"
+      },
+      "raw_bt4": {
+        "plane_history_mode": "lc0_full_history_as_preprocessed",
+        "state_sha256": "61e43e98d2c4cb747498c6bc13a5bbb3b07e985d3f5d87f0351a4db855fa0651"
+      }
+    },
+    "question": "Does inference-aligned validation policy loss order agree with observed searchless play for raw BT4, Hero1 and history-trained HH-002?",
+    "raw_bt4_sha256": "61e43e98d2c4cb747498c6bc13a5bbb3b07e985d3f5d87f0351a4db855fa0651",
+    "sequential_inputs_sha256": "9eeccee3d26f5032d0ed820df5a8aa5fd4e4b3f4ba917e8d8d0310fc0dc457f8",
+    "sequential_provenance": "research/analysis/ev003_history_corrected_20261002/common_validation_input.json",
+    "source_sha256": "33e37c6474e7c835379431042a3f1ece641694b75b7919e077a08d53e8bd057c",
+    "tooling_commit": "3e7cb97"
+  },
+  "raw_bt4_sha256": "61e43e98d2c4cb747498c6bc13a5bbb3b07e985d3f5d87f0351a4db855fa0651",
+  "source_sha256": "33e37c6474e7c835379431042a3f1ece641694b75b7919e077a08d53e8bd057c"
+}
