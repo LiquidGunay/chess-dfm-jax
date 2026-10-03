@@ -21,7 +21,7 @@ def collect(root):
     pre = json.loads((root/"preflight.json").read_text())
     remote = complete["output_relative"]
     if remote != pre["output_relative"]: raise ValueError("Output identity differs")
-    artifacts, results = {}, {}
+    artifacts, results, replays = {}, {}, {}
     def fetch(name):
         raw = b"".join(volume.read_file(remote+"/"+name))
         preserve_bytes(root/name, raw)
@@ -35,6 +35,10 @@ def collect(root):
         base = name.removesuffix("_resume")
         if base not in allowed: raise ValueError("Unknown arm")
         for filename in ("launch.json", "receipt.json", "stdout.log"): fetch(name+"/"+filename)
+        if record["process_status"] != "complete":
+            for filename in ("failure.json", "fork.json"):
+                try: fetch(name+"/"+filename)
+                except FileNotFoundError: pass  # Timeout can precede these writes.
         if record["result_status"] is not None:
             result = json.loads(fetch(name+"/result.json"))
             fetch(name+"/fork.json"); fetch(name+"/metrics.jsonl")
@@ -45,7 +49,28 @@ def collect(root):
             if not name.endswith("_resume"):
                 if summarize(result["records"]) != result["timing"]: raise ValueError("Timing recomputation differs")
                 results[name] = result
+            else:
+                replays[base] = result
     if choose_candidate(results) != complete["candidate"]: raise ValueError("Selection recomputation differs")
+    replay_diagnostics = None
+    if complete["resume"]:
+        target = complete["resume"]["target"]
+        replay = replays.get(target)
+        reference = results[target]
+        expected = {"target": target, "completed": replay is not None,
+            "state_bitwise_equal": bool(replay and replay["final_state_hashes"] == reference["final_state_hashes"]),
+            "validation_equal": bool(replay and replay["validation"] == reference["validation"])}
+        if complete["resume"] != expected: raise ValueError("Recovery check recomputation differs")
+        if replay:
+            original = {row["update"]:row for row in reference["records"]}
+            keys = ("loss", "gradient_global_norm", "learning_rate", "bt4_learning_rate",
+                    "root_legal_conditional_ce", "base_policy_root_legal_conditional_ce")
+            replay_diagnostics = {
+                "max_abs_training_metric_difference": {key:max(abs(row[key]-original[row["update"]][key])
+                    for row in replay["records"]) for key in keys},
+                "validation_abs_difference": {key:abs(replay["validation"][key]-reference["validation"][key])
+                    for key in ("loss", "root_legal_conditional_ce", "base_policy_root_legal_conditional_ce")},
+                "interpretation": "Descriptive differences only; do not replace the frozen bitwise replay criterion with a post-hoc tolerance. Without a repeated uninterrupted control, nondeterministic execution and checkpoint-specific effects are not separated."}
     baseline = results.get("production_control")
     rows = {}
     for name, result in results.items():
@@ -57,6 +82,7 @@ def collect(root):
             "unchanged_weight_proxy": result["unchanged_weight_proxy_update501"]}
     summary = {"experiment_id": "GPU-003", "arms": rows, "candidate": complete["candidate"],
         "resume": complete["resume"], "all_arms_complete": complete["all_arms_complete"],
+        "replay_diagnostics": replay_diagnostics,
         "failures": [r for r in complete["records"] if r["process_status"] != "complete"],
         "scope": "Fifty-update warmup-prefix diagnostic; common teacher-forced/full-horizon validation, not playing strength or stable-phase WSD validation. FP32-storage arms also change optimizer moment storage."}
     preserve_bytes(root/"summary.json", (json.dumps(summary, indent=2, sort_keys=True)+"\n").encode())
