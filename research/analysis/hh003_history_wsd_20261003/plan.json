@@ -1,0 +1,53 @@
+{
+  "experiment_id": "HH-003",
+  "name": "History Hero with extendable WSD training",
+  "status": "schedule_selected_execution_specification_pending",
+  "decision_date": "2026-10-03",
+  "user_decision": "Use warmup-stable-decay so training can be extended.",
+  "scope": "Record the selected schedule for the history continuation. This is not a frozen launch specification or authorization for additional compute.",
+  "parent": {
+    "experiment_id": "HH-002",
+    "result_label": "hh002-hero-history-0fe540075e5361da6c25",
+    "recovery_path": "runs/hh002-hero-history-0fe540075e5361da6c25/checkpoints/update00000553",
+    "state_sha256": "85149e467d19347a96218a90664f01b2e8d17b6aac04fe1f5df7753a18105b9a",
+    "optimizer_update": 553,
+    "examples_seen": 566272,
+    "next_data_cursor": 553,
+    "evidence": "research/analysis/hh002_history_subset_20261003/completion/report.json",
+    "transition": "Explicit child experiment retaining model and optimizer state, counters and RNG semantics. Do not mutate the historical checkpoint or describe a changed schedule/data contract as an exact HH-002 resume."
+  },
+  "selected_schedule": {
+    "kind": "warmup_stable_linear_decay",
+    "main_peak_lr": 0.0005,
+    "encoder_peak_lr": 0.000016666666666666667,
+    "warmup_examples": 566866,
+    "warmup_policy": "Preserve the original absolute warmup and accumulated example count. Do not repeat or rescale warmup when extending training.",
+    "stable_policy": "Continue at the fixed peak rates; retain a full recovery state before entering any cooldown.",
+    "cooldown_policy": "Create an explicitly identified evaluation branch from a stable checkpoint; its cooldown duration is fixed before running that branch.",
+    "extension_policy": "Resume the retained stable checkpoint and postpone the next cooldown. Do not raise LR on a cooled checkpoint and call it the same stable continuation. Cooldown work is branch-specific and may need repeating for each evaluated horizon.",
+    "other_recipe_settings": "Keep the HH-002 Hero architecture, objectives, optimizer moments/storage and weight-decay settings unchanged. Do not select hero_v2 merely to enable WSD. Precision/compilation changes require a separately validated and recorded decision."
+  },
+  "proposed_first_cooldown_not_frozen": {
+    "fraction_of_original_horizon": 0.2,
+    "original_horizon_examples": 28343296,
+    "decay_examples": 5668659,
+    "lr_min_ratio": 0.001,
+    "batch_size": 1024,
+    "last_full_stable_update": 22143,
+    "terminal_update": 27679,
+    "note": "Illustrative 2% warmup / 78% stable / 20% cooldown, pending the audited expanded history corpus and launch budget. An epoch must refer to actual retained data, not the old nominal horizon or repeats of the short HH-002 subset."
+  },
+  "retention": [
+    "Immutable HH-002 update-553 parent recovery state and provenance",
+    "Full stable pre-cooldown recovery state, including optimizer state, schedule/example counters, data cursor and RNG identity/state as required for reproducible continuation",
+    "Selected cooled evaluation models and compact validation/play evidence"
+  ],
+  "before_launch": [
+    "Implement and test a schedule-only Hero override and explicit checkpoint-fork contract; keep strict exact-resume checks intact.",
+    "Test warmup/stable/cooldown boundaries, horizon extension without warmup rescaling, and uninterrupted versus interrupted/resumed child-run equivalence.",
+    "Reconstruct and CPU-verify the remaining current/future full-history data, bind exclusions/order and the parent-to-expanded-data cursor mapping; never cycle the 553-update subset and call it a full original-data epoch.",
+    "Freeze source/input hashes, resolved recipe, seed, absolute cooldown boundaries, retention, common validation, W&B lineage and paired-play evaluation protocol in an immutable execution specification.",
+    "Refresh spend and projected storage, validate bounded stability at the sustained peak LR, and fit an approved compute budget. Existing Modal $34 stop / $42.50 outer limits remain unchanged."
+  ],
+  "interpretation": "WSD is chosen for extendability, not because stronger chess play has been established. Relative to cosine it increases time at peak LR and changes cumulative updates/decoupled weight decay; report the schedule change in comparisons."
+}

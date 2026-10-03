@@ -60,6 +60,30 @@ teacher-forced/composite training objective. Data, results and receipts:
 
 ## 1. Complete the selected epoch
 
+HH-003 schedule decision (2026-10-03): the user selected **warmup-stable-decay
+(WSD)** for the upcoming history continuation so that training can be
+extended. Keep the Hero peak rates (fresh modules `5e-4`, BT4 `5e-4 / 30`)
+and the original absolute 566,866-example warmup; extending the horizon must
+not rescale or restart warmup. HH-002 stopped at 566,272 examples, before
+its first post-warmup update, making its update-553 full recovery state the
+selected parent. Preserve its historical cosine contract unchanged.
+
+Retain a full model/optimizer/counter/data/RNG recovery state on the stable
+branch **before any cooldown**. Cool down a separately identified evaluation
+branch; extend from the retained stable state, not the cooled evaluation
+model. Evaluation cooldown work may therefore need repeating at a longer
+horizon. A 20% linear cooldown to the existing 0.001 LR ratio is proposed,
+not frozen; the final boundaries depend on audited data and budget. WSD
+changes exposure to peak LR and is not itself evidence of stronger play.
+
+This selection is recorded in
+`research/analysis/hh003_history_wsd_20261003/plan.json`. Trainer/launcher
+changes and an explicit child checkpoint contract are still required; do
+not bypass strict resume checks or switch to `hero_v2`, which changes other
+optimizer settings. The remaining full-history corpus must be prepared;
+repeating the short HH-002 subset is not the requested original-data epoch.
+No new GPU run or budget increase follows from this schedule decision.
+
 GPU-002 systems diagnostic (2026-10-03): the full-history, fixed-weight
 FP32/BF16/FP16 eager/compiled matrix and separate production-storage control
 completed on one L40S. Compiled FP16/BF16 both take about 0.096s per
@@ -76,7 +100,7 @@ and bounded training-stability/common-validation checks under a new explicit
 contract. All GPUs stopped; evidence and limitations are recorded in
 `research/analysis/gpu002_precision_compile_20261003/`.
 
-Run PA-001 with the already selected Proposal A recipe. Preserve the frozen
+Historical PA-001 is complete with its selected Proposal A recipe. Preserve the frozen
 data order, optimizer, 7,774-update schedule, validation, and checkpoints.
 The update-6,219 pre-decay state is a continuation asset; the update-7,774
 model is the primary final artifact. A lower validation loss alone is not

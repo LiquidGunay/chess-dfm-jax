@@ -13,6 +13,14 @@
   },
   "experiments": [
     {
+      "id": "HH-003",
+      "name": "History Hero with extendable WSD training",
+      "status": "schedule_selected_execution_specification_pending",
+      "depends_on": ["HH-002", "GPU-001", "GPU-002"],
+      "plan": "research/analysis/hh003_history_wsd_20261003/plan.json",
+      "scope": "User selected WSD for the history continuation. Retain a stable pre-cooldown full recovery state for future extensions; preserve Hero peak rates and other recipe settings. Explicit schedule/data fork tooling, expanded history verification, frozen cooldown and budget still required. No new run launched."
+    },
+    {
       "id": "GPU-002",
       "name": "Matched precision and BT4 compilation diagnostic",
       "status": "complete_fp16_compiled_promising_production_validation_required",
