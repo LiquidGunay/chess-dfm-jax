@@ -59,12 +59,21 @@ from research.infra.modal_arena_app import (
     _arena_job_spec,
     _arena_source_tree_sha256,
     _completed_arena_summary,
+    _require_result_label,
 )
 from research.interpretability.remote_cost import estimate_modal_job
 
 
 def _label(suffix: str) -> str:
     return f"hero-training-phase1-v2_fp32_1_30-l40s-{suffix}"
+
+
+def test_hh002_result_label_is_narrowly_allowed():
+    label = "hh002-hero-history-0fe540075e5361da6c25"
+    assert _require_result_label(label) == label
+    for invalid in ("hh002-hero-history-anything", label + "/../other", "hh003-hero-history-" + "a" * 20):
+        with pytest.raises(ValueError):
+            _require_result_label(invalid)
 
 
 def test_arena_identity_binds_both_checkpoints_and_options() -> None:

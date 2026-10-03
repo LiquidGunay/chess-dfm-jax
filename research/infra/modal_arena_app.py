@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -149,7 +150,8 @@ def _require_result_label(value: str) -> str:
         for character in value
     )
     if (
-        not value.startswith("hero-training-")
+        not (value.startswith("hero-training-")
+             or re.fullmatch(r"hh002-hero-history-[0-9a-f]{20}", value))
         or not 1 <= len(value) <= 200
         or Path(value).name != value
         or not safe
