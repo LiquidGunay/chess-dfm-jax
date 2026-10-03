@@ -13,6 +13,14 @@
   },
   "experiments": [
     {
+      "id": "EV-007",
+      "name": "Inference-aligned policy validation versus observed play",
+      "status": "preregistered",
+      "depends_on": ["EV-006", "EV-005", "HH-002"],
+      "specification": "research/analysis/ev007_policy_loss_play_20261003/preregister.json",
+      "scope": "Raw BT4 and old/history-trained Hero native/DFM1/DFM8 on shared 8128-position Hero and 8192-position sequential pools. No training or new games; compare legal CE with existing play results."
+    },
+    {
       "id": "EV-006",
       "name": "History-trained Hero searchless play and matched weight movement",
       "status": "complete_history_dfm_beats_hero1_but_loses_to_raw_bt4",
