@@ -81,3 +81,44 @@ def test_historical_arena_configs_keep_default_value_mode():
     old = dataclasses.asdict(dataclasses.replace(config("native"), value_supervision_mode="legacy"))
     old.pop("value_supervision_mode")
     assert t.Config(**_validated_torch_hero_model_config(old)).value_supervision_mode == "legacy"
+
+
+@pytest.mark.parametrize("arm", ("native", "jepa_residual"))
+def test_value_pilot_arena_descriptor_accepts_training_and_inference_regions(arm):
+    import hashlib
+    import json
+    import tempfile
+    from pathlib import Path
+    from research.prepare import REPO_ROOT
+    from research.evaluate_arena import torch_hero_checkpoint_descriptor
+    parent = REPO_ROOT / ".local/tmp"
+    parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(dir=parent) as temporary:
+        root = Path(temporary)
+        models = root / "models"
+        models.mkdir()
+        (models / "BT4_exported.pb.gz").write_bytes(b"fixture-raw")
+        run = root / "run"
+        checkpoint = run / "checkpoint"
+        checkpoint.mkdir(parents=True)
+        state = b"fixture-pilot-state"
+        (checkpoint / "model.safetensors").write_bytes(state)
+        manifest = {"format": "chess-dfm-torch-model-v1", "model_only": True,
+            "optimizer_update": 1000, "source_mapping_sha256": "a"*64,
+            "state": {"path": "model.safetensors", "size_bytes": len(state),
+                "sha256": hashlib.sha256(state).hexdigest(), "leaf_count": 468}}
+        (checkpoint / "manifest.json").write_text(json.dumps(manifest))
+        fresh = ["state_projector_blocks", "dfm_blocks", "jepa_transition"]
+        record = {"framework": "torch", "execution": "regional-compile", "torch_compile": True,
+            "recipe": "hero", "git_commit": "b"*40, "config": dataclasses.asdict(config(arm)),
+            "compile_regions": ["bt4_encoder_layers"] + fresh,
+            "evaluation_compile_regions": fresh, "args": {"data_format": "lc0_sequential"},
+            "data": {"schema_version": "lc0-sequential-v1"}}
+        (run / "run_config.json").write_text(json.dumps(record))
+        result = torch_hero_checkpoint_descriptor(run, models_dir=models)
+        assert result.descriptor["plane_history_mode"] == "lc0_full_history_as_preprocessed"
+        assert result.descriptor["model_config"]["value_supervision_mode"] == arm
+        record["compile_regions"] = fresh + ["bt4_encoder_layers"]
+        (run / "run_config.json").write_text(json.dumps(record))
+        with pytest.raises(ValueError, match="execution contract mismatch"):
+            torch_hero_checkpoint_descriptor(run, models_dir=models)
