@@ -91,7 +91,9 @@ def preflight(protocol):
     write(out/"protocol.json",protocol)
     inventory = {}
     for mount in (*VOLUMES, *extra_volumes):
-        inventory[mount] = sum((Path(p)/n).stat().st_size for p,_,names in os.walk(mount) for n in names)
+        # Historical W&B debug logs can be dangling symlinks to container /tmp.
+        # Count the stored link itself, never dereference external log targets.
+        inventory[mount] = sum((Path(p)/n).lstat().st_size for p,_,names in os.walk(mount) for n in names)
     if (sum(inventory.values())+20*1024**3)/1024**3 >= 768:
         raise RuntimeError("Projected storage reaches review threshold")
     data = base._training_dataset_root(data_tools.DATASET_LABEL)/"lc0_sequential"
@@ -251,7 +253,8 @@ def main(stage: str, protocol_path: str="research/analysis/vp001_joint_value_202
                 "opening_start":1664,"matches":6,"games":1536,"policy":"one-pass DFM; raw native policy",
                 "input_contract":"Full history for new models/raw, original current-only Hero1",
                 "scope":"Searchless development round robin; no held-out or search-strength claim; fixed terminal update, no selection"},
-            "budget":{"live_compute_floor":"7.81","old_completed_maxima_released":True,"training_round_cap":"4.25","evaluation_round_cap":"3.50","stop":"34","outer":"42.50"},
+            "attempt":"02-storage-symlink-accounting-fix-no-scientific-change",
+            "budget":{"live_compute_floor":"7.81","old_completed_maxima_released":True,"prior_attempt_bound":".184632","training_round_cap":"4.50","evaluation_round_cap":"3.50","stop":"34","outer":"42.50"},
             "historical_correction":"PA-001 full-history inputs were correct, but current WDL targets were dropped by batch filters. New pipeline preserves real current targets and fails closed if absent; historical evidence is unchanged."}
         write(path,protocol); print(json.dumps(protocol)); return
     protocol = json.loads(path.read_text())
@@ -259,7 +262,7 @@ def main(stage: str, protocol_path: str="research/analysis/vp001_joint_value_202
         raise ValueError("Local source changed after freeze")
     # Completed historical maximum reservations are not actual usage. Reserve
     # this workflow's whole bounded phases until its terminal reconciliation.
-    prior = Decimal(protocol["budget"]["live_compute_floor"])
+    prior = Decimal(protocol["budget"]["live_compute_floor"]) + Decimal(protocol["budget"].get("prior_attempt_bound", "0"))
     stages = ["preflight","train","eval-preflight","evaluate"]
     for previous in stages[:stages.index(stage)]:
         prior += Decimal(estimate_modal_job(spec(previous))["declared_attempt_upper_bound_dollars"])
