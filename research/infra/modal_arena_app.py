@@ -15,6 +15,8 @@ from typing import Any
 
 import modal
 
+from research.input_contract import CURRENT_ONLY, LC0_FULL_HISTORY, PLANE_HISTORY_MODES
+
 from research.infra.retained_terminal_hero import (
     TERMINAL_CONFIG_RELATIVE, TERMINAL_LABEL, retained_terminal_view,
 )
@@ -255,7 +257,10 @@ def _arena_identity(
     opponent_refinement_passes: int,
     opening_start_index: int,
     arena_source_tree_sha256: str,
+    raw_bt4_plane_history_mode: str = LC0_FULL_HISTORY,
 ) -> str:
+    if raw_bt4_plane_history_mode not in PLANE_HISTORY_MODES:
+        raise ValueError("Unsupported raw BT4 input-history contract")
     if pair_count not in ALLOWED_PAIR_COUNTS:
         raise ValueError(f"pair_count must be one of {ALLOWED_PAIR_COUNTS}")
     for label, passes in (
@@ -271,7 +276,8 @@ def _arena_identity(
     identity = hashlib.sha256(
         _canonical_json_bytes(
             {
-                "schema_version": "chess-dfm-modal-torch-arena-identity-v3",
+                "schema_version": "chess-dfm-modal-torch-arena-identity-v4",
+                "raw_bt4_plane_history_mode": raw_bt4_plane_history_mode,
                 "candidate_label": _require_result_label(candidate_label),
                 "candidate_state_sha256": _require_sha256(
                     candidate_state_sha256,
@@ -325,6 +331,7 @@ def _arena_command(
     opponent_refinement_passes: int,
     opening_start_index: int,
     resume: bool,
+    raw_bt4_plane_history_mode: str = LC0_FULL_HISTORY,
 ) -> list[str]:
     command = [
         sys.executable,
@@ -366,6 +373,7 @@ def _arena_command(
         if opponent_policy_mode != "policy_only" or opponent_refinement_passes != 1:
             raise ValueError("Raw BT4 requires policy_only and one opponent pass")
         command.append("--opponent-raw-bt4")
+        command.extend(("--raw-bt4-plane-history-mode", raw_bt4_plane_history_mode))
     else:
         command.extend((
             "--opponent-torch-hero", str(opponent_root),
@@ -422,6 +430,7 @@ def _completed_arena_summary(
     candidate_refinement_passes: int,
     opponent_refinement_passes: int,
     opening_start_index: int,
+    raw_bt4_plane_history_mode: str = LC0_FULL_HISTORY,
 ) -> dict[str, Any]:
     state_path = output_dir / "state.json"
     state = json.loads(state_path.read_text(encoding="utf-8"))
@@ -447,6 +456,7 @@ def _completed_arena_summary(
         != ("default" if raw_opponent else opponent_policy_mode)
         or (raw_opponent and (opponent_policy_mode != "policy_only"
                               or opponent_refinement_passes != 1))
+        or (raw_opponent and opponent_model.get("plane_history_mode") != raw_bt4_plane_history_mode)
         or int(aggregate.get("pair_count", -1)) != pair_count
         or int(run.get("candidate_refinement_passes", -1))
         != candidate_refinement_passes
@@ -469,6 +479,8 @@ def _completed_arena_summary(
         "opponent_state_sha256": opponent_state_sha256,
         "candidate_policy_mode": candidate_policy_mode,
         "opponent_policy_mode": opponent_policy_mode,
+        "candidate_plane_history_mode": candidate_model.get("plane_history_mode"),
+        "opponent_plane_history_mode": opponent_model.get("plane_history_mode"),
         "pair_score": float(pentanomial["score"]),
         "pentanomial": pentanomial,
         "pair_aware_logistic_interval": aggregate[
@@ -505,6 +517,7 @@ def _run_arena(
     expected_arena_source_tree_sha256: str,
     git_commit: str,
     declared_attempt_upper_bound_dollars: str,
+    raw_bt4_plane_history_mode: str = LC0_FULL_HISTORY,
 ) -> dict[str, Any]:
     import torch
 
@@ -559,6 +572,7 @@ def _run_arena(
         opponent_refinement_passes=opponent_refinement_passes,
         opening_start_index=opening_start_index,
         arena_source_tree_sha256=observed_source,
+        raw_bt4_plane_history_mode=raw_bt4_plane_history_mode,
     )
     output_dir = Path(TRAINING_RESULT_MOUNT) / "arenas" / arena_label
     state_path = output_dir / "state.json"
@@ -576,6 +590,7 @@ def _run_arena(
                 candidate_refinement_passes=candidate_refinement_passes,
                 opponent_refinement_passes=opponent_refinement_passes,
                 opening_start_index=opening_start_index,
+                raw_bt4_plane_history_mode=raw_bt4_plane_history_mode,
             )
             summary["reused_immutable_result"] = True
             return summary
@@ -617,6 +632,7 @@ def _run_arena(
         opponent_refinement_passes=opponent_refinement_passes,
         opening_start_index=opening_start_index,
         resume=resume,
+        raw_bt4_plane_history_mode=raw_bt4_plane_history_mode,
     )
     started = time.perf_counter()
     stdout_path = Path("/tmp") / f"{arena_label}.stdout.log"
@@ -668,6 +684,7 @@ def _run_arena(
         "opponent": opponent,
         "candidate_policy_mode": candidate_policy_mode,
         "opponent_policy_mode": opponent_policy_mode,
+        "raw_bt4_plane_history_mode": raw_bt4_plane_history_mode,
         "pair_count": pair_count,
         "candidate_refinement_passes": candidate_refinement_passes,
         "opponent_refinement_passes": opponent_refinement_passes,
@@ -700,6 +717,7 @@ def _run_arena(
         candidate_refinement_passes=candidate_refinement_passes,
         opponent_refinement_passes=opponent_refinement_passes,
         opening_start_index=opening_start_index,
+        raw_bt4_plane_history_mode=raw_bt4_plane_history_mode,
     )
     summary["reused_immutable_result"] = False
     return summary
@@ -826,6 +844,7 @@ def main(
     recorded_spend: str = "",
     per_job_cap: str = "",
     preflight_only: bool = False,
+    raw_bt4_plane_history_mode: str = LC0_FULL_HISTORY,
 ) -> None:
     from research.interpretability.remote_cost import (
         ModalJobSpec,
@@ -834,6 +853,8 @@ def main(
         modal_month_spend,
     )
 
+    if raw_bt4_plane_history_mode not in PLANE_HISTORY_MODES:
+        raise ValueError("Unsupported raw BT4 input-history contract")
     if pair_count not in ALLOWED_PAIR_COUNTS:
         raise ValueError(f"pair_count must be one of {ALLOWED_PAIR_COUNTS}")
     for label, passes in (
@@ -920,6 +941,7 @@ def main(
         opponent_refinement_passes=opponent_refinement_passes,
         opening_start_index=opening_start_index,
         expected_arena_source_tree_sha256=arena_source_tree_sha256,
+        raw_bt4_plane_history_mode=raw_bt4_plane_history_mode,
         git_commit=git_commit,
         declared_attempt_upper_bound_dollars=decision[
             "declared_attempt_upper_bound"

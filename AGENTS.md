@@ -4,6 +4,14 @@ The active training implementation is PyTorch in `research/train_torch.py`.
 The repository name and legacy JAX/TPU files are historical; do not route new
 experiments to JAX by default.
 
+New training must use full LC0 board history for current and future inputs.
+The legacy trajectory-v3 corpus zeroes planes 13:104; it is allowed only for
+explicit historical reproduction with --allow-legacy-current-only. The
+default training format is lc0_sequential; verify actual history planes as
+well as metadata before GPU work. Native-Torch raw BT4 evaluation defaults
+to full history. Preserve legacy checkpoints' recorded training contracts;
+never silently relabel a current-only checkpoint as history-trained.
+
 Start with `research/experiments/registry.json` and
 `docs/dfm_research_program.md`. The current order is the selected full epoch,
 searchless strength evaluation, conditional matched-search evaluation against

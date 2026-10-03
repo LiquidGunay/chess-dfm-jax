@@ -383,6 +383,7 @@ def test_native_torch_hero_pair_preserves_raw_bt4_opponent_dispatch(
         opponent_record={
             "kind": "raw_bt4",
             "bt4_checkpoint": {"path": "raw.pb.gz"},
+            "plane_history_mode": "lc0_full_history_as_preprocessed",
         },
         candidate_id="candidate-id",
         opponent_id="raw-id",
@@ -400,6 +401,7 @@ def test_native_torch_hero_pair_preserves_raw_bt4_opponent_dispatch(
     assert raw_kwargs["model_path"] == Path("raw.pb.gz")
     assert raw_kwargs["model_config"] == {"horizon": 8}
     assert raw_kwargs["model_id"] == "raw-id"
+    assert raw_kwargs["plane_history_mode"] == "lc0_full_history_as_preprocessed"
     assert result[0] == "candidate-policy"
     assert result[2] == "raw-policy"
 

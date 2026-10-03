@@ -10,6 +10,46 @@ from research.arena_history_trust import _mint_trusted_arena_history_endpoint
 from research.evaluate_arena import TrackingPolicy, PolicyTracker
 from research.input_contract import CURRENT_ONLY, LC0_FULL_HISTORY, torch_hero_plane_history_mode
 from research.train_torch import HERO_CONFIG, TorchHeroArenaPolicy
+from research.input_contract import require_training_history, audit_full_history_batch
+
+
+def test_full_history_audit_rejects_zeroed_targets():
+    board, history = position()
+    full = encode_board(board, history)
+    batch = {"current_planes": full[None], "future_planes": full[None, None],
+             "future_valid": np.ones((1, 1))}
+    assert audit_full_history_batch(batch)["future_targets_with_history"] == 1
+    batch["future_planes"] = encode_board(board, [])[None, None]
+    with pytest.raises(ValueError, match="zero-history future"):
+        audit_full_history_batch(batch)
+
+
+def test_new_training_requires_history_and_legacy_is_explicit():
+    from research.train_torch import build_parser, train
+    args = build_parser().parse_args(["train", "--output-dir", "/tmp/history-guard-test"])
+    assert args.data_format == "lc0_sequential"
+    assert require_training_history(args.data_format) == LC0_FULL_HISTORY
+    args.data_format = "trajectory_v3"
+    with pytest.raises(ValueError, match="zeroed board history"):
+        train(args)  # must fail before model construction or CUDA allocation
+    assert require_training_history("trajectory_v3", allow_legacy_current_only=True) == CURRENT_ONLY
+
+
+def test_legacy_preprocessor_zeroes_all_seven_past_slots():
+    board, history = position()
+    legacy = encode_board(board, [])
+    full = encode_board(board, history)
+    assert np.count_nonzero(legacy[13:104]) == 0
+    assert np.count_nonzero(legacy[12]) == 0
+    assert np.count_nonzero(full[13:104]) > 0
+
+
+def test_raw_adapter_receives_full_history():
+    model = CaptureModel()
+    policy = TorchHeroArenaPolicy(model, "raw", "raw_bt4", plane_history_mode=LC0_FULL_HISTORY)
+    board, history = position()
+    policy.select_actions_from_trusted_arena([board.copy(stack=False)], [endpoint(board, history)])
+    np.testing.assert_array_equal(model.planes[0].numpy(), encode_board(board, history))
 
 
 @pytest.mark.parametrize("record, expected", [
@@ -97,3 +137,25 @@ def test_tracking_wrapper_preserves_input_contract():
     delegate = TorchHeroArenaPolicy(model, "fixture", "policy_only", plane_history_mode=LC0_FULL_HISTORY)
     policy = TrackingPolicy(delegate, PolicyTracker())
     assert policy.plane_history_mode == LC0_FULL_HISTORY
+
+
+def test_native_pair_routes_raw_history_from_immutable_descriptor(monkeypatch):
+    from research import evaluate_arena as arena
+    seen = {}
+    def load_candidate(*args, **kwargs):
+        return object(), {"framework": "torch", "device": "fixture"}
+    def load_raw(**kwargs):
+        seen.update(kwargs)
+        return object(), {"framework": "torch", "device": "fixture"}
+    monkeypatch.setattr(arena, "load_torch_hero_policy", load_candidate)
+    monkeypatch.setattr(arena, "load_torch_raw_bt4_hero_policy", load_raw)
+    for mode in (CURRENT_ONLY, LC0_FULL_HISTORY):
+        arena.load_native_torch_hero_pair(
+            candidate_checkpoint=object(), opponent_checkpoint=None,
+            candidate_record={"model_config": {}},
+            opponent_record={"kind": "raw_bt4", "bt4_checkpoint": {"path": "fixture"}, "plane_history_mode": mode},
+            candidate_id="candidate", opponent_id="raw", candidate_policy_mode="dfm",
+            opponent_policy_mode="policy_only", candidate_refinement_passes=1,
+            opponent_refinement_passes=1, inference_batch_size=16,
+        )
+        assert seen["plane_history_mode"] == mode

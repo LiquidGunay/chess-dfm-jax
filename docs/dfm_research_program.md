@@ -3,6 +3,15 @@
 Updated from the user's priorities on 2026-09-29. The current implementation
 is PyTorch; JAX files remain historical reference material.
 
+2026-10-03 correction: use full LC0 board history in all new training,
+including future-target encodes. The original trajectory-v3 Hero runs used
+zeroed past-board planes, whereas PA-001 used full-history sequential data.
+EV-005 tests Hero1 against a full-history raw-BT4 opponent and includes a
+matched current-only opponent control. Prior raw-anchor scores are not
+evidence of superiority to normally configured BT4. Historical checkpoint
+input contracts stay immutable; changing their evaluation inputs requires
+an explicitly labelled ablation, not a silent correction.
+
 ## 1. Complete the selected epoch
 
 Run PA-001 with the already selected Proposal A recipe. Preserve the frozen

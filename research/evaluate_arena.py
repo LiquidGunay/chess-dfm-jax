@@ -53,7 +53,7 @@ from research.arena_history_trust import (
     HISTORY_VALIDATION_SCHEMA,
     HISTORY_VALIDATION_TRUSTED_ARENA_ENDPOINT,
 )
-from research.input_contract import torch_hero_plane_history_mode
+from research.input_contract import CURRENT_ONLY, LC0_FULL_HISTORY, PLANE_HISTORY_MODES, torch_hero_plane_history_mode
 from research.play_arena import (
     ArenaGameplayResult,
     BatchedArenaPolicy,
@@ -900,16 +900,19 @@ def source_checkpoint_descriptor(
 def raw_bt4_descriptor(
     *,
     models_dir: Path,
+    plane_history_mode: str = CURRENT_ONLY,
 ) -> dict[str, Any]:
     """Describe the immutable original BT4 policy checkpoint and semantics."""
 
+    if plane_history_mode not in PLANE_HISTORY_MODES:
+        raise ValueError("Unsupported raw BT4 input-history contract")
     model_path = require_within_workspace(models_dir / "BT4_exported.pb.gz")
     if not model_path.is_file():
         raise ValueError(f"Raw BT4 asset does not exist: {model_path}")
     return {
         "kind": "raw_bt4",
         "action_codec_id": ACTION_CODEC_LC0_CANONICAL_1858,
-        "plane_history_mode": PLANE_HISTORY_MODE_CURRENT_ONLY_AS_PREPROCESSED,
+        "plane_history_mode": plane_history_mode,
         "compute_dtype": RAW_BT4_POLICY_COMPUTE_DTYPE,
         "search": "none_deterministic_greedy_policy_head",
         "bt4_checkpoint": {
@@ -1254,6 +1257,7 @@ def load_torch_raw_bt4_hero_policy(
     model_config: Mapping[str, Any],
     model_id: str,
     inference_batch_size: int,
+    plane_history_mode: str = LC0_FULL_HISTORY,
 ) -> tuple[BatchedArenaPolicy, dict[str, Any]]:
     """Load raw BT4 through the same native Torch encoder and canonical codec."""
 
@@ -1280,6 +1284,7 @@ def load_torch_raw_bt4_hero_policy(
             model=model,
             model_id=model_id,
             policy_mode="raw_bt4",
+            plane_history_mode=plane_history_mode,
             inference_batch_size=inference_batch_size,
             refinement_passes=config.horizon,
         ),
@@ -1332,6 +1337,7 @@ def load_native_torch_hero_pair(
             model_config=candidate_record["model_config"],
             model_id=opponent_id,
             inference_batch_size=inference_batch_size,
+            plane_history_mode=opponent_record["plane_history_mode"],
         )
     else:
         if opponent_record.get("kind") != "torch_hero":
@@ -2268,6 +2274,11 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         ),
     )
     parser.add_argument("--policy-batch-size-cap", type=int, default=64)
+    parser.add_argument(
+        "--raw-bt4-plane-history-mode", choices=sorted(PLANE_HISTORY_MODES),
+        default=None,
+        help="Native Torch raw BT4 defaults to full history; legacy adapters remain current-only.",
+    )
     parser.add_argument("--policy-timeout-seconds", type=float, default=30.0)
     parser.add_argument(
         "--collect-diagnostics",
@@ -2425,10 +2436,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
 
     native_torch_hero = _validate_native_torch_hero_mode(args)
+    raw_history_mode = args.raw_bt4_plane_history_mode or (
+        LC0_FULL_HISTORY if native_torch_hero else CURRENT_ONLY
+    )
+    if raw_history_mode == LC0_FULL_HISTORY and not native_torch_hero:
+        raise ValueError("Full-history raw BT4 requires the native Torch arena")
 
     if args.candidate_raw_bt4:
         candidate_descriptor = None
-        candidate_record = raw_bt4_descriptor(models_dir=models_dir)
+        candidate_record = raw_bt4_descriptor(models_dir=models_dir, plane_history_mode=raw_history_mode)
         candidate_id = (
             "candidate-raw-bt4-"
             + candidate_record["bt4_checkpoint"]["sha256"][:12]
@@ -2476,7 +2492,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             descriptor=opponent_descriptor,
         )
     elif args.opponent_raw_bt4:
-        opponent_descriptor = raw_bt4_descriptor(models_dir=models_dir)
+        opponent_descriptor = raw_bt4_descriptor(models_dir=models_dir, plane_history_mode=raw_history_mode)
         opponent_config = None
         opponent_id = (
             "raw-bt4-" + opponent_descriptor["bt4_checkpoint"]["sha256"][:12]

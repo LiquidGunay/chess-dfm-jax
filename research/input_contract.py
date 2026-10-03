@@ -9,6 +9,47 @@ LC0_FULL_HISTORY = "lc0_full_history_as_preprocessed"
 PLANE_HISTORY_MODES = frozenset({CURRENT_ONLY, LC0_FULL_HISTORY})
 
 
+def require_training_history(data_format: str, *, allow_legacy_current_only: bool = False) -> str:
+    """New training must preserve history; legacy reproduction is explicit."""
+    if data_format == "lc0_sequential":
+        return LC0_FULL_HISTORY
+    if data_format == "trajectory_v3" and allow_legacy_current_only:
+        return CURRENT_ONLY
+    if data_format == "trajectory_v3":
+        raise ValueError(
+            "Legacy trajectory_v3 has zeroed board history. New training requires "
+            "--data-format lc0_sequential and a full-history dataset. Only explicit "
+            "historical reproduction may use --allow-legacy-current-only."
+        )
+    raise ValueError(f"Unsupported training data format: {data_format!r}")
+
+
+def audit_full_history_batch(batch: Mapping[str, Any]) -> dict[str, int]:
+    """Check actual input bytes, not just the dataset's name.
+
+    Every valid future target is after at least one move, including targets
+    of an initial-position example. Classical LC0 must retain its predecessor.
+    """
+    import numpy as np
+
+    current = np.asarray(batch["current_planes"])
+    future = np.asarray(batch["future_planes"])
+    valid = np.asarray(batch["future_valid"], dtype=bool)
+    if current.shape[-3:] != (112, 8, 8) or future.shape[-3:] != (112, 8, 8):
+        raise ValueError("History audit requires classical 112-plane inputs")
+    if future.shape[:2] != valid.shape or not valid.any():
+        raise ValueError("History audit requires valid future targets")
+    present = np.any(future[..., 13:104, :, :] != 0, axis=(-3, -2, -1))
+    if np.any(valid & ~present):
+        raise ValueError("Full-history training data contains a zero-history future target")
+    return {
+        "examples": int(current.shape[0]),
+        "current_with_history": int(np.any(current[:, 13:104] != 0, axis=(1, 2, 3)).sum()),
+        "valid_future_targets": int(valid.sum()),
+        "future_targets_with_history": int((present & valid).sum()),
+    }
+
+
 def torch_hero_plane_history_mode(run_config: Mapping[str, Any]) -> str:
     """Infer the immutable preprocessing contract from recorded training data.
 
@@ -19,14 +60,19 @@ def torch_hero_plane_history_mode(run_config: Mapping[str, Any]) -> str:
     data = run_config.get("data", {})
     data_format = args.get("data_format")
     schema = data.get("schema_version")
+    explicit = run_config.get("input_contract", {}).get("plane_history_mode")
     if data_format == "lc0_sequential" or schema == "lc0-sequential-v1":
         if data_format not in {None, "lc0_sequential"} or schema not in {
             None, "lc0-sequential-v1"
         }:
             raise ValueError("Conflicting training input-history provenance")
+        if explicit not in {None, LC0_FULL_HISTORY}:
+            raise ValueError("Explicit input history conflicts with training provenance")
         return LC0_FULL_HISTORY
     if data_format not in {None, "trajectory_v3"} or schema not in {
         None, "trajectory-v3"
     }:
         raise ValueError("Unsupported training input-history provenance")
+    if explicit not in {None, CURRENT_ONLY}:
+        raise ValueError("Explicit input history conflicts with training provenance")
     return CURRENT_ONLY

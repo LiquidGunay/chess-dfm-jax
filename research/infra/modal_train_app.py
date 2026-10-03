@@ -976,6 +976,9 @@ def _training_command(
         command.extend(str(update) for update in save_updates)
     if profile.save_model:
         command.append("--save-final")
+    if arm.data_format == "trajectory_v3":
+        # Entry point requires a separate explicit historical-reproduction opt-in.
+        command.append("--allow-legacy-current-only")
     if arm.recipe == "hero_v2":
         assert arm.main_lr_multiplier is not None
         assert arm.encoder_lr_ratio is not None
@@ -2364,6 +2367,7 @@ def main(
     recorded_spend: str = "",
     per_job_cap: str = "",
     data_root: str = "",
+    allow_legacy_current_only: bool = False,
 ) -> None:
     from research.interpretability.remote_cost import (
         enforce_modal_budget,
@@ -2461,6 +2465,11 @@ def main(
         raise ValueError(f"Mode must be stage-data or one of {sorted(TRAINING_PROFILES)}")
     if arm not in TRAINING_ARMS:
         raise ValueError(f"Unknown arm {arm!r}; choose from {sorted(TRAINING_ARMS)}")
+    from research.input_contract import require_training_history
+    require_training_history(
+        TRAINING_ARMS[arm].data_format,
+        allow_legacy_current_only=allow_legacy_current_only,
+    )
     if gpu not in {"L40S", "A100"}:
         raise ValueError("GPU must be L40S or A100")
     if mode == "proposal_epoch" or arm == "proposal_a_epoch":

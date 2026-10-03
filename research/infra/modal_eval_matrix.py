@@ -20,6 +20,10 @@ def reserved_spend(live: Decimal, baseline: Decimal, runs: dict, cap: Decimal) -
 
 def launch_command(protocol: dict, edge: dict, phase: str, spend: Decimal) -> list[str]:
     allocation = protocol['openings'][phase]
+    history_args = []
+    if protocol[edge['opponent']]['label'] == 'raw-bt4':
+        history_args = ['--raw-bt4-plane-history-mode',
+                        protocol[edge['opponent']]['plane_history_mode']]
     return [
         '/root/.local/bin/modal', 'run', '--detach', '--env', 'chess-dfm-research',
         'research/infra/modal_arena_app.py',
@@ -31,6 +35,7 @@ def launch_command(protocol: dict, edge: dict, phase: str, spend: Decimal) -> li
         '--opponent-refinement-passes', str(edge['opponent_passes']),
         '--pair-count', str(allocation['pairs']),
         '--opening-start-index', str(allocation['start']),
+        *history_args,
         '--recorded-spend', str(spend),
     ]
 
@@ -72,8 +77,14 @@ def main() -> None:
         verified = json.loads(preflight_raw)
         if verified.get('passed') is not True or verified['arena_source_tree_sha256'] != actual_source:
             raise RuntimeError('Missing valid CPU input preflight')
-        for name in ('candidate', 'hero1'):
+        model_names = {edge[side] for phase in ('smoke', 'development')
+                       for edge in protocol[f'{phase}_edges'] for side in ('candidate', 'opponent')}
+        for name in model_names:
             identity = protocol[name]
+            if identity['label'] == 'raw-bt4':
+                if identity['state_sha256'] != verified['raw_bt4_sha256']:
+                    raise RuntimeError('CPU preflight raw checkpoint drift')
+                continue
             observed = verified['models'][identity['label']]
             if any(observed[key] != identity[key] for key in ('state_sha256', 'plane_history_mode')):
                 raise RuntimeError('CPU preflight checkpoint/input contract drift')

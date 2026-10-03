@@ -63,7 +63,8 @@ from research.arena_history_trust import (  # noqa: E402
     verify_trusted_arena_history_endpoint,
 )
 from research.input_contract import (  # noqa: E402
-    CURRENT_ONLY, LC0_FULL_HISTORY, PLANE_HISTORY_MODES,
+    CURRENT_ONLY, LC0_FULL_HISTORY, PLANE_HISTORY_MODES, require_training_history,
+    audit_full_history_batch,
 )
 
 _LEGACY_WORKSPACE_ROOT = Path("/mountpoint/.exp")
@@ -6960,6 +6961,12 @@ def _resolve_training_recipe(
 
 
 def train(args: argparse.Namespace) -> int:
+    training_history_mode = require_training_history(
+        getattr(args, "data_format", "lc0_sequential"),
+        allow_legacy_current_only=bool(getattr(args, "allow_legacy_current_only", False)),
+    )
+    if training_history_mode == LC0_FULL_HISTORY and getattr(args, "hero_milestones", False):
+        raise ValueError("Legacy Hero milestones use current-only pools; use full-history validation-updates and the history-aware arena")
     config, optimizer_policy = _resolve_training_recipe(args)
     config = _apply_sigreg_sample_override(
         config,
@@ -7275,7 +7282,7 @@ def train(args: argparse.Namespace) -> int:
     partition = optimizer.partition_manifest()
     _write_json(output_dir / "optimizer_partition.json", partition)
 
-    data_format = getattr(args, "data_format", "trajectory_v3")
+    data_format = getattr(args, "data_format", "lc0_sequential")
     if data_format == "lc0_sequential":
         if config.action_codec != "lc0_canonical_1858":
             raise ValueError(
@@ -7309,6 +7316,10 @@ def train(args: argparse.Namespace) -> int:
         raise ValueError(f"Unsupported training data format: {data_format!r}")
     git_commit = _git_commit()
     data_provenance = batches.provenance()
+    history_audit = (
+        audit_full_history_batch(batches.batch_at(args.data_start))
+        if training_history_mode == LC0_FULL_HISTORY else None
+    )
     hero_milestone_contract = _hero_milestone_contract(
         args,
         enabled=hero_milestones_enabled,
@@ -7375,6 +7386,7 @@ def train(args: argparse.Namespace) -> int:
     restore_seconds = time.perf_counter() - restore_started
     run_config = {
         "schema_version": "torch-eager-train-run-v1",
+        "input_contract": {"plane_history_mode": training_history_mode, "first_batch_audit": history_audit},
         "created_utc": datetime.now(UTC).isoformat(),
         "git_commit": git_commit,
         "framework": "torch",
@@ -11143,11 +11155,15 @@ def build_parser() -> argparse.ArgumentParser:
     train_parser.add_argument(
         "--data-format",
         choices=("trajectory_v3", "lc0_sequential"),
-        default="trajectory_v3",
+        default="lc0_sequential",
         help=(
             "Read legacy duplicated trajectory-v3 shards or value-rich "
             "memory-mapped sequential LC0 shards."
         ),
+    )
+    train_parser.add_argument(
+        "--allow-legacy-current-only", action="store_true",
+        help="Explicit historical reproduction only: permit zero-history trajectory_v3 training.",
     )
     train_parser.add_argument("--resume-checkpoint", type=Path)
     train_parser.add_argument("--output-dir", type=Path, required=True)

@@ -82,6 +82,7 @@ def test_arena_identity_binds_both_checkpoints_and_options() -> None:
         "arena_source_tree_sha256": "3" * 64,
     }
     first = _arena_identity(**common)
+    assert first != _arena_identity(**common, raw_bt4_plane_history_mode="current_only_as_preprocessed")
 
     assert first == _arena_identity(**common)
     assert first.startswith("hero-arena-128p-o256-cpass8-opass1-")
@@ -215,6 +216,7 @@ def test_completed_arena_summary_verifies_checkpoint_binding(
         state["contract"]["models"]["opponent"] = {
             "kind": "raw_bt4", "arena_policy_mode": "default",
             "bt4_checkpoint": {"sha256": "2" * 64},
+            "plane_history_mode": "lc0_full_history_as_preprocessed",
         }
     opponent_mode = "policy_only" if raw_opponent else "dfm"
     (output_dir / "state.json").write_text(

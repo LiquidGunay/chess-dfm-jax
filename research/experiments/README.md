@@ -30,6 +30,22 @@ Use separate commits for launcher/accounting changes, experimental plans,
 and compact run receipts. Keep model/objective changes in separate experiment
 branches once the parent checkpoint and evaluation protocol are frozen.
 
+## Full-history input policy
+
+As of EV-005, native-Torch raw BT4 defaults to full LC0 history. The explicit
+`--raw-bt4-plane-history-mode current_only_as_preprocessed` option is only a
+historical/attribution control; its mode is bound into result and resume
+identities. EV-001/003/004 raw anchors used current-only inputs and do not
+establish strength against normally configured BT4.
+
+New training defaults to `--data-format lc0_sequential`; select an audited
+full-history dataset with `--data-root`. Both the local trainer and Modal
+launcher reject trajectory-v3 unless `--allow-legacy-current-only` is given
+for an explicitly requested historical reproduction. A first-batch audit
+checks that valid future targets actually retain history. Old current-only
+milestone pools cannot be used for full-history training: use sequential
+validation and the history-aware arena. This changes no retained weights.
+
 ## Storage policy
 
 Inventory all chess Volumes before a large run. Start a cleanup review when
