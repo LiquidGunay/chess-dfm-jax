@@ -1,0 +1,5161 @@
+{
+  "arm": {
+    "compile": "fresh",
+    "dtype": "bfloat16",
+    "id": "delayed_prefetch",
+    "norm": "eager",
+    "prefetch": "after-forward",
+    "remat_bt4": true,
+    "storage": "checkpoint",
+    "timeout": 480
+  },
+  "batch_size": 1024,
+  "compute_dtype": "bfloat16",
+  "config": {
+    "action_codec": "lc0_canonical_1858",
+    "bt4_learning_rate": 1.6666666666666667e-05,
+    "delta_rms_clip": 0.5,
+    "dfm_ce_coeff": 1.0,
+    "dfm_closed_loop_mode": "none",
+    "dfm_condition_on_current_jepa_state": false,
+    "dfm_heads": 4,
+    "dfm_jepa_fusion_mode": "none",
+    "dfm_layers": 4,
+    "dfm_mlp_dim": 1024,
+    "dfm_state_source": "trunk",
+    "future_trainable_tail_layers": 1,
+    "grad_clip_norm": 1.0,
+    "horizon": 8,
+    "init_seed": 0,
+    "jepa_feedback_mode": "none",
+    "jepa_layers": 4,
+    "jepa_mlp_dim": 4096,
+    "jepa_positive_coeff": 1.0,
+    "learning_rate": 0.0005,
+    "legality_coeff": 2.0,
+    "loss_clip_value": 0.0,
+    "lr_decay_start": 400,
+    "lr_decay_steps": 800,
+    "lr_min_ratio": 0.001,
+    "lr_schedule_unit": "examples",
+    "lr_total_examples": 28343296,
+    "lr_warmup_examples": 566866,
+    "policy_distill_coeff": 0.0,
+    "policy_distill_teacher_mode": "online",
+    "policy_distill_teacher_state_sha256": "",
+    "policy_passthrough_mode": "root_only",
+    "pred_sigreg_coeff": 2.0,
+    "projector_heads": 8,
+    "projector_layers": 2,
+    "projector_mlp_dim": 4096,
+    "remat_blocks": true,
+    "remat_bt4_blocks": true,
+    "remat_dfm_blocks": false,
+    "remat_projector_blocks": true,
+    "root_legal_ce_coeff": 0.08707768618513193,
+    "selective_weight_decay": true,
+    "sigreg_example_count": 64,
+    "sigreg_proj_dim": 1024,
+    "sigreg_reference_count": 1.0,
+    "target_sample_count": 1,
+    "target_sigreg_coeff": 2.0,
+    "token_dim": 256,
+    "use_bt4_policy_residual": true,
+    "use_bt4_sdpa": true,
+    "use_head_sdpa": true,
+    "use_qk_norm": true,
+    "use_xsa": true,
+    "wdl_coeff": 0.25,
+    "wdl_include_current_state": false,
+    "weight_decay": 0.01,
+    "z_dim": 1024
+  },
+  "optimizer_partition": {
+    "adamw_leaf_count": 366,
+    "bt4_leaf_count": 411,
+    "leaf_count": 462,
+    "leaves": [
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.float32",
+        "learning_rate_kind": "main",
+        "optimizer": "nesterov_adamw",
+        "path": "time_embed1",
+        "shape": [
+          1,
+          256
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.float32",
+        "learning_rate_kind": "main",
+        "optimizer": "nesterov_adamw",
+        "path": "time_embed2",
+        "shape": [
+          256,
+          256
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.float32",
+        "learning_rate_kind": "main",
+        "optimizer": "nesterov_adamw",
+        "path": "time_bias",
+        "shape": [
+          256
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.float32",
+        "learning_rate_kind": "main",
+        "optimizer": "nesterov_adamw",
+        "path": "pos_embed",
+        "shape": [
+          8,
+          256
+        ]
+      },
+      {
+        "apply_weight_decay": true,
+        "dtype": "torch.float32",
+        "learning_rate_kind": "main",
+        "optimizer": "nesterov_adamw",
+        "path": "out_proj",
+        "shape": [
+          256,
+          1858
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.float32",
+        "learning_rate_kind": "main",
+        "optimizer": "nesterov_adamw",
+        "path": "out_bias",
+        "shape": [
+          1858
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.embedding.mul_gate",
+        "shape": [
+          64,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.embedding.add_gate",
+        "shape": [
+          64,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.embedding.preproc.w",
+        "shape": [
+          768,
+          32768
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.embedding.preproc.b",
+        "shape": [
+          32768
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.embedding.proj.w",
+        "shape": [
+          624,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.embedding.proj.b",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.embedding.ln.scale",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.embedding.ln.bias",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.embedding.ffn1.w",
+        "shape": [
+          1024,
+          1536
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.embedding.ffn1.b",
+        "shape": [
+          1536
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.embedding.ffn2.w",
+        "shape": [
+          1536,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.embedding.ffn2.b",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.embedding.ffn_ln.scale",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.embedding.ffn_ln.bias",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.0.wq",
+        "shape": [
+          1024,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.0.wq_b",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.0.wk",
+        "shape": [
+          1024,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.0.wk_b",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.0.wv",
+        "shape": [
+          1024,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.0.wv_b",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.0.wo.w",
+        "shape": [
+          1024,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.0.wo.b",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.0.ln_attn.scale",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.0.ln_attn.bias",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.0.ffn1.w",
+        "shape": [
+          1024,
+          1536
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.0.ffn1.b",
+        "shape": [
+          1536
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.0.ffn2.w",
+        "shape": [
+          1536,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.0.ffn2.b",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.0.ln_ffn.scale",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.0.ln_ffn.bias",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.0.smolgen.shared_w",
+        "shape": [
+          256,
+          4096
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.0.smolgen.compress.w",
+        "shape": [
+          1024,
+          32
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.0.smolgen.dense1.w",
+        "shape": [
+          2048,
+          256
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.0.smolgen.dense1.b",
+        "shape": [
+          256
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.0.smolgen.ln1.scale",
+        "shape": [
+          256
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.0.smolgen.ln1.bias",
+        "shape": [
+          256
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.0.smolgen.dense2.w",
+        "shape": [
+          256,
+          8192
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.0.smolgen.dense2.b",
+        "shape": [
+          8192
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.0.smolgen.ln2.scale",
+        "shape": [
+          8192
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.0.smolgen.ln2.bias",
+        "shape": [
+          8192
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.1.wq",
+        "shape": [
+          1024,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.1.wq_b",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.1.wk",
+        "shape": [
+          1024,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.1.wk_b",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.1.wv",
+        "shape": [
+          1024,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.1.wv_b",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.1.wo.w",
+        "shape": [
+          1024,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.1.wo.b",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.1.ln_attn.scale",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.1.ln_attn.bias",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.1.ffn1.w",
+        "shape": [
+          1024,
+          1536
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.1.ffn1.b",
+        "shape": [
+          1536
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.1.ffn2.w",
+        "shape": [
+          1536,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.1.ffn2.b",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.1.ln_ffn.scale",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.1.ln_ffn.bias",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.1.smolgen.shared_w",
+        "shape": [
+          256,
+          4096
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.1.smolgen.compress.w",
+        "shape": [
+          1024,
+          32
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.1.smolgen.dense1.w",
+        "shape": [
+          2048,
+          256
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.1.smolgen.dense1.b",
+        "shape": [
+          256
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.1.smolgen.ln1.scale",
+        "shape": [
+          256
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.1.smolgen.ln1.bias",
+        "shape": [
+          256
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.1.smolgen.dense2.w",
+        "shape": [
+          256,
+          8192
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.1.smolgen.dense2.b",
+        "shape": [
+          8192
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.1.smolgen.ln2.scale",
+        "shape": [
+          8192
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.1.smolgen.ln2.bias",
+        "shape": [
+          8192
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.2.wq",
+        "shape": [
+          1024,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.2.wq_b",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.2.wk",
+        "shape": [
+          1024,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.2.wk_b",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.2.wv",
+        "shape": [
+          1024,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.2.wv_b",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.2.wo.w",
+        "shape": [
+          1024,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.2.wo.b",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.2.ln_attn.scale",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.2.ln_attn.bias",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.2.ffn1.w",
+        "shape": [
+          1024,
+          1536
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.2.ffn1.b",
+        "shape": [
+          1536
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.2.ffn2.w",
+        "shape": [
+          1536,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.2.ffn2.b",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.2.ln_ffn.scale",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.2.ln_ffn.bias",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.2.smolgen.shared_w",
+        "shape": [
+          256,
+          4096
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.2.smolgen.compress.w",
+        "shape": [
+          1024,
+          32
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.2.smolgen.dense1.w",
+        "shape": [
+          2048,
+          256
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.2.smolgen.dense1.b",
+        "shape": [
+          256
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.2.smolgen.ln1.scale",
+        "shape": [
+          256
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.2.smolgen.ln1.bias",
+        "shape": [
+          256
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.2.smolgen.dense2.w",
+        "shape": [
+          256,
+          8192
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.2.smolgen.dense2.b",
+        "shape": [
+          8192
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.2.smolgen.ln2.scale",
+        "shape": [
+          8192
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.2.smolgen.ln2.bias",
+        "shape": [
+          8192
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.3.wq",
+        "shape": [
+          1024,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.3.wq_b",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.3.wk",
+        "shape": [
+          1024,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.3.wk_b",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.3.wv",
+        "shape": [
+          1024,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.3.wv_b",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.3.wo.w",
+        "shape": [
+          1024,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.3.wo.b",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.3.ln_attn.scale",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.3.ln_attn.bias",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.3.ffn1.w",
+        "shape": [
+          1024,
+          1536
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.3.ffn1.b",
+        "shape": [
+          1536
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.3.ffn2.w",
+        "shape": [
+          1536,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.3.ffn2.b",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.3.ln_ffn.scale",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.3.ln_ffn.bias",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.3.smolgen.shared_w",
+        "shape": [
+          256,
+          4096
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.3.smolgen.compress.w",
+        "shape": [
+          1024,
+          32
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.3.smolgen.dense1.w",
+        "shape": [
+          2048,
+          256
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.3.smolgen.dense1.b",
+        "shape": [
+          256
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.3.smolgen.ln1.scale",
+        "shape": [
+          256
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.3.smolgen.ln1.bias",
+        "shape": [
+          256
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.3.smolgen.dense2.w",
+        "shape": [
+          256,
+          8192
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.3.smolgen.dense2.b",
+        "shape": [
+          8192
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.3.smolgen.ln2.scale",
+        "shape": [
+          8192
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.3.smolgen.ln2.bias",
+        "shape": [
+          8192
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.4.wq",
+        "shape": [
+          1024,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.4.wq_b",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.4.wk",
+        "shape": [
+          1024,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.4.wk_b",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.4.wv",
+        "shape": [
+          1024,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.4.wv_b",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.4.wo.w",
+        "shape": [
+          1024,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.4.wo.b",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.4.ln_attn.scale",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.4.ln_attn.bias",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.4.ffn1.w",
+        "shape": [
+          1024,
+          1536
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.4.ffn1.b",
+        "shape": [
+          1536
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.4.ffn2.w",
+        "shape": [
+          1536,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.4.ffn2.b",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.4.ln_ffn.scale",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.4.ln_ffn.bias",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.4.smolgen.shared_w",
+        "shape": [
+          256,
+          4096
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.4.smolgen.compress.w",
+        "shape": [
+          1024,
+          32
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.4.smolgen.dense1.w",
+        "shape": [
+          2048,
+          256
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.4.smolgen.dense1.b",
+        "shape": [
+          256
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.4.smolgen.ln1.scale",
+        "shape": [
+          256
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.4.smolgen.ln1.bias",
+        "shape": [
+          256
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.4.smolgen.dense2.w",
+        "shape": [
+          256,
+          8192
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.4.smolgen.dense2.b",
+        "shape": [
+          8192
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.4.smolgen.ln2.scale",
+        "shape": [
+          8192
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.4.smolgen.ln2.bias",
+        "shape": [
+          8192
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.5.wq",
+        "shape": [
+          1024,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.5.wq_b",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.5.wk",
+        "shape": [
+          1024,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.5.wk_b",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.5.wv",
+        "shape": [
+          1024,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.5.wv_b",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.5.wo.w",
+        "shape": [
+          1024,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.5.wo.b",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.5.ln_attn.scale",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.5.ln_attn.bias",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.5.ffn1.w",
+        "shape": [
+          1024,
+          1536
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.5.ffn1.b",
+        "shape": [
+          1536
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.5.ffn2.w",
+        "shape": [
+          1536,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.5.ffn2.b",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.5.ln_ffn.scale",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.5.ln_ffn.bias",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.5.smolgen.shared_w",
+        "shape": [
+          256,
+          4096
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.5.smolgen.compress.w",
+        "shape": [
+          1024,
+          32
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.5.smolgen.dense1.w",
+        "shape": [
+          2048,
+          256
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.5.smolgen.dense1.b",
+        "shape": [
+          256
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.5.smolgen.ln1.scale",
+        "shape": [
+          256
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.5.smolgen.ln1.bias",
+        "shape": [
+          256
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.5.smolgen.dense2.w",
+        "shape": [
+          256,
+          8192
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.5.smolgen.dense2.b",
+        "shape": [
+          8192
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.5.smolgen.ln2.scale",
+        "shape": [
+          8192
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.5.smolgen.ln2.bias",
+        "shape": [
+          8192
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.6.wq",
+        "shape": [
+          1024,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.6.wq_b",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.6.wk",
+        "shape": [
+          1024,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.6.wk_b",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.6.wv",
+        "shape": [
+          1024,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.6.wv_b",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.6.wo.w",
+        "shape": [
+          1024,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.6.wo.b",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.6.ln_attn.scale",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.6.ln_attn.bias",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.6.ffn1.w",
+        "shape": [
+          1024,
+          1536
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.6.ffn1.b",
+        "shape": [
+          1536
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.6.ffn2.w",
+        "shape": [
+          1536,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.6.ffn2.b",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.6.ln_ffn.scale",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.6.ln_ffn.bias",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.6.smolgen.shared_w",
+        "shape": [
+          256,
+          4096
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.6.smolgen.compress.w",
+        "shape": [
+          1024,
+          32
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.6.smolgen.dense1.w",
+        "shape": [
+          2048,
+          256
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.6.smolgen.dense1.b",
+        "shape": [
+          256
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.6.smolgen.ln1.scale",
+        "shape": [
+          256
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.6.smolgen.ln1.bias",
+        "shape": [
+          256
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.6.smolgen.dense2.w",
+        "shape": [
+          256,
+          8192
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.6.smolgen.dense2.b",
+        "shape": [
+          8192
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.6.smolgen.ln2.scale",
+        "shape": [
+          8192
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.6.smolgen.ln2.bias",
+        "shape": [
+          8192
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.7.wq",
+        "shape": [
+          1024,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.7.wq_b",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.7.wk",
+        "shape": [
+          1024,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.7.wk_b",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.7.wv",
+        "shape": [
+          1024,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.7.wv_b",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.7.wo.w",
+        "shape": [
+          1024,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.7.wo.b",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.7.ln_attn.scale",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.7.ln_attn.bias",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.7.ffn1.w",
+        "shape": [
+          1024,
+          1536
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.7.ffn1.b",
+        "shape": [
+          1536
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.7.ffn2.w",
+        "shape": [
+          1536,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.7.ffn2.b",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.7.ln_ffn.scale",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.7.ln_ffn.bias",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.7.smolgen.shared_w",
+        "shape": [
+          256,
+          4096
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.7.smolgen.compress.w",
+        "shape": [
+          1024,
+          32
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.7.smolgen.dense1.w",
+        "shape": [
+          2048,
+          256
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.7.smolgen.dense1.b",
+        "shape": [
+          256
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.7.smolgen.ln1.scale",
+        "shape": [
+          256
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.7.smolgen.ln1.bias",
+        "shape": [
+          256
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.7.smolgen.dense2.w",
+        "shape": [
+          256,
+          8192
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.7.smolgen.dense2.b",
+        "shape": [
+          8192
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.7.smolgen.ln2.scale",
+        "shape": [
+          8192
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.7.smolgen.ln2.bias",
+        "shape": [
+          8192
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.8.wq",
+        "shape": [
+          1024,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.8.wq_b",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.8.wk",
+        "shape": [
+          1024,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.8.wk_b",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.8.wv",
+        "shape": [
+          1024,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.8.wv_b",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.8.wo.w",
+        "shape": [
+          1024,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.8.wo.b",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.8.ln_attn.scale",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.8.ln_attn.bias",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.8.ffn1.w",
+        "shape": [
+          1024,
+          1536
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.8.ffn1.b",
+        "shape": [
+          1536
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.8.ffn2.w",
+        "shape": [
+          1536,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.8.ffn2.b",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.8.ln_ffn.scale",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.8.ln_ffn.bias",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.8.smolgen.shared_w",
+        "shape": [
+          256,
+          4096
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.8.smolgen.compress.w",
+        "shape": [
+          1024,
+          32
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.8.smolgen.dense1.w",
+        "shape": [
+          2048,
+          256
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.8.smolgen.dense1.b",
+        "shape": [
+          256
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.8.smolgen.ln1.scale",
+        "shape": [
+          256
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.8.smolgen.ln1.bias",
+        "shape": [
+          256
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.8.smolgen.dense2.w",
+        "shape": [
+          256,
+          8192
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.8.smolgen.dense2.b",
+        "shape": [
+          8192
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.8.smolgen.ln2.scale",
+        "shape": [
+          8192
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.8.smolgen.ln2.bias",
+        "shape": [
+          8192
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.9.wq",
+        "shape": [
+          1024,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.9.wq_b",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.9.wk",
+        "shape": [
+          1024,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.9.wk_b",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.9.wv",
+        "shape": [
+          1024,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.9.wv_b",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.9.wo.w",
+        "shape": [
+          1024,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.9.wo.b",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.9.ln_attn.scale",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.9.ln_attn.bias",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.9.ffn1.w",
+        "shape": [
+          1024,
+          1536
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.9.ffn1.b",
+        "shape": [
+          1536
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.9.ffn2.w",
+        "shape": [
+          1536,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.9.ffn2.b",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.9.ln_ffn.scale",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.9.ln_ffn.bias",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.9.smolgen.shared_w",
+        "shape": [
+          256,
+          4096
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.9.smolgen.compress.w",
+        "shape": [
+          1024,
+          32
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.9.smolgen.dense1.w",
+        "shape": [
+          2048,
+          256
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.9.smolgen.dense1.b",
+        "shape": [
+          256
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.9.smolgen.ln1.scale",
+        "shape": [
+          256
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.9.smolgen.ln1.bias",
+        "shape": [
+          256
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.9.smolgen.dense2.w",
+        "shape": [
+          256,
+          8192
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.9.smolgen.dense2.b",
+        "shape": [
+          8192
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.9.smolgen.ln2.scale",
+        "shape": [
+          8192
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.9.smolgen.ln2.bias",
+        "shape": [
+          8192
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.10.wq",
+        "shape": [
+          1024,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.10.wq_b",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.10.wk",
+        "shape": [
+          1024,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.10.wk_b",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.10.wv",
+        "shape": [
+          1024,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.10.wv_b",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.10.wo.w",
+        "shape": [
+          1024,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.10.wo.b",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.10.ln_attn.scale",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.10.ln_attn.bias",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.10.ffn1.w",
+        "shape": [
+          1024,
+          1536
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.10.ffn1.b",
+        "shape": [
+          1536
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.10.ffn2.w",
+        "shape": [
+          1536,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.10.ffn2.b",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.10.ln_ffn.scale",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.10.ln_ffn.bias",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.10.smolgen.shared_w",
+        "shape": [
+          256,
+          4096
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.10.smolgen.compress.w",
+        "shape": [
+          1024,
+          32
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.10.smolgen.dense1.w",
+        "shape": [
+          2048,
+          256
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.10.smolgen.dense1.b",
+        "shape": [
+          256
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.10.smolgen.ln1.scale",
+        "shape": [
+          256
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.10.smolgen.ln1.bias",
+        "shape": [
+          256
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.10.smolgen.dense2.w",
+        "shape": [
+          256,
+          8192
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.10.smolgen.dense2.b",
+        "shape": [
+          8192
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.10.smolgen.ln2.scale",
+        "shape": [
+          8192
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.10.smolgen.ln2.bias",
+        "shape": [
+          8192
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.11.wq",
+        "shape": [
+          1024,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.11.wq_b",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.11.wk",
+        "shape": [
+          1024,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.11.wk_b",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.11.wv",
+        "shape": [
+          1024,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.11.wv_b",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.11.wo.w",
+        "shape": [
+          1024,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.11.wo.b",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.11.ln_attn.scale",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.11.ln_attn.bias",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.11.ffn1.w",
+        "shape": [
+          1024,
+          1536
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.11.ffn1.b",
+        "shape": [
+          1536
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.11.ffn2.w",
+        "shape": [
+          1536,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.11.ffn2.b",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.11.ln_ffn.scale",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.11.ln_ffn.bias",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.11.smolgen.shared_w",
+        "shape": [
+          256,
+          4096
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.11.smolgen.compress.w",
+        "shape": [
+          1024,
+          32
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.11.smolgen.dense1.w",
+        "shape": [
+          2048,
+          256
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.11.smolgen.dense1.b",
+        "shape": [
+          256
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.11.smolgen.ln1.scale",
+        "shape": [
+          256
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.11.smolgen.ln1.bias",
+        "shape": [
+          256
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.11.smolgen.dense2.w",
+        "shape": [
+          256,
+          8192
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.11.smolgen.dense2.b",
+        "shape": [
+          8192
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.11.smolgen.ln2.scale",
+        "shape": [
+          8192
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.11.smolgen.ln2.bias",
+        "shape": [
+          8192
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.12.wq",
+        "shape": [
+          1024,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.12.wq_b",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.12.wk",
+        "shape": [
+          1024,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.12.wk_b",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.12.wv",
+        "shape": [
+          1024,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.12.wv_b",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.12.wo.w",
+        "shape": [
+          1024,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.12.wo.b",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.12.ln_attn.scale",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.12.ln_attn.bias",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.12.ffn1.w",
+        "shape": [
+          1024,
+          1536
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.12.ffn1.b",
+        "shape": [
+          1536
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.12.ffn2.w",
+        "shape": [
+          1536,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.12.ffn2.b",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.12.ln_ffn.scale",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.12.ln_ffn.bias",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.12.smolgen.shared_w",
+        "shape": [
+          256,
+          4096
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.12.smolgen.compress.w",
+        "shape": [
+          1024,
+          32
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.12.smolgen.dense1.w",
+        "shape": [
+          2048,
+          256
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.12.smolgen.dense1.b",
+        "shape": [
+          256
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.12.smolgen.ln1.scale",
+        "shape": [
+          256
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.12.smolgen.ln1.bias",
+        "shape": [
+          256
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.12.smolgen.dense2.w",
+        "shape": [
+          256,
+          8192
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.12.smolgen.dense2.b",
+        "shape": [
+          8192
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.12.smolgen.ln2.scale",
+        "shape": [
+          8192
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.12.smolgen.ln2.bias",
+        "shape": [
+          8192
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.13.wq",
+        "shape": [
+          1024,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.13.wq_b",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.13.wk",
+        "shape": [
+          1024,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.13.wk_b",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.13.wv",
+        "shape": [
+          1024,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.13.wv_b",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.13.wo.w",
+        "shape": [
+          1024,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.13.wo.b",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.13.ln_attn.scale",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.13.ln_attn.bias",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.13.ffn1.w",
+        "shape": [
+          1024,
+          1536
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.13.ffn1.b",
+        "shape": [
+          1536
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.13.ffn2.w",
+        "shape": [
+          1536,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.13.ffn2.b",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.13.ln_ffn.scale",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.13.ln_ffn.bias",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.13.smolgen.shared_w",
+        "shape": [
+          256,
+          4096
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.13.smolgen.compress.w",
+        "shape": [
+          1024,
+          32
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.13.smolgen.dense1.w",
+        "shape": [
+          2048,
+          256
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.13.smolgen.dense1.b",
+        "shape": [
+          256
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.13.smolgen.ln1.scale",
+        "shape": [
+          256
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.13.smolgen.ln1.bias",
+        "shape": [
+          256
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.13.smolgen.dense2.w",
+        "shape": [
+          256,
+          8192
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.13.smolgen.dense2.b",
+        "shape": [
+          8192
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.13.smolgen.ln2.scale",
+        "shape": [
+          8192
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.13.smolgen.ln2.bias",
+        "shape": [
+          8192
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.14.wq",
+        "shape": [
+          1024,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.14.wq_b",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.14.wk",
+        "shape": [
+          1024,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.14.wk_b",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.14.wv",
+        "shape": [
+          1024,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.14.wv_b",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.14.wo.w",
+        "shape": [
+          1024,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.14.wo.b",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.14.ln_attn.scale",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.14.ln_attn.bias",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.14.ffn1.w",
+        "shape": [
+          1024,
+          1536
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.14.ffn1.b",
+        "shape": [
+          1536
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.layers.14.ffn2.w",
+        "shape": [
+          1536,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.14.ffn2.b",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.14.ln_ffn.scale",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.14.ln_ffn.bias",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.14.smolgen.shared_w",
+        "shape": [
+          256,
+          4096
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.14.smolgen.compress.w",
+        "shape": [
+          1024,
+          32
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.14.smolgen.dense1.w",
+        "shape": [
+          2048,
+          256
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.14.smolgen.dense1.b",
+        "shape": [
+          256
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.14.smolgen.ln1.scale",
+        "shape": [
+          256
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.14.smolgen.ln1.bias",
+        "shape": [
+          256
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.14.smolgen.dense2.w",
+        "shape": [
+          256,
+          8192
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.14.smolgen.dense2.b",
+        "shape": [
+          8192
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.14.smolgen.ln2.scale",
+        "shape": [
+          8192
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.layers.14.smolgen.ln2.bias",
+        "shape": [
+          8192
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.policy_head.prom_w",
+        "shape": [
+          1024,
+          4
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.policy_head.dense1.w",
+        "shape": [
+          1024,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.policy_head.dense1.b",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.policy_head.q.w",
+        "shape": [
+          1024,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.policy_head.q.b",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "muon",
+        "path": "encoder.policy_head.k.w",
+        "shape": [
+          1024,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.bfloat16",
+        "learning_rate_kind": "bt4",
+        "optimizer": "nesterov_adamw",
+        "path": "encoder.policy_head.k.b",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": true,
+        "dtype": "torch.float32",
+        "learning_rate_kind": "main",
+        "optimizer": "muon",
+        "path": "state_projector.in_proj",
+        "shape": [
+          1024,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.float32",
+        "learning_rate_kind": "main",
+        "optimizer": "nesterov_adamw",
+        "path": "state_projector.in_bias",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": true,
+        "dtype": "torch.float32",
+        "learning_rate_kind": "main",
+        "optimizer": "nesterov_adamw",
+        "path": "state_projector.cls",
+        "shape": [
+          1,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.float32",
+        "learning_rate_kind": "main",
+        "optimizer": "nesterov_adamw",
+        "path": "state_projector.pos_embed",
+        "shape": [
+          65,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.float32",
+        "learning_rate_kind": "main",
+        "optimizer": "nesterov_adamw",
+        "path": "state_projector.blocks.attn_norm_scale",
+        "shape": [
+          2,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.float32",
+        "learning_rate_kind": "main",
+        "optimizer": "nesterov_adamw",
+        "path": "state_projector.blocks.mlp_norm_scale",
+        "shape": [
+          2,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.float32",
+        "learning_rate_kind": "main",
+        "optimizer": "nesterov_adamw",
+        "path": "state_projector.blocks.w_qkv",
+        "shape": [
+          2,
+          1024,
+          3072
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.float32",
+        "learning_rate_kind": "main",
+        "optimizer": "nesterov_adamw",
+        "path": "state_projector.blocks.b_qkv",
+        "shape": [
+          2,
+          3072
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.float32",
+        "learning_rate_kind": "main",
+        "optimizer": "nesterov_adamw",
+        "path": "state_projector.blocks.w_o",
+        "shape": [
+          2,
+          1024,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.float32",
+        "learning_rate_kind": "main",
+        "optimizer": "nesterov_adamw",
+        "path": "state_projector.blocks.b_o",
+        "shape": [
+          2,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.float32",
+        "learning_rate_kind": "main",
+        "optimizer": "nesterov_adamw",
+        "path": "state_projector.blocks.w_gate_up",
+        "shape": [
+          2,
+          1024,
+          5632
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.float32",
+        "learning_rate_kind": "main",
+        "optimizer": "nesterov_adamw",
+        "path": "state_projector.blocks.b_gate_up",
+        "shape": [
+          2,
+          5632
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.float32",
+        "learning_rate_kind": "main",
+        "optimizer": "nesterov_adamw",
+        "path": "state_projector.blocks.w_down",
+        "shape": [
+          2,
+          2816,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.float32",
+        "learning_rate_kind": "main",
+        "optimizer": "nesterov_adamw",
+        "path": "state_projector.blocks.b_down",
+        "shape": [
+          2,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": true,
+        "dtype": "torch.float32",
+        "learning_rate_kind": "main",
+        "optimizer": "nesterov_adamw",
+        "path": "dfm_state_projector.w",
+        "shape": [
+          1024,
+          256
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.float32",
+        "learning_rate_kind": "main",
+        "optimizer": "nesterov_adamw",
+        "path": "dfm_state_projector.b",
+        "shape": [
+          256
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.float32",
+        "learning_rate_kind": "main",
+        "optimizer": "nesterov_adamw",
+        "path": "jepa_action_embed.embedding",
+        "shape": [
+          1859,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": true,
+        "dtype": "torch.float32",
+        "learning_rate_kind": "main",
+        "optimizer": "nesterov_adamw",
+        "path": "jepa_hidden_adapter.w",
+        "shape": [
+          256,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.float32",
+        "learning_rate_kind": "main",
+        "optimizer": "nesterov_adamw",
+        "path": "jepa_hidden_adapter.b",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.float32",
+        "learning_rate_kind": "main",
+        "optimizer": "nesterov_adamw",
+        "path": "jepa_transition.norm_scale",
+        "shape": [
+          4,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": true,
+        "dtype": "torch.float32",
+        "learning_rate_kind": "main",
+        "optimizer": "muon",
+        "path": "jepa_transition.cond_w",
+        "shape": [
+          4,
+          1024,
+          2048
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.float32",
+        "learning_rate_kind": "main",
+        "optimizer": "nesterov_adamw",
+        "path": "jepa_transition.cond_b",
+        "shape": [
+          4,
+          2048
+        ]
+      },
+      {
+        "apply_weight_decay": true,
+        "dtype": "torch.float32",
+        "learning_rate_kind": "main",
+        "optimizer": "nesterov_adamw",
+        "path": "jepa_transition.w_gate_up",
+        "shape": [
+          4,
+          1024,
+          5632
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.float32",
+        "learning_rate_kind": "main",
+        "optimizer": "nesterov_adamw",
+        "path": "jepa_transition.b_gate_up",
+        "shape": [
+          4,
+          5632
+        ]
+      },
+      {
+        "apply_weight_decay": true,
+        "dtype": "torch.float32",
+        "learning_rate_kind": "main",
+        "optimizer": "nesterov_adamw",
+        "path": "jepa_transition.w_down",
+        "shape": [
+          4,
+          2816,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.float32",
+        "learning_rate_kind": "main",
+        "optimizer": "nesterov_adamw",
+        "path": "jepa_transition.b_down",
+        "shape": [
+          4,
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.float32",
+        "learning_rate_kind": "main",
+        "optimizer": "nesterov_adamw",
+        "path": "jepa_state_norm.scale",
+        "shape": [
+          1024
+        ]
+      },
+      {
+        "apply_weight_decay": true,
+        "dtype": "torch.float32",
+        "learning_rate_kind": "main",
+        "optimizer": "muon",
+        "path": "value_wdl_head.w1",
+        "shape": [
+          1024,
+          2048
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.float32",
+        "learning_rate_kind": "main",
+        "optimizer": "nesterov_adamw",
+        "path": "value_wdl_head.b1",
+        "shape": [
+          2048
+        ]
+      },
+      {
+        "apply_weight_decay": true,
+        "dtype": "torch.float32",
+        "learning_rate_kind": "main",
+        "optimizer": "nesterov_adamw",
+        "path": "value_wdl_head.value_w",
+        "shape": [
+          2048,
+          1
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.float32",
+        "learning_rate_kind": "main",
+        "optimizer": "nesterov_adamw",
+        "path": "value_wdl_head.value_b",
+        "shape": [
+          1
+        ]
+      },
+      {
+        "apply_weight_decay": true,
+        "dtype": "torch.float32",
+        "learning_rate_kind": "main",
+        "optimizer": "nesterov_adamw",
+        "path": "value_wdl_head.wdl_w",
+        "shape": [
+          2048,
+          3
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.float32",
+        "learning_rate_kind": "main",
+        "optimizer": "nesterov_adamw",
+        "path": "value_wdl_head.wdl_b",
+        "shape": [
+          3
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.float32",
+        "learning_rate_kind": "main",
+        "optimizer": "nesterov_adamw",
+        "path": "action_embed.embedding",
+        "shape": [
+          1859,
+          256
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.float32",
+        "learning_rate_kind": "main",
+        "optimizer": "nesterov_adamw",
+        "path": "dfm_blocks.attn_norm_scale",
+        "shape": [
+          4,
+          256
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.float32",
+        "learning_rate_kind": "main",
+        "optimizer": "nesterov_adamw",
+        "path": "dfm_blocks.mlp_norm_scale",
+        "shape": [
+          4,
+          256
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.float32",
+        "learning_rate_kind": "main",
+        "optimizer": "nesterov_adamw",
+        "path": "dfm_blocks.w_qkv",
+        "shape": [
+          4,
+          256,
+          768
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.float32",
+        "learning_rate_kind": "main",
+        "optimizer": "nesterov_adamw",
+        "path": "dfm_blocks.b_qkv",
+        "shape": [
+          4,
+          768
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.float32",
+        "learning_rate_kind": "main",
+        "optimizer": "nesterov_adamw",
+        "path": "dfm_blocks.w_o",
+        "shape": [
+          4,
+          256,
+          256
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.float32",
+        "learning_rate_kind": "main",
+        "optimizer": "nesterov_adamw",
+        "path": "dfm_blocks.b_o",
+        "shape": [
+          4,
+          256
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.float32",
+        "learning_rate_kind": "main",
+        "optimizer": "nesterov_adamw",
+        "path": "dfm_blocks.w_gate_up",
+        "shape": [
+          4,
+          256,
+          1536
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.float32",
+        "learning_rate_kind": "main",
+        "optimizer": "nesterov_adamw",
+        "path": "dfm_blocks.b_gate_up",
+        "shape": [
+          4,
+          1536
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.float32",
+        "learning_rate_kind": "main",
+        "optimizer": "nesterov_adamw",
+        "path": "dfm_blocks.w_down",
+        "shape": [
+          4,
+          768,
+          256
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.float32",
+        "learning_rate_kind": "main",
+        "optimizer": "nesterov_adamw",
+        "path": "dfm_blocks.b_down",
+        "shape": [
+          4,
+          256
+        ]
+      },
+      {
+        "apply_weight_decay": false,
+        "dtype": "torch.float32",
+        "learning_rate_kind": "main",
+        "optimizer": "nesterov_adamw",
+        "path": "dfm_out_norm.scale",
+        "shape": [
+          256
+        ]
+      }
+    ],
+    "main_leaf_count": 51,
+    "muon_leaf_count": 96,
+    "schema_version": "torch-muon-adamw-partition-v1"
+  },
+  "parent_contract_sha256": "664d8fd6a64d3cd2269a29d8418391860f4a1173423353d4a6c5aba061be46c0",
+  "parent_state_sha256": "fd6b25fe0ab8281208dd1be6819290193b963e5d13f2326d3fb5a57079b5e384",
+  "protocol": {
+    "amendment": {
+      "all_attempts_declared_round_bound_dollars": "4.40328000",
+      "change": "Canonicalize the mounted data path before exact parent provenance comparison. No scientific, input-content, checkpoint or selection changes.",
+      "failure_receipt": "../attempt01_failure.json",
+      "prior_specification": "../preregister.json"
+    },
+    "arms": [
+      {
+        "compile": "fresh",
+        "dtype": "bfloat16",
+        "id": "production_control",
+        "norm": "eager",
+        "prefetch": "step-start",
+        "remat_bt4": true,
+        "storage": "checkpoint",
+        "timeout": 480
+      },
+      {
+        "compile": "fresh",
+        "dtype": "bfloat16",
+        "id": "fp32_storage_control",
+        "norm": "eager",
+        "prefetch": "step-start",
+        "remat_bt4": true,
+        "storage": "float32",
+        "timeout": 480
+      },
+      {
+        "compile": "fresh-bt4",
+        "dtype": "bfloat16",
+        "id": "bf16_compiled",
+        "norm": "eager",
+        "prefetch": "step-start",
+        "remat_bt4": true,
+        "storage": "float32",
+        "timeout": 800
+      },
+      {
+        "compile": "fresh-bt4",
+        "dtype": "float16",
+        "id": "fp16_compiled",
+        "norm": "eager",
+        "prefetch": "step-start",
+        "remat_bt4": true,
+        "storage": "float32",
+        "timeout": 800
+      },
+      {
+        "compile": "fresh",
+        "dtype": "bfloat16",
+        "id": "fused_norm",
+        "norm": "eager-fused-backward",
+        "prefetch": "step-start",
+        "remat_bt4": true,
+        "storage": "checkpoint",
+        "timeout": 480
+      },
+      {
+        "compile": "fresh",
+        "dtype": "bfloat16",
+        "id": "delayed_prefetch",
+        "norm": "eager",
+        "prefetch": "after-forward",
+        "remat_bt4": true,
+        "storage": "checkpoint",
+        "timeout": 480
+      },
+      {
+        "compile": "fresh",
+        "dtype": "bfloat16",
+        "id": "fused_delayed",
+        "norm": "eager-fused-backward",
+        "prefetch": "after-forward",
+        "remat_bt4": true,
+        "storage": "checkpoint",
+        "timeout": 480
+      },
+      {
+        "compile": "fresh-bt4",
+        "dtype": "float16",
+        "id": "fp16_less_remat",
+        "norm": "eager",
+        "prefetch": "step-start",
+        "remat_bt4": false,
+        "storage": "float32",
+        "timeout": 800
+      }
+    ],
+    "attempt": 2,
+    "batch_size": 1024,
+    "budget": {
+      "max_concurrent_gpus": 1,
+      "outer_dollars": "42.50",
+      "retries": 0,
+      "round_cap_dollars": "4.50",
+      "stop_dollars": "34.00"
+    },
+    "checkpoint_manifest_sha256": "695cc76658fddcfaf4a6ec7fe574cd98575d664c573b2997003d22c74dcea6dc",
+    "checkpoint_relative": "runs/hh002-hero-history-0fe540075e5361da6c25/checkpoints/update00000500",
+    "checkpoint_state_sha256": "fd6b25fe0ab8281208dd1be6819290193b963e5d13f2326d3fb5a57079b5e384",
+    "created_utc": "2026-10-03",
+    "dataset_manifest_sha256": "d9003b1d3a5bcebfc5ece8f4f5340d25369bab53fcda68c4bf9965c45019278e",
+    "dataset_relative": "datasets/hh002-history-368190a511fd6d5dd51c",
+    "declared_bounds": {
+      "preflight": "0.10550400",
+      "sweep": "4.19227200"
+    },
+    "design": {
+      "controls": "All arms retain the existing Hero cosine schedule and identical stochastic training choices for updates 501-550. The selected production WSD continuation is separate. This window is still within warmup and cannot validate long stable-phase behavior.",
+      "measured": "Thirty warm full optimizer steps 511-540. Include prefetch wait, transfers, full forward/backward, unscale, optimizer, CPU scalar copies and logging. Exclude restore/first10, checkpoint545, validation and hash audit. No batch reduction on OOM. Record failures, cold timing, memory, full train traces.",
+      "parent": "Strictly restore the immutable HH-002 update-500 model plus all optimizer moments/counters before any explicit fork; source training files stay unchanged.",
+      "recovery": "Every successful main arm writes container-ephemeral full recovery545. Selected candidate (or baseline if none qualifies) reruns545->550 in a fresh process, reusing only its compiler cache and checkpoint. Require identical model+moment/counter hashes at550; report common validation equality separately. No unguarded production resume.",
+      "retention": "Compact JSON, metrics, logs, input hashes and checkpoint manifests only on results Volume (<50MiB). Full disposable checkpoints and compiler caches remain container-ephemeral (<40GiB anticipated) and are not selected production assets. Preserve all existing Volume assets.",
+      "rounding": "At update501 report per-backbone-group fraction of nonzero-gradient coordinates whose stored weights remain unchanged. This is only a proxy: nonzero gradients do not prove a nonzero intended update was rounded away. Excluded from measured timing.",
+      "runtime": "Production TF32/high and reduced-precision GEMM reductions enabled for all arms. Each arm fresh process and cold compiler cache, same single L40S, fixed order. No-CUDA-Graphs initial round.",
+      "scope": "No full epoch, search games, runtime adoption, new GPU provider, budget increase or automatic retry.",
+      "selection": "Fastest mean end-to-end candidate with >=1.10x baseline speed and neither DFM root nor native legal validation CE >1.02x baseline. All losses must be finite and all50 optimizer updates succeed. Speed and CE gates are screening heuristics, not significance or promotion claims.",
+      "storage": "The FP32-storage control changes parameter, gradient and optimizer-moment storage together. Its BF16 compute/fresh compile/reduction settings match production. BF16 compiled versus FP32-storage control isolates BT4 compilation. FP16 versus BF16 compiled isolates compute dtype plus fixed FP16 scale128; do not call FP32 storage an optimizer-neutral optimization.",
+      "validation": "All successful arms receive the same fixed 1024-position eager BF16 full-horizon validation at550; parent500 validation once on production control. Diagnostic and already-exposed validation only, no strength claim."
+    },
+    "experiment_id": "GPU-003",
+    "frozen_training_sources": {
+      "chess_dfm_jax/__init__.py": "704df17a42a3fe66f331b6d09e0c2eda5900468e976201ff174409741cb163be",
+      "chess_dfm_jax/analysis/__init__.py": "8cb4ebde6d8df81778acc4e2bd2990e3524d4073a66e14046a56273a12d960e1",
+      "chess_dfm_jax/analysis/bt4_theory.py": "2abcb476c0b8c65f83adee4f661f80491bee55fc53a816e68be9dba715e51db7",
+      "chess_dfm_jax/analysis/jepa_theory.py": "30f00f7191cf27f48f6f222d4f8bc1811f4e37ee9d465475827e6d7e01dd0d45",
+      "chess_dfm_jax/analysis/profile_targets.py": "aaef6528d9e926c574082204667ecd26fdf9d957b9a3e561421da6efe198291d",
+      "chess_dfm_jax/analysis/roofline.py": "57be21590288fc36458360a3ebebbc50eee4d1f331ec58a67ce96094a51f8735",
+      "chess_dfm_jax/data/__init__.py": "7397b6d9eb107d512e215f11f81f7234fc375967a0d9735aa808f3bb856c47f8",
+      "chess_dfm_jax/data/gcs_cache.py": "d8d0d133b3891f73f8f8b757397a152df825c1c80ed8af9aa0588d6ef232e958",
+      "chess_dfm_jax/data/grain_loader.py": "322a2ba71ae2a8c0263248439fddc52c6381a6fcae322f4e63cfbac70b33a8b3",
+      "chess_dfm_jax/data/lc0_sequential.py": "edb92aa09d21fc144257fce2da37f733c240cdfca030ebb53f9b1d5952820531",
+      "chess_dfm_jax/data/leela.py": "5c4befddab7424419302b01a8be6adc6a1809aba8831de2bdc34986a6269c1bb",
+      "chess_dfm_jax/data/pgn.py": "fd012046857514473007a08bfa6c06376c98254b8f87a18a47bb53c779c685d4",
+      "chess_dfm_jax/data/trajectory.py": "f1b3b9cc33abb62b0bc149a7892178d83ce2f7a093f7008f87a3ba6b340e2c12",
+      "chess_dfm_jax/data/trajectory_v3.py": "4a6b0df1671759346c5380b14dfabcff0af6fce43560c46e036ab2a3ec1a0ea1",
+      "chess_dfm_jax/encoding.py": "34620f4064526fb577d8e2fcaa3deecfe18d5907deeee8924902f5dca87d20bd",
+      "chess_dfm_jax/nnx_bt4.py": "b316f214fab577fb7fe5d174f6df2fd30e0d867f595735dc0cc1d71bb1b376fc",
+      "chess_dfm_jax/paths.py": "63b7f0da08b9c646b1911e44adbe96858b98091bd2bc244a80611d8274f177c0",
+      "chess_dfm_jax/policy.py": "700cb8310442564418cd7a431682f7f06e609309a3f585c968ecbc2fa1656bc2",
+      "chess_dfm_jax/policy_attn_map.txt": "788c74f0f006ccefb7924ed808503175252b8fdb7f0efeb858285d907be4961c",
+      "chess_dfm_jax/policy_moves.txt": "eb2483cf8f53bb000dd6ca437c4ecd383b391bb5fee468b6c30f7f167fb591c5",
+      "chess_dfm_jax/proto/__init__.py": "e0313d7ac20b859ae0a365759a54b1729001a37d8783bcc17eef76462c06ab4b",
+      "chess_dfm_jax/proto/net_pb2.py": "548ba30fc623ce6f36bc22b7225040ff2fddc936b96a51cb368ef2552c7f1353",
+      "chess_dfm_jax/reference_bt4.py": "6c55a0d7b50fe59863e21dc4ebe04c4ffaf159b4afa3d621e00101ca206fcacd",
+      "chess_dfm_jax/tracking/__init__.py": "3b609c34b9456f23e8e0578a25843b8cc2ea9ff6b83f0891cb3cba60b1fff66a",
+      "chess_dfm_jax/tracking/wandb.py": "4d08f26cbf41616afbda25e1e7d11c975effe39c060fa9d257669ff890d8c872",
+      "chess_dfm_jax/training/__init__.py": "816916e38ef463d0fac5d7270636a82b2e9d4fc0dc2bbd35d62916427517af79",
+      "chess_dfm_jax/training/checkpoints.py": "a0b482bff22a17d9846a7c9db5a473e96935f1ae021add4c3f64f1b295a40571",
+      "chess_dfm_jax/training/dfm.py": "49d95936e54f2f6f07555529650d3753755d0c41bb089cb4ea3c4ffdfa50fb6a",
+      "chess_dfm_jax/training/jepa.py": "7d1bf784759e759da00476c16dc1a010529f2ab8277abedeb7bca016b988e140",
+      "chess_dfm_jax/training/joint_latent_sasa.py": "2b7f627ba77c8c09cf3a81fa07636545f74de6766c36f97cb2a2a75fce4e276c",
+      "chess_dfm_jax/training/tpu_jobs.py": "87548963df47de5c997d16edf1693236744cf795d86be4a123e9812f311d5c94",
+      "chess_dfm_jax/weights.py": "5089cf10ef8979b981d7b7ba4fb2c7fddd92d49c500bf95d220091a025f231dd",
+      "research/arena_history_trust.py": "646c0e0381a391ddb529b03a0886f67addab0b1546870966dfba38c0acbe7a9d",
+      "research/hero_history_batches.py": "785a9e9d0b29e2850fcbc6d8e042df417d8b6869f48100b155c02f1d17600849",
+      "research/hero_history_data.py": "b3c2daeb9406f024667da690c40ed88d545441e1630dc7aba7d9bc39d5c1fa53",
+      "research/hero_history_subset_data.py": "71a298dbae7df9fd10b5191ae9ef41746614a2a818ee840bf06005697f8606c6",
+      "research/input_contract.py": "260f3166e8ebe61ad27e78080874d899dfe1f40bc500274fd2f7fd8e0d124ff7",
+      "research/prepare.py": "5118ef8e4690fa33d6da296b036c91a42ae5d83a7a50598024801df3710c45f9",
+      "research/train_torch.py": "71f3e2e43180196fef5c5a1abb0d950fa5be3b2fc1473c4f0231ad4771f52794"
+    },
+    "parent_update": 500,
+    "prior_conservative_floor_dollars": "26.47215455",
+    "question": "Which production-batch runtime optimizations are faster, finite and recoverable before Runpod?",
+    "recovery_update": 545,
+    "seed": 0,
+    "source_sha256": "15882528f9e48e8789ce5948392b15b1c7534394f87a9d4646a0a3bcd4256f33",
+    "terminal_update": 550,
+    "timing_updates": [
+      511,
+      540
+    ],
+    "tooling_commit": "4c69d2ea7572eb9aad4c951258a1a0f6b2eafa2c",
+    "training_cursors": [
+      500,
+      501,
+      502,
+      503,
+      504,
+      505,
+      506,
+      507,
+      508,
+      509,
+      510,
+      511,
+      512,
+      513,
+      514,
+      515,
+      516,
+      517,
+      518,
+      519,
+      520,
+      521,
+      522,
+      523,
+      524,
+      525,
+      526,
+      527,
+      528,
+      529,
+      530,
+      531,
+      532,
+      533,
+      534,
+      535,
+      536,
+      537,
+      538,
+      539,
+      540,
+      541,
+      542,
+      543,
+      544,
+      545,
+      546,
+      547,
+      548,
+      549
+    ],
+    "validation": {
+      "batch_size": 64,
+      "batches": 16,
+      "compute": "common eager BF16, same root/native legal CE and full-horizon auxiliary metrics",
+      "seed": 2026072501,
+      "selection": "first 1024 of the HH-002 common 8128-position pool",
+      "split": "validation"
+    },
+    "warmup_updates": [
+      501,
+      510
+    ]
+  },
+  "rng": "trainer materialize_step_choices(seed=0, update=absolute pre-step counter); no global RNG consumption",
+  "schema_version": "gpu003-disposable-fork-v1",
+  "seed": 0,
+  "transition": "Strict parent restore, then declared runtime/storage fork. Original cosine schedule retained for this systems comparison."
+}

@@ -15,7 +15,7 @@
     {
       "id": "GPU-003",
       "name": "Pre-Runpod full-batch runtime and checkpoint recovery tests",
-      "status": "gpu_sweep_running",
+      "status": "complete_compilation_validated_less_remat_oom_no_production_adoption",
       "depends_on": ["GPU-001", "GPU-002", "HH-002"],
       "specification": "research/analysis/gpu003_pre_runpod_20261003/preregister.json",
       "execution_specification": "research/analysis/gpu003_pre_runpod_20261003/attempt02/preregister.json",
@@ -23,6 +23,9 @@
       "execution_record": "research/analysis/gpu003_pre_runpod_20261003/attempt02/sweep_run.json",
       "app_id": "ap-MoN11J6haO0ZrQMNHbU2O1",
       "call_id": "fc-01M41B2BHSPVPPFQ9RC1ZY8NPZ",
+      "results": "research/analysis/gpu003_pre_runpod_20261003/attempt02/summary_verified.json",
+      "decision": "research/analysis/gpu003_pre_runpod_20261003/decision.json",
+      "result_summary": "Seven arms completed 50 updates with common validation. Compiled BF16/FP16 ~1.97s/update versus production 2.85s (~31% less time); BF16 fresh-process replay bitwise exact. Fused normalization 2.44s, delayed prefetch 2.81s, combined 2.42s. No-BT4-checkpointing FP16 OOMed. No production runtime change; GPU stopped. Observed spend increase ~$1.50, declared all-attempts bound $4.40328.",
       "scope": "Eight disposable L40S batch-1024 arms, matched 50-update training and 1024-position common validation; selected candidate fresh-process recovery check. All declared attempts including corrected CPU preflight total $4.403280 within $4.50 round cap. No production runtime or WSD continuation launched."
     },
     {

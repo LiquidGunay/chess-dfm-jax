@@ -1,0 +1,858 @@
+{
+  "all_arms_complete": false,
+  "arms": {
+    "bf16_compiled": {
+      "final_state_hashes": {
+        "examples_seen": 563200,
+        "model": "01cd00f4e7bbfca444d9e0d5506085fb824724624cc8250584d3a25eb95a928f",
+        "optimizer": "844552706a45b7b0bdf45d1d5f454332ee001b76d938abf5ec30f53a6e826c20",
+        "update": 550
+      },
+      "first_update_seconds": 140.67956103699998,
+      "speedup_vs_production": 1.4499550839701012,
+      "timing": {
+        "examples_per_second": 520.1647321678471,
+        "mean_backward_seconds": 1.0396556905110677,
+        "mean_forward_seconds": 0.7841767008463542,
+        "mean_optimizer_seconds": 0.1350402150472005,
+        "mean_seconds": 1.9686071290000011,
+        "measured_updates": [
+          511,
+          540
+        ],
+        "median_seconds": 1.9659886204999566,
+        "peak_allocated_bytes": 20235633152,
+        "scope": "Full batch 1024, CPU prepare/prefetch wait, transfer, forward/backward, unscale, optimizer, scalar/log writes. Excludes cold ten updates, checkpoint/hash audits, validation and initialization.",
+        "updates": 30
+      },
+      "unchanged_weight_proxy": {
+        "encoder.embedding": {
+          "fraction": 0.0016491907424151333,
+          "nonzero_gradient_coordinates": 21124300,
+          "unchanged_with_nonzero_gradient": 34838
+        },
+        "encoder.layers.0": {
+          "fraction": 0.023794037206531452,
+          "nonzero_gradient_coordinates": 11078700,
+          "unchanged_with_nonzero_gradient": 263607
+        },
+        "encoder.layers.1": {
+          "fraction": 0.013873876297166906,
+          "nonzero_gradient_coordinates": 11078663,
+          "unchanged_with_nonzero_gradient": 153704
+        },
+        "encoder.layers.10": {
+          "fraction": 0.007352390969019946,
+          "nonzero_gradient_coordinates": 11078709,
+          "unchanged_with_nonzero_gradient": 81455
+        },
+        "encoder.layers.11": {
+          "fraction": 0.009093296963274605,
+          "nonzero_gradient_coordinates": 11078710,
+          "unchanged_with_nonzero_gradient": 100742
+        },
+        "encoder.layers.12": {
+          "fraction": 0.010082745961449726,
+          "nonzero_gradient_coordinates": 11078728,
+          "unchanged_with_nonzero_gradient": 111704
+        },
+        "encoder.layers.13": {
+          "fraction": 0.015727909911557418,
+          "nonzero_gradient_coordinates": 11078713,
+          "unchanged_with_nonzero_gradient": 174245
+        },
+        "encoder.layers.14": {
+          "fraction": 0.05320794884286772,
+          "nonzero_gradient_coordinates": 11069737,
+          "unchanged_with_nonzero_gradient": 588998
+        },
+        "encoder.layers.2": {
+          "fraction": 0.012469087015616845,
+          "nonzero_gradient_coordinates": 11078678,
+          "unchanged_with_nonzero_gradient": 138141
+        },
+        "encoder.layers.3": {
+          "fraction": 0.010504694337747884,
+          "nonzero_gradient_coordinates": 11078666,
+          "unchanged_with_nonzero_gradient": 116378
+        },
+        "encoder.layers.4": {
+          "fraction": 0.009721307299605169,
+          "nonzero_gradient_coordinates": 11078654,
+          "unchanged_with_nonzero_gradient": 107699
+        },
+        "encoder.layers.5": {
+          "fraction": 0.008996281058164914,
+          "nonzero_gradient_coordinates": 11078689,
+          "unchanged_with_nonzero_gradient": 99667
+        },
+        "encoder.layers.6": {
+          "fraction": 0.008701031087889747,
+          "nonzero_gradient_coordinates": 11078687,
+          "unchanged_with_nonzero_gradient": 96396
+        },
+        "encoder.layers.7": {
+          "fraction": 0.00928240845630055,
+          "nonzero_gradient_coordinates": 11078698,
+          "unchanged_with_nonzero_gradient": 102837
+        },
+        "encoder.layers.8": {
+          "fraction": 0.00792991726991253,
+          "nonzero_gradient_coordinates": 11078678,
+          "unchanged_with_nonzero_gradient": 87853
+        },
+        "encoder.layers.9": {
+          "fraction": 0.00842853500080109,
+          "nonzero_gradient_coordinates": 11078675,
+          "unchanged_with_nonzero_gradient": 93377
+        },
+        "encoder.policy_head": {
+          "fraction": 0.22924225854579408,
+          "nonzero_gradient_coordinates": 3152896,
+          "unchanged_with_nonzero_gradient": 722777
+        }
+      },
+      "validation": {
+        "base_policy_root_legal_conditional_ce": 1.4654115363955498,
+        "loss": 7.861792683601379,
+        "root_legal_conditional_ce": 2.0238493159413338
+      }
+    },
+    "delayed_prefetch": {
+      "final_state_hashes": {
+        "examples_seen": 563200,
+        "model": "408bc53446a36eed72eb18752c1f500e716d9f3a129007a90f8cad73cbac0d17",
+        "optimizer": "01fc70f824ef9ff795e921e7c3c292912c73b8de287e9d6c7d5f8167a2c1e190",
+        "update": 550
+      },
+      "first_update_seconds": 120.04635061199997,
+      "speedup_vs_production": 1.0152926121852728,
+      "timing": {
+        "examples_per_second": 364.23156518980585,
+        "mean_backward_seconds": 1.731515478515625,
+        "mean_forward_seconds": 0.9282385111490885,
+        "mean_optimizer_seconds": 0.14187671915690103,
+        "mean_seconds": 2.8113982912666566,
+        "measured_updates": [
+          511,
+          540
+        ],
+        "median_seconds": 2.8149307534999934,
+        "peak_allocated_bytes": 20696977920,
+        "scope": "Full batch 1024, CPU prepare/prefetch wait, transfer, forward/backward, unscale, optimizer, scalar/log writes. Excludes cold ten updates, checkpoint/hash audits, validation and initialization.",
+        "updates": 30
+      },
+      "unchanged_weight_proxy": {
+        "encoder.embedding": {
+          "fraction": 0.9749845651821754,
+          "nonzero_gradient_coordinates": 21124318,
+          "unchanged_with_nonzero_gradient": 20595884
+        },
+        "encoder.layers.0": {
+          "fraction": 0.9982459126958624,
+          "nonzero_gradient_coordinates": 11078696,
+          "unchanged_with_nonzero_gradient": 11059263
+        },
+        "encoder.layers.1": {
+          "fraction": 0.9980218746454336,
+          "nonzero_gradient_coordinates": 11078671,
+          "unchanged_with_nonzero_gradient": 11056756
+        },
+        "encoder.layers.10": {
+          "fraction": 0.9973201637526264,
+          "nonzero_gradient_coordinates": 11078662,
+          "unchanged_with_nonzero_gradient": 11048973
+        },
+        "encoder.layers.11": {
+          "fraction": 0.997228556947766,
+          "nonzero_gradient_coordinates": 11078705,
+          "unchanged_with_nonzero_gradient": 11048001
+        },
+        "encoder.layers.12": {
+          "fraction": 0.9973345197563717,
+          "nonzero_gradient_coordinates": 11078679,
+          "unchanged_with_nonzero_gradient": 11049149
+        },
+        "encoder.layers.13": {
+          "fraction": 0.9976731043301165,
+          "nonzero_gradient_coordinates": 11078709,
+          "unchanged_with_nonzero_gradient": 11052930
+        },
+        "encoder.layers.14": {
+          "fraction": 0.9979169188574898,
+          "nonzero_gradient_coordinates": 11069660,
+          "unchanged_with_nonzero_gradient": 11046601
+        },
+        "encoder.layers.2": {
+          "fraction": 0.9980057167527465,
+          "nonzero_gradient_coordinates": 11078667,
+          "unchanged_with_nonzero_gradient": 11056573
+        },
+        "encoder.layers.3": {
+          "fraction": 0.9977360090104711,
+          "nonzero_gradient_coordinates": 11078666,
+          "unchanged_with_nonzero_gradient": 11053584
+        },
+        "encoder.layers.4": {
+          "fraction": 0.9974872478142495,
+          "nonzero_gradient_coordinates": 11078689,
+          "unchanged_with_nonzero_gradient": 11050851
+        },
+        "encoder.layers.5": {
+          "fraction": 0.9973202530486995,
+          "nonzero_gradient_coordinates": 11078658,
+          "unchanged_with_nonzero_gradient": 11048970
+        },
+        "encoder.layers.6": {
+          "fraction": 0.997298597090197,
+          "nonzero_gradient_coordinates": 11078688,
+          "unchanged_with_nonzero_gradient": 11048760
+        },
+        "encoder.layers.7": {
+          "fraction": 0.9973385746458278,
+          "nonzero_gradient_coordinates": 11078650,
+          "unchanged_with_nonzero_gradient": 11049165
+        },
+        "encoder.layers.8": {
+          "fraction": 0.9972510292731308,
+          "nonzero_gradient_coordinates": 11078692,
+          "unchanged_with_nonzero_gradient": 11048237
+        },
+        "encoder.layers.9": {
+          "fraction": 0.9973096036390666,
+          "nonzero_gradient_coordinates": 11078665,
+          "unchanged_with_nonzero_gradient": 11048859
+        },
+        "encoder.policy_head": {
+          "fraction": 0.9991068528743099,
+          "nonzero_gradient_coordinates": 3152896,
+          "unchanged_with_nonzero_gradient": 3150080
+        }
+      },
+      "validation": {
+        "base_policy_root_legal_conditional_ce": 1.463932454586029,
+        "loss": 7.95541176199913,
+        "root_legal_conditional_ce": 2.0207472294569016
+      }
+    },
+    "fp16_compiled": {
+      "final_state_hashes": {
+        "examples_seen": 563200,
+        "model": "1fd24034974a6f09880b6d9ede4a988cce055847d964ab1e855baae02f5fa4d6",
+        "optimizer": "0391d7ec8278e291f4e5792f349995a7b4540095979348264bfd8d437b594d82",
+        "update": 550
+      },
+      "first_update_seconds": 141.38271558299994,
+      "speedup_vs_production": 1.4481450074466982,
+      "timing": {
+        "examples_per_second": 519.5153755219701,
+        "mean_backward_seconds": 1.0206473673502605,
+        "mean_forward_seconds": 0.8065571716308594,
+        "mean_optimizer_seconds": 0.13487060089111327,
+        "mean_seconds": 1.9710677455333476,
+        "measured_updates": [
+          511,
+          540
+        ],
+        "median_seconds": 1.978179791499997,
+        "peak_allocated_bytes": 20235633152,
+        "scope": "Full batch 1024, CPU prepare/prefetch wait, transfer, forward/backward, unscale, optimizer, scalar/log writes. Excludes cold ten updates, checkpoint/hash audits, validation and initialization.",
+        "updates": 30
+      },
+      "unchanged_weight_proxy": {
+        "encoder.embedding": {
+          "fraction": 0.0014220995040236022,
+          "nonzero_gradient_coordinates": 21098383,
+          "unchanged_with_nonzero_gradient": 30004
+        },
+        "encoder.layers.0": {
+          "fraction": 0.023851317866824095,
+          "nonzero_gradient_coordinates": 11078130,
+          "unchanged_with_nonzero_gradient": 264228
+        },
+        "encoder.layers.1": {
+          "fraction": 0.013831657158609664,
+          "nonzero_gradient_coordinates": 11078499,
+          "unchanged_with_nonzero_gradient": 153234
+        },
+        "encoder.layers.10": {
+          "fraction": 0.00734349202922052,
+          "nonzero_gradient_coordinates": 11078653,
+          "unchanged_with_nonzero_gradient": 81356
+        },
+        "encoder.layers.11": {
+          "fraction": 0.009039006644401019,
+          "nonzero_gradient_coordinates": 11078651,
+          "unchanged_with_nonzero_gradient": 100140
+        },
+        "encoder.layers.12": {
+          "fraction": 0.010076928888504968,
+          "nonzero_gradient_coordinates": 11078673,
+          "unchanged_with_nonzero_gradient": 111639
+        },
+        "encoder.layers.13": {
+          "fraction": 0.015676956489675983,
+          "nonzero_gradient_coordinates": 11078681,
+          "unchanged_with_nonzero_gradient": 173680
+        },
+        "encoder.layers.14": {
+          "fraction": 0.05315024423728322,
+          "nonzero_gradient_coordinates": 11074681,
+          "unchanged_with_nonzero_gradient": 588622
+        },
+        "encoder.layers.2": {
+          "fraction": 0.012444136421811842,
+          "nonzero_gradient_coordinates": 11078551,
+          "unchanged_with_nonzero_gradient": 137863
+        },
+        "encoder.layers.3": {
+          "fraction": 0.010562074630368458,
+          "nonzero_gradient_coordinates": 11078600,
+          "unchanged_with_nonzero_gradient": 117013
+        },
+        "encoder.layers.4": {
+          "fraction": 0.00974415104517285,
+          "nonzero_gradient_coordinates": 11078646,
+          "unchanged_with_nonzero_gradient": 107952
+        },
+        "encoder.layers.5": {
+          "fraction": 0.00906229140631241,
+          "nonzero_gradient_coordinates": 11078655,
+          "unchanged_with_nonzero_gradient": 100398
+        },
+        "encoder.layers.6": {
+          "fraction": 0.00871621228844938,
+          "nonzero_gradient_coordinates": 11078436,
+          "unchanged_with_nonzero_gradient": 96562
+        },
+        "encoder.layers.7": {
+          "fraction": 0.009236136723419028,
+          "nonzero_gradient_coordinates": 11078658,
+          "unchanged_with_nonzero_gradient": 102324
+        },
+        "encoder.layers.8": {
+          "fraction": 0.007927041002518264,
+          "nonzero_gradient_coordinates": 11078661,
+          "unchanged_with_nonzero_gradient": 87821
+        },
+        "encoder.layers.9": {
+          "fraction": 0.008457542411373534,
+          "nonzero_gradient_coordinates": 11078632,
+          "unchanged_with_nonzero_gradient": 93698
+        },
+        "encoder.policy_head": {
+          "fraction": 0.2086805864378828,
+          "nonzero_gradient_coordinates": 3069447,
+          "unchanged_with_nonzero_gradient": 640534
+        }
+      },
+      "validation": {
+        "base_policy_root_legal_conditional_ce": 1.4603176563978195,
+        "loss": 7.853415787220001,
+        "root_legal_conditional_ce": 2.007343605160713
+      }
+    },
+    "fp32_storage_control": {
+      "final_state_hashes": {
+        "examples_seen": 563200,
+        "model": "390cc0883ced7033e85b3df1e19a1d4596b6601c63835398104c216435305145",
+        "optimizer": "b95117cad47dd97a18bf0ed5b548c63cff20788d706b766d6349c3b85da1d52b",
+        "update": 550
+      },
+      "first_update_seconds": 118.66667278599999,
+      "speedup_vs_production": 0.9742155975847926,
+      "timing": {
+        "examples_per_second": 349.49537471457444,
+        "mean_backward_seconds": 1.46064970703125,
+        "mean_forward_seconds": 1.3227684204101562,
+        "mean_optimizer_seconds": 0.13663859354654947,
+        "mean_seconds": 2.9299386317666705,
+        "measured_updates": [
+          511,
+          540
+        ],
+        "median_seconds": 2.9374018410000247,
+        "peak_allocated_bytes": 21683555328,
+        "scope": "Full batch 1024, CPU prepare/prefetch wait, transfer, forward/backward, unscale, optimizer, scalar/log writes. Excludes cold ten updates, checkpoint/hash audits, validation and initialization.",
+        "updates": 30
+      },
+      "unchanged_weight_proxy": {
+        "encoder.embedding": {
+          "fraction": 0.0016673167849818882,
+          "nonzero_gradient_coordinates": 21124360,
+          "unchanged_with_nonzero_gradient": 35221
+        },
+        "encoder.layers.0": {
+          "fraction": 0.023895570475468884,
+          "nonzero_gradient_coordinates": 11078706,
+          "unchanged_with_nonzero_gradient": 264732
+        },
+        "encoder.layers.1": {
+          "fraction": 0.013848048407963661,
+          "nonzero_gradient_coordinates": 11078673,
+          "unchanged_with_nonzero_gradient": 153418
+        },
+        "encoder.layers.10": {
+          "fraction": 0.007335443994882059,
+          "nonzero_gradient_coordinates": 11078675,
+          "unchanged_with_nonzero_gradient": 81267
+        },
+        "encoder.layers.11": {
+          "fraction": 0.009079142028525033,
+          "nonzero_gradient_coordinates": 11078690,
+          "unchanged_with_nonzero_gradient": 100585
+        },
+        "encoder.layers.12": {
+          "fraction": 0.010069869246320912,
+          "nonzero_gradient_coordinates": 11078694,
+          "unchanged_with_nonzero_gradient": 111561
+        },
+        "encoder.layers.13": {
+          "fraction": 0.01572210808394187,
+          "nonzero_gradient_coordinates": 11078667,
+          "unchanged_with_nonzero_gradient": 174180
+        },
+        "encoder.layers.14": {
+          "fraction": 0.05324297137509141,
+          "nonzero_gradient_coordinates": 11069555,
+          "unchanged_with_nonzero_gradient": 589376
+        },
+        "encoder.layers.2": {
+          "fraction": 0.01249039483338844,
+          "nonzero_gradient_coordinates": 11078673,
+          "unchanged_with_nonzero_gradient": 138377
+        },
+        "encoder.layers.3": {
+          "fraction": 0.010564938909910171,
+          "nonzero_gradient_coordinates": 11078720,
+          "unchanged_with_nonzero_gradient": 117046
+        },
+        "encoder.layers.4": {
+          "fraction": 0.009764154341047306,
+          "nonzero_gradient_coordinates": 11078686,
+          "unchanged_with_nonzero_gradient": 108174
+        },
+        "encoder.layers.5": {
+          "fraction": 0.008988544369592812,
+          "nonzero_gradient_coordinates": 11078657,
+          "unchanged_with_nonzero_gradient": 99581
+        },
+        "encoder.layers.6": {
+          "fraction": 0.008707534768805059,
+          "nonzero_gradient_coordinates": 11078681,
+          "unchanged_with_nonzero_gradient": 96468
+        },
+        "encoder.layers.7": {
+          "fraction": 0.009229893536014592,
+          "nonzero_gradient_coordinates": 11078676,
+          "unchanged_with_nonzero_gradient": 102255
+        },
+        "encoder.layers.8": {
+          "fraction": 0.007882524675313422,
+          "nonzero_gradient_coordinates": 11078684,
+          "unchanged_with_nonzero_gradient": 87328
+        },
+        "encoder.layers.9": {
+          "fraction": 0.00840741410027951,
+          "nonzero_gradient_coordinates": 11078674,
+          "unchanged_with_nonzero_gradient": 93143
+        },
+        "encoder.policy_head": {
+          "fraction": 0.22925113927005522,
+          "nonzero_gradient_coordinates": 3152896,
+          "unchanged_with_nonzero_gradient": 722805
+        }
+      },
+      "validation": {
+        "base_policy_root_legal_conditional_ce": 1.4654815271496773,
+        "loss": 7.8692120015621185,
+        "root_legal_conditional_ce": 2.012187898159027
+      }
+    },
+    "fused_delayed": {
+      "final_state_hashes": {
+        "examples_seen": 563200,
+        "model": "8beba50f10687906f4181c480b940c667621088ca8f6c8bca882316662e901d4",
+        "optimizer": "c81c4e2abbc90d0603c67a2957316a054dc6e211e0f412c5c443e1a728d42463",
+        "update": 550
+      },
+      "first_update_seconds": 120.19339437099984,
+      "speedup_vs_production": 1.1796806651441487,
+      "timing": {
+        "examples_per_second": 423.20502477092396,
+        "mean_backward_seconds": 1.3664843587239583,
+        "mean_forward_seconds": 0.9015010945638021,
+        "mean_optimizer_seconds": 0.14193794962565104,
+        "mean_seconds": 2.4196310063999817,
+        "measured_updates": [
+          511,
+          540
+        ],
+        "median_seconds": 2.4199075309999216,
+        "peak_allocated_bytes": 18481919488,
+        "scope": "Full batch 1024, CPU prepare/prefetch wait, transfer, forward/backward, unscale, optimizer, scalar/log writes. Excludes cold ten updates, checkpoint/hash audits, validation and initialization.",
+        "updates": 30
+      },
+      "unchanged_weight_proxy": {
+        "encoder.embedding": {
+          "fraction": 0.9749816100772091,
+          "nonzero_gradient_coordinates": 21124341,
+          "unchanged_with_nonzero_gradient": 20595844
+        },
+        "encoder.layers.0": {
+          "fraction": 0.9982466298962916,
+          "nonzero_gradient_coordinates": 11078665,
+          "unchanged_with_nonzero_gradient": 11059240
+        },
+        "encoder.layers.1": {
+          "fraction": 0.998020338557129,
+          "nonzero_gradient_coordinates": 11078662,
+          "unchanged_with_nonzero_gradient": 11056730
+        },
+        "encoder.layers.10": {
+          "fraction": 0.9973173701815226,
+          "nonzero_gradient_coordinates": 11078681,
+          "unchanged_with_nonzero_gradient": 11048961
+        },
+        "encoder.layers.11": {
+          "fraction": 0.9972311680842093,
+          "nonzero_gradient_coordinates": 11078679,
+          "unchanged_with_nonzero_gradient": 11048004
+        },
+        "encoder.layers.12": {
+          "fraction": 0.9973346988398339,
+          "nonzero_gradient_coordinates": 11078673,
+          "unchanged_with_nonzero_gradient": 11049145
+        },
+        "encoder.layers.13": {
+          "fraction": 0.9976734695830181,
+          "nonzero_gradient_coordinates": 11078729,
+          "unchanged_with_nonzero_gradient": 11052954
+        },
+        "encoder.layers.14": {
+          "fraction": 0.9979169073784877,
+          "nonzero_gradient_coordinates": 11069599,
+          "unchanged_with_nonzero_gradient": 11046540
+        },
+        "encoder.layers.2": {
+          "fraction": 0.9980064408406851,
+          "nonzero_gradient_coordinates": 11078678,
+          "unchanged_with_nonzero_gradient": 11056592
+        },
+        "encoder.layers.3": {
+          "fraction": 0.9977356483649479,
+          "nonzero_gradient_coordinates": 11078668,
+          "unchanged_with_nonzero_gradient": 11053582
+        },
+        "encoder.layers.4": {
+          "fraction": 0.997488683641295,
+          "nonzero_gradient_coordinates": 11078652,
+          "unchanged_with_nonzero_gradient": 11050830
+        },
+        "encoder.layers.5": {
+          "fraction": 0.9973207922121905,
+          "nonzero_gradient_coordinates": 11078648,
+          "unchanged_with_nonzero_gradient": 11048966
+        },
+        "encoder.layers.6": {
+          "fraction": 0.9973005828849048,
+          "nonzero_gradient_coordinates": 11078688,
+          "unchanged_with_nonzero_gradient": 11048782
+        },
+        "encoder.layers.7": {
+          "fraction": 0.997338577528586,
+          "nonzero_gradient_coordinates": 11078662,
+          "unchanged_with_nonzero_gradient": 11049177
+        },
+        "encoder.layers.8": {
+          "fraction": 0.997249042734208,
+          "nonzero_gradient_coordinates": 11078689,
+          "unchanged_with_nonzero_gradient": 11048212
+        },
+        "encoder.layers.9": {
+          "fraction": 0.9973118604712878,
+          "nonzero_gradient_coordinates": 11078666,
+          "unchanged_with_nonzero_gradient": 11048885
+        },
+        "encoder.policy_head": {
+          "fraction": 0.9991068528743099,
+          "nonzero_gradient_coordinates": 3152896,
+          "unchanged_with_nonzero_gradient": 3150080
+        }
+      },
+      "validation": {
+        "base_policy_root_legal_conditional_ce": 1.4651092812418938,
+        "loss": 7.972492307424545,
+        "root_legal_conditional_ce": 2.005483202636242
+      }
+    },
+    "fused_norm": {
+      "final_state_hashes": {
+        "examples_seen": 563200,
+        "model": "b0d9b8f62f30053b21e1bae1f3469f7e535edfe72ac120c1c31f9e095b87174b",
+        "optimizer": "be5d7a0002ecdd41f3f9ff1b565d35a796ab94b9c878afae3e388a33c00c5f85",
+        "update": 550
+      },
+      "first_update_seconds": 120.50007439299998,
+      "speedup_vs_production": 1.1711415218004926,
+      "timing": {
+        "examples_per_second": 420.1416462846513,
+        "mean_backward_seconds": 1.0556909749348957,
+        "mean_forward_seconds": 1.2299142700195314,
+        "mean_optimizer_seconds": 0.14195110219319662,
+        "mean_seconds": 2.4372732602333524,
+        "measured_updates": [
+          511,
+          540
+        ],
+        "median_seconds": 2.4360829089999925,
+        "peak_allocated_bytes": 18481919488,
+        "scope": "Full batch 1024, CPU prepare/prefetch wait, transfer, forward/backward, unscale, optimizer, scalar/log writes. Excludes cold ten updates, checkpoint/hash audits, validation and initialization.",
+        "updates": 30
+      },
+      "unchanged_weight_proxy": {
+        "encoder.embedding": {
+          "fraction": 0.9749756086707684,
+          "nonzero_gradient_coordinates": 21124310,
+          "unchanged_with_nonzero_gradient": 20595687
+        },
+        "encoder.layers.0": {
+          "fraction": 0.9982458162573316,
+          "nonzero_gradient_coordinates": 11078657,
+          "unchanged_with_nonzero_gradient": 11059223
+        },
+        "encoder.layers.1": {
+          "fraction": 0.9980210572720865,
+          "nonzero_gradient_coordinates": 11078643,
+          "unchanged_with_nonzero_gradient": 11056719
+        },
+        "encoder.layers.10": {
+          "fraction": 0.9973205318209525,
+          "nonzero_gradient_coordinates": 11078691,
+          "unchanged_with_nonzero_gradient": 11049006
+        },
+        "encoder.layers.11": {
+          "fraction": 0.9972245811056327,
+          "nonzero_gradient_coordinates": 11078688,
+          "unchanged_with_nonzero_gradient": 11047940
+        },
+        "encoder.layers.12": {
+          "fraction": 0.9973370444894639,
+          "nonzero_gradient_coordinates": 11078668,
+          "unchanged_with_nonzero_gradient": 11049166
+        },
+        "encoder.layers.13": {
+          "fraction": 0.9976726481822844,
+          "nonzero_gradient_coordinates": 11078686,
+          "unchanged_with_nonzero_gradient": 11052902
+        },
+        "encoder.layers.14": {
+          "fraction": 0.997916262027385,
+          "nonzero_gradient_coordinates": 11069530,
+          "unchanged_with_nonzero_gradient": 11046464
+        },
+        "encoder.layers.2": {
+          "fraction": 0.9980039165262695,
+          "nonzero_gradient_coordinates": 11078695,
+          "unchanged_with_nonzero_gradient": 11056581
+        },
+        "encoder.layers.3": {
+          "fraction": 0.9977350214267171,
+          "nonzero_gradient_coordinates": 11078692,
+          "unchanged_with_nonzero_gradient": 11053599
+        },
+        "encoder.layers.4": {
+          "fraction": 0.9974880615451549,
+          "nonzero_gradient_coordinates": 11078695,
+          "unchanged_with_nonzero_gradient": 11050866
+        },
+        "encoder.layers.5": {
+          "fraction": 0.9973234151752873,
+          "nonzero_gradient_coordinates": 11078670,
+          "unchanged_with_nonzero_gradient": 11049017
+        },
+        "encoder.layers.6": {
+          "fraction": 0.9972985919695935,
+          "nonzero_gradient_coordinates": 11078667,
+          "unchanged_with_nonzero_gradient": 11048739
+        },
+        "encoder.layers.7": {
+          "fraction": 0.9973388600894093,
+          "nonzero_gradient_coordinates": 11078711,
+          "unchanged_with_nonzero_gradient": 11049229
+        },
+        "encoder.layers.8": {
+          "fraction": 0.9972506667306935,
+          "nonzero_gradient_coordinates": 11078686,
+          "unchanged_with_nonzero_gradient": 11048227
+        },
+        "encoder.layers.9": {
+          "fraction": 0.9973139394429552,
+          "nonzero_gradient_coordinates": 11078678,
+          "unchanged_with_nonzero_gradient": 11048920
+        },
+        "encoder.policy_head": {
+          "fraction": 0.9991046326932446,
+          "nonzero_gradient_coordinates": 3152896,
+          "unchanged_with_nonzero_gradient": 3150073
+        }
+      },
+      "validation": {
+        "base_policy_root_legal_conditional_ce": 1.4650613814592361,
+        "loss": 7.970975458621979,
+        "root_legal_conditional_ce": 1.9942413866519928
+      }
+    },
+    "production_control": {
+      "final_state_hashes": {
+        "examples_seen": 563200,
+        "model": "90da2ebd8d9ae789c22c4e827312fe826b73aac71a6fd7b28d2778be2cc3dff1",
+        "optimizer": "bd75f0ead06c0e623260670ff3b6ad689c1a3c08edc8f2d459b9a8029b9f0a48",
+        "update": 550
+      },
+      "first_update_seconds": 118.44862591000002,
+      "speedup_vs_production": 1.0,
+      "timing": {
+        "examples_per_second": 358.7454107499603,
+        "mean_backward_seconds": 1.4554406453450521,
+        "mean_forward_seconds": 1.249580078125,
+        "mean_optimizer_seconds": 0.1394763483683268,
+        "mean_seconds": 2.8543919150333363,
+        "measured_updates": [
+          511,
+          540
+        ],
+        "median_seconds": 2.8514901785000006,
+        "peak_allocated_bytes": 20696336896,
+        "scope": "Full batch 1024, CPU prepare/prefetch wait, transfer, forward/backward, unscale, optimizer, scalar/log writes. Excludes cold ten updates, checkpoint/hash audits, validation and initialization.",
+        "updates": 30
+      },
+      "unchanged_weight_proxy": {
+        "encoder.embedding": {
+          "fraction": 0.9749965726746355,
+          "nonzero_gradient_coordinates": 21124344,
+          "unchanged_with_nonzero_gradient": 20596163
+        },
+        "encoder.layers.0": {
+          "fraction": 0.998245553384524,
+          "nonzero_gradient_coordinates": 11078707,
+          "unchanged_with_nonzero_gradient": 11059270
+        },
+        "encoder.layers.1": {
+          "fraction": 0.9980194380663245,
+          "nonzero_gradient_coordinates": 11078674,
+          "unchanged_with_nonzero_gradient": 11056732
+        },
+        "encoder.layers.10": {
+          "fraction": 0.9973201695580144,
+          "nonzero_gradient_coordinates": 11078686,
+          "unchanged_with_nonzero_gradient": 11048997
+        },
+        "encoder.layers.11": {
+          "fraction": 0.9972296383564205,
+          "nonzero_gradient_coordinates": 11078698,
+          "unchanged_with_nonzero_gradient": 11048006
+        },
+        "encoder.layers.12": {
+          "fraction": 0.9973336166403263,
+          "nonzero_gradient_coordinates": 11078677,
+          "unchanged_with_nonzero_gradient": 11049137
+        },
+        "encoder.layers.13": {
+          "fraction": 0.9976745456030697,
+          "nonzero_gradient_coordinates": 11078695,
+          "unchanged_with_nonzero_gradient": 11052932
+        },
+        "encoder.layers.14": {
+          "fraction": 0.9979168187346833,
+          "nonzero_gradient_coordinates": 11069608,
+          "unchanged_with_nonzero_gradient": 11046548
+        },
+        "encoder.layers.2": {
+          "fraction": 0.9980049054611504,
+          "nonzero_gradient_coordinates": 11078673,
+          "unchanged_with_nonzero_gradient": 11056570
+        },
+        "encoder.layers.3": {
+          "fraction": 0.997737457107951,
+          "nonzero_gradient_coordinates": 11078685,
+          "unchanged_with_nonzero_gradient": 11053619
+        },
+        "encoder.layers.4": {
+          "fraction": 0.9974884269058665,
+          "nonzero_gradient_coordinates": 11078714,
+          "unchanged_with_nonzero_gradient": 11050889
+        },
+        "encoder.layers.5": {
+          "fraction": 0.9973208827177393,
+          "nonzero_gradient_coordinates": 11078649,
+          "unchanged_with_nonzero_gradient": 11048968
+        },
+        "encoder.layers.6": {
+          "fraction": 0.9973003982156343,
+          "nonzero_gradient_coordinates": 11078671,
+          "unchanged_with_nonzero_gradient": 11048763
+        },
+        "encoder.layers.7": {
+          "fraction": 0.9973389402643946,
+          "nonzero_gradient_coordinates": 11078669,
+          "unchanged_with_nonzero_gradient": 11049188
+        },
+        "encoder.layers.8": {
+          "fraction": 0.9972473150580423,
+          "nonzero_gradient_coordinates": 11078638,
+          "unchanged_with_nonzero_gradient": 11048142
+        },
+        "encoder.layers.9": {
+          "fraction": 0.9973092503567883,
+          "nonzero_gradient_coordinates": 11078697,
+          "unchanged_with_nonzero_gradient": 11048887
+        },
+        "encoder.policy_head": {
+          "fraction": 0.9991068528743099,
+          "nonzero_gradient_coordinates": 3152896,
+          "unchanged_with_nonzero_gradient": 3150080
+        }
+      },
+      "validation": {
+        "base_policy_root_legal_conditional_ce": 1.4653269425034523,
+        "loss": 7.982634276151657,
+        "root_legal_conditional_ce": 2.0238778591156006
+      }
+    }
+  },
+  "candidate": "bf16_compiled",
+  "experiment_id": "GPU-003",
+  "failures": [
+    {
+      "arm": "fp16_less_remat",
+      "elapsed_seconds": 153.09913811499996,
+      "process_status": "failed",
+      "result_status": null,
+      "returncode": 1
+    }
+  ],
+  "replay_diagnostics": {
+    "interpretation": "Descriptive differences only; do not replace the frozen bitwise replay criterion with a post-hoc tolerance. Without a repeated uninterrupted control, nondeterministic execution and checkpoint-specific effects are not separated.",
+    "max_abs_training_metric_difference": {
+      "base_policy_root_legal_conditional_ce": 0.0,
+      "bt4_learning_rate": 0.0,
+      "gradient_global_norm": 0.0,
+      "learning_rate": 0.0,
+      "loss": 0.0,
+      "root_legal_conditional_ce": 0.0
+    },
+    "validation_abs_difference": {
+      "base_policy_root_legal_conditional_ce": 0.0,
+      "loss": 0.0,
+      "root_legal_conditional_ce": 0.0
+    }
+  },
+  "resume": {
+    "completed": true,
+    "state_bitwise_equal": true,
+    "target": "bf16_compiled",
+    "validation_equal": true
+  },
+  "scope": "Fifty-update warmup-prefix diagnostic; common teacher-forced/full-horizon validation, not playing strength or stable-phase WSD validation. FP32-storage arms also change optimizer moment storage."
+}

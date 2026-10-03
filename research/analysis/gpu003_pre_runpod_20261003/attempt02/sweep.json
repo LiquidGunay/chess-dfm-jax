@@ -1,0 +1,79 @@
+{
+  "all_arms_complete": false,
+  "candidate": "bf16_compiled",
+  "cuda_graphs": "Deferred: first establish full-step gains and safe resume. No capture implementation or automatic runtime adoption.",
+  "declared_cost": "4.19227200",
+  "git_commit": "8a7deb96db9ec04781fb117dce5a5ba46261e523",
+  "output_relative": "benchmarks/gpu003-3341603e891e1dbac9d7",
+  "records": [
+    {
+      "arm": "production_control",
+      "elapsed_seconds": 288.72320670399995,
+      "process_status": "complete",
+      "result_status": "complete",
+      "returncode": 0
+    },
+    {
+      "arm": "fp32_storage_control",
+      "elapsed_seconds": 286.659122078,
+      "process_status": "complete",
+      "result_status": "complete",
+      "returncode": 0
+    },
+    {
+      "arm": "bf16_compiled",
+      "elapsed_seconds": 262.001492493,
+      "process_status": "complete",
+      "result_status": "complete",
+      "returncode": 0
+    },
+    {
+      "arm": "fp16_compiled",
+      "elapsed_seconds": 262.72351083399997,
+      "process_status": "complete",
+      "result_status": "complete",
+      "returncode": 0
+    },
+    {
+      "arm": "fused_norm",
+      "elapsed_seconds": 262.92282019000004,
+      "process_status": "complete",
+      "result_status": "complete",
+      "returncode": 0
+    },
+    {
+      "arm": "delayed_prefetch",
+      "elapsed_seconds": 280.77175677699984,
+      "process_status": "complete",
+      "result_status": "complete",
+      "returncode": 0
+    },
+    {
+      "arm": "fused_delayed",
+      "elapsed_seconds": 260.5247906660002,
+      "process_status": "complete",
+      "result_status": "complete",
+      "returncode": 0
+    },
+    {
+      "arm": "fp16_less_remat",
+      "elapsed_seconds": 153.09913811499996,
+      "process_status": "failed",
+      "result_status": null,
+      "returncode": 1
+    },
+    {
+      "arm": "bf16_compiled_resume",
+      "elapsed_seconds": 64.92360806199986,
+      "process_status": "complete",
+      "result_status": "complete",
+      "returncode": 0
+    }
+  ],
+  "resume": {
+    "completed": true,
+    "state_bitwise_equal": true,
+    "target": "bf16_compiled",
+    "validation_equal": true
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "observed_utc": "2026-10-03 17:39:53 UTC",
+  "billing_summary": {
+    "metered_cost": "10.07728095",
+    "billed_cost": "0E-8",
+    "adjustments": {
+      "network_egress_allowance": "0E-8",
+      "reservation_adjustment": "-0E-8",
+      "credits": "-7.81000000",
+      "plan_cost": "0E-8",
+      "free_storage": "-2.26728095"
+    },
+    "metered_cost_breakdown": {
+      "ephemeral_apps": "7.81126330",
+      "llm_tokens": "0E-8",
+      "volumes": "2.26728095"
+    }
+  },
+  "active_gpu_containers": 0,
+  "app_state": "stopped",
+  "app_id": "ap-MoN11J6haO0ZrQMNHbU2O1",
+  "source": "Authenticated Modal CLI billing summary and app/container listings",
+  "note": "Metered compute before credits; provider-waived storage excluded. Readouts can lag and are not per-app invoices."
+}

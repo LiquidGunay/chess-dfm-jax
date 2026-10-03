@@ -60,6 +60,34 @@ teacher-forced/composite training objective. Data, results and receipts:
 
 ## 1. Complete the selected epoch
 
+GPU-003 pre-Runpod tests are complete (2026-10-03). At the real batch size
+of 1,024, compiled BF16/FP16 with FP32 parameter and optimizer-moment storage
+take about 1.97s per full update versus 2.85s for production (31% less time).
+The matched FP32-storage/fresh-only control takes 2.93s, isolating a ~33%
+time reduction from BT4 compilation. Both compiled arms remain finite for
+50 matched updates and have comparable common validation losses; FP16 has
+slightly lower root/native CE in this one short run. The selected compiled
+BF16 arm reproduced model and optimizer/counter hashes and validation
+exactly after a fresh-process update-545 to 550 recovery. FP16's own recovery
+has not separately been tested.
+
+Fused normalization backward reduces time by ~15%; delayed prefetch adds
+little here. Disabling BT4 activation checkpointing OOMed during backward
+at batch 1,024, so retain it on this L40S configuration. Seven arms completed,
+one OOMed, and the GPU is stopped. The first-step unchanged-weight diagnostic
+is 99.5% among nonzero-gradient backbone coordinates in original storage
+versus 1.6% in FP32 storage; this is a proxy, not proof of rounded-away
+nonzero optimizer updates. FP32 storage is a scientific optimizer-state
+change, not a transparent implementation optimization.
+
+No runtime was automatically adopted. These tests cover the warmup prefix,
+not sustained WSD training or chess strength; validation is a common exposed
+1,024-position, full-horizon/teacher-forced pool. CUDA Graphs remain deferred.
+All declared attempts cost at most $4.40328 (including one CPU-only path-fix
+replacement); the observed compute increase is about $1.50, subject to
+billing lag. Verified evidence and the decision are indexed under
+`research/analysis/gpu003_pre_runpod_20261003/`.
+
 HH-003 schedule decision (2026-10-03): the user selected **warmup-stable-decay
 (WSD)** for the upcoming history continuation so that training can be
 extended. Keep the Hero peak rates (fresh modules `5e-4`, BT4 `5e-4 / 30`)

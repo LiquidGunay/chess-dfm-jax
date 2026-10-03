@@ -1,0 +1,57 @@
+{
+  "experiment_id": "GPU-003",
+  "status": "complete_compilation_validated_less_remat_oom_no_production_adoption",
+  "completed_utc": "2026-10-03",
+  "app_id": "ap-MoN11J6haO0ZrQMNHbU2O1",
+  "call_id": "fc-01M41B2BHSPVPPFQ9RC1ZY8NPZ",
+  "results": "attempt02/summary_verified.json",
+  "artifact_receipt": "attempt02/completion_verified.json",
+  "protocol_completed": true,
+  "successful_training_arms": 7,
+  "failed_training_arms": 1,
+  "successful_fresh_process_replays": 1,
+  "findings": [
+    "At batch 1024, compiled BF16/FP16 with FP32 parameter/gradient/moment storage take 1.96861/1.97107 seconds per full update versus production control 2.85439 seconds: about 1.45x throughput or 31% less time. This includes the optimizer and input pipeline, unlike GPU-002's small-batch forward/backward diagnostic.",
+    "The matched FP32-storage BF16 fresh-only control takes 2.92994 seconds; adding BT4 compilation alone reduces this to 1.96861 seconds, about 33% less time. Changing storage alone is slightly slower here.",
+    "Compiled FP16 and BF16 are effectively tied in speed in this single allocation. FP16 has slightly lower common validation root/native CE (2.00734/1.46032) than BF16 (2.02385/1.46541) or production (2.02388/1.46533). These are one short run's descriptive losses, not strength or statistical superiority results.",
+    "Fused normalization backward takes 2.43727 seconds (14.6% less time); delayed prefetch alone takes 2.81140 seconds (1.5% less time); together 2.41963 seconds (15.2% less time). These arms retain original parameter/optimizer storage. Delaying prefetch shifts time from forward to backward and adds little net benefit here.",
+    "Disabling BT4 activation checkpointing in the compiled FP16 arm OOMed in the first backward pass: 41.34 GiB allocated, 2.22 GiB reserved/unallocated, failed 1 GiB allocation. Keep BT4 checkpointing on this L40S configuration; no batch-size reduction or allocator retry was performed.",
+    "The frozen fastest-eligible rule selected compiled BF16, whose tiny speed advantage over FP16 should not be interpreted as a meaningful ranking. Its separate-process update-545 to 550 replay reproduced exact model and optimizer/counter hashes and identical common validation. FP16's own fresh-process replay was not separately tested.",
+    "At the first step, 99.5088% of nonzero-gradient backbone coordinates retain unchanged stored values in production versus 1.6149% in FP32 storage. This is a quantization diagnostic proxy, not proof that every such coordinate had a nonzero intended update rounded away."
+  ],
+  "recommendation": {
+    "runtime": "Use regional BT4 compilation and retain BT4 activation checkpointing as the supported optimization direction. Treat FP32 parameter/moment storage as an explicit optimizer-state fork, never a transparent runtime change.",
+    "precision": "Compiled BF16 has the completed strict recovery proof. FP16 is effectively tied on speed and promising numerically/validation-wise, but requires its own recovery and deployment-policy checks before production selection.",
+    "deferred": "No CUDA Graphs, optimizer fusion, full epoch, search matches, Runpod rental, or automatic adoption. WSD child-contract support and verified expanded history data remain prerequisites to the requested long continuation."
+  },
+  "limitations": [
+    "All arms use the same already-materialized 50-update prefix, updates 501-550; this is within warmup. It does not test sustained peak LR under WSD or long-run stability.",
+    "One L40S allocation, fixed arm order, thirty warm measured updates 511-540; cold restore/compile, checkpoint I/O and validation excluded from warm timings and retained separately in records.",
+    "The harness uses existing training kernels/optimizer but separate orchestration and input/RNG hashing. No claim of bitwise equality to historical production runs; the first baseline loss differs from GPU-001 by about 2.34e-5.",
+    "Common validation is the first 1024 rows of HH-002's exposed 8128-position pool with eager BF16 compute for every arm; this is full-horizon/teacher-forced validation, not inference-aligned play or Elo.",
+    "FP32 storage promotes inherited BF16 values and moments exactly; it cannot recover precision already lost during the first 500 updates. It also changes subsequent optimizer arithmetic and cumulative learning."
+  ],
+  "verification": {
+    "local_tests_passed": 115,
+    "optional_jax_test_skipped": 1,
+    "cpu_full_input_hashes_and_history_audits_passed": true,
+    "all_successful_arm_input_rng_hashes_match": true,
+    "selection_and_timings_independently_recomputed": true,
+    "compiled_bf16_fresh_process_replay_bitwise_equal": true,
+    "gpu_containers_remaining": 0
+  },
+  "budget": {
+    "first_cpu_attempt_bound_dollars": "0.10550400",
+    "corrected_cpu_attempt_bound_dollars": "0.10550400",
+    "gpu_sweep_bound_dollars": "4.19227200",
+    "all_attempts_bound_dollars": "4.40328000",
+    "authorized_round_cap_dollars": "4.50",
+    "prior_conservative_floor_dollars": "26.36665055",
+    "new_conservative_floor_dollars": "30.76993055",
+    "observed_compute_before_dollars": "6.31000000",
+    "observed_compute_after_dollars": "7.81000000",
+    "observed_increase_dollars": "1.50000000",
+    "note": "Workspace metered total minus only validated provider-waived storage, before credits. Billing may lag/revise; this is not an exact per-app invoice. All declared attempts including failed CPU preflight are reserved."
+  },
+  "retention": "Compact evidence on the results Volume and in this worktree. Disposable model/optimizer recovery states and compiler caches were container-ephemeral, not selected production assets. No original models, data, or pre-decay recovery assets were deleted or modified."
+}

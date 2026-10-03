@@ -1,0 +1,7 @@
+{
+  "arm": "fp16_less_remat",
+  "elapsed_seconds": 153.09913811499996,
+  "process_status": "failed",
+  "result_status": null,
+  "returncode": 1
+}

@@ -1,0 +1,33 @@
+{
+  "arm": {
+    "compile": "fresh-bt4",
+    "dtype": "float16",
+    "id": "fp16_less_remat",
+    "norm": "eager",
+    "prefetch": "step-start",
+    "remat_bt4": false,
+    "storage": "float32",
+    "timeout": 800
+  },
+  "cache_policy": "Fresh process and empty cache for each arm; resumed process reuses same-arm compiler cache",
+  "command": [
+    "/opt/conda/bin/python",
+    "-m",
+    "research.pre_runpod_benchmark",
+    "--protocol",
+    "/tmp/gpu003-sweep-tdwgm6az/protocol.json",
+    "--preflight",
+    "/workspace/training-results/benchmarks/gpu003-3341603e891e1dbac9d7/preflight.json",
+    "--arm",
+    "fp16_less_remat",
+    "--data",
+    "/workspace/training-results/datasets/hh002-history-368190a511fd6d5dd51c",
+    "--checkpoint",
+    "/workspace/training-results/runs/hh002-hero-history-0fe540075e5361da6c25/checkpoints/update00000500",
+    "--scratch",
+    "/tmp/gpu003-sweep-tdwgm6az",
+    "--output",
+    "/workspace/training-results/benchmarks/gpu003-3341603e891e1dbac9d7/fp16_less_remat"
+  ],
+  "resume": false
+}
