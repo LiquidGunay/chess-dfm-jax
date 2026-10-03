@@ -8,7 +8,6 @@ import subprocess
 import modal
 
 from research.infra import modal_train_app as base
-from research.hero_history_data import build_dataset, sha256, write_json_once
 from research.interpretability.remote_cost import ModalJobSpec, estimate_modal_job, enforce_modal_budget
 
 app = modal.App("chess-dfm-hero-history-stage")
@@ -24,7 +23,7 @@ image = base.gpu_image.add_local_file(
 
 
 def source_identity(root):
-    values = {name: sha256(Path(root)/name) for name in PATHS}
+    values = {name: base._sha256_file(Path(root)/name) for name in PATHS}
     return hashlib.sha256(json.dumps(values,sort_keys=True).encode()).hexdigest()
 
 
@@ -41,6 +40,7 @@ def cost_spec():
                        base.TRAINING_RESULT_MOUNT: base.training_result_volume,
                        **{path:volume.with_mount_options(read_only=True) for path,volume in extra_volumes.items()}})
 def rebuild(expected_source, git_commit):
+    from research.hero_history_data import build_dataset, sha256, write_json_once
     if source_identity("/root") != expected_source:
         raise ValueError("CPU reconstruction source mismatch")
     output = RESULT_ROOT/"datasets"/f"hero1-history-{expected_source[:20]}"
