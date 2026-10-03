@@ -12,6 +12,18 @@ evidence of superiority to normally configured BT4. Historical checkpoint
 input contracts stay immutable; changing their evaluation inputs requires
 an explicitly labelled ablation, not a silent correction.
 
+EV-005 closeout: on the same 128 color-reversed opening pairs, Hero1 p1
+scored 18.75% against full-history raw BT4 versus 93.75% against current-only
+raw BT4. Its native policy scored 41.80% against full-history raw BT4, with a
+pair-aware 95% interval of 29.79%-53.80%. All 768 main games completed with
+zero faults, cap draws or legal-codec coverage misses. This rejects the
+interpretation that the old Hero1 p1 advantage established superiority to
+normally configured BT4. No searched-strength or SOTA claim is supported.
+Both smoke runs and all main matches are complete; evidence is recorded in
+`research/analysis/ev005_full_history_bt4_20261003/`. The old Hero1-relative
+representation-strength proposal remains unfrozen and requires recalibration
+against this full-history anchor before architecture selection.
+
 ## 1. Complete the selected epoch
 
 Run PA-001 with the already selected Proposal A recipe. Preserve the frozen

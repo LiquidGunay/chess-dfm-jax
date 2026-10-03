@@ -1,0 +1,14 @@
+{
+  "evaluation_source_commit": "50b37e9",
+  "experiment_id": "EV-005",
+  "future_training": "Full-history sequential inputs by default; legacy zero-history training requires explicit reproduction override. Existing weights and historical evidence unchanged.",
+  "input_plane_parity_positions": 3225,
+  "legacy_jax_suite": "Not run: Torch-only environment lacks JAX; maintained Torch and data/gameplay tests passed.",
+  "native_policy": "inconclusive",
+  "post_launch_training_guard_commit": "5df1516",
+  "primary": "inferior_on_development",
+  "scope": "Fixed-size development comparisons, no absolute Elo or SOTA claim; no native-LC0 forward-parity test was added.",
+  "source_note": "All GPU jobs used the frozen source hash. Current-position training-audit hardening was committed only after all jobs were submitted; it changed no arena inputs or inference.",
+  "status": "complete",
+  "targeted_tests_passed": 92
+}

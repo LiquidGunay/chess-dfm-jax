@@ -175,7 +175,46 @@ def report():
     print(json.dumps(result, indent=2))
 
 
+def closeout():
+    from research.interpretability.remote_cost import budget_usage_from_summary
+    receipt = json.loads((DEST / "runs.json").read_text())
+    if len(receipt["runs"]) != 5 or any(r["status"] != "complete" for r in receipt["runs"].values()):
+        raise RuntimeError("All five frozen runs must complete before closeout")
+    def cli(*args):
+        completed = subprocess.run(["/root/.local/bin/modal", *args], text=True,
+                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+        return json.loads(completed.stdout)
+    usage = cli("billing", "summary", "--for", "this month", "--json")
+    apps = cli("app", "list", "--env", "chess-dfm-research", "--json")
+    our_ids = {run["app_id"] for run in receipt["runs"].values()}
+    active = [app for app in apps if app["app_id"] in our_ids and app["state"] != "stopped"]
+    if active:
+        raise RuntimeError("Completed experiment still has active apps")
+    write_once(DEST / "closeout_usage.json", {
+        "collected_utc": datetime.now(UTC).isoformat(), "provider_summary": usage,
+        "budget_usage_before_credits_excluding_waived_storage": str(budget_usage_from_summary(usage)),
+        "apps": [app for app in apps if app["app_id"] in our_ids], "active_experiment_apps": 0,
+        "note": "Provider meter can lag or revise. Launch ledger retained a conservative historical floor and full attempt reservations.",
+    })
+    results = json.loads((DEST / "development_summary.json").read_text())
+    def verdict(row):
+        ci = row["interval"]
+        return "inferior_on_development" if ci["score_upper"] < .5 else (
+            "superior_on_development" if ci["score_lower"] > .5 else "inconclusive")
+    write_once(DEST / "decision.json", {
+        "experiment_id": "EV-005", "status": "complete",
+        "primary": verdict(results["rows"][0]), "native_policy": verdict(results["rows"][1]),
+        "input_plane_parity_positions": 3225, "targeted_tests_passed": 92,
+        "evaluation_source_commit": "50b37e9", "post_launch_training_guard_commit": "5df1516",
+        "source_note": "All GPU jobs used the frozen source hash. Current-position training-audit hardening was committed only after all jobs were submitted; it changed no arena inputs or inference.",
+        "legacy_jax_suite": "Not run: Torch-only environment lacks JAX; maintained Torch and data/gameplay tests passed.",
+        "scope": "Fixed-size development comparisons, no absolute Elo or SOTA claim; no native-LC0 forward-parity test was added.",
+        "future_training": "Full-history sequential inputs by default; legacy zero-history training requires explicit reproduction override. Existing weights and historical evidence unchanged.",
+    })
+    print(json.dumps({"status": "complete", "usage": usage, "active_experiment_apps": 0}))
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=["preflight", "freeze", "report"])
-    {"preflight": preflight, "freeze": freeze, "report": report}[parser.parse_args().action]()
+    parser.add_argument("action", choices=["preflight", "freeze", "report", "closeout"])
+    {"preflight": preflight, "freeze": freeze, "report": report, "closeout": closeout}[parser.parse_args().action]()

@@ -1,0 +1,64 @@
+{
+  "active_experiment_apps": 0,
+  "apps": [
+    {
+      "app_id": "ap-PrR7lcy3xABBeGw4aCbfvl",
+      "created_at": "2026-10-03 05:52:34+00:00",
+      "description": "chess-dfm-torch-arena",
+      "state": "stopped",
+      "stopped_at": "2026-10-03 06:00:17+00:00",
+      "tasks": "0"
+    },
+    {
+      "app_id": "ap-E1gzNMaUkAVOVElLQxKb8M",
+      "created_at": "2026-10-03 05:53:19+00:00",
+      "description": "chess-dfm-torch-arena",
+      "state": "stopped",
+      "stopped_at": "2026-10-03 06:00:13+00:00",
+      "tasks": "0"
+    },
+    {
+      "app_id": "ap-UPcjhnE7hhzz5wTUS45844",
+      "created_at": "2026-10-03 05:53:42+00:00",
+      "description": "chess-dfm-torch-arena",
+      "state": "stopped",
+      "stopped_at": "2026-10-03 05:58:05+00:00",
+      "tasks": "0"
+    },
+    {
+      "app_id": "ap-Snym44rBmmOjLq8k0m2P1z",
+      "created_at": "2026-10-03 05:46:46+00:00",
+      "description": "chess-dfm-torch-arena",
+      "state": "stopped",
+      "stopped_at": "2026-10-03 05:50:23+00:00",
+      "tasks": "0"
+    },
+    {
+      "app_id": "ap-9bJxyrlBe3ra5ALiRYWjEA",
+      "created_at": "2026-10-03 05:47:08+00:00",
+      "description": "chess-dfm-torch-arena",
+      "state": "stopped",
+      "stopped_at": "2026-10-03 05:49:59+00:00",
+      "tasks": "0"
+    }
+  ],
+  "budget_usage_before_credits_excluding_waived_storage": "2.29000000",
+  "collected_utc": "2026-10-03T06:03:02.345174+00:00",
+  "note": "Provider meter can lag or revise. Launch ledger retained a conservative historical floor and full attempt reservations.",
+  "provider_summary": {
+    "adjustments": {
+      "credits": "-2.29000000",
+      "free_storage": "-1.51149446",
+      "network_egress_allowance": "0E-8",
+      "plan_cost": "0E-8",
+      "reservation_adjustment": "-0E-8"
+    },
+    "billed_cost": "0E-8",
+    "metered_cost": "3.80149446",
+    "metered_cost_breakdown": {
+      "ephemeral_apps": "2.29104436",
+      "llm_tokens": "0E-8",
+      "volumes": "1.51149446"
+    }
+  }
+}
