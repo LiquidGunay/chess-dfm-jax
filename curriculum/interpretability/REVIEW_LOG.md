@@ -124,3 +124,76 @@ The reviewed implementation commit above was validated from a clean worktree:
 39 course tests passed and the full source/snapshot/static validator passed.
 This audit-only follow-up changes only this identity record; it does not alter
 a notebook, support module, evidence artifact, test, or static edition.
+
+## Round 5 — lens and authored-visual extension
+
+Date: 2026-08-11. Initial independent-critic verdict: block on four major
+scientific/pedagogical findings. Final verdict after the creator response:
+**approve, with no remaining blocker or major**.
+
+| Critic finding | Creator response | Closure evidence |
+| --- | --- | --- |
+| The toy OLS state regression was named too much like the canonical Tuned Lens, whose fitting objective is decoded-distribution KL. | Renamed the executable estimator “OLS affine state translator” in controls, payload keys, prose, and tests; retained Tuned Lens only as the canonical method definition. | Regression test rejects the old estimator key; closure critic verified the distinction. |
+| The eight-position policy-lens curve hid legal renormalization while pre-mask legal mass was small. | Renamed axes, threshold, table, claim card, and snapshot semantics; added a separate four-arm pre-mask legal-mass curve and exact final cards. | Snapshot binds both metrics; all four final parity checks remain exact; no population or mechanism claim was added. |
+| The initial superposition scene animated vector addition without defining interference. | Rebuilt the scene around the explicit decoder cross-term d1·(d1+d2), a numeric 0.57 cross-talk error, and an orthogonal zero-cross-term control; composed a stable poster and retimed every caption cue. | Independent frame/caption review passed; the conclusion now says interference is decoder cross-talk, not addition alone. |
+| J-Lens, local Jacobians, J-space, and BT4 square routing needed sharper boundaries. | Replaced “global” by fixed corpus-average transport; labeled J(h)h noncanonical; separated J-Lens from J-space and its single-token limit; stated that bidirectional BT4 has no temporal square order analogous to t'≥t. | Closure critic approved the method and chess translation with no major. |
+| JL matrices used separate color scales and the on-screen distortion label was ambiguous. | Rerendered both matrices on one shared scale; displayed maximum relative pair distortion as a percentage; retained the warning that JL is not a learned-feature theory. | Shared-scale poster and late theorem-warning frame were inspected; source and output hashes pass. |
+
+The extension remains deliberately asymmetric in evidence strength. Module 11
+derives canonical identity/logit, Tuned, and Jacobian lenses; executes a known
+nonlinear toy with an OLS comparison; reproduces only the retained
+eight-position native-policy-head pilot; and labels the real Raw/Hero chess
+Jacobian transport as proposed work. No historical curve was promoted to a
+fitted J-Lens result.
+
+Final extension gates:
+
+| Gate | Result |
+| --- | --- |
+| Course tests | 42 passed, including all evidence modes, reactive branches, media integrity, and exact static binding |
+| Surrounding Torch interpretability regressions | 14 passed |
+| Strict marimo graph check | passed for all 12 notebooks |
+| Scientific closure review | approved; no blocker or major |
+| Source verification | 18/18 checksum-bound source records reproduced |
+| Authored media | 2/2 source/video/poster/caption records validated; 703,169 bytes including manifest |
+| Static binding | 12/12 HTML editions; 3,428,954 bytes |
+| Snapshot SHA-256 | 67158d4bd43f0effb2af5f9453a406112bf9d590b35b88172287479aa48b9d8c |
+
+Publication decision for the extension: **approve as the network-backed,
+read-only blog edition and executable CPU course**. A true Raw/Hero Jacobian
+lens remains an explicitly future, resource-gated experiment.
+
+## Round 6 — real Raw/Hero activation specimen
+
+Date: 2026-08-11. The initial independent verdict blocked merge on public
+redistribution, a stale post-provenance artifact, Module 07 ordering, and
+imprecise VJP language. The creator's follow-up audit also found that notebooks
+handled an absent local tensor honestly while snapshot validation and one test
+still assumed it existed.
+
+| Finding | Creator response | Closure evidence |
+| --- | --- | --- |
+| The public repository had no established permission to redistribute checkpoint-derived tensors or rendered views. | Kept the 30.8 MB NPZ globally ignored and untracked; made all six tensor-dependent notebooks show explicit absence cards; prohibited staging/pushing both the tensor and rendered real views pending human review. | `git check-ignore` resolves to the global `*.npz` rule; critic approved the local implementation but independently retained the public-publication block. |
+| The first manifest did not close over every scientific source and probe contract. | Bound 33 exact code/data/model/probe sources plus Raw/Hero/layout/corpus/split/boundary/task ABI identities and an independent prediction-level probe recomputation. | Probe recomputation maximum absolute metric difference is `4.218847493575595e-15`; every gallery row is development; test remains untouched. |
+| Provenance edits made the retained artifact, snapshot, and static pages stale. | Rebuilt locally on the GTX 1660 Ti, then regenerated the snapshot and all 12 static editions. | Gallery run `ae6d4eceadc00811d51aa738c7eafd30c5a4e406ece4feedd08123403fbdea04`; data SHA-256 `49f6f35271acaaaae052191f9a758695cb545ec6e9c20d3eb2c52a8cf02a5860`; exact static/source binding passes. |
+| Module 07 taught the controlled superposition mechanism before exposing the real specimen. | Moved the finite-gallery Raw/Hero residual spectrum before the controlled animation and retained the 64-position transcoder result as the aggregate return. | Cold critic verified the real → controlled → aggregate sequence. |
+| “One Jacobian row” overstated what the compact artifact retained. | Described the product everywhere as per-square norm and gradient-times-state reductions of one full endpoint-specific VJP. | Builder, manifest, snapshot, methods matrix, Modules 05/11, and documentation all deny both a fitted J-Lens and a causal-intervention claim. |
+| A clean checkout without the intentionally ignored NPZ could not run the complete validation path. | Made deterministic snapshot construction recover only the expected tensor identity from the integrity-bound manifest; source verification skips only that explicitly release-gated absent file; report fields distinguish materialization and source verification; tensor-heavy assertions skip honestly. | A real filesystem relocation test passed 46 tests with one tensor-only skip and the full validator with `activation_materialized=False` / `activation_sources_verified=False`; the restored NPZ reproduced its exact SHA-256. |
+
+Final local gates:
+
+| Gate | Materialized result | Clean-checkout result |
+| --- | --- | --- |
+| Course tests | 47 passed | 46 passed, 1 honest tensor-only skip |
+| Focused Torch interpretability regressions | 14 passed | not tensor-pack dependent |
+| Full course validator | 12 notebooks; 20 snapshot sources; 8 real positions; 30,830,817-byte gallery; 2 media; 3,955,629-byte exports | same source/snapshot/media gates; 3,635,771-byte absence-card exports |
+| Snapshot SHA-256 | `1b79baf8278f730333b35bc7052f73df6b054dfd6021aec70f175cdb55ec6973` | identical |
+| Ruff / strict marimo / whitespace | passed | same source |
+| Independent closure review | **local implementation approved; no blocker or major** | honest absence behavior approved |
+
+Publication decision: **do not merge or publish the current real-derived
+edition yet**. Human review must clear the Raw/Hero source-model and
+source-position terms, and the repository's missing root license text must be
+resolved. The alternative release path is an absence-card static edition that
+omits rendered real-derived views. No tensor, rendered real view, commit, or
+push was published as part of this round.

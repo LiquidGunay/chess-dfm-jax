@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import base64
+import hashlib
 import html
+from pathlib import Path
 from typing import Iterable, Mapping, Sequence
 
 from .catalog import ModuleSpec
@@ -38,6 +41,9 @@ COURSE_CSS = """
 .ci-highlight-marker{position:absolute;right:.08rem;top:.08rem;border:1px solid #111;border-radius:50%;
   background:#ffeb3b;color:#111;font:800 .68rem/1rem sans-serif;width:1rem;height:1rem}
 .ci-caption{font-size:.8rem;color:var(--muted);margin-top:.35rem}
+.ci-animation{border:1px solid var(--line);border-radius:14px;padding:.8rem;background:#fff}
+.ci-animation video{display:block;width:100%;max-height:480px;background:#111;border-radius:9px}
+.ci-animation summary{cursor:pointer;font-weight:700;color:var(--blue);margin-top:.55rem}
 .ci-visually-hidden{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;
   clip:rect(0,0,0,0);white-space:nowrap;border:0}
 </style>
@@ -107,8 +113,14 @@ def accessible_text_area(mo, *, label: str, **kwargs):
 
     kwargs.setdefault("placeholder", label)
     return mo.ui.text_area(label=label, **kwargs)
+
+
 def module_header(spec: ModuleSpec, *, subtitle: str | None = None) -> str:
-    track = "Core" if spec.track == "core" else "Advanced"
+    track = {
+        "core": "Core",
+        "advanced": "Advanced",
+        "visual essay": "Visual essay",
+    }.get(spec.track, spec.track.title())
     return COURSE_CSS + (
         '<section class="ci-hero">'
         f"<div>{track} · Module {spec.index:02d}</div>"
@@ -153,6 +165,56 @@ def metric_cards(cards: Iterable[tuple[object, str]]) -> str:
             + "</span></div>"
         )
     return '<div class="ci-card-grid">' + "".join(blocks) + "</div>"
+
+
+def animation_card(
+    video_path: str | Path,
+    poster_path: str | Path,
+    captions_path: str | Path,
+    *,
+    title: str,
+    description: str,
+    transcript: str,
+) -> str:
+    """Embed a small authored animation with poster, captions, and transcript."""
+
+    video = Path(video_path)
+    poster = Path(poster_path)
+    captions = Path(captions_path)
+    for path in (video, poster, captions):
+        if not path.is_file():
+            raise FileNotFoundError(path)
+    if video.suffix.lower() != ".mp4" or poster.suffix.lower() != ".png":
+        raise ValueError("Animation media must use MP4 video and PNG poster")
+    if captions.suffix.lower() != ".vtt" or not captions.read_text(
+        encoding="utf-8"
+    ).startswith("WEBVTT"):
+        raise ValueError("Animation captions must be a valid WEBVTT text file")
+    if video.stat().st_size > 5_000_000:
+        raise ValueError("Animation exceeds the 5 MB per-video course budget")
+
+    video_bytes = video.read_bytes()
+    poster_bytes = poster.read_bytes()
+    captions_bytes = captions.read_bytes()
+    digest = hashlib.sha256(video_bytes).hexdigest()
+    video_uri = "data:video/mp4;base64," + base64.b64encode(video_bytes).decode("ascii")
+    poster_uri = "data:image/png;base64," + base64.b64encode(poster_bytes).decode("ascii")
+    captions_uri = "data:text/vtt;base64," + base64.b64encode(captions_bytes).decode("ascii")
+    return COURSE_CSS + (
+        f'<figure class="ci-animation" data-media-sha256="{digest}">'
+        f'<video controls preload="metadata" playsinline poster="{poster_uri}" '
+        f'aria-label="{html.escape(title)}">'
+        f'<source src="{video_uri}" type="video/mp4">'
+        f'<track kind="captions" srclang="en" label="English descriptions" '
+        f'src="{captions_uri}" default>'
+        "Your browser cannot play this animation. The complete transcript follows."
+        "</video>"
+        f'<figcaption><strong>{html.escape(title)}</strong> — '
+        f'{html.escape(description)}</figcaption>'
+        f'<details><summary>Text transcript and static explanation</summary>'
+        f'<p>{html.escape(transcript)}</p></details>'
+        "</figure>"
+    )
 
 
 def table(rows: Sequence[Mapping[str, object]], columns: Sequence[tuple[str, str]]) -> str:

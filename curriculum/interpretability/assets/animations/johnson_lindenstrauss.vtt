@@ -1,0 +1,13 @@
+WEBVTT
+
+00:00.000 --> 00:02.500
+A seven-by-seven distance matrix represents pairwise distances among seven points in 64 dimensions; both matrices use one shared color scale.
+
+00:02.500 --> 00:05.500
+A random projection maps the points into 12 dimensions and a second distance matrix appears.
+
+00:05.500 --> 00:07.500
+The two matrices have similar color structure; a label reports the maximum relative pair distortion as a percentage for this sampled map.
+
+00:07.500 --> 00:09.000
+The animation states that the target dimension scales with log n over epsilon squared and warns that this is not a theory of learned features.

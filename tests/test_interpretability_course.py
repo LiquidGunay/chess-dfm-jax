@@ -6,9 +6,16 @@ from pathlib import Path
 import shutil
 import subprocess
 
+import chess
 import numpy as np
 import pytest
 
+from research.interpretability.course.activations import (
+    absolute_square_values,
+    describe_activation_gallery,
+    load_activation_gallery,
+    load_optional_activation_gallery,
+)
 from research.interpretability.course.build_snapshot import build_snapshot
 from research.interpretability.course.catalog import MODULES, get_module, validate_catalog
 from research.interpretability.course.data import (
@@ -27,6 +34,8 @@ from research.interpretability.course.evidence import (
 from research.interpretability.course.experiments import (
     toy_circuit_truth_table,
     toy_intervention,
+    toy_jl_projection,
+    toy_lens_experiment,
     toy_lookahead_rollout,
     toy_probe_experiment,
     toy_representations,
@@ -50,6 +59,7 @@ from research.interpretability.course.stats import (
 from research.interpretability.course.ui import (
     accessible_text,
     accessible_text_area,
+    animation_card,
     chessboard,
     committed_form,
     line_chart,
@@ -60,13 +70,27 @@ from research.interpretability.course.ui import (
 from research.interpretability.course.validate import (
     embedded_notebook_source,
     notebook_paths,
+    validate_activation_gallery,
     validate_committed_site,
+    validate_media_assets,
     validate_notebook_source,
 )
 
 
 ROOT = Path(__file__).resolve().parents[1]
 SNAPSHOT = ROOT / SNAPSHOT_RELATIVE_PATH
+
+
+def _pretend_activation_pack_is_absent(monkeypatch: pytest.MonkeyPatch) -> None:
+    tensor_path = describe_activation_gallery(ROOT).data_path.resolve()
+    original_is_file = Path.is_file
+
+    def is_file(path: Path) -> bool:
+        if path.resolve() == tensor_path:
+            return False
+        return original_is_file(path)
+
+    monkeypatch.setattr(Path, "is_file", is_file)
 
 
 def _valid_card(**overrides: object) -> ClaimCard:
@@ -119,12 +143,14 @@ def _complete_capstone_gate_args(**overrides: str) -> dict[str, str]:
 
 def test_catalog_is_a_valid_ordered_prerequisite_dag() -> None:
     validate_catalog()
-    assert len(MODULES) == 11
-    assert [module.index for module in MODULES] == list(range(11))
+    assert len(MODULES) == 12
+    assert [module.index for module in MODULES] == list(range(12))
     assert [module.track for module in MODULES[:7]] == ["core"] * 7
-    assert [module.track for module in MODULES[7:]] == ["advanced"] * 4
+    assert [module.track for module in MODULES[7:11]] == ["advanced"] * 4
+    assert MODULES[11].track == "visual essay"
     assert get_module("lookahead_case_study").index == 6
     assert get_module(10).slug == "capstone"
+    assert get_module(11).slug == "policy_and_jacobian_lenses"
 
 
 def test_claim_card_accepts_representation_endpoint() -> None:
@@ -317,6 +343,69 @@ def test_geometry_metrics_expose_rotation_gauge() -> None:
     assert mean_row_cosine(first, rotated) < 0.5
 
 
+def test_jl_toy_reports_every_nonzero_pair_and_is_deterministic() -> None:
+    first = toy_jl_projection(
+        point_count=12,
+        ambient_dim=64,
+        target_dim=10,
+        seed=43,
+    )
+    second = toy_jl_projection(
+        point_count=12,
+        ambient_dim=64,
+        target_dim=10,
+        seed=43,
+    )
+    assert len(first["original_distances"]) == 12 * 11 // 2
+    assert np.all(np.asarray(first["original_distances"]) > 0.0)
+    assert np.all(np.asarray(first["projected_distances"]) > 0.0)
+    assert np.array_equal(
+        first["relative_distortion"],
+        second["relative_distortion"],
+    )
+    assert first["maximum_relative_distortion"] >= first["median_relative_distortion"]
+    with pytest.raises(ValueError, match="dimensions"):
+        toy_jl_projection(ambient_dim=8, target_dim=9)
+
+
+def test_jacobian_lens_corrects_rotation_and_exposes_curvature() -> None:
+    linear = toy_lens_experiment(
+        basis_angle_degrees=55.0,
+        nonlinearity=0.0,
+        perturbation_size=0.2,
+    )
+    assert linear["kl_to_actual"]["identity_logit_lens"] > 0.05
+    assert abs(linear["kl_to_actual"]["average_jacobian_lens"]) < 1e-12
+    assert abs(linear["kl_to_actual"]["local_jacobian_lens"]) < 1e-12
+    assert "ols_affine_state_translator" in linear["kl_to_actual"]
+    assert "tuned_affine_lens" not in linear["kl_to_actual"]
+    assert linear["jacobian_finite_difference_max_error"] < 1e-9
+
+    tiny = toy_lens_experiment(nonlinearity=0.8, perturbation_size=0.05)
+    large = toy_lens_experiment(nonlinearity=0.8, perturbation_size=1.0)
+    tiny_error = np.sqrt(
+        np.mean(
+            (
+                np.asarray(tiny["actual_logit_delta"])
+                - np.asarray(tiny["local_linear_delta"])
+            )
+            ** 2
+        )
+    )
+    large_error = np.sqrt(
+        np.mean(
+            (
+                np.asarray(large["actual_logit_delta"])
+                - np.asarray(large["local_linear_delta"])
+            )
+            ** 2
+        )
+    )
+    assert large_error > tiny_error * 20
+    with pytest.raises(ValueError, match="basis_angle_degrees"):
+        toy_lens_experiment(basis_angle_degrees=181.0)
+
+
 def test_probe_fixture_contains_a_group_leak() -> None:
     experiment = toy_probe_experiment()
 
@@ -431,6 +520,24 @@ def test_tables_and_chessboards_expose_keyboard_and_semantic_cues() -> None:
     assert "Seed / dtype" in provenance and "seed 7; NumPy float64" in provenance
 
 
+def test_animation_assets_are_bound_accessible_and_non_autoplaying() -> None:
+    assert validate_media_assets(ROOT) == 2
+    media = ROOT / "curriculum/interpretability/assets/animations"
+    rendered = animation_card(
+        media / "superposition.mp4",
+        media / "superposition.png",
+        media / "superposition.vtt",
+        title="Superposition geometry",
+        description="Five directions share two axes.",
+        transcript="Five feature directions are shown, followed by sparse co-activation.",
+    )
+    assert "<video controls" in rendered
+    assert "autoplay" not in rendered
+    assert 'kind="captions"' in rendered
+    assert "Text transcript and static explanation" in rendered
+    assert "data-media-sha256=" in rendered
+
+
 def test_form_validation_fails_closed_and_text_controls_have_ax_fallbacks() -> None:
     class FakeForm:
         def form(self, **kwargs):
@@ -486,7 +593,29 @@ def test_snapshot_is_content_bound_compact_and_deterministic() -> None:
     bundle = load_course_bundle("snapshot", root=ROOT)
     assert bundle.integrity_sha256 == committed["integrity"]["sha256"]
     assert SNAPSHOT.stat().st_size < 1_000_000
-    assert len(bundle.sources) == 18
+    assert len(bundle.sources) == 20
+    activation_gallery = bundle.section("activation_gallery")
+    assert activation_gallery["selection"]["position_count"] == 8
+    assert activation_gallery["representation"]["boundary"] == "resid_post_after_ln"
+    assert activation_gallery["data_size_bytes"] < 32_000_000
+    assert activation_gallery["target_gradient"]["layers"] == [0, 7, 14]
+    assert "not a fitted corpus-average J-Lens" in activation_gallery[
+        "target_gradient"
+    ]["interpretation"]
+    lenses = bundle.section("lenses")
+    assert lenses["position_count"] == 8
+    assert lenses["jacobian_lens_fitted"] is False
+    assert "legal masking" in lenses["target_probability_semantics"]
+    assert "before masking" in lenses["legal_mass_semantics"]
+    assert set(lenses["arms"]) == {"RR", "HR", "RH", "HH"}
+    assert all(
+        len(lenses["arms"][arm]["metrics"]["target_probability"]) == 15
+        for arm in lenses["arms"]
+    )
+    assert all(
+        lenses["arms"][arm]["final_lens_parity"]["passed"]
+        for arm in lenses["arms"]
+    )
     sparse = bundle.section("sparse")
     assert sparse["transcoder_position_count"] == 64
     assert sparse["transcoder_source_compatibility_gate"]["passed"] is True
@@ -512,9 +641,119 @@ def test_snapshot_is_content_bound_compact_and_deterministic() -> None:
     assert refinement["pass_1_score"] > refinement["pass_8_score"]
     assert refinement["jepa_used_at_inference"] is False
     assert all(
-        Path(record["path"]).suffix in {".json", ".jsonl", ".md"}
+        Path(record["path"]).suffix in {".json", ".jsonl", ".md", ".npz"}
         for record in bundle.sources
     )
+
+
+def test_real_activation_gallery_is_source_bound_and_semantically_aligned() -> None:
+    gallery = load_optional_activation_gallery(ROOT, verify_sources=True)
+    assert validate_activation_gallery(ROOT, verify_source=True) == (
+        8,
+        30_830_817,
+        gallery is not None,
+    )
+    if gallery is None:
+        pytest.skip("authorized local activation tensors are not materialized")
+    assert gallery.position_count == 8
+    assert gallery.layer_indices == tuple(range(15))
+    assert gallery.arrays["raw_resid_post_f16"].shape == (8, 15, 64, 1024)
+    assert gallery.arrays["hero_resid_post_f16"].shape == (8, 15, 64, 1024)
+    assert gallery.arrays["lens_logits_f16"].shape == (4, 8, 15, 1858)
+    assert gallery.data_sha256 == "49f6f35271acaaaae052191f9a758695cb545ec6e9c20d3eb2c52a8cf02a5860"
+
+    activation = gallery.activation_view(position=0, layer=14, channel_rank=0)
+    assert activation["channel"] == 749
+    assert activation["delta_channel"].shape == (64,)
+    assert activation["delta_square_rms"].shape == (64,)
+    assert len(activation["per_layer_delta_rms"]) == 15
+    assert activation["per_layer_delta_rms"][-1] > 0.0
+    assert -1.0 <= activation["per_layer_mean_token_cosine"][-1] <= 1.0
+    vector = gallery.activation_vector(
+        position=0,
+        layer=14,
+        model="hero",
+        square="e4",
+    )
+    assert vector["vector"].shape == (1024,)
+    assert vector["width"] == 1024
+    assert vector["rms"] > 0.0
+
+    policy = gallery.policy_lens_view(position=0, layer=14)
+    assert {row["arm"] for row in policy} == {"RR", "HR", "RH", "HH"}
+    assert all(0.0 <= row["target_probability"] <= 1.0 for row in policy)
+    assert all(0.0 <= row["legal_mass_before_masking"] <= 1.0 for row in policy)
+    assert policy[0]["target_probability"] == pytest.approx(
+        gallery.position(0)["arms"]["RR"]["target_probability"], abs=2e-3
+    )
+
+    probe = gallery.probe_view(
+        position=0,
+        layer=14,
+        model="hero",
+        task="legal_destination",
+    )
+    assert probe["prediction"].shape == (64,)
+    assert np.all((probe["prediction"] >= 0.0) & (probe["prediction"] <= 1.0))
+    piece_probe = gallery.probe_view(
+        position=0,
+        layer=14,
+        model="hero",
+        task="piece_code",
+    )
+    assert set(np.unique(piece_probe["error"])).issubset({0.0, 1.0})
+    assert piece_probe["error_semantics"] == "1 denotes a misclassified piece code"
+    gradient = gallery.target_gradient_view(
+        position=0,
+        layer=14,
+        model="hero",
+    )
+    assert gradient["gradient_rms"] > 0.0
+    assert gradient["square_gradient_norm"].shape == (64,)
+    assert "not a fitted corpus-average J-Lens" in gradient["interpretation"]
+    spectrum = gallery.spectrum_view(layer=14, model="hero")
+    assert spectrum["observation_count"] == 512
+    assert 1.0 <= spectrum["participation_ratio"] <= 511.0
+    assert 1.0 <= spectrum["entropy_effective_rank"] <= 511.0
+    assert 1 <= spectrum["components_for_90_percent"] <= spectrum[
+        "components_for_95_percent"
+    ]
+    assert "not evidence of superposition" in spectrum["interpretation"]
+
+
+def test_optional_activation_gallery_is_honest_when_local_tensor_is_absent(
+    tmp_path: Path,
+) -> None:
+    target = tmp_path / "curriculum/interpretability/artifacts"
+    target.mkdir(parents=True)
+    shutil.copyfile(
+        ROOT / "curriculum/interpretability/artifacts/real_activation_gallery_v1.json",
+        target / "real_activation_gallery_v1.json",
+    )
+    assert load_optional_activation_gallery(tmp_path) is None
+    with pytest.raises(FileNotFoundError, match="local, license-gated artifact"):
+        load_activation_gallery(tmp_path)
+
+
+def test_activation_validator_accepts_an_intentionally_absent_gitignored_pack(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _pretend_activation_pack_is_absent(monkeypatch)
+    assert validate_activation_gallery(ROOT, verify_source=True) == (
+        8,
+        30_830_817,
+        False,
+    )
+
+
+def test_activation_square_orientation_maps_black_tokens_to_absolute_board() -> None:
+    values = np.arange(64, dtype=np.float32)
+    white = absolute_square_values(values, chess.STARTING_FEN)
+    np.testing.assert_array_equal(white, values)
+    black_fen = "8/8/8/8/8/8/8/8 b - - 0 1"
+    mapped = absolute_square_values(values, black_fen)
+    for token in range(64):
+        assert mapped[chess.square_mirror(token)] == values[token]
 
 
 def test_toy_mode_cannot_masquerade_as_raw_hero() -> None:
@@ -549,6 +788,17 @@ def test_source_mode_reproduces_frozen_payload() -> None:
     source = load_course_bundle("source", root=ROOT)
     assert source.payload == snapshot.payload
     assert source.integrity_sha256 == snapshot.integrity_sha256
+
+
+def test_source_mode_and_snapshot_rebuild_survive_absent_local_activation_pack(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _pretend_activation_pack_is_absent(monkeypatch)
+    snapshot = load_course_bundle("snapshot", root=ROOT)
+    source = load_course_bundle("source", root=ROOT)
+    assert source.payload == snapshot.payload
+    assert source.sources == snapshot.sources
+    assert build_snapshot(ROOT) == json.loads(SNAPSHOT.read_text(encoding="utf-8"))
 
 
 def test_every_notebook_satisfies_static_course_contract() -> None:

@@ -193,6 +193,21 @@ MODULES = (
         "Submit an executable claim card, manifest, analysis, and replication plan.",
         ("geiger_2023", "mib_2025"),
     ),
+    ModuleSpec(
+        11,
+        "policy_and_jacobian_lenses",
+        "From the policy lens to the Jacobian lens",
+        "visual essay",
+        ("attribution_and_intervention",),
+        "Read intermediate states without mistaking a decoder for the computation.",
+        (
+            "Derive identity/logit, tuned, and average-Jacobian transports.",
+            "Diagnose basis drift, distribution shift, and finite-step linearization error.",
+            "Define a BT4 action-lens experiment that respects spatial routing and legality.",
+        ),
+        "Given an early-layer move readout, state what it licenses and design a causal follow-up.",
+        ("tuned_lens_2023", "jacobian_lens_2026"),
+    ),
 )
 
 

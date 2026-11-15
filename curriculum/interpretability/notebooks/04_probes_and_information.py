@@ -22,6 +22,7 @@ def imports():
         sys.path.insert(0, str(repo_root))
 
     from research.interpretability.course import get_module, load_course_bundle
+    from research.interpretability.course.activations import load_optional_activation_gallery
     from research.interpretability.course.evidence import (
         ClaimCard,
         Endpoint,
@@ -37,6 +38,7 @@ def imports():
     )
     from research.interpretability.course.ui import (
         callout,
+        chessboard,
         claim_card_html,
         committed_form,
         line_chart,
@@ -44,6 +46,7 @@ def imports():
         mode_badge,
         module_header,
         resource_card,
+        square_heatmap,
         table,
     )
 
@@ -55,19 +58,23 @@ def imports():
         TargetLevel,
         binary_accuracy,
         callout,
+        chessboard,
         claim_card_html,
         committed_form,
         fit_ridge_binary,
         get_module,
         line_chart,
         load_course_bundle,
+        load_optional_activation_gallery,
         metric_cards,
         mo,
         mode_badge,
         module_header,
         np,
+        repo_root,
         resource_card,
         ridge_binary_scores,
+        square_heatmap,
         table,
         toy_probe_experiment,
     )
@@ -165,6 +172,223 @@ def load_mode(evidence_mode, load_course_bundle, mo, verify_source):
 @app.cell
 def mode_view(bundle, mo, mode_badge, selected_mode):
     mo.Html(mode_badge(selected_mode, bundle.evidence_scope))
+    return
+
+
+@app.cell
+def real_probe_controls(
+    bundle,
+    load_optional_activation_gallery,
+    mo,
+    repo_root,
+    selected_mode,
+):
+    if bundle.is_empirical:
+        probe_gallery = load_optional_activation_gallery(
+            repo_root,
+            verify_sources=selected_mode == "source",
+        )
+        _probe_positions = (
+            probe_gallery.position_options()
+            if probe_gallery is not None
+            else {"Local activation pack is not materialized": 0}
+        )
+    else:
+        probe_gallery = None
+        _probe_positions = {"Constructed mode has no checkpoint probe": 0}
+    probe_position = mo.ui.dropdown(
+        options=_probe_positions,
+        value=next(iter(_probe_positions)),
+        label="Real chess position",
+    )
+    probe_layer = mo.ui.number(
+        0,
+        14,
+        step=1,
+        value=14,
+        label="Probe layer",
+    )
+    probe_model = mo.ui.radio(
+        options={"Raw BT4": "raw", "Hero": "hero"},
+        value="Hero",
+        label="Frozen encoder and fitted probe",
+        inline=True,
+    )
+    probe_task = mo.ui.radio(
+        options={
+            "Legal destination · binary": "legal_destination",
+            "Enemy attack count · regression": "opponent_attack_count",
+            "Piece on square · 13 classes": "piece_code",
+        },
+        value="Legal destination · binary",
+        label="Recorded probe task",
+    )
+    mo.vstack([
+        mo.md("## Watch a trained probe read a real residual stream"),
+        mo.md(
+            "These are predictions from the retained all-layer probes applied "
+            "to the actual checkpoint activation tensor—not a newly fitted toy decoder."
+        ),
+        mo.hstack(
+            [probe_position, probe_layer, probe_model, probe_task],
+            justify="start",
+            gap=1,
+        ),
+    ])
+    return probe_gallery, probe_layer, probe_model, probe_position, probe_task
+
+
+@app.cell
+def real_probe_microscope(
+    bundle,
+    callout,
+    chessboard,
+    metric_cards,
+    mo,
+    np,
+    probe_gallery,
+    probe_layer,
+    probe_model,
+    probe_position,
+    probe_task,
+    resource_card,
+    square_heatmap,
+    table,
+):
+    if bundle.is_empirical and probe_gallery is not None:
+        gallery_probe = probe_gallery.probe_view(
+            position=int(probe_position.value),
+            layer=int(probe_layer.value),
+            model=str(probe_model.value),
+            task=str(probe_task.value),
+        )
+        _record = gallery_probe["position"]
+        _prediction = np.asarray(gallery_probe["prediction"], dtype=np.float64)
+        _target = np.asarray(gallery_probe["target"], dtype=np.float64)
+        _error = np.asarray(gallery_probe["error"], dtype=np.float64)
+        _task = str(probe_task.value)
+        if _task == "legal_destination":
+            _primary_value = f"{np.mean((_prediction >= 0.5) == _target):.1%}"
+            _primary_label = "single-board square accuracy at threshold 0.5"
+            _secondary_value = f"{np.mean((_prediction - _target) ** 2):.4f}"
+            _secondary_label = "single-board Brier score"
+            _prediction_label = "predicted probability of legal destination"
+            _target_label = "legal-destination label"
+        elif _task == "opponent_attack_count":
+            _primary_value = f"{np.mean(np.abs(_error)):.3f}"
+            _primary_label = "single-board mean absolute error"
+            _secondary_value = f"{np.sqrt(np.mean(_error ** 2)):.3f}"
+            _secondary_label = "single-board RMSE"
+            _prediction_label = "predicted enemy attack count"
+            _target_label = "rule-derived enemy attack count"
+        else:
+            _predicted_class = np.asarray(gallery_probe["predicted_class"])
+            _primary_value = f"{np.mean(_predicted_class == _target):.1%}"
+            _primary_label = "single-board piece-code accuracy"
+            _secondary_value = f"{np.mean(_prediction):.1%}"
+            _secondary_label = "mean winning-class confidence"
+            _prediction_label = "winning piece-class probability"
+            _target_label = "piece code 0–12"
+        _largest_errors = np.argsort(-np.abs(_error), kind="stable")[:8]
+        _error_rows = []
+        for _index in _largest_errors:
+            _row = {
+                "square": f"{chr(ord('a') + int(_index) % 8)}{int(_index) // 8 + 1}",
+                "target": f"{_target[_index]:.3f}",
+                "prediction": f"{_prediction[_index]:.3f}",
+                "error": f"{_error[_index]:+.3f}",
+            }
+            if _task == "piece_code":
+                _row["prediction"] = str(int(gallery_probe["predicted_class"][_index]))
+                _row["error"] = "wrong" if _error[_index] else "correct"
+            _error_rows.append(_row)
+        real_probe_microscope_view = mo.vstack([
+            mo.Html(metric_cards([
+                (_record["puzzle_id"], "public puzzle specimen"),
+                (str(probe_model.value).title(), "encoder/probe family"),
+                (int(probe_layer.value), "actual residual layer"),
+                (_primary_value, _primary_label),
+                (_secondary_value, _secondary_label),
+            ])),
+            mo.hstack([
+                mo.Html(chessboard(_record["fen"])),
+                mo.vstack([
+                    mo.md(
+                        f"**Target move:** `{_record['target_move']}`  \n"
+                        f"**Themes:** {_record['themes']}  \n"
+                        "Every square contributes one real 1,024-dimensional residual row."
+                    ),
+                    mo.Html(table(
+                        _error_rows,
+                        (
+                            ("square", "Largest-error square"),
+                            ("target", "Target"),
+                            ("prediction", "Prediction"),
+                            ("error", "Error"),
+                        ),
+                    )),
+                ]),
+            ], justify="start", gap=1),
+            mo.ui.tabs({
+                "Probe prediction": mo.Html(square_heatmap(
+                    _prediction,
+                    alt_text=(
+                        f"{str(probe_model.value).title()} layer {int(probe_layer.value)} "
+                        f"{_prediction_label} on the selected real position."
+                    ),
+                    signed=False,
+                )),
+                "Ground truth": mo.Html(square_heatmap(
+                    _target,
+                    alt_text=f"{_target_label} for the selected real chess position.",
+                    signed=False,
+                )),
+                "Error": mo.Html(square_heatmap(
+                    _error,
+                    alt_text=(
+                        f"Probe error map for {_task}; {gallery_probe['error_semantics']}."
+                    ),
+                    signed=_task != "piece_code",
+                )),
+            }),
+            mo.Html(callout(
+                "limit",
+                "This makes the decoder inspectable; it does not prove policy use",
+                "The board-level score is a case study, not an independent estimate. "
+                "The grouped aggregate curve and controls later in this chapter carry "
+                "the predictive claim. Steering or patching is still required for use.",
+            )),
+            mo.Html(resource_card(
+                mode="real trained-probe prediction · frozen activation gallery",
+                runtime="instant from stored predictions",
+                device="probe fit ran remotely; gallery activations were extracted on GTX 1660 Ti",
+                determinism="fixed probe weights, float32 evaluation, float16 stored predictions",
+                sources=f"{probe_gallery.run_id}; retained modal_probe_all_layers_dev_v1",
+                limitations=(
+                    "Eight development specimens shown interactively; use the grouped "
+                    "512-position evaluation summary below for aggregate evidence."
+                ),
+            )),
+        ])
+    elif bundle.is_empirical:
+        gallery_probe = None
+        real_probe_microscope_view = mo.Html(callout(
+            "limit",
+            "The local real-activation pack is absent",
+            "This public repository intentionally omits the license-gated 30.8 MB "
+            "tensor pack. Rebuild it locally from authorized sources to enable the "
+            "interactive retained-probe prediction maps.",
+        ))
+    else:
+        gallery_probe = None
+        real_probe_microscope_view = mo.Html(callout(
+            "neutral",
+            "Toy mode isolates leakage on purpose",
+            "Switch to Snapshot or source-verified mode for trained Raw/Hero probe "
+            "predictions. The constructed lab remains the place where the hidden "
+            "fingerprint mechanism is known exactly.",
+        ))
+    real_probe_microscope_view
     return
 
 

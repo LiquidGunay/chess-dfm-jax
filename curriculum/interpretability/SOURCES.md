@@ -10,6 +10,7 @@ without being treated as peer-reviewed consensus.
 | [Searchless Chess](https://arxiv.org/abs/2402.04494), [official code](https://github.com/google-deepmind/searchless_chess) | NeurIPS 2024, peer-reviewed; official repository | 01–02 | Strength without external search does not identify an internal algorithm. |
 | [McGrath et al., AlphaZero chess knowledge](https://pmc.ncbi.nlm.nih.gov/articles/PMC9704706/) | peer-reviewed | 01, 04 | Probe trajectories show decodability, not automatically use. |
 | [Kornblith et al., representation similarity](https://proceedings.mlr.press/v97/kornblith19a.html) | ICML 2019, peer-reviewed | 03 | Metrics encode different invariances. |
+| [Johnson & Lindenstrauss, Extensions of Lipschitz mappings into a Hilbert space](https://doi.org/10.1090/conm/026/737400) | foundational 1984 conference-volume chapter | 03 | A finite set admits a lower-dimensional embedding with bounded pairwise distance distortion; a sampled map is not the theorem. |
 | [Hewitt & Liang, probe controls](https://aclanthology.org/D19-1275/) | EMNLP-IJCNLP 2019, peer-reviewed | 04 | Capacity and memorization need controls. |
 | [Voita & Titov, MDL probing](https://aclanthology.org/2020.emnlp-main.14/) | EMNLP 2020, peer-reviewed | 04 | Sample efficiency matters beyond final accuracy. |
 | [Karvonen, Chess-GPT world model](https://arxiv.org/abs/2403.15498) | COLM 2024, peer-reviewed | 04–05 | Decodability and steering need bounded claims. |
@@ -23,12 +24,16 @@ without being treated as peer-reviewed consensus.
 | [Linear Pin Representations](https://openreview.net/forum?id=sbt3pBy9Rx) | ICML 2026 Mechanistic Interpretability Workshop virtual poster | 05 | Strong probes/random controls can overstate behavioral causation. |
 | [Jenner et al., Learned Look-Ahead](https://proceedings.neurips.cc/paper_files/paper/2024/hash/37d9f19150fce07bced2a81fc87d47a6-Abstract-Conference.html) | NeurIPS 2024, peer-reviewed | 06 | Probe, intervention, and scope are separate evidence lines. |
 | [Towards Monosemanticity](https://transformer-circuits.pub/2023/monosemantic-features/index.html) | lab report | 07 | Sparse features are not proof of monosemanticity. |
+| [Toy Models of Superposition](https://transformer-circuits.pub/2022/toy_model/) | 2022 lab report | 07 | Sparse features can make non-orthogonal feature packing useful; the toy theory is not direct evidence about a trained chess model. |
 | [Transcoders](https://proceedings.neurips.cc/paper_files/paper/2024/hash/2b8f4db0464cc5b6e9d5e6bea4b9f308-Abstract-Conference.html) | NeurIPS 2024, peer-reviewed | 07–08 | A transcoder replaces a computation boundary. |
 | [Sparse Crosscoders](https://transformer-circuits.pub/2024/crosscoders/index.html) | lab report | 08 | Cross-model features remain representational until intervention-linked. |
 | [Tracing the Thought of a Grandmaster-level Chess-Playing Transformer](https://arxiv.org/abs/2604.10158) | 2026 preprint | 08–09 | Sparse chess tooling must be source- and ABI-matched. |
 | [Geiger et al., Causal Abstraction](https://arxiv.org/abs/2301.04709) | JMLR 2025, peer-reviewed | 09 | Interchange tests a mapping to an abstract causal model. |
 | [ACDC](https://proceedings.neurips.cc/paper_files/paper/2023/hash/34e1dbe95d34d7ebaf99b9bcaeb5b2be-Abstract-Conference.html) | NeurIPS 2023, peer-reviewed | 09 | Discovery inherits metric and graph assumptions. |
 | [MIB](https://proceedings.mlr.press/v267/mueller25a.html) | ICML 2025, peer-reviewed | 09–10 | Sparse features need not beat neurons. |
+| [Eliciting Latent Predictions from Transformers with the Tuned Lens](https://arxiv.org/abs/2303.08112) | 2023 preprint | 11 | Affine translators can correct intermediate-state basis and scale mismatch; fitting creates its own evaluation boundary. |
+| [Verbalizable Representations Form a Global Workspace in Language Models](https://transformer-circuits.pub/2026/workspace/index.html), [official Jacobian-lens code](https://github.com/anthropics/jacobian-lens) | 2026 lab report / preprint and official code | 11 | J-Lens applies a corpus-averaged downstream Jacobian before the final readout. No chess result is claimed by this source. |
+| [Manim Community documentation](https://docs.manim.community/en/stable/) | official documentation | 03, 07 | Course-created animations are authoring outputs; the course runtime does not import Manim. |
 | [marimo documentation](https://docs.marimo.io/) | official documentation | all | Reactive execution helps reproducibility; PyTorch is not assumed to run in browser WASM. |
 
 Each notebook labels sources locally as peer-reviewed, preprint, lab report, or

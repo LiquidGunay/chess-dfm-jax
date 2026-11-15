@@ -60,6 +60,211 @@ def toy_representations(seed: int = 13) -> tuple[np.ndarray, np.ndarray]:
     return first, second
 
 
+def toy_jl_projection(
+    *,
+    point_count: int = 24,
+    ambient_dim: int = 96,
+    target_dim: int = 12,
+    seed: int = 43,
+) -> dict[str, np.ndarray | float | int]:
+    """Gaussian random projection with all finite-set distance diagnostics.
+
+    This is an experiment about one sampled map, not a numerical proof of the
+    Johnson--Lindenstrauss lemma. Distances are reported only for distinct
+    point pairs, so zero diagonal entries cannot create undefined ratios.
+    """
+
+    if not 3 <= point_count <= 256:
+        raise ValueError("point_count must be within [3, 256]")
+    if not 2 <= target_dim <= ambient_dim <= 2048:
+        raise ValueError("dimensions must satisfy 2 <= target_dim <= ambient_dim <= 2048")
+    rng = np.random.default_rng(seed)
+    points = rng.normal(size=(point_count, ambient_dim))
+    projection = rng.normal(size=(ambient_dim, target_dim)) / np.sqrt(target_dim)
+    projected = points @ projection
+
+    def pairwise(values: np.ndarray) -> np.ndarray:
+        delta = values[:, None, :] - values[None, :, :]
+        return np.linalg.norm(delta, axis=-1)
+
+    original_distances = pairwise(points)
+    projected_distances = pairwise(projected)
+    upper = np.triu_indices(point_count, k=1)
+    original_pairs = original_distances[upper]
+    projected_pairs = projected_distances[upper]
+    ratios = projected_pairs / original_pairs
+    relative_distortion = np.abs(ratios - 1.0)
+    return {
+        "point_count": point_count,
+        "ambient_dim": ambient_dim,
+        "target_dim": target_dim,
+        "original_distances": original_pairs,
+        "projected_distances": projected_pairs,
+        "distance_ratios": ratios,
+        "relative_distortion": relative_distortion,
+        "maximum_relative_distortion": float(relative_distortion.max()),
+        "median_relative_distortion": float(np.median(relative_distortion)),
+        "projection_frobenius_norm": float(np.linalg.norm(projection)),
+    }
+
+
+def toy_lens_experiment(
+    *,
+    basis_angle_degrees: float = 55.0,
+    nonlinearity: float = 0.35,
+    corpus_mix: float = 0.5,
+    test_context: int = 0,
+    perturbation_size: float = 0.2,
+    seed: int = 47,
+) -> dict[str, object]:
+    """Compare identity and Jacobian lenses with an OLS state translator.
+
+    The constructed downstream map fixes F(0)=0 and has an analytic Jacobian.
+    At zero nonlinearity the average Jacobian exactly transports a rotated
+    basis, while the identity/logit lens does not. With nonlinearity, corpus
+    averaging and finite perturbations expose the method's limits.
+    """
+
+    if not 0.0 <= basis_angle_degrees <= 180.0:
+        raise ValueError("basis_angle_degrees must be within [0, 180]")
+    if not 0.0 <= nonlinearity <= 1.5:
+        raise ValueError("nonlinearity must be within [0, 1.5]")
+    if not 0.0 <= corpus_mix <= 1.0:
+        raise ValueError("corpus_mix must be within [0, 1]")
+    if test_context not in {0, 1}:
+        raise ValueError("test_context must be 0 or 1")
+    if not 0.0 <= perturbation_size <= 2.0:
+        raise ValueError("perturbation_size must be within [0, 2]")
+
+    rng = np.random.default_rng(seed)
+    width, outputs = 4, 6
+    angle = np.deg2rad(basis_angle_degrees)
+    rotation = np.eye(width)
+    rotation[:2, :2] = np.asarray(
+        [[np.cos(angle), -np.sin(angle)], [np.sin(angle), np.cos(angle)]]
+    )
+    context_maps = np.stack(
+        (
+            np.asarray(
+                [
+                    [0.65, -0.20, 0.05, 0.00],
+                    [0.10, 0.45, -0.25, 0.00],
+                    [0.00, 0.20, 0.55, -0.15],
+                    [-0.10, 0.00, 0.25, 0.50],
+                ]
+            ),
+            np.asarray(
+                [
+                    [0.20, 0.55, 0.00, -0.10],
+                    [-0.45, 0.15, 0.20, 0.00],
+                    [0.15, 0.00, 0.30, 0.50],
+                    [0.00, -0.25, 0.45, 0.20],
+                ]
+            ),
+        )
+    )
+    unembedding = rng.normal(size=(outputs, width))
+    unembedding /= np.linalg.norm(unembedding, axis=1, keepdims=True)
+
+    def downstream(hidden: np.ndarray, context: int) -> np.ndarray:
+        mapped = hidden @ context_maps[context].T
+        return hidden @ rotation.T + nonlinearity * np.tanh(mapped)
+
+    def jacobian(hidden: np.ndarray, context: int) -> np.ndarray:
+        mapped = context_maps[context] @ hidden
+        slope = 1.0 - np.tanh(mapped) ** 2
+        return rotation + nonlinearity * (slope[:, None] * context_maps[context])
+
+    fit_count = 768
+    fit_hidden = rng.normal(size=(fit_count, width))
+    fit_context = (rng.random(fit_count) < corpus_mix).astype(np.int64)
+    fit_final = np.stack(
+        [
+            downstream(hidden, int(context))
+            for hidden, context in zip(fit_hidden, fit_context, strict=True)
+        ]
+    )
+    average_jacobian = np.mean(
+        [
+            jacobian(hidden, int(context))
+            for hidden, context in zip(fit_hidden, fit_context, strict=True)
+        ],
+        axis=0,
+    )
+    affine_design = np.column_stack((fit_hidden, np.ones(fit_count)))
+    ols_affine, *_ = np.linalg.lstsq(affine_design, fit_final, rcond=None)
+
+    hidden = np.asarray([0.9, -0.55, 0.35, 0.7])
+    final_hidden = downstream(hidden, test_context)
+    local_jacobian = jacobian(hidden, test_context)
+    transported = {
+        "actual": final_hidden,
+        "identity_logit_lens": hidden,
+        "average_jacobian_lens": average_jacobian @ hidden,
+        "local_jacobian_lens": local_jacobian @ hidden,
+        "ols_affine_state_translator": np.append(hidden, 1.0) @ ols_affine,
+    }
+    logits = {name: unembedding @ value for name, value in transported.items()}
+
+    def softmax(values: np.ndarray) -> np.ndarray:
+        shifted = values - np.max(values)
+        exponent = np.exp(shifted)
+        return exponent / exponent.sum()
+
+    probabilities = {name: softmax(value) for name, value in logits.items()}
+    actual_probability = probabilities["actual"]
+    kl_to_actual = {}
+    for name, probability in probabilities.items():
+        kl_to_actual[name] = max(
+            0.0,
+            float(
+                np.sum(
+                    actual_probability
+                    * (np.log(actual_probability) - np.log(probability))
+                )
+            ),
+        )
+
+    direction = np.asarray([0.2, 0.7, -0.5, 0.35])
+    direction /= np.linalg.norm(direction)
+    perturbation = perturbation_size * direction
+    actual_logit_delta = unembedding @ (
+        downstream(hidden + perturbation, test_context) - final_hidden
+    )
+    average_linear_delta = unembedding @ (average_jacobian @ perturbation)
+    local_linear_delta = unembedding @ (local_jacobian @ perturbation)
+
+    epsilon = 1e-5
+    finite_difference_columns = []
+    for index in range(width):
+        step = np.zeros(width)
+        step[index] = epsilon
+        finite_difference_columns.append(
+            (downstream(hidden + step, test_context) - downstream(hidden - step, test_context))
+            / (2.0 * epsilon)
+        )
+    finite_difference = np.stack(finite_difference_columns, axis=1)
+    return {
+        "basis_angle_degrees": float(basis_angle_degrees),
+        "nonlinearity": float(nonlinearity),
+        "corpus_mix": float(corpus_mix),
+        "test_context": test_context,
+        "perturbation_size": float(perturbation_size),
+        "rotation": rotation,
+        "average_jacobian": average_jacobian,
+        "local_jacobian": local_jacobian,
+        "probabilities": probabilities,
+        "logits": logits,
+        "kl_to_actual": kl_to_actual,
+        "actual_logit_delta": actual_logit_delta,
+        "average_linear_delta": average_linear_delta,
+        "local_linear_delta": local_linear_delta,
+        "jacobian_finite_difference_max_error": float(
+            np.max(np.abs(local_jacobian - finite_difference))
+        ),
+    }
+
+
 def transform_representation(
     values: np.ndarray,
     kind: Literal["identity", "rotate", "permute", "scale", "noise", "duplicate"],

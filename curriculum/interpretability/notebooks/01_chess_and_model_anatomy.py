@@ -23,6 +23,7 @@ def imports():
         sys.path.insert(0, str(repo_root))
 
     from research.interpretability.course import get_module, load_course_bundle
+    from research.interpretability.course.activations import load_optional_activation_gallery
     from research.interpretability.course.evidence import (
         ClaimCard,
         Endpoint,
@@ -40,6 +41,7 @@ def imports():
         mode_badge,
         module_header,
         resource_card,
+        square_heatmap,
         table,
     )
 
@@ -56,12 +58,15 @@ def imports():
         committed_form,
         get_module,
         load_course_bundle,
+        load_optional_activation_gallery,
         metric_cards,
         mo,
         mode_badge,
         module_header,
         np,
+        repo_root,
         resource_card,
+        square_heatmap,
         stable_softmax,
         table,
     )
@@ -175,6 +180,191 @@ def load_mode(evidence_mode, load_course_bundle, mo, verify_source):
 @app.cell
 def mode_view(bundle, mo, mode_badge, selected_mode):
     mo.Html(mode_badge(selected_mode, bundle.evidence_scope))
+    return
+
+
+@app.cell
+def real_tensor_controls(
+    bundle,
+    load_optional_activation_gallery,
+    mo,
+    repo_root,
+    selected_mode,
+):
+    if bundle.is_empirical:
+        anatomy_gallery = load_optional_activation_gallery(
+            repo_root,
+            verify_sources=selected_mode == "source",
+        )
+        _anatomy_positions = (
+            anatomy_gallery.position_options()
+            if anatomy_gallery is not None
+            else {"Local activation pack is not materialized": 0}
+        )
+    else:
+        anatomy_gallery = None
+        _anatomy_positions = {"Constructed mode has no checkpoint tensor": 0}
+    anatomy_position = mo.ui.dropdown(
+        options=_anatomy_positions,
+        value=next(iter(_anatomy_positions)),
+        label="Real chess position",
+    )
+    anatomy_layer = mo.ui.number(
+        0,
+        14,
+        step=1,
+        value=0,
+        label="Residual layer",
+    )
+    anatomy_model = mo.ui.radio(
+        options={"Raw BT4": "raw", "Hero": "hero"},
+        value="Raw BT4",
+        label="Checkpoint encoder",
+        inline=True,
+    )
+    _square_options = {
+        f"{chr(ord('a') + file)}{rank}": f"{chr(ord('a') + file)}{rank}"
+        for rank in range(1, 9)
+        for file in range(8)
+    }
+    anatomy_square = mo.ui.dropdown(
+        options=_square_options,
+        value="e4",
+        label="Absolute board square",
+    )
+    mo.vstack([
+        mo.md("## Meet one actual residual tensor"),
+        mo.md(
+            "Before discussing hooks abstractly, inspect the object they carry. "
+            "For each board the selected checkpoint emits 64 square-token rows, "
+            "each with 1,024 stored residual coordinates."
+        ),
+        mo.hstack(
+            [anatomy_position, anatomy_layer, anatomy_model, anatomy_square],
+            justify="start",
+            gap=1,
+        ),
+    ])
+    return (
+        anatomy_gallery,
+        anatomy_layer,
+        anatomy_model,
+        anatomy_position,
+        anatomy_square,
+    )
+
+
+@app.cell
+def real_tensor_view(
+    anatomy_gallery,
+    anatomy_layer,
+    anatomy_model,
+    anatomy_position,
+    anatomy_square,
+    bundle,
+    callout,
+    chessboard,
+    metric_cards,
+    mo,
+    np,
+    resource_card,
+    square_heatmap,
+    table,
+):
+    if bundle.is_empirical and anatomy_gallery is not None:
+        gallery_vector = anatomy_gallery.activation_vector(
+            position=int(anatomy_position.value),
+            layer=int(anatomy_layer.value),
+            model=str(anatomy_model.value),
+            square=str(anatomy_square.value),
+        )
+        _activation = anatomy_gallery.activation_view(
+            position=int(anatomy_position.value),
+            layer=int(anatomy_layer.value),
+            channel_rank=0,
+        )
+        _vector = np.asarray(gallery_vector["vector"])
+        _top_coordinates = np.argsort(-np.abs(_vector), kind="stable")[:12]
+        _coordinate_rows = [
+            {
+                "coordinate": int(index),
+                "activation": f"{_vector[index]:+.5f}",
+                "absolute magnitude": f"{abs(_vector[index]):.5f}",
+            }
+            for index in _top_coordinates
+        ]
+        _square_rms = (
+            _activation["raw_square_rms"]
+            if str(anatomy_model.value) == "raw"
+            else _activation["hero_square_rms"]
+        )
+        real_tensor_panel = mo.vstack([
+            mo.Html(metric_cards([
+                ("64 × 1024", "actual residual tensor shape for one board"),
+                (gallery_vector["absolute_square"], "selected absolute square"),
+                (gallery_vector["token_index"], "side-to-move token index"),
+                (gallery_vector["width"], "coordinates in this row"),
+                (f"{gallery_vector['rms']:.4f}", "row RMS"),
+                (f"{gallery_vector['l2']:.3f}", "row L2 norm"),
+            ])),
+            mo.hstack([
+                mo.Html(chessboard(
+                    gallery_vector["position"]["fen"],
+                    highlighted=[gallery_vector["absolute_square"]],
+                )),
+                mo.Html(table(
+                    _coordinate_rows,
+                    (
+                        ("coordinate", "Largest-magnitude residual coordinate"),
+                        ("activation", "Stored activation value"),
+                        ("absolute magnitude", "Magnitude"),
+                    ),
+                )),
+            ], justify="start", gap=1),
+            mo.Html(square_heatmap(
+                _square_rms,
+                alt_text=(
+                    f"Actual {str(anatomy_model.value)} layer {int(anatomy_layer.value)} "
+                    "residual RMS across 1024 coordinates for every absolute board square."
+                ),
+                signed=False,
+            )),
+            mo.Html(callout(
+                "limit",
+                "Numbers first, semantics later",
+                "These are real residual values, but coordinate 731 is not thereby a "
+                "knight detector. Basis dependence, distributed encoding, and downstream "
+                "use are the questions the later geometry, probe, and intervention modules test.",
+            )),
+            mo.Html(resource_card(
+                mode="real checkpoint activation tensor · frozen gallery",
+                runtime="instant from stored float16 residuals",
+                device="extracted locally on GTX 1660 Ti",
+                determinism="float32 checkpoint inference; float16 tensor storage",
+                sources=f"{anatomy_gallery.run_id}; {anatomy_gallery.data_sha256}",
+                limitations=(
+                    "One selected development position and square are inspectable; "
+                    "the display itself makes no semantic or population claim."
+                ),
+            )),
+        ])
+    elif bundle.is_empirical:
+        gallery_vector = None
+        real_tensor_panel = mo.Html(callout(
+            "limit",
+            "The local real-activation pack is absent",
+            "This public repository intentionally omits the license-gated 30.8 MB "
+            "tensor pack. Rebuild it locally from authorized sources to enable the "
+            "interactive checkpoint tensor view.",
+        ))
+    else:
+        gallery_vector = None
+        real_tensor_panel = mo.Html(callout(
+            "neutral",
+            "Toy architecture mode has no checkpoint tensor",
+            "Switch to Snapshot or source-verified mode for actual 64 × 1024 residuals.",
+        ))
+    real_tensor_panel
     return
 
 

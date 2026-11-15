@@ -20,8 +20,10 @@ def imports():
     repo_root = Path(__file__).resolve().parents[3]
     if str(repo_root) not in sys.path:
         sys.path.insert(0, str(repo_root))
+    animation_asset_root = repo_root / "curriculum/interpretability/assets/animations"
 
     from research.interpretability.course import get_module, load_course_bundle
+    from research.interpretability.course.activations import load_optional_activation_gallery
     from research.interpretability.course.evidence import (
         ClaimCard,
         Endpoint,
@@ -30,6 +32,7 @@ def imports():
         TargetLevel,
     )
     from research.interpretability.course.experiments import (
+        toy_jl_projection,
         toy_representations,
         transform_representation,
     )
@@ -40,7 +43,9 @@ def imports():
         symmetric_relative_l2,
     )
     from research.interpretability.course.ui import (
+        animation_card,
         callout,
+        chessboard,
         claim_card_html,
         committed_form,
         line_chart,
@@ -48,6 +53,7 @@ def imports():
         mode_badge,
         module_header,
         resource_card,
+        square_heatmap,
         table,
     )
 
@@ -57,13 +63,17 @@ def imports():
         EvidenceOperation,
         ResultStatus,
         TargetLevel,
+        animation_asset_root,
+        animation_card,
         callout,
+        chessboard,
         claim_card_html,
         committed_form,
         get_module,
         line_chart,
         linear_cka,
         load_course_bundle,
+        load_optional_activation_gallery,
         mean_row_cosine,
         metric_cards,
         mo,
@@ -71,9 +81,12 @@ def imports():
         module_header,
         np,
         procrustes_similarity,
+        repo_root,
         resource_card,
+        square_heatmap,
         symmetric_relative_l2,
         table,
+        toy_jl_projection,
         toy_representations,
         transform_representation,
     )
@@ -165,6 +178,246 @@ def load_mode(evidence_mode, load_course_bundle, mo, verify_source):
 @app.cell
 def mode_view(bundle, mo, mode_badge, selected_mode):
     mo.Html(mode_badge(selected_mode, bundle.evidence_scope))
+    return
+
+
+@app.cell
+def real_activation_controls(
+    bundle,
+    load_optional_activation_gallery,
+    mo,
+    repo_root,
+    selected_mode,
+):
+    if bundle.is_empirical:
+        activation_gallery = load_optional_activation_gallery(
+            repo_root,
+            verify_sources=selected_mode == "source",
+        )
+        _position_options = (
+            activation_gallery.position_options()
+            if activation_gallery is not None
+            else {"Local activation pack is not materialized": 0}
+        )
+    else:
+        activation_gallery = None
+        _position_options = {"Constructed mode has no Raw/Hero tensor": 0}
+    activation_position = mo.ui.dropdown(
+        options=_position_options,
+        value=next(iter(_position_options)),
+        label="Real chess position",
+    )
+    activation_layer = mo.ui.number(
+        0,
+        14,
+        step=1,
+        value=14,
+        label="Residual layer",
+    )
+    activation_channel_rank = mo.ui.number(
+        0,
+        7,
+        step=1,
+        value=0,
+        label="Channel rank by mean |Hero − Raw| at this layer",
+    )
+    mo.vstack([
+        mo.md("## Put an actual activation under the microscope"),
+        mo.md(
+            "The default specimen below is not simulated: select one retained "
+            "public chess position, one of all 15 layers, and a real residual "
+            "coordinate from the Raw and Hero checkpoints."
+        ),
+        mo.hstack(
+            [activation_position, activation_layer, activation_channel_rank],
+            justify="start",
+            gap=1,
+        ),
+    ])
+    return (
+        activation_channel_rank,
+        activation_gallery,
+        activation_layer,
+        activation_position,
+    )
+
+
+@app.cell
+def real_activation_microscope(
+    activation_channel_rank,
+    activation_gallery,
+    activation_layer,
+    activation_position,
+    bundle,
+    callout,
+    chessboard,
+    line_chart,
+    metric_cards,
+    mo,
+    np,
+    resource_card,
+    square_heatmap,
+    table,
+):
+    if bundle.is_empirical and activation_gallery is not None:
+        gallery_activation = activation_gallery.activation_view(
+            position=int(activation_position.value),
+            layer=int(activation_layer.value),
+            channel_rank=int(activation_channel_rank.value),
+        )
+        _record = gallery_activation["position"]
+        _delta = np.asarray(gallery_activation["delta_channel"])
+        _raw = np.asarray(gallery_activation["raw_channel"])
+        _hero = np.asarray(gallery_activation["hero_channel"])
+        _largest = np.argsort(-np.abs(_delta), kind="stable")[:8]
+        _square_rows = [
+            {
+                "square": f"{chr(ord('a') + int(_index) % 8)}{int(_index) // 8 + 1}",
+                "Raw": f"{_raw[_index]:+.4f}",
+                "Hero": f"{_hero[_index]:+.4f}",
+                "Hero − Raw": f"{_delta[_index]:+.4f}",
+            }
+            for _index in _largest
+        ]
+        _layer_points = list(enumerate(gallery_activation["per_layer_delta_rms"]))
+        _cosine_points = list(
+            enumerate(gallery_activation["per_layer_mean_token_cosine"])
+        )
+        _selected_layer = int(activation_layer.value)
+        _selected_delta = gallery_activation["per_layer_delta_rms"][_selected_layer]
+        _selected_cosine = gallery_activation["per_layer_mean_token_cosine"][
+            _selected_layer
+        ]
+        activation_microscope_view = mo.vstack([
+            mo.Html(metric_cards([
+                (_record["puzzle_id"], "public puzzle specimen"),
+                (_record["target_move"], "recorded target move"),
+                (_selected_layer, "selected layer"),
+                (gallery_activation["channel"], "actual residual coordinate"),
+                (f"{_selected_delta:.4f}", "position-level activation Δ RMS"),
+                (f"{_selected_cosine:.4f}", "mean paired-token cosine"),
+            ])),
+            mo.hstack([
+                mo.Html(chessboard(_record["fen"])),
+                mo.vstack([
+                    mo.md(
+                        f"**Themes:** {_record['themes']}  \n"
+                        f"**Solution:** `{_record['solution_uci']}`  \n"
+                        "Activations use BT4's side-to-move token frame internally; "
+                        "these maps have been returned to absolute board squares."
+                    ),
+                    mo.Html(table(
+                        _square_rows,
+                        (
+                            ("square", "Largest-change square"),
+                            ("Raw", "Raw activation"),
+                            ("Hero", "Hero activation"),
+                            ("Hero − Raw", "Difference"),
+                        ),
+                    )),
+                ]),
+            ], justify="start", gap=1),
+            mo.ui.tabs({
+                "Raw channel values": mo.Html(square_heatmap(
+                    gallery_activation["raw_channel"],
+                    alt_text=(
+                        f"Actual Raw residual coordinate {gallery_activation['channel']} "
+                        f"at layer {_selected_layer}, mapped to absolute squares."
+                    ),
+                    signed=True,
+                )),
+                "Hero channel values": mo.Html(square_heatmap(
+                    gallery_activation["hero_channel"],
+                    alt_text=(
+                        f"Actual Hero residual coordinate {gallery_activation['channel']} "
+                        f"at layer {_selected_layer}, mapped to absolute squares."
+                    ),
+                    signed=True,
+                )),
+                "Hero − Raw channel": mo.Html(square_heatmap(
+                    gallery_activation["delta_channel"],
+                    alt_text=(
+                        f"Hero minus Raw residual coordinate {gallery_activation['channel']} "
+                        f"at layer {_selected_layer}."
+                    ),
+                    signed=True,
+                )),
+                "Whole-vector Δ RMS": mo.Html(square_heatmap(
+                    gallery_activation["delta_square_rms"],
+                    alt_text=(
+                        f"RMS difference across all 1024 residual coordinates per square "
+                        f"at layer {_selected_layer}."
+                    ),
+                    signed=False,
+                )),
+            }),
+            mo.Html(line_chart(
+                [{
+                    "name": "position-level activation Δ RMS",
+                    "points": _layer_points,
+                    "color": "#a95f19",
+                }],
+                x_label="BT4 layer",
+                y_label="RMS(Hero − Raw)",
+                alt_text=(
+                    "For the selected real chess position, residual activation "
+                    "difference across all squares and channels at every layer."
+                ),
+            )),
+            mo.Html(line_chart(
+                [{
+                    "name": "mean paired-token cosine",
+                    "points": _cosine_points,
+                    "color": "#3366a3",
+                }],
+                x_label="BT4 layer",
+                y_label="cosine",
+                y_domain=(-1.0, 1.0),
+                alt_text=(
+                    "For the selected real chess position, mean Raw versus Hero "
+                    "token cosine at every layer."
+                ),
+            )),
+            mo.Html(callout(
+                "limit",
+                "A coordinate is visible, not automatically meaningful",
+                "Channel selection is based on mean absolute Raw/Hero difference. "
+                "That makes the coordinate interesting for inspection but does not "
+                "make it a chess concept, a monosemantic feature, or a policy mediator.",
+            )),
+            mo.Html(resource_card(
+                mode="real activation tensor · frozen development gallery",
+                runtime="instant from the 30.8 MB local activation pack",
+                device="gallery was extracted on the local GTX 1660 Ti",
+                determinism="float32 inference; float16 stored residuals; fixed 8-position selection",
+                sources=(
+                    f"{activation_gallery.run_id}; data SHA-256 "
+                    f"{activation_gallery.data_sha256}"
+                ),
+                limitations=(
+                    "Eight deliberately selected development positions; channel ranking "
+                    "is descriptive and no population interval is implied."
+                ),
+            )),
+        ])
+    elif bundle.is_empirical:
+        gallery_activation = None
+        activation_microscope_view = mo.Html(callout(
+            "limit",
+            "The local real-activation pack is absent",
+            "This public repository intentionally omits the license-gated 30.8 MB "
+            "tensor pack. Rebuild it locally from authorized sources to enable the "
+            "interactive Raw/Hero activation microscope.",
+        ))
+    else:
+        gallery_activation = None
+        activation_microscope_view = mo.Html(callout(
+            "neutral",
+            "Toy mode keeps its boundary",
+            "Switch to Snapshot or source-verified mode to inspect checkpoint activations. "
+            "The constructed rotation lab below remains useful because its mechanism is known.",
+        ))
+    activation_microscope_view
     return
 
 
@@ -374,6 +627,129 @@ def gauge_lesson(mo):
 
 
 @app.cell
+def jl_visual_essay(animation_asset_root, animation_card, mo):
+    mo.vstack([
+        mo.md(r"""
+        ## Visual essay: what random projection actually promises
+
+        A basis rotation preserves every pairwise distance exactly. The
+        Johnson–Lindenstrauss lemma makes a weaker but surprisingly useful
+        statement: for a finite set of points, a suitable random linear map
+        can reduce dimension while approximately preserving all pairwise
+        distances. The required target dimension scales logarithmically with
+        the number of points and polynomially with the inverse distortion.
+
+        Watch the distance matrix, not the coordinates. The points are free to
+        look completely different after projection; the guarantee concerns
+        finite-set distances.
+        """),
+        mo.Html(animation_card(
+            animation_asset_root / "johnson_lindenstrauss.mp4",
+            animation_asset_root / "johnson_lindenstrauss.png",
+            animation_asset_root / "johnson_lindenstrauss.vtt",
+            title="Johnson–Lindenstrauss as a distance-preservation story",
+            description="A 64-dimensional finite point cloud is randomly projected to 12 dimensions while its pairwise distance matrix is compared.",
+            transcript=(
+                "The animation begins with seven points represented only through their "
+                "pairwise distance matrix in 64 dimensions. Both matrices use one "
+                "shared color scale. A Gaussian random matrix projects the points into "
+                "12 dimensions. The second matrix remains visually "
+                "similar, and the maximum relative distance distortion for this sampled "
+                "map is displayed. The closing equation states the asymptotic dimension "
+                "bound. A final warning separates this finite-set geometric theorem from "
+                "a theory of which features a trained neural network learns."
+            ),
+        )),
+    ])
+    return
+
+
+@app.cell
+def jl_controls(mo):
+    jl_point_count = mo.ui.number(
+        8, 64, step=4, value=24, label="Finite-set point count"
+    )
+    jl_target_dim = mo.ui.number(
+        2, 48, step=2, value=12, label="Projected dimension (ambient = 96)"
+    )
+    jl_tolerance = mo.ui.number(
+        0.05, 0.8, step=0.05, value=0.35, label="Chosen relative-distortion tolerance"
+    )
+    jl_seed = mo.ui.number(0, 1000, step=1, value=43, label="Projection seed")
+    mo.hstack(
+        [jl_point_count, jl_target_dim, jl_tolerance, jl_seed],
+        justify="start",
+    )
+    return jl_point_count, jl_seed, jl_target_dim, jl_tolerance
+
+
+@app.cell
+def run_jl_lab(jl_point_count, jl_seed, jl_target_dim, toy_jl_projection):
+    jl_result = toy_jl_projection(
+        point_count=int(jl_point_count.value),
+        ambient_dim=96,
+        target_dim=int(jl_target_dim.value),
+        seed=int(jl_seed.value),
+    )
+    return (jl_result,)
+
+
+@app.cell
+def jl_lab_view(jl_result, jl_tolerance, line_chart, metric_cards, mo, np):
+    jl_order = np.argsort(jl_result["original_distances"])
+    jl_original = np.asarray(jl_result["original_distances"])[jl_order]
+    jl_projected = np.asarray(jl_result["projected_distances"])[jl_order]
+    jl_within = float(
+        np.mean(np.asarray(jl_result["relative_distortion"]) <= jl_tolerance.value)
+    )
+    jl_series = [
+        {
+            "name": "original 96D distance",
+            "color": "#3366a3",
+            "points": list(enumerate(jl_original)),
+        },
+        {
+            "name": "projected distance",
+            "color": "#a95f19",
+            "points": list(enumerate(jl_projected)),
+        },
+    ]
+    mo.vstack([
+        mo.Html(metric_cards([
+            (
+                f"{jl_result['maximum_relative_distortion']:.1%}",
+                "maximum pairwise relative distortion",
+            ),
+            (
+                f"{jl_result['median_relative_distortion']:.1%}",
+                "median pairwise relative distortion",
+            ),
+            (
+                f"{jl_within:.1%}",
+                f"pairs within chosen {jl_tolerance.value:.0%} tolerance",
+            ),
+        ])),
+        mo.Html(line_chart(
+            jl_series,
+            x_label="pair index, sorted by original distance",
+            y_label="Euclidean distance",
+            alt_text=(
+                "Original and projected pairwise distances for every distinct "
+                "pair in one sampled Gaussian random projection."
+            ),
+        )),
+        mo.callout(
+            "This cell samples one map. It is not a numerical proof of the "
+            "Johnson–Lindenstrauss lemma, and a good median does not imply that "
+            "every pair meets the chosen tolerance. Change both seed and target "
+            "dimension; the maximum is the relevant finite-set diagnostic.",
+            kind="warn",
+        ),
+    ])
+    return
+
+
+@app.cell
 def real_geometry_panel(
     ClaimCard,
     Endpoint,
@@ -502,8 +878,10 @@ def close(bundle, callout, mo, resource_card):
         2. Why must alignment be selected away from the final evaluation set?
         3. Give a case where parameter, representation, and behavior metrics disagree.
 
-        **Source:** Kornblith et al. (ICML 2019) introduces CKA for representation
-        comparison. Local Raw/Hero records are exploratory. See the
+        **Sources:** Kornblith et al. (ICML 2019) introduces CKA for
+        representation comparison; Johnson and Lindenstrauss (1984) provides
+        the finite-set random-projection theorem. Local Raw/Hero records are
+        exploratory. See the
         [course source register](../SOURCES.md).
         """),
         mo.Html(resource_card(

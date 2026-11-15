@@ -1,0 +1,22 @@
+WEBVTT
+
+00:00.000 --> 00:02.000
+The title defines the topic: non-orthogonal co-activation can create decoder cross-talk.
+
+00:02.000 --> 00:04.800
+Two neuron axes appear, followed by five differently colored candidate feature directions sharing the plane.
+
+00:04.800 --> 00:07.150
+A label emphasizes that five candidate directions share only two axes.
+
+00:07.150 --> 00:08.630
+Feature one activates alone. Its dot-product decoder returns the correct value, one.
+
+00:08.630 --> 00:10.430
+A non-orthogonal second feature co-activates. The readout becomes one plus d one dot d two, or 1.57, producing cross-talk error 0.57.
+
+00:10.430 --> 00:12.130
+An orthogonal control replaces feature two. The cross-term becomes zero and the feature-one readout returns to one.
+
+00:12.130 --> 00:15.060
+The conclusion states that interference is decoder cross-talk, not vector addition alone.

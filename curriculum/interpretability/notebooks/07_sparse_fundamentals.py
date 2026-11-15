@@ -20,8 +20,10 @@ def imports():
     repo_root = Path(__file__).resolve().parents[3]
     if str(repo_root) not in sys.path:
         sys.path.insert(0, str(repo_root))
+    animation_asset_root = repo_root / "curriculum/interpretability/assets/animations"
 
     from research.interpretability.course import get_module, load_course_bundle
+    from research.interpretability.course.activations import load_optional_activation_gallery
     from research.interpretability.course.evidence import (
         ClaimCard,
         Endpoint,
@@ -31,6 +33,7 @@ def imports():
     )
     from research.interpretability.course.experiments import toy_sparse_frontier
     from research.interpretability.course.ui import (
+        animation_card,
         callout,
         claim_card_html,
         committed_form,
@@ -48,17 +51,21 @@ def imports():
         EvidenceOperation,
         ResultStatus,
         TargetLevel,
+        animation_asset_root,
+        animation_card,
         callout,
         claim_card_html,
         committed_form,
         get_module,
         line_chart,
         load_course_bundle,
+        load_optional_activation_gallery,
         metric_cards,
         mo,
         mode_badge,
         module_header,
         np,
+        repo_root,
         resource_card,
         table,
         toy_sparse_frontier,
@@ -155,6 +162,198 @@ def load_mode(evidence_mode, load_course_bundle, mo, verify_source):
 @app.cell
 def mode_view(bundle, mo, mode_badge, selected_mode):
     mo.Html(mode_badge(selected_mode, bundle.evidence_scope))
+    return
+
+
+@app.cell
+def real_spectrum_controls(
+    bundle,
+    load_optional_activation_gallery,
+    mo,
+    repo_root,
+    selected_mode,
+):
+    spectrum_gallery = (
+        load_optional_activation_gallery(
+            repo_root,
+            verify_sources=selected_mode == "source",
+        )
+        if bundle.is_empirical
+        else None
+    )
+    spectrum_layer = mo.ui.dropdown(
+        options={"Layer 0": 0, "Layer 7": 7, "Layer 14": 14},
+        value="Layer 14",
+        label="Real residual-spectrum layer",
+    )
+    spectrum_model = mo.ui.radio(
+        options={"Raw BT4": "raw", "Hero": "hero"},
+        value="Hero",
+        label="Checkpoint residual stream",
+        inline=True,
+    )
+    mo.vstack([
+        mo.md("## Before naming features, inspect the real variance geometry"),
+        mo.md(
+            "Start with a narrow empirical question of the checkpoints: how many "
+            "orthogonal directions carry the finite gallery's residual variance? "
+            "The controlled animation that follows supplies a known mechanism—not "
+            "an explanation retrofitted to this spectrum."
+        ),
+        mo.hstack([spectrum_layer, spectrum_model], justify="start", gap=1),
+    ])
+    return spectrum_gallery, spectrum_layer, spectrum_model
+
+
+@app.cell
+def real_spectrum_view(
+    bundle,
+    callout,
+    line_chart,
+    metric_cards,
+    mo,
+    resource_card,
+    spectrum_gallery,
+    spectrum_layer,
+    spectrum_model,
+    table,
+):
+    if bundle.is_empirical and spectrum_gallery is not None:
+        gallery_spectrum = spectrum_gallery.spectrum_view(
+            layer=int(spectrum_layer.value),
+            model=str(spectrum_model.value),
+        )
+        _fraction = gallery_spectrum["variance_fraction"]
+        _cumulative = gallery_spectrum["cumulative_variance"]
+        _component_rows = [
+            {
+                "component": index + 1,
+                "variance share": f"{_fraction[index]:.3%}",
+                "cumulative": f"{_cumulative[index]:.2%}",
+            }
+            for index in range(12)
+        ]
+        empirical_spectrum_view = mo.vstack([
+            mo.Html(metric_cards([
+                (str(spectrum_model.value).title(), "checkpoint residual stream"),
+                (int(spectrum_layer.value), "layer"),
+                (gallery_spectrum["observation_count"], "position-square observations"),
+                (f"{gallery_spectrum['participation_ratio']:.1f}", "participation-ratio rank"),
+                (f"{gallery_spectrum['entropy_effective_rank']:.1f}", "entropy effective rank"),
+                (gallery_spectrum["components_for_95_percent"], "components for 95% variance"),
+            ])),
+            mo.Html(line_chart(
+                [{
+                    "name": "cumulative centered residual variance",
+                    "points": [
+                        (index + 1, float(_cumulative[index]))
+                        for index in range(min(160, len(_cumulative)))
+                    ],
+                    "color": "#7450a8",
+                }],
+                x_label="ordered singular component",
+                y_label="cumulative variance",
+                y_domain=(0.0, 1.0),
+                alt_text=(
+                    f"Cumulative centered variance of real {str(spectrum_model.value)} "
+                    f"residual activations at layer {int(spectrum_layer.value)} over "
+                    "the finite eight-position gallery."
+                ),
+            )),
+            mo.Html(table(
+                _component_rows,
+                (
+                    ("component", "Leading component"),
+                    ("variance share", "Variance share"),
+                    ("cumulative", "Cumulative variance"),
+                ),
+            )),
+            mo.Html(callout(
+                "limit",
+                "Effective rank is not a feature count",
+                "A broad spectrum establishes that this finite activation cloud is not "
+                "one-dimensional. It does not reveal how many sparse causes exist, whether "
+                "they are superposed, or whether any learned dictionary coordinate is "
+                "monosemantic. Those are model-and-intervention questions.",
+            )),
+            mo.Html(resource_card(
+                mode="real centered activation spectrum · frozen gallery",
+                runtime="instant from exact stored singular values",
+                device="source activations extracted on GTX 1660 Ti",
+                determinism="float16 stored residuals promoted to float64 for exact finite-gallery SVD",
+                sources=f"{spectrum_gallery.run_id}; layers 0, 7, 14",
+                limitations=gallery_spectrum["interpretation"],
+            )),
+        ])
+    elif bundle.is_empirical:
+        gallery_spectrum = None
+        empirical_spectrum_view = mo.Html(callout(
+            "limit",
+            "The local real-activation pack is absent",
+            "This public repository intentionally omits the license-gated 30.8 MB "
+            "tensor pack. Rebuild it locally from authorized sources to enable the "
+            "interactive centered-residual spectra.",
+        ))
+    else:
+        gallery_spectrum = None
+        empirical_spectrum_view = mo.Html(callout(
+            "neutral",
+            "Toy mode has known sparse causes but no checkpoint spectrum",
+            "Switch to Snapshot or source-verified mode for the Raw/Hero residual "
+            "spectrum. Neither mode turns effective rank into evidence of feature semantics.",
+        ))
+    empirical_spectrum_view
+    return
+
+
+@app.cell
+def superposition_visual_essay(animation_asset_root, animation_card, mo):
+    mo.vstack([
+        mo.md(r"""
+        ## Controlled mechanism: more candidate features than axes
+
+        Superposition is easiest to understand geometrically. If features are
+        sparse—only a few matter for any one example—a model can assign more
+        feature directions than it has orthogonal axes. The directions need
+        not collide on most inputs. When several co-activate, however, their
+        non-orthogonality creates decoder cross-talk. For unit decoder
+        directions and \(x=f_1d_1+f_2d_2\),
+
+        \[
+        \hat f_1=d_1^\top x
+        =f_1+f_2\,d_1^\top d_2.
+        \]
+
+        The cross-term—not vector addition by itself—is the interference.
+
+        This is a capacity argument, not a certificate that any learned
+        direction is a clean human concept. The animation deliberately uses a
+        tiny two-dimensional system so the trade-off is visible.
+        """),
+        mo.Html(animation_card(
+            animation_asset_root / "superposition.mp4",
+            animation_asset_root / "superposition.png",
+            animation_asset_root / "superposition.vtt",
+            title="Five sparse features sharing two representational axes",
+            description="A non-orthogonal decoder produces a measurable cross-term under co-activation, while an orthogonal control removes it.",
+            transcript=(
+                "The animation first draws two orthogonal axes, then places five colored "
+                "feature directions in the same plane. With feature one active alone, its "
+                "dot-product decoder returns one. A non-orthogonal second direction then "
+                "co-activates. The decoder readout becomes one plus the cross-term d1 dot "
+                "d2, producing a visible error. An orthogonal control sets that cross-term "
+                "to zero and restores the correct readout. The conclusion distinguishes "
+                "decoder cross-talk from vector addition itself."
+            ),
+        )),
+        mo.callout(
+            "The Johnson–Lindenstrauss lemma can explain how finite-set distances "
+            "survive some random projections. It does not, by itself, explain why a "
+            "trained network chooses sparse features, how features are represented, "
+            "or whether a direction is monosemantic.",
+            kind="warn",
+        ),
+    ])
     return
 
 
@@ -506,8 +705,9 @@ def close(bundle, callout, mo, resource_card):
         2. Why can identical NMSE produce different policy change?
         3. When must the sparsity operating point be frozen?
 
-        **Sources:** Anthropic's monosemanticity report (lab report 2023) and
-        Dunefsky et al. on transcoders (NeurIPS 2024). See the
+        **Sources:** Toy Models of Superposition (lab report 2022), Anthropic's
+        monosemanticity report (lab report 2023), and Dunefsky et al. on
+        transcoders (NeurIPS 2024). See the
         [course source register](../SOURCES.md).
         """),
         mo.Html(resource_card(

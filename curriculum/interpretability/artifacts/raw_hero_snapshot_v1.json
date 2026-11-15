@@ -3,9 +3,1336 @@
   "extraction_version": 1,
   "integrity": {
     "algorithm": "sha256-canonical-json-without-integrity",
-    "sha256": "e75d545dafa1e32bf6dcf334bafa9a30c01cf7667838f3fbe44eeaad616fa68f"
+    "sha256": "1b79baf8278f730333b35bc7052f73df6b054dfd6021aec70f175cdb55ec6973"
   },
   "payload": {
+    "activation_gallery": {
+      "activation_spectrum": {
+        "interpretation": "descriptive variance geometry; effective rank is not evidence of superposition, feature count, or monosemanticity",
+        "layers": [
+          0,
+          7,
+          14
+        ],
+        "observations": 512,
+        "operation": "exact singular values of centered position-square residual rows within the finite gallery"
+      },
+      "data_sha256": "49f6f35271acaaaae052191f9a758695cb545ec6e9c20d3eb2c52a8cf02a5860",
+      "data_size_bytes": 30830817,
+      "elapsed_seconds": 19.454161591944285,
+      "environment": {
+        "device": "cuda",
+        "device_name": "NVIDIA GeForce GTX 1660 Ti",
+        "numpy": "2.2.6",
+        "peak_allocated_bytes": 2196733440,
+        "python": "3.12.3",
+        "python_chess": "1.11.2",
+        "safetensors": "0.5.3",
+        "torch": "2.5.1+cu121"
+      },
+      "paired_layer_metrics": {
+        "delta_rms": [
+          0.014537391335165913,
+          0.01679935193023721,
+          0.012826913056869074,
+          0.011940552406593008,
+          0.011454710173891948,
+          0.01189949450476434,
+          0.011751306146070038,
+          0.012334577764521477,
+          0.013625980132635804,
+          0.015703522938719818,
+          0.018661414722335554,
+          0.023253497618526804,
+          0.02450144051301655,
+          0.02554419708878779,
+          0.34190526981874225
+        ],
+        "hero_rms": [
+          0.08272316596834667,
+          0.08828591878007314,
+          0.08058889810315671,
+          0.07805932673522922,
+          0.07513082972892264,
+          0.07477139479000958,
+          0.07336741103033811,
+          0.07693037470476902,
+          0.07694253980822133,
+          0.08026590907893166,
+          0.08439478127543816,
+          0.09128832410916127,
+          0.0904271307543019,
+          0.1095037499149809,
+          1.429674182648026
+        ],
+        "linear_cka_over_tokens": [
+          0.9928818514451809,
+          0.9871594650296533,
+          0.9936661255416692,
+          0.993397875416118,
+          0.9944349867691968,
+          0.993610163883665,
+          0.9948086455751193,
+          0.9957866990960825,
+          0.9947582065762258,
+          0.9924747780165378,
+          0.9853290460822367,
+          0.98082343225035,
+          0.975445286765407,
+          0.9820822728970993,
+          0.9808928109318327
+        ],
+        "mean_token_cosine": [
+          0.9846857763277934,
+          0.9872247764153709,
+          0.9894935068300055,
+          0.9907655015724901,
+          0.9892610199268687,
+          0.9880395026513337,
+          0.9874032364975971,
+          0.9865731227332797,
+          0.9830366824072104,
+          0.9787449797015015,
+          0.9722186797441394,
+          0.9655120237667432,
+          0.960472176749777,
+          0.9720174879268465,
+          0.9668466241422932
+        ],
+        "raw_rms": [
+          0.0816253518752905,
+          0.0872147217350285,
+          0.08043638737724451,
+          0.07809635363655566,
+          0.07593668179028185,
+          0.07580568198072826,
+          0.07423673942162215,
+          0.07790373259331573,
+          0.07817218296548806,
+          0.08201603773767814,
+          0.08669438488057574,
+          0.09403551857505234,
+          0.09223521901519124,
+          0.11092635848809751,
+          1.4149704557634804
+        ],
+        "symmetric_relative_l2": [
+          0.17690930865585208,
+          0.19144490733401792,
+          0.15931551394057636,
+          0.15293138716650226,
+          0.15165021332115824,
+          0.15805187296711828,
+          0.15922731318987743,
+          0.1593263652274637,
+          0.17568906276568214,
+          0.19353382488646034,
+          0.2181484092957524,
+          0.25094987543669783,
+          0.2682702871602781,
+          0.23176686046969305,
+          0.24038522436297424
+        ]
+      },
+      "policy_lens": {
+        "arm_semantics": "first letter encoder, second letter policy head",
+        "boundary": "resid_post_after_ln",
+        "final_parity_atol": 1e-05,
+        "final_parity_max_abs_error": {
+          "HH": 9.298324584960938e-06,
+          "HR": 8.344650268554688e-06,
+          "RH": 7.867813110351562e-06,
+          "RR": 7.62939453125e-06
+        },
+        "readout": "native nonlinear attention-policy head at every layer",
+        "stored_dtype": "float16 after float32 parity validation"
+      },
+      "positions": [
+        {
+          "arms": {
+            "HH": {
+              "legal_mass_before_masking": 0.0926482304930687,
+              "target_probability": 0.814263105392456,
+              "top_legal_moves": [
+                {
+                  "action": 266,
+                  "move": "c2e4",
+                  "probability": 0.814263105392456
+                },
+                {
+                  "action": 1135,
+                  "move": "h5f7",
+                  "probability": 0.12499330192804337
+                },
+                {
+                  "action": 77,
+                  "move": "d1g1",
+                  "probability": 0.0032253244426101446
+                },
+                {
+                  "action": 177,
+                  "move": "h1g1",
+                  "probability": 0.002531586214900017
+                },
+                {
+                  "action": 76,
+                  "move": "d1f1",
+                  "probability": 0.0020183564629405737
+                }
+              ]
+            },
+            "HR": {
+              "legal_mass_before_masking": 0.09042976796627045,
+              "target_probability": 0.8136324286460876,
+              "top_legal_moves": [
+                {
+                  "action": 266,
+                  "move": "c2e4",
+                  "probability": 0.8136324286460876
+                },
+                {
+                  "action": 1135,
+                  "move": "h5f7",
+                  "probability": 0.12501850724220276
+                },
+                {
+                  "action": 77,
+                  "move": "d1g1",
+                  "probability": 0.0032386011444032192
+                },
+                {
+                  "action": 177,
+                  "move": "h1g1",
+                  "probability": 0.0025395259726792574
+                },
+                {
+                  "action": 76,
+                  "move": "d1f1",
+                  "probability": 0.0020445557311177254
+                }
+              ]
+            },
+            "RH": {
+              "legal_mass_before_masking": 0.06541493535041809,
+              "target_probability": 0.7528620362281799,
+              "top_legal_moves": [
+                {
+                  "action": 266,
+                  "move": "c2e4",
+                  "probability": 0.7528620362281799
+                },
+                {
+                  "action": 1135,
+                  "move": "h5f7",
+                  "probability": 0.15858088433742523
+                },
+                {
+                  "action": 77,
+                  "move": "d1g1",
+                  "probability": 0.004338948056101799
+                },
+                {
+                  "action": 177,
+                  "move": "h1g1",
+                  "probability": 0.0035344366915524006
+                },
+                {
+                  "action": 76,
+                  "move": "d1f1",
+                  "probability": 0.0029531323816627264
+                }
+              ]
+            },
+            "RR": {
+              "legal_mass_before_masking": 0.06357389688491821,
+              "target_probability": 0.7521159648895264,
+              "top_legal_moves": [
+                {
+                  "action": 266,
+                  "move": "c2e4",
+                  "probability": 0.7521159648895264
+                },
+                {
+                  "action": 1135,
+                  "move": "h5f7",
+                  "probability": 0.1585785150527954
+                },
+                {
+                  "action": 77,
+                  "move": "d1g1",
+                  "probability": 0.004360121674835682
+                },
+                {
+                  "action": 177,
+                  "move": "h1g1",
+                  "probability": 0.0035447534173727036
+                },
+                {
+                  "action": 76,
+                  "move": "d1f1",
+                  "probability": 0.00298498198390007
+                }
+              ]
+            }
+          },
+          "fen": "rn1q2r1/1pp2p1k/3p3p/p1bN3Q/2P1pPb1/P7/1PB4P/2KR3R w - - 0 20",
+          "legal_count": 38,
+          "position_id": "000ee9f47a578b4e53f698df026d0c9861666f7b095d319e553256dfbb3c721d",
+          "position_index": 0,
+          "puzzle_id": "1M9A9",
+          "solution_uci": "c2e4 f7f5 e4f5 g4f5 h5f5",
+          "target_action": 266,
+          "target_move": "c2e4",
+          "themes": "advantage long middlegame"
+        },
+        {
+          "arms": {
+            "HH": {
+              "legal_mass_before_masking": 0.15013758838176727,
+              "target_probability": 0.9388137459754944,
+              "top_legal_moves": [
+                {
+                  "action": 72,
+                  "move": "d8a8",
+                  "probability": 0.9388137459754944
+                },
+                {
+                  "action": 194,
+                  "move": "a7a8",
+                  "probability": 0.01806422509253025
+                },
+                {
+                  "action": 197,
+                  "move": "a7b7",
+                  "probability": 0.011452923528850079
+                },
+                {
+                  "action": 426,
+                  "move": "a6b5",
+                  "probability": 0.0036897354293614626
+                },
+                {
+                  "action": 126,
+                  "move": "f8e8",
+                  "probability": 0.0016925864620134234
+                }
+              ]
+            },
+            "HR": {
+              "legal_mass_before_masking": 0.14613685011863708,
+              "target_probability": 0.9379140734672546,
+              "top_legal_moves": [
+                {
+                  "action": 72,
+                  "move": "d8a8",
+                  "probability": 0.9379140734672546
+                },
+                {
+                  "action": 194,
+                  "move": "a7a8",
+                  "probability": 0.018266335129737854
+                },
+                {
+                  "action": 197,
+                  "move": "a7b7",
+                  "probability": 0.011602288112044334
+                },
+                {
+                  "action": 426,
+                  "move": "a6b5",
+                  "probability": 0.00370786152780056
+                },
+                {
+                  "action": 126,
+                  "move": "f8e8",
+                  "probability": 0.001720951171591878
+                }
+              ]
+            },
+            "RH": {
+              "legal_mass_before_masking": 0.09993863850831985,
+              "target_probability": 0.9017384648323059,
+              "top_legal_moves": [
+                {
+                  "action": 72,
+                  "move": "d8a8",
+                  "probability": 0.9017384648323059
+                },
+                {
+                  "action": 194,
+                  "move": "a7a8",
+                  "probability": 0.030923670157790184
+                },
+                {
+                  "action": 197,
+                  "move": "a7b7",
+                  "probability": 0.016944769769906998
+                },
+                {
+                  "action": 426,
+                  "move": "a6b5",
+                  "probability": 0.0044538890942931175
+                },
+                {
+                  "action": 126,
+                  "move": "f8e8",
+                  "probability": 0.0027547008357942104
+                }
+              ]
+            },
+            "RR": {
+              "legal_mass_before_masking": 0.09776012599468231,
+              "target_probability": 0.9006564617156982,
+              "top_legal_moves": [
+                {
+                  "action": 72,
+                  "move": "d8a8",
+                  "probability": 0.9006564617156982
+                },
+                {
+                  "action": 194,
+                  "move": "a7a8",
+                  "probability": 0.031204896047711372
+                },
+                {
+                  "action": 197,
+                  "move": "a7b7",
+                  "probability": 0.01715322956442833
+                },
+                {
+                  "action": 426,
+                  "move": "a6b5",
+                  "probability": 0.004461596719920635
+                },
+                {
+                  "action": 126,
+                  "move": "f8e8",
+                  "probability": 0.0027838279493153095
+                }
+              ]
+            }
+          },
+          "fen": "3q1rk1/r1p1bpp1/p2p1n1p/1N6/RPPp4/3P2P1/1B2PPKP/3Q1R2 b - - 0 16",
+          "legal_count": 25,
+          "position_id": "0046857a0e6620ad3ee366e6e32e42915d976a954ddd641da8d9f1a518d08581",
+          "position_index": 1,
+          "puzzle_id": "4uXWq",
+          "solution_uci": "d8a8 g2g1 a6b5 a4a7 a8a7",
+          "target_action": 72,
+          "target_move": "d8a8",
+          "themes": "advantage long middlegame"
+        },
+        {
+          "arms": {
+            "HH": {
+              "legal_mass_before_masking": 0.1282147616147995,
+              "target_probability": 0.9168720245361328,
+              "top_legal_moves": [
+                {
+                  "action": 802,
+                  "move": "e5f3",
+                  "probability": 0.9168720245361328
+                },
+                {
+                  "action": 229,
+                  "move": "b7a6",
+                  "probability": 0.036787115037441254
+                },
+                {
+                  "action": 509,
+                  "move": "d6a6",
+                  "probability": 0.010539684444665909
+                },
+                {
+                  "action": 48,
+                  "move": "c8b8",
+                  "probability": 0.003124665468931198
+                },
+                {
+                  "action": 782,
+                  "move": "e5c6",
+                  "probability": 0.0013308417983353138
+                }
+              ]
+            },
+            "HR": {
+              "legal_mass_before_masking": 0.12415452301502228,
+              "target_probability": 0.9158480167388916,
+              "top_legal_moves": [
+                {
+                  "action": 802,
+                  "move": "e5f3",
+                  "probability": 0.9158480167388916
+                },
+                {
+                  "action": 229,
+                  "move": "b7a6",
+                  "probability": 0.037070415914058685
+                },
+                {
+                  "action": 509,
+                  "move": "d6a6",
+                  "probability": 0.010628633201122284
+                },
+                {
+                  "action": 48,
+                  "move": "c8b8",
+                  "probability": 0.0031765252351760864
+                },
+                {
+                  "action": 782,
+                  "move": "e5c6",
+                  "probability": 0.0013662064447999
+                }
+              ]
+            },
+            "RH": {
+              "legal_mass_before_masking": 0.10145147889852524,
+              "target_probability": 0.9096290469169617,
+              "top_legal_moves": [
+                {
+                  "action": 802,
+                  "move": "e5f3",
+                  "probability": 0.9096290469169617
+                },
+                {
+                  "action": 229,
+                  "move": "b7a6",
+                  "probability": 0.03940436989068985
+                },
+                {
+                  "action": 509,
+                  "move": "d6a6",
+                  "probability": 0.010046029463410378
+                },
+                {
+                  "action": 48,
+                  "move": "c8b8",
+                  "probability": 0.00246669864282012
+                },
+                {
+                  "action": 798,
+                  "move": "e5g4",
+                  "probability": 0.001490295398980379
+                }
+              ]
+            },
+            "RR": {
+              "legal_mass_before_masking": 0.09769798070192337,
+              "target_probability": 0.9081634879112244,
+              "top_legal_moves": [
+                {
+                  "action": 802,
+                  "move": "e5f3",
+                  "probability": 0.9081634879112244
+                },
+                {
+                  "action": 229,
+                  "move": "b7a6",
+                  "probability": 0.039882440119981766
+                },
+                {
+                  "action": 509,
+                  "move": "d6a6",
+                  "probability": 0.010170393623411655
+                },
+                {
+                  "action": 48,
+                  "move": "c8b8",
+                  "probability": 0.002511297119781375
+                },
+                {
+                  "action": 798,
+                  "move": "e5g4",
+                  "probability": 0.0015321298269554973
+                }
+              ]
+            }
+          },
+          "fen": "2k1r3/1pp1r3/P2q3p/3pn1p1/1P1B4/8/2P1QPPP/1R2R1K1 b - - 0 23",
+          "legal_count": 37,
+          "position_id": "006056ae2d159f9b306b0531ab5d1a2ca97237c03f3c8e203449963a18d109fb",
+          "position_index": 2,
+          "puzzle_id": "3Xozh",
+          "solution_uci": "e5f3 g2f3 e7e2 e1e2 e8e2 a6a7 d6a6",
+          "target_action": 802,
+          "target_move": "e5f3",
+          "themes": "advantage discoveredAttack kingsideAttack middlegame veryLong"
+        },
+        {
+          "arms": {
+            "HH": {
+              "legal_mass_before_masking": 0.10674667358398438,
+              "target_probability": 0.9499727487564087,
+              "top_legal_moves": [
+                {
+                  "action": 1706,
+                  "move": "e8f6",
+                  "probability": 0.9499727487564087
+                },
+                {
+                  "action": 771,
+                  "move": "d4g7",
+                  "probability": 0.004860020242631435
+                },
+                {
+                  "action": 1712,
+                  "move": "e8g7",
+                  "probability": 0.002482255455106497
+                },
+                {
+                  "action": 768,
+                  "move": "d4f6",
+                  "probability": 0.001855496084317565
+                },
+                {
+                  "action": 624,
+                  "move": "g3g7",
+                  "probability": 0.0018374640494585037
+                }
+              ]
+            },
+            "HR": {
+              "legal_mass_before_masking": 0.1039862334728241,
+              "target_probability": 0.9492279887199402,
+              "top_legal_moves": [
+                {
+                  "action": 1706,
+                  "move": "e8f6",
+                  "probability": 0.9492279887199402
+                },
+                {
+                  "action": 771,
+                  "move": "d4g7",
+                  "probability": 0.004899080377072096
+                },
+                {
+                  "action": 1712,
+                  "move": "e8g7",
+                  "probability": 0.0025391285307705402
+                },
+                {
+                  "action": 768,
+                  "move": "d4f6",
+                  "probability": 0.001898008631542325
+                },
+                {
+                  "action": 624,
+                  "move": "g3g7",
+                  "probability": 0.0018504237523302436
+                }
+              ]
+            },
+            "RH": {
+              "legal_mass_before_masking": 0.09326951205730438,
+              "target_probability": 0.9407796859741211,
+              "top_legal_moves": [
+                {
+                  "action": 1706,
+                  "move": "e8f6",
+                  "probability": 0.9407796859741211
+                },
+                {
+                  "action": 771,
+                  "move": "d4g7",
+                  "probability": 0.005925862584263086
+                },
+                {
+                  "action": 1712,
+                  "move": "e8g7",
+                  "probability": 0.0029709937516599894
+                },
+                {
+                  "action": 624,
+                  "move": "g3g7",
+                  "probability": 0.0022558027412742376
+                },
+                {
+                  "action": 768,
+                  "move": "d4f6",
+                  "probability": 0.002173625398427248
+                }
+              ]
+            },
+            "RR": {
+              "legal_mass_before_masking": 0.09091240912675858,
+              "target_probability": 0.9401040077209473,
+              "top_legal_moves": [
+                {
+                  "action": 1706,
+                  "move": "e8f6",
+                  "probability": 0.9401040077209473
+                },
+                {
+                  "action": 771,
+                  "move": "d4g7",
+                  "probability": 0.0059447824023664
+                },
+                {
+                  "action": 1712,
+                  "move": "e8g7",
+                  "probability": 0.0030274156015366316
+                },
+                {
+                  "action": 624,
+                  "move": "g3g7",
+                  "probability": 0.0022674291394650936
+                },
+                {
+                  "action": 768,
+                  "move": "d4f6",
+                  "probability": 0.002197667956352234
+                }
+              ]
+            }
+          },
+          "fen": "4Nbk1/p4ppp/7q/3r4/2pB4/2P3QP/P4PP1/6K1 w - - 0 31",
+          "legal_count": 33,
+          "position_id": "00669768e28735cb167c1d54d9232c8a7a2459bc7ad72a293a0a7b261a008745",
+          "position_index": 3,
+          "puzzle_id": "1jPGU",
+          "solution_uci": "e8f6 h6f6 d4f6",
+          "target_action": 1706,
+          "target_move": "e8f6",
+          "themes": "advantage endgame pin short"
+        },
+        {
+          "arms": {
+            "HH": {
+              "legal_mass_before_masking": 0.0995674729347229,
+              "target_probability": 0.9551753997802734,
+              "top_legal_moves": [
+                {
+                  "action": 701,
+                  "move": "b4d6",
+                  "probability": 0.9551753997802734
+                },
+                {
+                  "action": 705,
+                  "move": "b4f8",
+                  "probability": 0.0014248726656660438
+                },
+                {
+                  "action": 703,
+                  "move": "b4e7",
+                  "probability": 0.0013359322911128402
+                },
+                {
+                  "action": 0,
+                  "move": "a1b1",
+                  "probability": 0.0012697855709120631
+                },
+                {
+                  "action": 695,
+                  "move": "b4b5",
+                  "probability": 0.0012648352421820164
+                }
+              ]
+            },
+            "HR": {
+              "legal_mass_before_masking": 0.09841611236333847,
+              "target_probability": 0.9548313617706299,
+              "top_legal_moves": [
+                {
+                  "action": 701,
+                  "move": "b4d6",
+                  "probability": 0.9548313617706299
+                },
+                {
+                  "action": 705,
+                  "move": "b4f8",
+                  "probability": 0.0014105173759162426
+                },
+                {
+                  "action": 703,
+                  "move": "b4e7",
+                  "probability": 0.001314746798016131
+                },
+                {
+                  "action": 0,
+                  "move": "a1b1",
+                  "probability": 0.0012594504514709115
+                },
+                {
+                  "action": 695,
+                  "move": "b4b5",
+                  "probability": 0.001247210893779993
+                }
+              ]
+            },
+            "RH": {
+              "legal_mass_before_masking": 0.0889151468873024,
+              "target_probability": 0.9487400650978088,
+              "top_legal_moves": [
+                {
+                  "action": 701,
+                  "move": "b4d6",
+                  "probability": 0.9487400650978088
+                },
+                {
+                  "action": 705,
+                  "move": "b4f8",
+                  "probability": 0.001594345085322857
+                },
+                {
+                  "action": 703,
+                  "move": "b4e7",
+                  "probability": 0.0014745279913768172
+                },
+                {
+                  "action": 695,
+                  "move": "b4b5",
+                  "probability": 0.0014488350134342909
+                },
+                {
+                  "action": 180,
+                  "move": "h1h2",
+                  "probability": 0.001443186542019248
+                }
+              ]
+            },
+            "RR": {
+              "legal_mass_before_masking": 0.08762169629335403,
+              "target_probability": 0.9481077194213867,
+              "top_legal_moves": [
+                {
+                  "action": 701,
+                  "move": "b4d6",
+                  "probability": 0.9481077194213867
+                },
+                {
+                  "action": 705,
+                  "move": "b4f8",
+                  "probability": 0.001587070757523179
+                },
+                {
+                  "action": 703,
+                  "move": "b4e7",
+                  "probability": 0.0014649364165961742
+                },
+                {
+                  "action": 695,
+                  "move": "b4b5",
+                  "probability": 0.0014478693483397365
+                },
+                {
+                  "action": 180,
+                  "move": "h1h2",
+                  "probability": 0.001431001233868301
+                }
+              ]
+            }
+          },
+          "fen": "r1bq3r/1p1k2n1/pnp1p1Bp/3pP3/1Q1P3P/8/PPP2PP1/R3K2R w KQ - 2 17",
+          "legal_count": 43,
+          "position_id": "00a23cf6deda1973757ee96f1e332500ee00052e8b369f1b0a0d9f17556977e3",
+          "position_index": 4,
+          "puzzle_id": "OzLJX",
+          "solution_uci": "b4d6",
+          "target_action": 701,
+          "target_move": "b4d6",
+          "themes": "mate mateIn1 middlegame oneMove"
+        },
+        {
+          "arms": {
+            "HH": {
+              "legal_mass_before_masking": 0.03607120364904404,
+              "target_probability": 0.9537598490715027,
+              "top_legal_moves": [
+                {
+                  "action": 71,
+                  "move": "c8c1",
+                  "probability": 0.9537598490715027
+                },
+                {
+                  "action": 1080,
+                  "move": "f4e2",
+                  "probability": 0.010788473300635815
+                },
+                {
+                  "action": 1062,
+                  "move": "f4d5",
+                  "probability": 0.004001939203590155
+                },
+                {
+                  "action": 1078,
+                  "move": "f4h3",
+                  "probability": 0.0011772089637815952
+                },
+                {
+                  "action": 1082,
+                  "move": "f4g2",
+                  "probability": 0.001161223859526217
+                }
+              ]
+            },
+            "HR": {
+              "legal_mass_before_masking": 0.03498498722910881,
+              "target_probability": 0.9525435566902161,
+              "top_legal_moves": [
+                {
+                  "action": 71,
+                  "move": "c8c1",
+                  "probability": 0.9525435566902161
+                },
+                {
+                  "action": 1080,
+                  "move": "f4e2",
+                  "probability": 0.011108601465821266
+                },
+                {
+                  "action": 1062,
+                  "move": "f4d5",
+                  "probability": 0.004119683988392353
+                },
+                {
+                  "action": 1078,
+                  "move": "f4h3",
+                  "probability": 0.001232131035067141
+                },
+                {
+                  "action": 1082,
+                  "move": "f4g2",
+                  "probability": 0.001210661605000496
+                }
+              ]
+            },
+            "RH": {
+              "legal_mass_before_masking": 0.03573565557599068,
+              "target_probability": 0.9565154314041138,
+              "top_legal_moves": [
+                {
+                  "action": 71,
+                  "move": "c8c1",
+                  "probability": 0.9565154314041138
+                },
+                {
+                  "action": 1080,
+                  "move": "f4e2",
+                  "probability": 0.004893492441624403
+                },
+                {
+                  "action": 1062,
+                  "move": "f4d5",
+                  "probability": 0.0027024431619793177
+                },
+                {
+                  "action": 1078,
+                  "move": "f4h3",
+                  "probability": 0.0013456681044772267
+                },
+                {
+                  "action": 1082,
+                  "move": "f4g2",
+                  "probability": 0.0013042662758380175
+                }
+              ]
+            },
+            "RR": {
+              "legal_mass_before_masking": 0.03503073751926422,
+              "target_probability": 0.9555899500846863,
+              "top_legal_moves": [
+                {
+                  "action": 71,
+                  "move": "c8c1",
+                  "probability": 0.9555899500846863
+                },
+                {
+                  "action": 1080,
+                  "move": "f4e2",
+                  "probability": 0.00502918753772974
+                },
+                {
+                  "action": 1062,
+                  "move": "f4d5",
+                  "probability": 0.002782811177894473
+                },
+                {
+                  "action": 1078,
+                  "move": "f4h3",
+                  "probability": 0.001403390895575285
+                },
+                {
+                  "action": 1082,
+                  "move": "f4g2",
+                  "probability": 0.0013575589982792735
+                }
+              ]
+            }
+          },
+          "fen": "1rr3k1/p4ppp/8/3B4/5n2/5N2/P4PPP/2R1R1K1 b - - 0 23",
+          "legal_count": 34,
+          "position_id": "00e9612ed0116a1786584b1025d728fe5f6d3ac8f47c95ec2205df284ba46ff9",
+          "position_index": 5,
+          "puzzle_id": "QUz6k",
+          "solution_uci": "c8c1 e1c1 f4e2 g1f1 e2c1",
+          "target_action": 71,
+          "target_move": "c8c1",
+          "themes": "advantage attraction fork long middlegame"
+        },
+        {
+          "arms": {
+            "HH": {
+              "legal_mass_before_masking": 0.05922093987464905,
+              "target_probability": 0.5052728056907654,
+              "top_legal_moves": [
+                {
+                  "action": 830,
+                  "move": "f4f5",
+                  "probability": 0.5052728056907654
+                },
+                {
+                  "action": 888,
+                  "move": "h4h5",
+                  "probability": 0.4407067596912384
+                },
+                {
+                  "action": 861,
+                  "move": "g4g5",
+                  "probability": 0.044670671224594116
+                },
+                {
+                  "action": 750,
+                  "move": "d4e3",
+                  "probability": 0.00934977550059557
+                }
+              ]
+            },
+            "HR": {
+              "legal_mass_before_masking": 0.05794486403465271,
+              "target_probability": 0.5036518573760986,
+              "top_legal_moves": [
+                {
+                  "action": 830,
+                  "move": "f4f5",
+                  "probability": 0.5036518573760986
+                },
+                {
+                  "action": 888,
+                  "move": "h4h5",
+                  "probability": 0.4418744742870331
+                },
+                {
+                  "action": 861,
+                  "move": "g4g5",
+                  "probability": 0.045030247420072556
+                },
+                {
+                  "action": 750,
+                  "move": "d4e3",
+                  "probability": 0.009443462826311588
+                }
+              ]
+            },
+            "RH": {
+              "legal_mass_before_masking": 0.04454746097326279,
+              "target_probability": 0.590338408946991,
+              "top_legal_moves": [
+                {
+                  "action": 830,
+                  "move": "f4f5",
+                  "probability": 0.590338408946991
+                },
+                {
+                  "action": 888,
+                  "move": "h4h5",
+                  "probability": 0.34099501371383667
+                },
+                {
+                  "action": 861,
+                  "move": "g4g5",
+                  "probability": 0.060424767434597015
+                },
+                {
+                  "action": 750,
+                  "move": "d4e3",
+                  "probability": 0.008241740986704826
+                }
+              ]
+            },
+            "RR": {
+              "legal_mass_before_masking": 0.04359132796525955,
+              "target_probability": 0.5893347263336182,
+              "top_legal_moves": [
+                {
+                  "action": 830,
+                  "move": "f4f5",
+                  "probability": 0.5893347263336182
+                },
+                {
+                  "action": 888,
+                  "move": "h4h5",
+                  "probability": 0.34174758195877075
+                },
+                {
+                  "action": 861,
+                  "move": "g4g5",
+                  "probability": 0.06061729043722153
+                },
+                {
+                  "action": 750,
+                  "move": "d4e3",
+                  "probability": 0.008300361223518848
+                }
+              ]
+            }
+          },
+          "fen": "8/8/3k2pp/1p1p4/pPpK1PPP/P1P5/8/8 w - - 2 43",
+          "legal_count": 4,
+          "position_id": "00fac3a5d0373d4e54b711a92b78915d9799a109ea8bc0db7db18276eb1a1d34",
+          "position_index": 6,
+          "puzzle_id": "4rU6L",
+          "solution_uci": "f4f5 g6f5 g4f5",
+          "target_action": 830,
+          "target_move": "f4f5",
+          "themes": "crushing endgame pawnEndgame short"
+        },
+        {
+          "arms": {
+            "HH": {
+              "legal_mass_before_masking": 0.12749141454696655,
+              "target_probability": 0.9444913864135742,
+              "top_legal_moves": [
+                {
+                  "action": 595,
+                  "move": "f3f7",
+                  "probability": 0.9444913864135742
+                },
+                {
+                  "action": 231,
+                  "move": "b2c3",
+                  "probability": 0.010497475042939186
+                },
+                {
+                  "action": 597,
+                  "move": "f3f8",
+                  "probability": 0.002745123580098152
+                },
+                {
+                  "action": 403,
+                  "move": "h2h4",
+                  "probability": 0.0018268617568537593
+                },
+                {
+                  "action": 761,
+                  "move": "d4d5",
+                  "probability": 0.0012654303573071957
+                }
+              ]
+            },
+            "HR": {
+              "legal_mass_before_masking": 0.12678350508213043,
+              "target_probability": 0.944413959980011,
+              "top_legal_moves": [
+                {
+                  "action": 595,
+                  "move": "f3f7",
+                  "probability": 0.944413959980011
+                },
+                {
+                  "action": 231,
+                  "move": "b2c3",
+                  "probability": 0.010468464344739914
+                },
+                {
+                  "action": 597,
+                  "move": "f3f8",
+                  "probability": 0.002771836007013917
+                },
+                {
+                  "action": 403,
+                  "move": "h2h4",
+                  "probability": 0.0018267120467498899
+                },
+                {
+                  "action": 761,
+                  "move": "d4d5",
+                  "probability": 0.0012653266312554479
+                }
+              ]
+            },
+            "RH": {
+              "legal_mass_before_masking": 0.11543012410402298,
+              "target_probability": 0.9448920488357544,
+              "top_legal_moves": [
+                {
+                  "action": 595,
+                  "move": "f3f7",
+                  "probability": 0.9448920488357544
+                },
+                {
+                  "action": 231,
+                  "move": "b2c3",
+                  "probability": 0.005602097138762474
+                },
+                {
+                  "action": 597,
+                  "move": "f3f8",
+                  "probability": 0.004236951936036348
+                },
+                {
+                  "action": 403,
+                  "move": "h2h4",
+                  "probability": 0.0016414859564974904
+                },
+                {
+                  "action": 230,
+                  "move": "b2b3",
+                  "probability": 0.0014178158016875386
+                }
+              ]
+            },
+            "RR": {
+              "legal_mass_before_masking": 0.11460670828819275,
+              "target_probability": 0.9447457194328308,
+              "top_legal_moves": [
+                {
+                  "action": 595,
+                  "move": "f3f7",
+                  "probability": 0.9447457194328308
+                },
+                {
+                  "action": 231,
+                  "move": "b2c3",
+                  "probability": 0.005612180568277836
+                },
+                {
+                  "action": 597,
+                  "move": "f3f8",
+                  "probability": 0.004273693077266216
+                },
+                {
+                  "action": 403,
+                  "move": "h2h4",
+                  "probability": 0.0016412318218499422
+                },
+                {
+                  "action": 230,
+                  "move": "b2b3",
+                  "probability": 0.0014343064976856112
+                }
+              ]
+            }
+          },
+          "fen": "r5k1/pppb2pp/2n1p3/6q1/3P4/P1bBPQ2/1P4PP/5RK1 w - - 0 18",
+          "legal_count": 43,
+          "position_id": "01217dcf4d391d0ffab4af62a2c17a64a6cf13faffa2202aff3887be5486808f",
+          "position_index": 7,
+          "puzzle_id": "9ef1V",
+          "solution_uci": "f3f7 g8h8 f7f8 a8f8 f1f8",
+          "target_action": 595,
+          "target_move": "f3f7",
+          "themes": "fork long mate mateIn3 middlegame sacrifice"
+        }
+      ],
+      "probes": {
+        "activation_boundary": "resid_post_after_ln",
+        "compatibility_gate": {
+          "checks": [
+            "checksum ledger and weight payload identity",
+            "Raw/Hero checkpoint and encoder-layout identities",
+            "public-corpus and deterministic split identities",
+            "all-layer residual boundary and concept-task inventory",
+            "training-only normalization and exact probe ABI",
+            "independent prediction-level metric reproduction",
+            "development evaluation with test split untouched"
+          ],
+          "passed": true
+        },
+        "independent_validation": {
+          "evaluation_rows_all_development": true,
+          "maximum_absolute_metric_difference": 4.218847493575595e-15,
+          "schema_version": "bt4-probe-result-independent-validation-v1",
+          "test_rows_evaluated": false,
+          "validation_sha256": "90a431eec5df6d0086256607013f8ea0299bc3ab64837307bfbc268395d61926"
+        },
+        "layers": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14
+        ],
+        "model_identities": {
+          "encoder_layout_sha256": "c8c7fdcab3dfb1b6af5f1ac3a54f9347dd52e3d4673ad6f88e8d9407523d8bbb",
+          "hero_state_sha256": "665ac91ad37e14a6c8810068700dba021e39e9c0fe145c8bf620882bb5a71692",
+          "raw_asset_sha256": "61e43e98d2c4cb747498c6bc13a5bbb3b07e985d3f5d87f0351a4db855fa0651",
+          "raw_mapping_sha256": "c7a22e25a74e959357f294dfdda4a8f47372d79c96ada49131967bec75b2d93c"
+        },
+        "predictions_stored_after_full-precision_probe_evaluation": true,
+        "public_corpus_integrity": "9195f857f60ab123b353095b6b931c589ae69098750ea6b26e53e7d871f349d0",
+        "source_checksums_sha256": "57880ccc85ccf1ca6f35e529d0ab8a36ed0e679486a3123d7b76da52f1911f2c",
+        "source_manifest_schema_version": "bt4-raw-hero-probe-lookahead-run-v1",
+        "source_manifest_sha256": "69e1b293bac71401caa6ba63e071c086432ff99257b57495c2a384ad4458bdea",
+        "source_metadata_schema_version": "bt4-raw-hero-probe-metadata-v1",
+        "source_metadata_sha256": "cd676ac8ac98bd5586671e0988b0ee2e13698233169016dd08163739bca6a834",
+        "source_run_id": "sha256:8c9ce9ee97af6f6753688a36a1997994f8803fe358578edf07be7b356b22d963",
+        "source_weights_sha256": "0f24c95b021a4397163924cbc990a9176b73619b55e4ec1e920324040a364c1c",
+        "split_policy": "train fit + train selection; development evaluation; test untouched",
+        "tasks": [
+          "legal_destination",
+          "opponent_attack_count",
+          "piece_code"
+        ],
+        "test_split_opened": false,
+        "weights_used_for_extraction_only": true
+      },
+      "redistribution": {
+        "artifact_class": "derived activation tensors and predictions",
+        "bulk_corpus_bundled": false,
+        "checkpoints_bundled": false,
+        "standalone_release_gate": "Human review of source-model and source-position redistribution terms is required."
+      },
+      "representation": {
+        "black_token_orientation": "BT4 square tokens are vertically mirrored for black to move; course views map back to absolute board squares.",
+        "boundary": "resid_post_after_ln",
+        "channel_basis_warning": "A residual channel is a basis coordinate, not a demonstrated chess feature.",
+        "shape_semantics": "[position, layer, side-to-move square token, channel]",
+        "source_compute_dtype": "float32",
+        "stored_dtype": "float16"
+      },
+      "run_id": "sha256:ae6d4eceadc00811d51aa738c7eafd30c5a4e406ece4feedd08123403fbdea04",
+      "scientific_status": "frozen development teaching gallery; position-level inspection, not a population estimate",
+      "selection": {
+        "position_count": 8,
+        "position_ids": [
+          "000ee9f47a578b4e53f698df026d0c9861666f7b095d319e553256dfbb3c721d",
+          "0046857a0e6620ad3ee366e6e32e42915d976a954ddd641da8d9f1a518d08581",
+          "006056ae2d159f9b306b0531ab5d1a2ca97237c03f3c8e203449963a18d109fb",
+          "00669768e28735cb167c1d54d9232c8a7a2459bc7ad72a293a0a7b261a008745",
+          "00a23cf6deda1973757ee96f1e332500ee00052e8b369f1b0a0d9f17556977e3",
+          "00e9612ed0116a1786584b1025d728fe5f6d3ac8f47c95ec2205df284ba46ff9",
+          "00fac3a5d0373d4e54b711a92b78915d9799a109ea8bc0db7db18276eb1a1d34",
+          "01217dcf4d391d0ffab4af62a2c17a64a6cf13faffa2202aff3887be5486808f"
+        ],
+        "rule": "lowest position_id in the immutable public-v2 development split",
+        "split": "development"
+      },
+      "target_gradient": {
+        "boundary": "resid_post_after_ln",
+        "interpretation": "per-square norm and gradient-times-state reductions of one full endpoint-specific VJP; not a fitted corpus-average J-Lens and not a causal intervention",
+        "layers": [
+          0,
+          7,
+          14
+        ],
+        "models": [
+          "raw with raw head",
+          "hero with hero head"
+        ],
+        "objective": "target log-odds on the fixed original legal-action support"
+      }
+    },
     "architecture": {
       "action_vocab": 1858,
       "dfm_closed_loop_mode": "none",
@@ -5026,6 +6353,494 @@
         }
       ]
     },
+    "lenses": {
+      "arms": {
+        "HH": {
+          "final_lens_parity": {
+            "maximum_absolute_error": 0.0,
+            "passed": true,
+            "rms_error": 0.0
+          },
+          "first_target_probability_ge_0.5": {
+            "count": 8,
+            "finite_count": 8,
+            "maximum": 14.0,
+            "mean": 14.0,
+            "median": 14.0,
+            "minimum": 14.0
+          },
+          "layer_indices": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14
+          ],
+          "metrics": {
+            "entropy": [
+              3.2974519431591034,
+              3.2962133586406708,
+              3.296725168824196,
+              3.296104907989502,
+              3.2969746440649033,
+              3.2974226623773575,
+              3.297351375222206,
+              3.2972905337810516,
+              3.2975597381591797,
+              3.2974192947149277,
+              3.2970187962055206,
+              3.2948455214500427,
+              3.292028233408928,
+              3.262007400393486,
+              0.5052891746163368
+            ],
+            "legal_mass_before_masking": [
+              0.017332874820567667,
+              0.01748995974776335,
+              0.01753302541328594,
+              0.017522923735668883,
+              0.017530503449961543,
+              0.017538531101308763,
+              0.017511253157863393,
+              0.017454519518651068,
+              0.017497033695690334,
+              0.017536483734147623,
+              0.017431198939448223,
+              0.017423248500563204,
+              0.017250100354431197,
+              0.016972204204648733,
+              0.10003119008615613
+            ],
+            "target_probability": [
+              0.056691103149205446,
+              0.06126694893464446,
+              0.06138221197761595,
+              0.0629984128754586,
+              0.06188382161781192,
+              0.06176339485682547,
+              0.06207349477335811,
+              0.061899943044409156,
+              0.0615207941737026,
+              0.06158842728473246,
+              0.06145232589915395,
+              0.06471467297524214,
+              0.06907804496586323,
+              0.09619366098195314,
+              0.8723710551857948
+            ],
+            "target_rank": [
+              9.375,
+              5.625,
+              4.0,
+              2.625,
+              2.125,
+              2.25,
+              2.25,
+              2.0,
+              2.25,
+              2.375,
+              2.375,
+              1.625,
+              1.5,
+              1.25,
+              1.0
+            ],
+            "top1_accuracy": [
+              0.125,
+              0.5,
+              0.625,
+              0.5,
+              0.5,
+              0.5,
+              0.5,
+              0.5,
+              0.5,
+              0.5,
+              0.5,
+              0.5,
+              0.625,
+              0.75,
+              1.0
+            ]
+          }
+        },
+        "HR": {
+          "final_lens_parity": {
+            "maximum_absolute_error": 0.0,
+            "passed": true,
+            "rms_error": 0.0
+          },
+          "first_target_probability_ge_0.5": {
+            "count": 8,
+            "finite_count": 8,
+            "maximum": 14.0,
+            "mean": 14.0,
+            "median": 14.0,
+            "minimum": 14.0
+          },
+          "layer_indices": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14
+          ],
+          "metrics": {
+            "entropy": [
+              3.2974595576524734,
+              3.296243593096733,
+              3.296746775507927,
+              3.296127423644066,
+              3.296993985772133,
+              3.2974395155906677,
+              3.2973689436912537,
+              3.2973048985004425,
+              3.297572895884514,
+              3.2974295616149902,
+              3.29702627658844,
+              3.2948599755764008,
+              3.292055606842041,
+              3.2621501833200455,
+              0.5092628970742226
+            ],
+            "legal_mass_before_masking": [
+              0.01731810497585684,
+              0.017474589287303388,
+              0.017519177490612492,
+              0.017510465579107404,
+              0.017519809596706182,
+              0.01752861443674192,
+              0.017501015885500237,
+              0.01744325939216651,
+              0.017485880118329078,
+              0.01752522896276787,
+              0.017417659371858463,
+              0.017409072897862643,
+              0.017234416911378503,
+              0.016947451484156772,
+              0.0978679321706295
+            ],
+            "target_probability": [
+              0.05664794449694455,
+              0.061207664432004094,
+              0.06132695870473981,
+              0.06295659206807613,
+              0.06183226057328284,
+              0.06170433876104653,
+              0.06202429276891053,
+              0.06184662482701242,
+              0.061481805983930826,
+              0.06155385100282729,
+              0.06142095010727644,
+              0.06468163011595607,
+              0.06904684007167816,
+              0.09612000547349453,
+              0.8714803904294968
+            ],
+            "target_rank": [
+              9.5,
+              5.625,
+              4.0,
+              2.625,
+              2.125,
+              2.25,
+              2.25,
+              2.0,
+              2.25,
+              2.25,
+              2.375,
+              1.625,
+              1.5,
+              1.25,
+              1.0
+            ],
+            "top1_accuracy": [
+              0.125,
+              0.5,
+              0.625,
+              0.5,
+              0.5,
+              0.5,
+              0.5,
+              0.5,
+              0.5,
+              0.5,
+              0.5,
+              0.5,
+              0.625,
+              0.75,
+              1.0
+            ]
+          }
+        },
+        "RH": {
+          "final_lens_parity": {
+            "maximum_absolute_error": 0.0,
+            "passed": true,
+            "rms_error": 0.0
+          },
+          "first_target_probability_ge_0.5": {
+            "count": 8,
+            "finite_count": 8,
+            "maximum": 14.0,
+            "mean": 14.0,
+            "median": 14.0,
+            "minimum": 14.0
+          },
+          "layer_indices": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14
+          ],
+          "metrics": {
+            "entropy": [
+              3.2974695563316345,
+              3.2961734533309937,
+              3.296694278717041,
+              3.2960698902606964,
+              3.2969265580177307,
+              3.2974062711000443,
+              3.2973204106092453,
+              3.29719477891922,
+              3.2974488735198975,
+              3.2973363995552063,
+              3.296879529953003,
+              3.294505089521408,
+              3.291879042983055,
+              3.2640844881534576,
+              0.5740656554698944
+            ],
+            "legal_mass_before_masking": [
+              0.01731406632461585,
+              0.017463833442889154,
+              0.017500671208836138,
+              0.017489650286734104,
+              0.017493922205176204,
+              0.017506751406472176,
+              0.01748282735934481,
+              0.01743421528954059,
+              0.01747706174501218,
+              0.01752016507089138,
+              0.017408882034942508,
+              0.017395776376361027,
+              0.017165147641208023,
+              0.016746739041991532,
+              0.08057399746030569
+            ],
+            "target_probability": [
+              0.056762013118714094,
+              0.061237738467752934,
+              0.061655920930206776,
+              0.06317510129883885,
+              0.0621236995793879,
+              0.06187934544868767,
+              0.062237988924607635,
+              0.062069838866591454,
+              0.061758016934618354,
+              0.061889079166576266,
+              0.061725622741505504,
+              0.06483686110004783,
+              0.06925484212115407,
+              0.0964500717818737,
+              0.8681257516145706
+            ],
+            "target_rank": [
+              9.375,
+              5.75,
+              3.875,
+              2.375,
+              2.125,
+              2.25,
+              1.875,
+              1.875,
+              2.25,
+              2.125,
+              2.0,
+              1.625,
+              1.5,
+              1.125,
+              1.0
+            ],
+            "top1_accuracy": [
+              0.125,
+              0.375,
+              0.625,
+              0.625,
+              0.5,
+              0.5,
+              0.5,
+              0.5,
+              0.5,
+              0.625,
+              0.5,
+              0.5,
+              0.625,
+              0.875,
+              1.0
+            ]
+          }
+        },
+        "RR": {
+          "final_lens_parity": {
+            "maximum_absolute_error": 0.0,
+            "passed": true,
+            "rms_error": 0.0
+          },
+          "first_target_probability_ge_0.5": {
+            "count": 8,
+            "finite_count": 8,
+            "maximum": 14.0,
+            "mean": 14.0,
+            "median": 14.0,
+            "minimum": 14.0
+          },
+          "layer_indices": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14
+          ],
+          "metrics": {
+            "entropy": [
+              3.297477424144745,
+              3.2962037920951843,
+              3.296717122197151,
+              3.296094059944153,
+              3.296947404742241,
+              3.2974240630865097,
+              3.2973392605781555,
+              3.297211319208145,
+              3.2974644899368286,
+              3.2973491102457047,
+              3.2968899309635162,
+              3.294525682926178,
+              3.291914314031601,
+              3.2642352879047394,
+              0.5781494863331318
+            ],
+            "legal_mass_before_masking": [
+              0.017299633705988526,
+              0.017448751430492848,
+              0.017486868106061593,
+              0.017477049463195726,
+              0.017483316420111805,
+              0.01749682886293158,
+              0.01747261345735751,
+              0.01742281869519502,
+              0.01746584306238219,
+              0.017508764722151682,
+              0.017395135946571827,
+              0.01738133520120755,
+              0.01714889335562475,
+              0.016721618158044294,
+              0.07885928312316537
+            ],
+            "target_probability": [
+              0.05672057531774044,
+              0.06118025165051222,
+              0.061600580578669906,
+              0.06313362228684127,
+              0.06206936319358647,
+              0.06181968655437231,
+              0.06218548584729433,
+              0.06201355950906873,
+              0.06171422079205513,
+              0.06185157201252878,
+              0.0616915465798229,
+              0.06479869550094008,
+              0.06921736430376768,
+              0.09636425646021962,
+              0.8673554956912994
+            ],
+            "target_rank": [
+              9.375,
+              5.75,
+              3.75,
+              2.375,
+              2.125,
+              2.25,
+              1.75,
+              2.0,
+              2.25,
+              2.125,
+              2.0,
+              1.625,
+              1.5,
+              1.125,
+              1.0
+            ],
+            "top1_accuracy": [
+              0.125,
+              0.375,
+              0.625,
+              0.625,
+              0.5,
+              0.5,
+              0.5,
+              0.5,
+              0.5,
+              0.625,
+              0.5,
+              0.5,
+              0.625,
+              0.875,
+              1.0
+            ]
+          }
+        }
+      },
+      "boundary": "resid_post_after_ln",
+      "jacobian_lens_fitted": false,
+      "legal_mass_semantics": "mean probability mass assigned to legal actions before masking",
+      "position_count": 8,
+      "readout": "native nonlinear attention-policy head applied at every depth",
+      "run_id": "raw_hero_literature_pilot_v2",
+      "scientific_status": "exploratory development pilot",
+      "target_probability_semantics": "mean recorded-target probability after position-specific legal masking and renormalization"
+    },
     "lookahead": {
       "deltas": [
         {
@@ -9525,6 +11340,26 @@
       "schema_version": "bt4-lorsa-causal-validation-metrics-v2",
       "sha256": "bcc84d4ea3d604d1fcffc8d301e5d74dc581620a23b7d7684446a55ad64e4427",
       "size_bytes": 254018
+    },
+    {
+      "id": "activation_gallery_manifest",
+      "license_note": "Course does not redistribute source checkpoints, LoRSA/probe weights, bulk positions, or corpora; upstream license remains controlling.",
+      "path": "curriculum/interpretability/artifacts/real_activation_gallery_v1.json",
+      "redistribution": "derived_metrics_or_minimal_fen_only",
+      "role": "real Raw/Hero activation-gallery manifest and compact summaries",
+      "schema_version": "bt4-real-activation-gallery-v1",
+      "sha256": "6611075be6f5dd4ce4bb401773a194f2422f38120adf6ef6be0441bc877431d1",
+      "size_bytes": 53402
+    },
+    {
+      "id": "activation_gallery_tensors",
+      "license_note": "Activation tensors contain no checkpoint or bulk corpus but require human review of source-model and source-position terms before a standalone release.",
+      "path": "curriculum/interpretability/artifacts/real_activation_gallery_v1.npz",
+      "redistribution": "internal_derived_tensor_release_review_required",
+      "role": "eight-position float16 Raw/Hero residual activation gallery",
+      "schema_version": null,
+      "sha256": "49f6f35271acaaaae052191f9a758695cb545ec6e9c20d3eb2c52a8cf02a5860",
+      "size_bytes": 30830817
     },
     {
       "id": "hero_handoff",

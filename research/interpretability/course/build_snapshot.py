@@ -76,6 +76,14 @@ SOURCE_SPECS: dict[str, tuple[str, str]] = {
         "research/analysis/published_lorsa_l14_causal_dev256_v2/metrics.json",
         "matched-control sparse-feature interventions",
     ),
+    "activation_gallery_manifest": (
+        "curriculum/interpretability/artifacts/real_activation_gallery_v1.json",
+        "real Raw/Hero activation-gallery manifest and compact summaries",
+    ),
+    "activation_gallery_tensors": (
+        "curriculum/interpretability/artifacts/real_activation_gallery_v1.npz",
+        "eight-position float16 Raw/Hero residual activation gallery",
+    ),
     "hero_handoff": (
         "docs/hero_proposal_a_continuation.md",
         "paused Proposal A estimand and predicted-action gate",
@@ -126,11 +134,58 @@ def _load_jsonl(root: Path, source_id: str, *, limit: int) -> list[dict[str, Any
     return rows
 
 
+def _activation_tensor_identity_from_manifest(
+    root: Path,
+    *,
+    expected_relative: str,
+) -> tuple[str, int]:
+    """Recover the ignored tensor identity from its integrity-bound manifest."""
+
+    manifest = _load_json(root, "activation_gallery_manifest")
+    if not isinstance(manifest, Mapping):
+        raise ValueError("Activation-gallery manifest is malformed")
+    integrity = manifest.get("manifest_integrity")
+    if not isinstance(integrity, Mapping):
+        raise ValueError("Activation-gallery manifest lacks integrity metadata")
+    unsigned = dict(manifest)
+    unsigned.pop("manifest_integrity", None)
+    observed = hashlib.sha256(_canonical_bytes(unsigned)).hexdigest()
+    if (
+        integrity.get("algorithm")
+        != "sha256-canonical-json-without-manifest_integrity"
+        or integrity.get("sha256") != observed
+    ):
+        raise ValueError("Activation-gallery manifest integrity drift")
+    data = manifest.get("data")
+    if not isinstance(data, Mapping):
+        raise ValueError("Activation-gallery manifest lacks a data record")
+    manifest_relative = Path(SOURCE_SPECS["activation_gallery_manifest"][0])
+    declared_relative = manifest_relative.parent / str(data.get("path", ""))
+    if declared_relative.as_posix() != expected_relative:
+        raise ValueError("Activation-gallery tensor path drift")
+    digest = str(data.get("sha256", ""))
+    size_bytes = int(data.get("size_bytes", -1))
+    if len(digest) != 64 or any(character not in "0123456789abcdef" for character in digest):
+        raise ValueError("Activation-gallery tensor digest is malformed")
+    if size_bytes <= 0:
+        raise ValueError("Activation-gallery tensor size is malformed")
+    return digest, size_bytes
+
+
 def _source_records(root: Path) -> list[dict[str, Any]]:
     records = []
     for source_id, (relative, role) in SOURCE_SPECS.items():
         path = root / relative
-        if not path.is_file():
+        is_activation_tensor = source_id == "activation_gallery_tensors"
+        if path.is_file():
+            source_sha256 = _sha256_file(path)
+            source_size_bytes = path.stat().st_size
+        elif is_activation_tensor:
+            source_sha256, source_size_bytes = _activation_tensor_identity_from_manifest(
+                root,
+                expected_relative=relative,
+            )
+        else:
             raise FileNotFoundError(path)
         schema = None
         if path.suffix == ".json":
@@ -141,12 +196,20 @@ def _source_records(root: Path) -> list[dict[str, Any]]:
                 "id": source_id,
                 "path": relative,
                 "role": role,
-                "sha256": _sha256_file(path),
-                "size_bytes": path.stat().st_size,
+                "sha256": source_sha256,
+                "size_bytes": source_size_bytes,
                 "schema_version": schema,
-                "redistribution": "derived_metrics_or_minimal_fen_only",
+                "redistribution": (
+                    "internal_derived_tensor_release_review_required"
+                    if is_activation_tensor
+                    else "derived_metrics_or_minimal_fen_only"
+                ),
                 "license_note": (
-                    "Course does not redistribute source checkpoints, LoRSA/probe "
+                    "Activation tensors contain no checkpoint or bulk corpus but require "
+                    "human review of source-model and source-position terms before a "
+                    "standalone release."
+                    if is_activation_tensor
+                    else "Course does not redistribute source checkpoints, LoRSA/probe "
                     "weights, bulk positions, or corpora; upstream license remains controlling."
                 ),
             }
@@ -308,6 +371,73 @@ def _circuit_evidence_matrix(
     return rows
 
 
+def _policy_lens_summary(literature: Mapping[str, Any]) -> dict[str, Any]:
+    arms = {}
+    for arm in ("RR", "HR", "RH", "HH"):
+        source = literature["logit_lens"][arm]
+        layer_indices = [int(layer) for layer in source["layer_indices"]]
+        arms[arm] = {
+            "layer_indices": layer_indices,
+            "metrics": {
+                name: [
+                    source["metrics"][name][str(layer)]
+                    for layer in layer_indices
+                ]
+                for name in (
+                    "entropy",
+                    "legal_mass_before_masking",
+                    "target_probability",
+                    "target_rank",
+                    "top1_accuracy",
+                )
+            },
+            "final_lens_parity": source["final_lens_parity"],
+            "first_target_probability_ge_0.5": source[
+                "first_target_probability_ge_0.5"
+            ],
+        }
+    return {
+        "run_id": "raw_hero_literature_pilot_v2",
+        "position_count": int(
+            literature["logit_lens"]["HH"]["final_target_probability_bootstrap"]["count"]
+        ),
+        "boundary": "resid_post_after_ln",
+        "readout": "native nonlinear attention-policy head applied at every depth",
+        "target_probability_semantics": (
+            "mean recorded-target probability after position-specific legal masking "
+            "and renormalization"
+        ),
+        "legal_mass_semantics": (
+            "mean probability mass assigned to legal actions before masking"
+        ),
+        "arms": arms,
+        "jacobian_lens_fitted": False,
+        "scientific_status": "exploratory development pilot",
+    }
+
+
+def _activation_gallery_summary(manifest: Mapping[str, Any]) -> dict[str, Any]:
+    """Retain enough real-tensor provenance for every notebook claim card."""
+
+    return {
+        "run_id": manifest["run_id"],
+        "scientific_status": manifest["scientific_status"],
+        "selection": manifest["selection"],
+        "representation": manifest["representation"],
+        "policy_lens": manifest["policy_lens"],
+        "target_gradient": manifest["target_gradient"],
+        "activation_spectrum": manifest["activation_spectrum"],
+        "probes": manifest["probes"],
+        "data_sha256": manifest["data"]["sha256"],
+        "data_size_bytes": manifest["data"]["size_bytes"],
+        "paired_layer_metrics": manifest["summary"]["paired_layer_metrics"],
+        "positions": manifest["summary"]["positions"],
+        "environment": manifest["environment"],
+        "elapsed_seconds": manifest["elapsed_seconds"],
+        "redistribution": manifest["redistribution"],
+    }
+
+
 def build_payload(root: Path) -> dict[str, Any]:
     synthesis = _load_json(root, "synthesis")
     model_diff = _load_json(root, "model_diff")
@@ -324,6 +454,7 @@ def build_payload(root: Path) -> dict[str, Any]:
     token_metrics = _load_json(root, "token_metrics")
     token_selection = _load_json(root, "token_selection")
     lorsa_causal = _load_json(root, "lorsa_causal")
+    activation_gallery = _load_json(root, "activation_gallery_manifest")
     datasets = synthesis["datasets"]
     selected_spectrum = next(
         row for row in spectra["matrices"] if row["name"] == "embedding.proj.w"
@@ -394,6 +525,8 @@ def build_payload(root: Path) -> dict[str, Any]:
             "embedding_projection_spectrum": selected_spectrum,
             "encoder_lr_verdict": hero_lr["verdict"],
         },
+        "lenses": _policy_lens_summary(literature),
+        "activation_gallery": _activation_gallery_summary(activation_gallery),
         "probes": {
             "concept_metrics": datasets["concept_metrics"],
             "concept_deltas": datasets["concept_deltas"],

@@ -1,6 +1,6 @@
 # Curriculum specification
 
-Version: 1.0 creator–critic freeze, 2026-08-11.
+Version: 1.2 real-activation blog extension, 2026-08-11.
 
 ## Purpose
 
@@ -17,6 +17,10 @@ as a gallery of activation plots. A learner should finish able to:
 6. evaluate lookahead claims without conflating decodability, refinement,
    conditional prediction, or search; and
 7. defend or falsify a mechanism with a reproducible evidence record.
+8. distinguish identity/logit, tuned, and Jacobian lenses and translate them
+   into a legality-aware chess policy experiment.
+9. inspect an actual checkpoint activation, decoder prediction, endpoint
+   gradient, and spectrum without confusing visibility with semantics or use.
 
 The target is an advanced undergraduate, graduate student, engineer, or
 independent STEM researcher. Prerequisites are matrix multiplication, dot
@@ -93,6 +97,15 @@ The compact snapshot records schema, source path/SHA-256/size, source schema,
 repository commit, extraction version, grouping scope, and redistribution
 status. Corruption, source drift, order drift, or unknown schema is an error.
 Static exports show the default snapshot narrative without requiring Python.
+A separate 30.8 MB gallery retains eight positions of both models' complete
+all-layer post-residual streams plus selected policy, probe, gradient, and
+spectrum products. It is a local, gitignored derived tensor artifact with its
+own tracked manifest and standalone redistribution-review gate; no checkpoint
+or activation tensor is bundled in the public repository. Snapshot notebooks
+show an explicit absence card rather than silently substituting toy data. A
+clean checkout reconstructs only the expected tensor identity from that
+integrity-bound manifest and reports that tensor/source verification did not
+run; a source-materialized checkout performs the full checksum and ABI gates.
 
 ## Course-wide experimental invariants
 
@@ -123,15 +136,17 @@ Static exports show the default snapshot narrative without requiring Python.
                  └─> 04 Probes
                       └─> 05 Attribution & intervention
                            ├─> 06 Lookahead case study
-                           └─> 07 Sparse fundamentals
+                           ├─> 07 Sparse fundamentals
                                 └─> 08 LoRSA & sparse diff
+                           └─> 11 Policy & Jacobian lenses
                       03 + 05 + 06 + 08
                            └─> 09 Circuits & abstraction
                                 └─> 10 Capstone
 ```
 
-Modules 00–06 are the core. Modules 07–10 are the advanced track. Lookahead
-does not depend on sparse methods.
+Modules 00–06 are the core. Modules 07–10 are the advanced track. Module 11 is
+a standalone visual essay after Module 05. Lookahead does not depend on sparse
+methods, and the lens essay does not depend on the capstone.
 
 ## Module specifications
 
@@ -161,8 +176,10 @@ policy plus pooled value/WDL outputs; place DFM actions and JEPA states;
 distinguish parameters, activations, residuals, branches, and replacements; and
 identify the exact `[B,64,1024]` hook ABI.
 
-Lab: board/legal-move explorer, softmax and legality mask, shape-tracing puzzle,
-hook-boundary matcher, and tiny attention pass. The language analogy explicitly
+Lab: inspect one actual `[64,1024]` checkpoint residual, its selected
+1,024-value square row, and per-square RMS; then use the board/legal-move
+explorer, softmax and legality mask, shape-tracing puzzle, hook-boundary
+matcher, and tiny attention pass. The language analogy explicitly
 breaks: chess uses fixed jointly encoded state, bidirectional attention, an
 exact simulator, and a legality-constrained action vocabulary.
 
@@ -193,8 +210,12 @@ geometry, and functional change; use identical-model, independent-seed,
 random-rotation, and shuffled-pair nulls; and interpret low-rank deltas without
 equating rank with mechanism.
 
-Lab: transform a representation and submit metric predictions before reveal;
-inspect layerwise Raw/Hero curves and parameter-delta spectra.
+Lab: select a public position, layer, and real residual coordinate; inspect
+Raw, Hero, delta, whole-vector square RMS, and position-level depth curves;
+then transform a known representation and submit metric predictions before
+reveal. Inspect aggregate layerwise Raw/Hero curves and parameter-delta spectra; watch an
+authored Johnson–Lindenstrauss distance-matrix animation; and sample random
+projections while tracking maximum rather than only average distortion.
 
 ### 04 — Probes and usable information
 
@@ -207,8 +228,10 @@ sweeps, and MDL intuition; state strictly predictive conclusions. Probability
 calibration is introduced with behavior metrics in module 02 rather than
 misattributed to a representation probe.
 
-Lab: toggle leaked row split versus grouped split; sweep ridge/capacity; compare
-simple-input and shuffled-label baselines; inspect layer selection and
+Lab: apply the retained trained probes to real selectable Raw/Hero activation
+rows and compare board-aligned prediction, target, and error maps; then toggle
+leaked row split versus grouped split, sweep ridge/capacity, and compare
+simple-input and shuffled-label baselines. Inspect layer selection and
 multiplicity. Real negative evidence: future-move decodability yields no
 systematic Hero advantage, and only one of 30 probe-direction policy intervals
 excludes zero while four random controls also do.
@@ -224,8 +247,10 @@ random, norm-matched, positive, and semantic-placebo controls; diagnose dose,
 sign, off-manifold risk, legality, and off-target effects; and separate
 localization, necessity, sufficiency, and explanation.
 
-Lab: change saturation and watch gradients fail; compare maps; choose a patch
-layer/token/dose; inspect dose response and activation density. Retained
+Lab: first inspect a real target-log-odds residual VJP and gradient-times-state
+map at layers 0, 7, or 14; then change saturation and watch gradients fail,
+compare maps, choose a patch layer/token/dose, and inspect dose response and
+activation density. Retained
 integrated-gradients completeness failures and the chess-pin intervention
 caution are first-class evidence, not appendices.
 
@@ -262,9 +287,13 @@ reconstruction, sparsity, dead features, fidelity, and policy replacement;
 navigate the reconstruction–sparsity frontier; understand why sparse does not
 imply monosemantic.
 
-Lab: vary sparsity/top-k on a ground-truth sparse mixture; compare activation
+Lab: compare exact finite-gallery Raw/Hero centered residual spectra at layers
+0, 7, and 14 without treating effective rank as a feature count; vary
+sparsity/top-k on a ground-truth sparse mixture; compare activation
 reconstruction with downstream replacement fidelity; retain feature-splitting
-and dead-feature failures.
+and dead-feature failures. An authored superposition animation makes the
+feature-capacity/interference trade-off visible while explicitly separating it
+from the Johnson–Lindenstrauss theorem.
 
 ### 08 — LoRSA and sparse model diffing
 
@@ -323,6 +352,29 @@ Deliverable:
 
 A rigorously falsified central hypothesis can receive full marks.
 
+### 11 — From the policy lens to the Jacobian lens
+
+Mission: treat a lens as a measurement instrument rather than a transparent
+window into computation.
+
+Objectives: derive the identity/logit lens, a fitted affine tuned lens, and the
+corpus-averaged Jacobian lens; diagnose basis drift, distribution shift, and
+finite-step linearization error; distinguish a local Jacobian from the
+published global average; and translate sequence-token unembedding into BT4's
+64-square, nonlinear, legality-constrained policy interface.
+
+Lab: inspect actual top UCI moves, target probability, pre-mask legal mass, and
+per-square reductions of one full endpoint-specific VJP for a selectable Raw/Hero position and
+depth. Then rotate a known hidden basis, introduce context-dependent nonlinear
+transport, compare identity, corpus-average-J, and local-J readouts plus an OLS
+state-regression baseline against the actual downstream readout, and perturb
+the state to expose curvature. The retained aggregate panel reproduces a
+policy-head trace for eight development positions and four Raw/Hero hybrid
+arms. The real VJP is not called a fitted Jacobian lens. The final
+protocol freezes parity, corpus groups, legal-action contrasts, structured
+transport estimators, held-out prediction, and a later controlled
+intervention.
+
 ## Notebook contract
 
 Every notebook contains:
@@ -363,6 +415,7 @@ or peer to apply the named criteria to the capstone evidence record.
 | Sparse-model ABI | architecture-boundary classification in 07/08 |
 | Circuit evidence | necessity/sufficiency/interchange audit in 09 |
 | Reproducible synthesis | capstone manifest and falsifier in 10 |
+| Lens calibration | nonlinear transport laboratory and chess protocol in 11 |
 
 ## Creator–critic release process
 
@@ -370,7 +423,8 @@ The course ships in three tranches even when implemented on one branch:
 
 1. foundations: 00–03;
 2. causal case studies: 04–06;
-3. advanced sparse/circuit work: 07–10.
+3. advanced sparse/circuit work: 07–10;
+4. visual-essay extension: 11 plus the authored animations in 03 and 07.
 
 Each tranche requires a creator draft, scientific critic, cold-learner pedagogy
 critic, runtime/accessibility critic, and a response log mapping every finding
@@ -392,6 +446,8 @@ Hard release gates:
 - `marimo check`, static export, unit tests, and interaction smoke tests pass;
 - keyboard use, color-safe redundant encodings, alt text, and a no-chess path
   are checked; and
+- animation source, MP4, poster, and captions match a compact hash manifest;
+  videos never autoplay and every animation has a complete transcript; and
 - the review log has no unresolved blocker.
 
 Scored gate: at least 90/100 overall and at least 80% in each category.

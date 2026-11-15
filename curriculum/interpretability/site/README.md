@@ -25,6 +25,24 @@ graded assessments.
 - [09 — Circuits and causal abstraction](09_circuits_and_abstraction.html)
 - [10 — Defend or falsify a mechanism](10_capstone.html)
 
+## Visual essay
+
+- [11 — From the policy lens to the Jacobian lens](11_policy_and_jacobian_lenses.html)
+
+Modules 03 and 07 embed compact, captioned course-created visual essays on
+Johnson–Lindenstrauss distance preservation and superposition. Each video has
+a poster and full text transcript and does not autoplay.
+
+The default editions of Modules 01, 03, 04, 05, 07, and 11 also render views
+computed from the frozen real Raw/Hero activation gallery: numeric residual
+rows, board-aligned deltas and probe errors, target-policy gradients, finite
+spectra, and position-level legal policy trajectories. The HTML contains the
+rendered view and exact notebook source, not either checkpoint or the complete
+30.8 MB tensor pack. Live selectors require the executable notebook.
+Both the local tensor and these rendered real-derived views remain under the
+human publication gate in the artifact register; do not push regenerated real
+pages to a public branch until that gate is closed.
+
 The HTML is generated; review and edit the Python notebooks, not these files.
 See [the publishing contract](../PUBLISHING.md) and
 [artifact/license register](../ARTIFACTS_AND_LICENSES.md).

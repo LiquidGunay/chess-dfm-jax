@@ -1,0 +1,60 @@
+{
+  "schema_version": "chess-interp-animation-manifest-v1",
+  "authoring": {
+    "manim": "0.20.1",
+    "ffmpeg": "6.1.1",
+    "resolution": "854x480",
+    "fps": 15,
+    "audio": false
+  },
+  "source": {
+    "path": "curriculum/interpretability/animations/scenes.py",
+    "sha256": "eeae8285c98110eb5eab3e5324ff0c527cff53035fbbc3c9a8ea60907ed9caef"
+  },
+  "animations": [
+    {
+      "id": "superposition",
+      "scene": "SuperpositionGeometry",
+      "duration_seconds": 15.066667,
+      "files": {
+        "video": {
+          "path": "curriculum/interpretability/assets/animations/superposition.mp4",
+          "size_bytes": 332062,
+          "sha256": "b6afc1a8ed973ea97f0060939bb6edcc5ba320426ad2aa7ad1dfa0d9efe1b68c"
+        },
+        "poster": {
+          "path": "curriculum/interpretability/assets/animations/superposition.png",
+          "size_bytes": 80114,
+          "sha256": "1bb9b973ca29fc140655fae2b9b7fa66c751ddc8b2b72ae5c27bb9d32d20db5f"
+        },
+        "captions": {
+          "path": "curriculum/interpretability/assets/animations/superposition.vtt",
+          "size_bytes": 876,
+          "sha256": "f378fc407255954ce21f366e0c4da17784bff3e45cb01c3aea9235f33a650b8b"
+        }
+      }
+    },
+    {
+      "id": "johnson_lindenstrauss",
+      "scene": "JohnsonLindenstraussDistances",
+      "duration_seconds": 9.0,
+      "files": {
+        "video": {
+          "path": "curriculum/interpretability/assets/animations/johnson_lindenstrauss.mp4",
+          "size_bytes": 212468,
+          "sha256": "1bc6d7e09e3a2be64fc4f51711cef1100f93ea3cd892b87de00b400906eddbcc"
+        },
+        "poster": {
+          "path": "curriculum/interpretability/assets/animations/johnson_lindenstrauss.png",
+          "size_bytes": 74924,
+          "sha256": "4d7b577dc7aed53d79bce1ad35437e29bc20c1410a05251daff7b737eaaf0a2e"
+        },
+        "captions": {
+          "path": "curriculum/interpretability/assets/animations/johnson_lindenstrauss.vtt",
+          "size_bytes": 623,
+          "sha256": "a8ddee713896a309b178503e2ee14bdea0265b23cacbf8bd78d10dcfc69f08ea"
+        }
+      }
+    }
+  ]
+}

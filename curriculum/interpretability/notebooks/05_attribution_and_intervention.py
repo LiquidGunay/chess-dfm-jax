@@ -22,6 +22,7 @@ def imports():
         sys.path.insert(0, str(repo_root))
 
     from research.interpretability.course import get_module, load_course_bundle
+    from research.interpretability.course.activations import load_optional_activation_gallery
     from research.interpretability.course.evidence import (
         ClaimCard,
         Endpoint,
@@ -60,11 +61,13 @@ def imports():
         get_module,
         line_chart,
         load_course_bundle,
+        load_optional_activation_gallery,
         metric_cards,
         mo,
         mode_badge,
         module_header,
         np,
+        repo_root,
         resource_card,
         square_heatmap,
         table,
@@ -160,6 +163,170 @@ def load_mode(evidence_mode, load_course_bundle, mo, verify_source):
 @app.cell
 def mode_view(bundle, mo, mode_badge, selected_mode):
     mo.Html(mode_badge(selected_mode, bundle.evidence_scope))
+    return
+
+
+@app.cell
+def real_gradient_controls(
+    bundle,
+    load_optional_activation_gallery,
+    mo,
+    repo_root,
+    selected_mode,
+):
+    if bundle.is_empirical:
+        gradient_gallery = load_optional_activation_gallery(
+            repo_root,
+            verify_sources=selected_mode == "source",
+        )
+        _gradient_positions = (
+            gradient_gallery.position_options()
+            if gradient_gallery is not None
+            else {"Local activation pack is not materialized": 0}
+        )
+    else:
+        gradient_gallery = None
+        _gradient_positions = {"Constructed mode has no checkpoint gradient": 0}
+    gradient_position = mo.ui.dropdown(
+        options=_gradient_positions,
+        value=next(iter(_gradient_positions)),
+        label="Real chess position",
+    )
+    gradient_layer = mo.ui.dropdown(
+        options={"Layer 0": 0, "Layer 7": 7, "Layer 14": 14},
+        value="Layer 14",
+        label="Residual layer",
+    )
+    gradient_model = mo.ui.radio(
+        options={"Raw → Raw head": "raw", "Hero → Hero head": "hero"},
+        value="Hero → Hero head",
+        label="Native policy arm",
+        inline=True,
+    )
+    mo.vstack([
+        mo.md("## A real endpoint gradient before the toy failure laboratory"),
+        mo.md(
+            "Choose a checkpoint state and inspect one vector–Jacobian product: "
+            "the derivative of the recorded move's legal-policy log-odds with "
+            "respect to every square-token residual."
+        ),
+        mo.hstack(
+            [gradient_position, gradient_layer, gradient_model],
+            justify="start",
+            gap=1,
+        ),
+    ])
+    return gradient_gallery, gradient_layer, gradient_model, gradient_position
+
+
+@app.cell
+def real_gradient_microscope(
+    bundle,
+    callout,
+    chessboard,
+    gradient_gallery,
+    gradient_layer,
+    gradient_model,
+    gradient_position,
+    metric_cards,
+    mo,
+    np,
+    resource_card,
+    square_heatmap,
+    table,
+):
+    if bundle.is_empirical and gradient_gallery is not None:
+        gallery_gradient = gradient_gallery.target_gradient_view(
+            position=int(gradient_position.value),
+            layer=int(gradient_layer.value),
+            model=str(gradient_model.value),
+        )
+        _record = gallery_gradient["position"]
+        _norm = np.asarray(gallery_gradient["square_gradient_norm"])
+        _gradient_x_state = np.asarray(gallery_gradient["gradient_x_state"])
+        _top = np.argsort(-_norm, kind="stable")[:8]
+        _gradient_rows = [
+            {
+                "square": f"{chr(ord('a') + int(_index) % 8)}{int(_index) // 8 + 1}",
+                "gradient norm": f"{_norm[_index]:.6f}",
+                "gradient × state": f"{_gradient_x_state[_index]:+.5f}",
+            }
+            for _index in _top
+        ]
+        _mass = _norm / max(float(_norm.sum()), 1e-30)
+        _top_mass = float(_mass[_top].sum())
+        real_gradient_view = mo.vstack([
+            mo.Html(metric_cards([
+                (_record["puzzle_id"], "public puzzle specimen"),
+                (_record["target_move"], "fixed target action"),
+                (int(gradient_layer.value), "residual layer"),
+                (f"{gallery_gradient['gradient_rms']:.3e}", "full residual-gradient RMS"),
+                (f"{_top_mass:.1%}", "gradient-norm mass on top 8 squares"),
+            ])),
+            mo.hstack([
+                mo.Html(chessboard(_record["fen"])),
+                mo.Html(table(
+                    _gradient_rows,
+                    (
+                        ("square", "Most locally sensitive square"),
+                        ("gradient norm", "‖∂ objective / ∂ residual_square‖₂"),
+                        ("gradient × state", "Σchannel gradient × activation"),
+                    ),
+                )),
+            ], justify="start", gap=1),
+            mo.ui.tabs({
+                "Gradient norm": mo.Html(square_heatmap(
+                    _norm,
+                    alt_text=(
+                        f"Real {str(gradient_model.value)} layer {int(gradient_layer.value)} "
+                        "target-log-odds residual-gradient norm by absolute board square."
+                    ),
+                    signed=False,
+                )),
+                "Gradient × activation": mo.Html(square_heatmap(
+                    _gradient_x_state,
+                    alt_text=(
+                        f"Real {str(gradient_model.value)} layer {int(gradient_layer.value)} "
+                        "signed gradient times activation summed over channels by square."
+                    ),
+                    signed=True,
+                )),
+            }),
+            mo.Html(callout(
+                "limit",
+                "Per-square VJP summaries are still local sensitivity",
+                "The full VJP differentiates one endpoint on one board; this artifact "
+                "retains its per-square norm and gradient×state reductions. It is neither "
+                "a fitted corpus-average J-Lens nor an intervention. Saturation, "
+                "basis dependence, and correlated residual directions remain live alternatives.",
+            )),
+            mo.Html(resource_card(
+                mode="real checkpoint VJP · frozen development gallery",
+                runtime="instant from stored gradient summaries",
+                device="computed locally on GTX 1660 Ti",
+                determinism="float32 autograd; fixed original legal support; layers 0, 7, 14",
+                sources=f"{gradient_gallery.run_id}; objective: {gallery_gradient['objective']}",
+                limitations=gallery_gradient["interpretation"],
+            )),
+        ])
+    elif bundle.is_empirical:
+        gallery_gradient = None
+        real_gradient_view = mo.Html(callout(
+            "limit",
+            "The local real-activation pack is absent",
+            "This public repository intentionally omits the license-gated 30.8 MB "
+            "tensor pack. Rebuild it locally from authorized sources to enable the "
+            "interactive endpoint-VJP summaries.",
+        ))
+    else:
+        gallery_gradient = None
+        real_gradient_view = mo.Html(callout(
+            "neutral",
+            "Toy mode has no checkpoint VJP",
+            "Switch to Snapshot or source-verified mode for real residual gradients. "
+            "The saturating toy below remains necessary because its failure mechanism is known.",
+        ))
+    real_gradient_view
     return
 
 
