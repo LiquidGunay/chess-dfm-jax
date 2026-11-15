@@ -47,3 +47,13 @@ authorized local activation/source files, passed:
 These results do not assert that a bare clone contains the local datasets,
 models or freshly regenerated HTML. Full release validation must be repeated
 after reconstructing those artifacts.
+
+## Dependency preservation
+
+The existing uv.lock was ignored locally; this archive deliberately tracks it.
+It records the project's previous resolver state, not necessarily every package
+in the later course environment. The separate
+`docs/ubuntu-course-environment-2026-11-15.txt` records all installed Python
+package versions from the environment that passed the checks above. Reconstruct
+CPU/GPU packages using the matching upstream indices (including the CUDA wheel
+variant when required); a clean cloud installation was not attempted here.
